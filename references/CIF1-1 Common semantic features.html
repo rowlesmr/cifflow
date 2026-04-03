@@ -1,0 +1,3540 @@
+<!DOCTYPE html>
+<!-- saved from url=(0060)https://www.iucr.org/resources/cif/spec/version1.1/semantics -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<script src="./CIF1-1 Common semantic features_files/analytics.js.download"></script><script type="text/javascript" async="" src="https://www.googletagmanager.com/gtag/js?id=G-VYFG17ZX93"></script>
+<title>(IUCr) Common semantic features</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="DC.title" content="Common semantic features">
+<link href="./CIF1-1 Common semantic features_files/fontawesome-4.4.0.min.css" rel="stylesheet" type="text/css" media="all">
+<link href="./CIF1-1 Common semantic features_files/college-font.css" rel="stylesheet" type="text/css" media="all">
+<link href="./CIF1-1 Common semantic features_files/framework.css" rel="stylesheet" type="text/css" media="all">
+<link href="./CIF1-1 Common semantic features_files/layout.css" rel="stylesheet" type="text/css" media="all">
+<link href="./CIF1-1 Common semantic features_files/iucr.css" rel="stylesheet" type="text/css" media="all">
+<link href="./CIF1-1 Common semantic features_files/newsletter.css" rel="stylesheet" type="text/css" media="all">
+<link href="./CIF1-1 Common semantic features_files/slimbox2.css" rel="stylesheet" type="text/css" media="all">
+<script src="./CIF1-1 Common semantic features_files/jquery.min.js.download"></script>
+<script src="./CIF1-1 Common semantic features_files/jquery-ui.min.js.download"></script>
+<script>function onLoad(){}; /* placeholder - may be replaced by special_scripts */</script>
+<!-- for timelines -->
+<script> var Timeline_ajax_url="https://www.iucr.org/__data/iucr/js/timeline_2.3.0/src/ajax/api/simile-ajax-api.js"; var Timeline_urlPrefix='https://www.iucr.org/__data/iucr/js/timeline_2.3.0/src/webapp/api/'; </script>
+<script src="./CIF1-1 Common semantic features_files/timeline-api.js.download" type="text/javascript"> </script><script src="./CIF1-1 Common semantic features_files/simile-ajax-api.js.download" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/simile-ajax-bundle.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/timeline.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/band.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/themes.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/ethers.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/ether-painters.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/event-utils.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/labellers.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/sources.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/original-painter.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/detailed-painter.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/overview-painter.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/compact-painter.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/decorators.js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/units.js.download" onerror="" type="text/javascript"></script><link rel="stylesheet" href="./CIF1-1 Common semantic features_files/timeline.css" type="text/css"><link rel="stylesheet" href="./CIF1-1 Common semantic features_files/ethers.css" type="text/css"><link rel="stylesheet" href="./CIF1-1 Common semantic features_files/events.css" type="text/css"><script src="./CIF1-1 Common semantic features_files/timeline(1).js.download" onerror="" type="text/javascript"></script><script src="./CIF1-1 Common semantic features_files/labellers(1).js.download" onerror="" type="text/javascript"></script><link rel="stylesheet" href="./CIF1-1 Common semantic features_files/graphics.css" type="text/css">
+<!-- end of setup for timelines -->
+
+
+
+
+</head>
+<body id="top" onload="onLoad();window.focus();tabberAutomatic();">
+
+<!-- ######################################################################################## -->
+<!-- ##################### TOP BAR WITH SIGN-IN AND SOCIAL MEDIA ############################ -->
+<!-- ######################################################################################## -->
+<div class="wrapper row0">
+  <div id="topbar" class="clear"> 
+    <!-- ######################################################################################## -->
+    <div class="fl_left">
+      <ul class="nospace inline pushright">
+        <li>&nbsp;</li>
+        <li><a href="https://www.iucr.org/welcome.html"><img src="./CIF1-1 Common semantic features_files/IUCr-logo-White.png" style="width:23px;"></a></li>
+        <li><a href="https://journals.iucr.org/"><img src="./CIF1-1 Common semantic features_files/iucr_journals_white.png" style="width:22px;"></a></li>
+        <li><i class="fa fa-user"></i> <a href="https://www.iucr.org/people/login">Login</a></li>
+      </ul>
+    </div>
+    <div class="fl_right">
+      <ul class="faico clear">
+        <!-- <li><a href="/cgi-bin/iucrsearch"><img src="https://www.iucr.org/__data/assets/image/0017/150218/search-icon.png"></a></li> -->
+        <li><form method="GET" action="https://www.iucr.org/cgi-bin/iucrsearch" enctype="application/x-www-form-urlencoded" class="form"><input maxlength="200" value="" name="query" class="inlinesearch" type="text" size="16"><input value="Search" name="submit" style="display:none;" type="submit"><br> </form><img src="./CIF1-1 Common semantic features_files/search-icon.png" style="width:20px;"></li> 
+        <li><a class="faicon-facebook" href="https://www.facebook.com/iucr.org"><i class="fa fa-facebook"></i></a></li>
+        <li><a class="faicon-twitter" href="https://twitter.com/IUCr"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="faicon-linkedin" href="https://www.linkedin.com/company/5334871?trk=tyah&amp;trkInfo=clickedVertical%3Acompany%2CclickedEntityId%3A5334871%2Cidx%3A3-1-3%2CtarId%3A1486115202109%2Ctas%3Ainternational%20union%20of%20crystall"><i class="fa fa-linkedin"></i></a></li> 
+        <li><a class="faicon-rss" href="https://www.iucr.org/news/rss-feeds"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+    <!-- ######################################################################################## -->
+  </div>
+</div>
+
+
+<!-- ####################################################################################### -->
+<!-- ##################################### MAIN SITE MENU ################################## -->
+<!-- ####################################################################################### -->
+<div class="wrapper row3">
+  <header id="header" class="hoc clear"> 
+    <!-- ######################################################################################## -->
+    <nav id="mainav" class="fl_right">
+        							
+        <ul class="clear">
+                <li><a class="drop" href="https://www.iucr.org/iucr">The <span class="iucrlogo">IUCr</span></a>
+            							
+            <ul>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/iucr/governance">governance</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/governance/ga">general assembly</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/governance/ec">executive committee</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/governance/finance.html">finance committee</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/governance/advisory-committees">advisory committees</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/governance/secretariat">secretariat</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/governance/statutes-and-by-laws">statutes and by-laws</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/governance/mediaenquiries">Media Enquiries</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/iucr/ab.html">membership</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/ab.html/adhering-bodies">adhering bodies</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/ab.html/regional-associates">regional associates</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/ab.html/scientific-associates">scientific associates</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/ab.html/other-bodies">other bodies</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/iucr/commissions">commissions</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/principles">principles</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/aperiodic-crystals">aperiodic crystals</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/biological-macromolecules">biological macromolecules</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/crystal-growth">crystal growth and characterization of materials</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/crystallographic-computing">crystallographic computing</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/nomenclature">crystallographic nomenclature</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/teaching">crystallographic teaching</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/art-and-cultural-heritage">crystallography in art and cultural heritage</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/crystallography-of-materials">crystallography of materials</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/diffraction-microstructure-imaging">diffraction microstructure imaging</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/electron-crystallography">electron crystallography</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/high-pressure">high pressure</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/inorganic-and-mineral-structures">inorganic and mineral structures</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/international-tables">international tables</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/journals">journals</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/magnetic-structures">magnetic structures</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/mathematical-and-theoretical-crystallography">mathematical and theoretical crystallography</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/neutron-scattering">neutron scattering</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/nmr-crystallography">nmr crystallography</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/powder-diffraction">powder diffraction</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/quantum-crystallography">quantum crystallography</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/small-angle-scattering">small-angle scattering</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/structural-chemistry">structural chemistry</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/synchrotron-radiation">synchrotron and xfel radiation</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/commissions/xafs">xafs</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/iucr/principles-and-policies">policies</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/iucr/ewald-prize">ewald prize</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/iucr/bragg-prize">bragg prize</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/iucr/struchkov-prize">struchkov prize</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/iucr/cong">congress</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/2029-iucr-xxviii">2029 iucr xxviiI</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/2026-iucr-xxvii">2026 iucr xxvii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/2023-iucr-xxvi">2023 iucr xxvi</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xxv">2021 iucr xxv</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xxiv">2017 iucr xxiv</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xxiii">2014 iucr xxiii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xxii">2011 iucr xxii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xxi">2008 iucr xxi</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xx">2005 iucr xx</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xix">2002 iucr xix</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xviii">1999 iucr xviii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xvii">1996 iucr xvii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xvi">1993 iucr xvi</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xv">1990 iucr xv</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xiv">1987 iucr xiv</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xiii">1984 iucr xiii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xii">1981 iucr xii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-xi">1978 iucr xi</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-x">1975 iucr x</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-ix">1972 iucr ix</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-viii">1969 iucr viii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-vii">1966 iucr vii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-vi">1963 iucr vi</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-v">1960 iucr v</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-iv">1957 iucr iv</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-iii">1954 iucr iii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-ii">1951 iucr ii</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/cong/iucr-i">1948 iucr i</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/iucr/history">history</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/history/aspects">aspects</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/history/early-history">early history</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/history/journals-history">journals history</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/history/previous">previous executive committees</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/history/photos">photos of crystallographers</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/iucr/history/xray-diffraction">50 years of x-ray diffraction</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                        </ul>
+            
+						
+           </li>
+                  <li><a class="drop" href="https://www.iucr.org/news">news</a>
+            							
+            <ul>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/news/whats-new">what's new</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/news/whats-new/whats-new-by-date">what's new by date</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/whats-new/announcements2">announcements</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/whats-new/employment">jobs</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/whats-new/journal-issues">journal issues</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/whats-new/meetings">meetings</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/whats-new/software">software</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/news/newsletter">newsletter</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/index">index</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/archive">archive</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/editorial-board">editorial board</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-34">volume 34</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-33">volume 33</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-32">volume 32</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-31">volume 31</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-30">volume 30</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-29">volume 29</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-28">volume 28</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-27">volume 27</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-26">volume 26</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-25">volume 25</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-24">volume 24</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-23">volume 23</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-22">volume 22</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-21">volume 21</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-20">volume 20</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-19">volume 19</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-18">volume 18</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-17">volume 17</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-16">volume 16</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-15">volume 15</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-14">volume 14</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-13">volume 13</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-12">volume 12</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-11">volume 11</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-10">volume 10</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-9">volume 9</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-8">volume 8</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-7">volume 7</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-6">volume 6</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-5">volume 5</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-4">volume 4</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-3">volume 3</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-2">volume 2</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/volume-1">volume 1</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/advertise">advertise</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/news/newsletter/submit">submit</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/news/announcements">announcements</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/news/jobs">jobs</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/news/meetings">meetings</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/news/rss-feeds">rss feeds</a>
+              							
+               </li>
+                        </ul>
+            
+						
+           </li>
+                  <li><a class="drop" href="https://www.iucr.org/publications">publications</a>
+            							
+            <ul>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/publications/journals"><span class="iucrlogo">IUCr</span> Journals</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/publications/journals/acta-a">Acta A</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/publications/journals/acta-b">Acta B</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/publications/journals/acta-c">Acta C</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/publications/journals/acta-d">Acta D</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/publications/journals/acta-e">Acta E</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/publications/journals/acta-f">Acta F</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/publications/journals/iucrj"><span class="iucrlogo">IUCr</span>J</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/publications/journals/jac">JAC</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/publications/journals/jsr">JSR</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/publications/journals/iucrdata"><span class="iucrlogo">IUCr</span>Data</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/publications/international-tables-for-crystallography-online">International Tables (online)</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/publications/international-tables-print">International Tables (print)</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/publications/newsletter">Newsletter</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/publications/iucr"><span class="iucrlogo">IUCr</span> Books</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/publications/iucr-oup"><span class="iucrlogo">IUCr</span>/OUP Book Series</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/publications/other">Other Book Series</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/publications/teaching-pamphlets">Teaching Pamphlets</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/publications/springerbriefs-in-crystallography">SpringerBriefs in Crystallography</a>
+              							
+               </li>
+                        </ul>
+            
+						
+           </li>
+                  <li><a class="drop" href="https://www.iucr.org/people">people</a>
+            							
+            <ul>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/people/wdc">world directory</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/people/wdc/help">help</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/wdc/ealert">ealerts</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/wdc/special-offers">special offers</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/wdc/about">about</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/people/employment">jobs</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/people/ewald-prize">ewald prize</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/people/bragg-prize">bragg prize</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/people/nobel-prize">nobel prize</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/all">all</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/agre">agre</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/anfinsen">anfinsen</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/baker">baker</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/yaghi">yaghi</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/barkla">barkla</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/boyer">boyer</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/w.h.bragg">w.h.bragg</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/w.l.bragg">w.l.bragg</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/brockhouse">brockhouse</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/debroglie">de broglie</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/charpak">charpak</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/compton">compton</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/crick">crick</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/rfcurljr">curl</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/davisson">davisson</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/debye">debye</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/deisenhofer">deisenhofer</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/doudna">doudna</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/geim">geim</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/degennes">de gennes</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/feringa">feringa</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/hauptman">hauptman</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/hodgkin">hodgkin</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/huber2">huber</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/julius">julius</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/karle">karle</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/karplus">karplus</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/kendrew">kendrew</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/klug">klug</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/kobilka">kobilka</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/kornberg">kornberg</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/kroto">kroto</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/laue">laue</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/lefkowitz">lefkowitz</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/m.-levitt">levitt</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/lipscomb">lipscomb</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/mackinnon">mackinnon</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/michel">michel</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/novoselov">novoselov</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/patapoutian">patapoutian</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/pauling">pauling</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/perutz">perutz</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/ramakrishnan">ramakrishnan</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/roentgen">roentgen</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/j.-p.-sauvage">sauvage</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/shechtman">shechtman</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/shull">shull</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/skou">skou</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/smalley">smalley</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/steitz">steitz</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/stoddart">stoddart</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/sumner">sumner</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/thomson">thomson</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/walker">walker</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/a.-warshel">warshel</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/watson">watson</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/wilkins">wilkins</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/nobel-prize/yonath">yonath</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/people/crystallographers">crystallographers</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/people/photos">photos</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/people/associates">associates</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/people/associates/faqs">faqs</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/associates/joining-fees">fees</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/people/associates/company">company</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                        </ul>
+            
+						
+           </li>
+                  <li><a class="current" href="https://www.iucr.org/resources">resources</a>
+            							
+            <ul>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/resources/world-directory">world directory</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/resources/other-directories">other directories</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/other-directories/facilities">facilities</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/other-directories/organizations">organizations</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/other-directories/software">software</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/other-directories/suppliers">suppliers</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/resources/online-dictionary">online dictionary</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/resources/data">data</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/data/databases">databases</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/data/datasets">data sets</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/data/meeting-reports">data-related meetings</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/data/dddwg">dddwg</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/data/commdat">commdat</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="current" href="https://www.iucr.org/resources/cif">cif</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/cif/spec">specification</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/cif/documentation">documentation</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/cif/software">software</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/cif/comcifs">comcifs</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/cif/ddl">ddl</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/cif/dictionaries">dictionaries</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/cif/checkcif">checkcif</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/cif/cif2">cif2</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/resources/lists">lists</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/compcomm">compcomm</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/teaching-commission">teaching-commission</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/epc">epc</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/ecacomsig">ecacomsig</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/cif-developers">cif-developers</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/comcifs">comcifs</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/coredmg">coredmg</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/corecifchem">corecifchem</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/magcif">magcif</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/hpc">high-pressure-crystallography</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/ddlm-group">ddlm-group</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/cif2-encoding">cif2-encoding</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/pddmg">pddmg</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/imgcif-l">imgcif-l</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/lists/sa_scat">sa_scat</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/resources/blogs">blogs</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/blogs/crystal-mathematician">Crystal Mathematician</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/blogs/crystallites">Crystallites: news and opinion in crystallography</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/resources/forums">forums</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/resources/commissions">commissions</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/aperiodic">aperiodic crystals</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/biological-macromolecules">biological macromolecules</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/crystal-growth">crystal growth and characterization of materials</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/computing">crystallographic computing</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/crystallographic-nomenclature">crystallographic nomenclature</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/crystallographic-teaching">crystallographic teaching</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/crysac">crystallography in art and cultural heritage</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/crystallography-of-materials">crystallography of materials</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/diffraction-microstructure-imaging">diffraction microstructure imaging</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/electron-crystallography">electron crystallography</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/high-pressure">high pressure</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/inorganic">inorganic and mineral structures</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/international-tables">international tables</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/journals">journals</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/magnetic-structures">magnetic structures</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/math">mathematical and theoretical crystallography</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/neutron-scattering">neutron scattering</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/nmr-crystallography">NMR crystallography</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/powder-diffraction">powder diffraction</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/csmd">quantum crystallography</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/small-angle-scattering">small-angle scattering</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/structural-chemistry">structural chemistry</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/synchrotron-radiation">synchrotron radiation</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/resources/commissions/xafs">xafs</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/resources/symmetry-font">symmetry font</a>
+              							
+               </li>
+                        </ul>
+            
+						
+           </li>
+                  <li><a class="drop" href="https://www.iucr.org/education">education</a>
+            							
+            <ul>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/education/commission">teaching commission</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/education/pamphlets">pamphlets</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/1">1</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/2">2</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/3">3</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/4">4</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/5">5</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/6">6</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/7">7</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/8">8</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/9">9</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/10">10</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/11">11</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/12">12</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/13">13</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/14">14</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/15">15</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/16">16</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/17">17</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/18">18</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/19">19</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/20">20</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/21">21</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/22">22</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/pamphlets/23">23</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/education/teaching-resources">teaching resources</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/education/teaching-resources/crystal-growing">crystal growing</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/teaching-resources/polyhedral-models">polyhedral models</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/teaching-resources/bragg-lecture-2001">bragg lecture 2001</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/teaching-resources/symmetry-font">symmetry font</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/teaching-resources/bernal-essay">bernal essay</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/teaching-resources/lonsdale-lecture-2011">lonsdale lecture 2011</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/education/teaching-resources/erice-2011">erice 2011</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/education/online-dictionary">online dictionary</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/education/resources">web resources</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/education/resources/archived">archived</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/education/young-scientists">young scientists</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/education/young-scientists/how-to-publish">how to publish</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/education/presentations">presentations</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/education/presentations/crystallography-and-sustainability">crystallography and sustainability</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                        </ul>
+            
+						
+           </li>
+                  <li><a class="drop" href="https://www.iucr.org/outreach">outreach</a>
+            							
+            <ul>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/outreach/crystal-growing-competition">crystal growing competition</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/crystal-growing-competition/submit-entry">submit entry</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/outreach/openlabs">openlabs</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/calendar">calendar</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-kenya">Bruker OpenLab Kenya</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/laaamp-bruker-openlab-benin-2">LAAAMP Bruker OpenLab Benin 2</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-congo-brazzavill">Bruker OpenLab Congo-Brazzaville</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/laaamp-bruker-openlab-benin">LAAAMP Bruker OpenLab Benin</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-ghana-2">Bruker OpenLab Ghana</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/malvern-panalytical-openlab-turkey-2">Malvern Panalytical OpenLab Turkey 2</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/openlab-ivory-coast">Bruker OpenLab Côte d'Ivoire</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/openlab-costa-rica">LAAMP OpenLab Costa Rica</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/iucr-iupap-ictp-openlab-senegal"><span class="iucrlogo">IUCr</span>-IUPAP-ICTP OpenLab Senegal</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-cameroon">Bruker OpenLab Cameroon</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/rigaku-openlab-bolivia">Rigaku OpenLab Bolivia</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-albania">Bruker OpenLab Albania</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-uruguay-2">Bruker OpenLab Uruguay 2</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/rigaku-openlab-cambodia-2">Rigaku OpenLab Cambodia 2</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-vietnam-2">Bruker OpenLab Vietnam 2</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-senegal">Bruker OpenLab Senegal</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/panalytical-openlab-mexico-2">PANalytical OpenLab Mexico 2</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/ccdc-openlab-kenya">CCDC OpenLab Kenya</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-tunisia">Bruker OpenLab Tunisia</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-algeria">Bruker OpenLab Algeria</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-vietnam">Bruker OpenLab Vietnam</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/agilent-openlab-hong-kong">Agilent OpenLab Hong Kong</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/panalytical-openlab-mexico">PANalytical OpenLab Mexico</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/grenoble-darmstadt">grenoble-darmstadt</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/agilent-openlab-turkey">Agilent OpenLab Turkey</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-uruguay">Bruker OpenLab Uruguay</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/rigaku-openlab-cambodia">Rigaku OpenLab Cambodia</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/panalytical-openlab-ghana">PANalytical OpenLab Ghana</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-morocco">Bruker OpenLab Morocco</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/agilent-openlab-argentina">Agilent OpenLab Argentina</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/openlabs/bruker-openlab-pakistan">Bruker OpenLab Pakistan</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/outreach/africa">initiative in africa</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/outreach/success-story">success stories</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/success-story/icsu2015"><span class="iucrlogo">IUCr</span>-ICSU 2015</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/success-story/afca">AfCA</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/success-story/iycr"><span class="iucrlogo">IYCr2014</span></a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/outreach/laamp">LAAAMP</a>
+              							
+               </li>
+                          <li>
+              <a class="drop" href="https://www.iucr.org/outreach/sponsorship">support &amp; funds</a>
+              							
+                  <ul>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/sponsorship/vp.html">visiting professorships</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/sponsorship/meetings.html">meetings</a>
+                  </li>
+                                    <li>
+                    <a href="https://www.iucr.org/outreach/sponsorship/iucr-outreach-fund">outreach and education</a>
+                  </li>
+                                  </ul>
+               
+						
+               </li>
+                        </ul>
+            
+						
+           </li>
+                    </ul>
+          
+						
+    <form action="https://www.iucr.org/resources/cif/spec/version1.1/semantics#"><select><option selected="selected" value="">SITE MENU</option><option value="https://www.iucr.org/iucr">The <span class="iucrlogo">IUCr</span></option><option value="https://www.iucr.org/iucr/governance">- - governance</option><option value="https://www.iucr.org/iucr/ab.html">- - membership</option><option value="https://www.iucr.org/iucr/commissions">- - commissions</option><option value="https://www.iucr.org/iucr/principles-and-policies">- - policies</option><option value="https://www.iucr.org/iucr/ewald-prize">- - ewald prize</option><option value="https://www.iucr.org/iucr/bragg-prize">- - bragg prize</option><option value="https://www.iucr.org/iucr/struchkov-prize">- - struchkov prize</option><option value="https://www.iucr.org/iucr/cong">- - congress</option><option value="https://www.iucr.org/iucr/history">- - history</option><option value="https://www.iucr.org/news">news</option><option value="https://www.iucr.org/news/whats-new">- - what's new</option><option value="https://www.iucr.org/news/newsletter">- - newsletter</option><option value="https://www.iucr.org/news/announcements">- - announcements</option><option value="https://www.iucr.org/news/jobs">- - jobs</option><option value="https://www.iucr.org/news/meetings">- - meetings</option><option value="https://www.iucr.org/news/rss-feeds">- - rss feeds</option><option value="https://www.iucr.org/publications">publications</option><option value="https://www.iucr.org/publications/journals">- - <span class="iucrlogo">IUCr</span> Journals</option><option value="https://www.iucr.org/publications/international-tables-for-crystallography-online">- - International Tables (online)</option><option value="https://www.iucr.org/publications/international-tables-print">- - International Tables (print)</option><option value="https://www.iucr.org/publications/newsletter">- - Newsletter</option><option value="https://www.iucr.org/publications/iucr">- - <span class="iucrlogo">IUCr</span> Books</option><option value="https://www.iucr.org/publications/iucr-oup">- - <span class="iucrlogo">IUCr</span>/OUP Book Series</option><option value="https://www.iucr.org/publications/other">- - Other Book Series</option><option value="https://www.iucr.org/publications/teaching-pamphlets">- - Teaching Pamphlets</option><option value="https://www.iucr.org/publications/springerbriefs-in-crystallography">- - SpringerBriefs in Crystallography</option><option value="https://www.iucr.org/people">people</option><option value="https://www.iucr.org/people/wdc">- - world directory</option><option value="https://www.iucr.org/people/employment">- - jobs</option><option value="https://www.iucr.org/people/ewald-prize">- - ewald prize</option><option value="https://www.iucr.org/people/bragg-prize">- - bragg prize</option><option value="https://www.iucr.org/people/nobel-prize">- - nobel prize</option><option value="https://www.iucr.org/people/crystallographers">- - crystallographers</option><option value="https://www.iucr.org/people/photos">- - photos</option><option value="https://www.iucr.org/people/associates">- - associates</option><option value="https://www.iucr.org/resources">resources</option><option value="https://www.iucr.org/resources/world-directory">- - world directory</option><option value="https://www.iucr.org/resources/other-directories">- - other directories</option><option value="https://www.iucr.org/resources/online-dictionary">- - online dictionary</option><option value="https://www.iucr.org/resources/data">- - data</option><option value="https://www.iucr.org/resources/cif">- - cif</option><option value="https://www.iucr.org/resources/lists">- - lists</option><option value="https://www.iucr.org/resources/blogs">- - blogs</option><option value="https://www.iucr.org/resources/forums">- - forums</option><option value="https://www.iucr.org/resources/commissions">- - commissions</option><option value="https://www.iucr.org/resources/symmetry-font">- - symmetry font</option><option value="https://www.iucr.org/education">education</option><option value="https://www.iucr.org/education/commission">- - teaching commission</option><option value="https://www.iucr.org/education/pamphlets">- - pamphlets</option><option value="https://www.iucr.org/education/teaching-resources">- - teaching resources</option><option value="https://www.iucr.org/education/online-dictionary">- - online dictionary</option><option value="https://www.iucr.org/education/resources">- - web resources</option><option value="https://www.iucr.org/education/young-scientists">- - young scientists</option><option value="https://www.iucr.org/education/presentations">- - presentations</option><option value="https://www.iucr.org/outreach">outreach</option><option value="https://www.iucr.org/outreach/crystal-growing-competition">- - crystal growing competition</option><option value="https://www.iucr.org/outreach/openlabs">- - openlabs</option><option value="https://www.iucr.org/outreach/africa">- - initiative in africa</option><option value="https://www.iucr.org/outreach/success-story">- - success stories</option><option value="https://www.iucr.org/outreach/laamp">- - LAAAMP</option><option value="https://www.iucr.org/outreach/sponsorship">- - support &amp; funds</option></select></form></nav>
+
+
+    <!-- ######################################################################################## -->
+  </header>
+</div>
+
+
+
+<!-- ######################################################################################## -->
+<!-- ########################### WELCOME BANNER WITH IMAGE ################################## -->
+<!-- ######################################################################################## -->
+
+<!-- ######################################################################################## -->
+
+<div class="wrapper bgded overlay" style="background-image:url(&#39;/cgi-bin/getiucrphoto.php?ms=data&amp;no=6&#39;);">
+  <div id="pagetitle" class="hoc clear">
+    <div id="logo" class="fl_left">
+      <a href="https://www.iucr.org/resources/cif"><img src="./CIF1-1 Common semantic features_files/CIF_white.png" alt="[CIF logo]" title="[CIF home page]" style="width:66px;margin-top: -28px;margin-right: 10px;"></a>
+    </div>
+
+    <h2><a href="https://www.iucr.org/resources/cif" title="[CIF home page]">Crystallographic Information Framework</a></h2>
+  </div>
+</div>
+<!-- ######################################################################################## -->
+
+<!-- ######################################################################################## -->
+<!-- ############################## LIST OF MINISITES ####################################### -->
+<!-- ######################################################################################## -->
+ 
+<!-- ######################################################################################## -->
+    
+<!-- ######################################################################################## -->
+
+<!-- ######################################################################################## -->
+<!-- ##################################### BREADCRUMB ####################################### -->
+<!-- ######################################################################################## -->
+        <!--  start of breadcrumb -->
+        
+        <div id="breadcrumb">
+                      <a href="https://www.iucr.org/">iucr</a>
+                    &nbsp;&gt;&nbsp;
+                      <a href="https://www.iucr.org/resources">resources</a>
+                    &nbsp;&gt;&nbsp;
+                      <a href="https://www.iucr.org/resources/cif">cif</a>
+                    &nbsp;&gt;&nbsp;
+                      <a href="https://www.iucr.org/resources/cif/spec">specification</a>
+                    &nbsp;&gt;&nbsp;
+                      <a href="https://www.iucr.org/resources/cif/spec/version1.1">version1.1</a>
+                    &nbsp;&gt;&nbsp;
+                      <a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics">semantics</a>
+                    
+        </div>
+        
+        <!--  end of breadcrumb -->
+
+<!-- ######################################################################################## -->
+<!-- #################################### MINISITES MENU #################################### -->
+<!-- ######################################################################################## -->
+    		
+														
+    <div class="wrapper row3">
+      <header id="minisite" class="hoc">
+        <nav id="mainav2" class="fl_right">
+            <ul class="clear">
+                        <li><a class="current" href="https://www.iucr.org/resources/cif/spec">specification</a>
+                							
+                <ul>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/spec/cif-2-development">cif2</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="current" href="https://www.iucr.org/resources/cif/spec/version1.1">version1.1</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/spec/version1.1/cifsyntax">syntax</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics">semantics</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/spec/ancillary">ancillary</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/spec/ancillary/placeholders">placeholders</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/spec/ancillary/datetime">date/time</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/spec/ancillary/phonefax">phone/fax</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/spec/ancillary/names">names</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/spec/ancillary/abbreviations">abbreviations</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/spec/ancillary/reserved-prefixes">reserved prefixes</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/spec/star-file">star file</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/spec/ddl">ddl</a>
+                  							
+                   </li>
+                                </ul>
+                
+						
+               </li>
+                          <li><a class="drop" href="https://www.iucr.org/resources/cif/documentation">documentation</a>
+                							
+                <ul>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/documentation/cifguide">authors' guide to cif</a>
+                  							
+                   </li>
+                                </ul>
+                
+						
+               </li>
+                          <li><a class="drop" href="https://www.iucr.org/resources/cif/software">software</a>
+                							
+                <ul>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/index">index</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/tc">terms and conditions</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/gpl">gnu general public license</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cbflib">cbflib</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cif2cif">cif2cif</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cif2pdb">cif2pdb</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cif2sx">cif2sx</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cif2xml">cif2xml</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cifedit">cifedit</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/ciffold">ciffold</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cifio">cifio</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/ciflib">ciflib</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0005/17807/pdblicence.txt">pdblicence.txt</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cifparse">cifparse</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0006/17898/pdblicence.txt">pdblicence.txt</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cifparse-obj">cifparse-obj</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0003/17904/installation.txt">installationnotes.txt</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0020/17903/pdblicence.txt">pdblicence.txt</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/cifparse-obj/usage">usage</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cifsieve">cifsieve</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/ciftbx4">ciftbx4</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/ciftex">ciftex</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/ciftools">ciftools</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/cyclops2">cyclops2</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/dbloader">dbloader</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0011/18011/installation.txt">installationnotes.txt</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0012/18012/pdblicence.txt">pdblicence.txt</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/dbloader/usage">usage</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/dict-obj-file">dict-obj-file</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0005/17888/installationnotes.txt">installationnotes.txt</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0006/17889/pdblicence.txt">pdblicence.txt</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/dict-obj-file/usage">usage</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/difrac">difrac</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0008/17918/README.1ST">README.1ST</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/istable">istable</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0005/17951/installation.txt">installationnotes.txt</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0006/17952/pdblicence.txt">pdblicence.txt</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/istable/usage">usage</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/jscifbrowser">jscifbrowser</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/file/0005/160907/JsCifBrowser.tgz">JsCifBrowser.tgz</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/pdf_file/0006/160908/JsCifBrowser_primer.pdf">JsCifBrowser: a Primer</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/pymmlib">mmlib</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/openmms">openmms</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/file/0012/18030/COPYRIGHT.html">ucsdcopyright.html</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/pdb2cif">pdb2cif</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/pdbextract">pdbextract</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0013/18004/pdblicence.txt">pdblicence.txt</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/file/0014/18005/install_src.html">install source</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/file/0015/18006/install_bin.html">install bin</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/pdcifplot">pdcifplot</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/prepub">prepub</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/publcif">publcif</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/pycifrw">pycifrw</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/pycifrw/overview">overview</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/quasar">quasar</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0015/11904/quasar.txt">quasar.txt</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/quasar/quasar">quasar</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/quasar/doc">doc</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/rasmol">rasmol</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/starbase">starbase</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/file/0012/11343/sb_tar.Z">sb_tar.Z</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/starbase/sb">sb</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/starbase/doc">doc</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/starparser">starparser</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/text_file/0003/17913/ucsdcopyright.txt">ucsdcopyright.txt</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/trip">trip</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/vcif2">vcif2</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/file/0017/11519/CBFlib_0.7.8_28Jul07.tar.gz">CBFlib_0.7.8.tar.gz</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/file/0009/11520/vcifHTML.tar.gz">vcifHTML.tar.gz</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/xtal">xtal</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/xtal/release-notes">release notes</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/xtools">xtools</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/file/0011/160886/Xtools.tgz">Xtools.tgz</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/pdf_file/0003/160887/XTools-Guide.pdf">User Guide</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/software/archived">archived</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/index">index</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/cifobj">cifobj</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/ciftbx">ciftbx 1</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/ciftbx3">ciftbx3</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/cyclops">cyclops 1</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/makedict">makedict</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/oostar">oostar</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/printcifword">printcifword</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/ciftest1">ciftest1</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/vcif-0.58">vcif 0.58</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/vcif-1.2">vcif 1.2</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/software/archived/zinc">zinc</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                </ul>
+                
+						
+               </li>
+                          <li><a class="drop" href="https://www.iucr.org/resources/cif/comcifs">comcifs</a>
+                							
+                <ul>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/terms-of-reference">terms of reference</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/members">members</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/policy">policy</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/list">list</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/coredmg">coredmg</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/symposium-2013">symposium 2013</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/workshop-2013">workshop 2013</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/comcifs/workshop-2013/workshop-home">Workshop Home</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/comcifs/workshop-2013/attendees">attendees</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/comcifs/workshop-2013/logistics">logistics</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/comcifs/workshop-2013/resources">resources</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/workshop-2017">workshop 2017</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/cifiesta-2019">cifiesta 2019</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/workshop-2023">workshop 2023</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/pdf_file/0015/157011/handout.pdf">Programme book</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/pdf_file/0016/157012/IntroductionToCIFOntology.pdf">Introduction to the CIF ontology</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/pdf_file/0017/157013/DWW_2023_Morning.pdf">The relational underpinnings of CIF</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/pdf_file/0018/157014/Structure-of-a-CIF-dictionary.pdf">Structure of a CIF dictionary</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/pdf_file/0019/157015/WritingCIFSoftware.pdf">Strategies for writing CIF software</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/__data/assets/pdf_file/0015/157020/github.pdf">Using GitHub</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/comcifs/github2">github</a>
+                  							
+                   </li>
+                                </ul>
+                
+						
+               </li>
+                          <li><a class="drop" href="https://www.iucr.org/resources/cif/ddl">ddl</a>
+                							
+                <ul>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/ddl/search">search</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/ddl/ddlm">ddlm</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/ddl/ddl2">ddl2</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/ddl/ddl1">ddl1</a>
+                  							
+                   </li>
+                                </ul>
+                
+						
+               </li>
+                          <li><a class="drop" href="https://www.iucr.org/resources/cif/dictionaries">dictionaries</a>
+                							
+                <ul>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/search">search</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_core">cif_core</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/dictionaries/cif_core/diffs2.4.5-2.4.4">diffs2.4.5-2.4.4</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/dictionaries/cif_core/diffs2.4.3-2.4.2">diffs2.4.3-2.4.2</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/dictionaries/cif_core/diffs2.4.2-2.4.1">diffs2.4.2-2.4.1</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/dictionaries/cif_core/diffs2.4.1-2.4">diffs2.4.1-2.4</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/dictionaries/cif_core/diffs2.4-2.3">diffs2.4-2.3</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/dictionaries/cif_core/diffs2.3-2.2">diffs2.3-2.2</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/dictionaries/cif_core/diffs2.2-2.1">diffs2.2-2.1</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/dictionaries/cif_core/diffs2.1-2.0">diffs2.1-2.0</a>
+                      </li>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/dictionaries/cif_core/diffs2.0-1.0">diffs2.0-1.0</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_core_restraints">cif_core_restraints</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_pd">cif_pd</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_ms">cif_ms</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_rho">cif_rho</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_twinning">cif_twinning</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_mm">cif_mm</a>
+                  							
+                      <ul>
+                                            <li>
+                        <a href="https://www.iucr.org/resources/cif/dictionaries/cif_mm/diffs2.0-1.0">diffs2.0-1.0</a>
+                      </li>
+                                          </ul>
+                   
+						
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_img">cif_img</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_sym">cif_sym</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_mag">cif_mag</a>
+                  							
+                   </li>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/resources/cif/dictionaries/cif_topology">cif_topology</a>
+                  							
+                   </li>
+                                </ul>
+                
+						
+               </li>
+                          <li><a class="drop" href="https://www.iucr.org/resources/cif/checkcif">checkcif</a>
+                							
+               </li>
+                          <li><a class="drop" href="https://www.iucr.org/resources/cif/cif2">cif2</a>
+                							
+                <ul>
+                                  <li>
+                  <a class="drop" href="https://www.iucr.org/__data/assets/text_file/0009/112131/CIF2-ENBF.txt">cif2_ebnf.txt</a>
+                  							
+                   </li>
+                                </ul>
+                
+						
+               </li>
+                            </ul>
+        <form action="https://www.iucr.org/resources/cif/spec/version1.1/semantics#"><select><option selected="selected" value="">also in this section</option><option value="https://www.iucr.org/resources/cif/spec">specification</option><option value="https://www.iucr.org/resources/cif/spec/cif-2-development">- - cif2</option><option value="https://www.iucr.org/resources/cif/spec/version1.1">- - version1.1</option><option value="https://www.iucr.org/resources/cif/spec/ancillary">- - ancillary</option><option value="https://www.iucr.org/resources/cif/spec/star-file">- - star file</option><option value="https://www.iucr.org/resources/cif/spec/ddl">- - ddl</option><option value="https://www.iucr.org/resources/cif/documentation">documentation</option><option value="https://www.iucr.org/resources/cif/documentation/cifguide">- - authors' guide to cif</option><option value="https://www.iucr.org/resources/cif/software">software</option><option value="https://www.iucr.org/resources/cif/software/index">- - index</option><option value="https://www.iucr.org/resources/cif/software/tc">- - terms and conditions</option><option value="https://www.iucr.org/resources/cif/software/gpl">- - gnu general public license</option><option value="https://www.iucr.org/resources/cif/software/cbflib">- - cbflib</option><option value="https://www.iucr.org/resources/cif/software/cif2cif">- - cif2cif</option><option value="https://www.iucr.org/resources/cif/software/cif2pdb">- - cif2pdb</option><option value="https://www.iucr.org/resources/cif/software/cif2sx">- - cif2sx</option><option value="https://www.iucr.org/resources/cif/software/cif2xml">- - cif2xml</option><option value="https://www.iucr.org/resources/cif/software/cifedit">- - cifedit</option><option value="https://www.iucr.org/resources/cif/software/ciffold">- - ciffold</option><option value="https://www.iucr.org/resources/cif/software/cifio">- - cifio</option><option value="https://www.iucr.org/resources/cif/software/ciflib">- - ciflib</option><option value="https://www.iucr.org/resources/cif/software/cifparse">- - cifparse</option><option value="https://www.iucr.org/resources/cif/software/cifparse-obj">- - cifparse-obj</option><option value="https://www.iucr.org/resources/cif/software/cifsieve">- - cifsieve</option><option value="https://www.iucr.org/resources/cif/software/ciftbx4">- - ciftbx4</option><option value="https://www.iucr.org/resources/cif/software/ciftex">- - ciftex</option><option value="https://www.iucr.org/resources/cif/software/ciftools">- - ciftools</option><option value="https://www.iucr.org/resources/cif/software/cyclops2">- - cyclops2</option><option value="https://www.iucr.org/resources/cif/software/dbloader">- - dbloader</option><option value="https://www.iucr.org/resources/cif/software/dict-obj-file">- - dict-obj-file</option><option value="https://www.iucr.org/resources/cif/software/difrac">- - difrac</option><option value="https://www.iucr.org/resources/cif/software/istable">- - istable</option><option value="https://www.iucr.org/resources/cif/software/jscifbrowser">- - jscifbrowser</option><option value="https://www.iucr.org/resources/cif/software/pymmlib">- - mmlib</option><option value="https://www.iucr.org/resources/cif/software/openmms">- - openmms</option><option value="https://www.iucr.org/resources/cif/software/pdb2cif">- - pdb2cif</option><option value="https://www.iucr.org/resources/cif/software/pdbextract">- - pdbextract</option><option value="https://www.iucr.org/resources/cif/software/pdcifplot">- - pdcifplot</option><option value="https://www.iucr.org/resources/cif/software/prepub">- - prepub</option><option value="https://www.iucr.org/resources/cif/software/publcif">- - publcif</option><option value="https://www.iucr.org/resources/cif/software/pycifrw">- - pycifrw</option><option value="https://www.iucr.org/resources/cif/software/quasar">- - quasar</option><option value="https://www.iucr.org/resources/cif/software/rasmol">- - rasmol</option><option value="https://www.iucr.org/resources/cif/software/starbase">- - starbase</option><option value="https://www.iucr.org/resources/cif/software/starparser">- - starparser</option><option value="https://www.iucr.org/resources/cif/software/trip">- - trip</option><option value="https://www.iucr.org/resources/cif/software/vcif2">- - vcif2</option><option value="https://www.iucr.org/resources/cif/software/xtal">- - xtal</option><option value="https://www.iucr.org/resources/cif/software/xtools">- - xtools</option><option value="https://www.iucr.org/resources/cif/software/archived">- - archived</option><option value="https://www.iucr.org/resources/cif/comcifs">comcifs</option><option value="https://www.iucr.org/resources/cif/comcifs/terms-of-reference">- - terms of reference</option><option value="https://www.iucr.org/resources/cif/comcifs/members">- - members</option><option value="https://www.iucr.org/resources/cif/comcifs/policy">- - policy</option><option value="https://www.iucr.org/resources/cif/comcifs/list">- - list</option><option value="https://www.iucr.org/resources/cif/comcifs/coredmg">- - coredmg</option><option value="https://www.iucr.org/resources/cif/comcifs/symposium-2013">- - symposium 2013</option><option value="https://www.iucr.org/resources/cif/comcifs/workshop-2013">- - workshop 2013</option><option value="https://www.iucr.org/resources/cif/comcifs/workshop-2017">- - workshop 2017</option><option value="https://www.iucr.org/resources/cif/comcifs/cifiesta-2019">- - cifiesta 2019</option><option value="https://www.iucr.org/resources/cif/comcifs/workshop-2023">- - workshop 2023</option><option value="https://www.iucr.org/resources/cif/comcifs/github2">- - github</option><option value="https://www.iucr.org/resources/cif/ddl">ddl</option><option value="https://www.iucr.org/resources/cif/ddl/search">- - search</option><option value="https://www.iucr.org/resources/cif/ddl/ddlm">- - ddlm</option><option value="https://www.iucr.org/resources/cif/ddl/ddl2">- - ddl2</option><option value="https://www.iucr.org/resources/cif/ddl/ddl1">- - ddl1</option><option value="https://www.iucr.org/resources/cif/dictionaries">dictionaries</option><option value="https://www.iucr.org/resources/cif/dictionaries/search">- - search</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_core">- - cif_core</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_core_restraints">- - cif_core_restraints</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_pd">- - cif_pd</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_ms">- - cif_ms</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_rho">- - cif_rho</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_twinning">- - cif_twinning</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_mm">- - cif_mm</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_img">- - cif_img</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_sym">- - cif_sym</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_mag">- - cif_mag</option><option value="https://www.iucr.org/resources/cif/dictionaries/cif_topology">- - cif_topology</option><option value="https://www.iucr.org/resources/cif/checkcif">checkcif</option><option value="https://www.iucr.org/resources/cif/cif2">cif2</option><option value="https://www.iucr.org/__data/assets/text_file/0009/112131/CIF2-ENBF.txt">- - cif2_ebnf.txt</option></select></form></nav>
+      </header>
+    </div>
+            
+						
+			    <!-- ######################################################################################## -->
+
+<!-- ###################################################################################### -->
+<!-- ##################################### MAIN BODY ###################################### -->
+<!-- ###################################################################################### -->
+<div class="wrapper row3" id="page_body">
+  <main class="hoc container clear">
+
+<!-- ############################### MESSAGE OF THE DAY OR OTHER HEADLINE ################# -->
+  <div class="motd">
+    
+  </div>
+
+<!-- ########################################## MAIN PAGE CONTENT ######################### -->
+
+  <div class="clear">
+  <!--  Left sidebar hosts a navigation menu -->
+  		
+<!-- iucr indexable content starts here -->
+     <div id="_layout_34Q" class="content three_quarter first">
+<div id="content_div_11191">
+<img src="./CIF1-1 Common semantic features_files/CIF_v2.5_Format1.1.jpg" alt="[CIF1.1 logo]" style="float:left;margin-right:10px;margin-bottom:10px;width:20%;max-width:160px;min-width:64px;"><h1>Common semantic features</h1>
+<h2>Version 1.1 <i>Working specification</i></h2>
+
+<ul style="clear:left;">
+  <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#intro">Introduction</a></li>
+  <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#definitions">Definition of terms</a></li>
+  <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#semantics">Semantics of data items</a></li>
+  <ul>
+
+    <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#names">Data name semantics</a></li>
+    <ul>
+      <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#namespace">Namespace</a></li>
+      <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#units">Note on handling of units</a></li>
+    </ul>
+    <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#names">Data value semantics</a></li>
+    <ul>
+
+      <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#typing">Data typing</a></li>
+      <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#subtyping">Data subtyping</a></li>
+      <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#specials">Special generic values</a></li>
+    </ul>
+    <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#embedded">Embedded data semantics</a></li>
+    <ul>
+      <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#specialchars">CIF
+      conventions for special characters in text</a></li>
+
+    </ul>
+    <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#longlines">Handling of long lines</a></li>
+  </ul>
+  <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#compliance">Dictionary compliance</a></li>
+  <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#markup">CIF markup conventions</a></li>
+  <ul>
+    <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#greek">Greek letters</a></li>
+
+    <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#accent">Accented letters</a></li>
+    <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#other">Other characters</a></li>
+    <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#style">Typographic style codes</a></li>
+  </ul>
+  <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#refs">References</a></li>
+</ul>
+
+<a name="intro"></a>
+
+<h2>Introduction</h2>
+
+<p>1. The Crystallographic Information File (CIF) standard is an
+extensible mechanism for the archival and interchange of information in
+crystallography and related structural sciences.  Ultimately CIF seeks to
+establish an ontology for machine-readable crystallographic information -
+that is, a collection of statements providing the relations between
+concepts and the logical rules for reasoning about them.</p>
+
+<p>Essential components in the development of such an ontology are:
+</p><ul>
+  <li>the basic rules of grammar and syntax, described in the document <a href="https://www.iucr.org/resources/cif/spec/version1.1/cifsyntax">File syntax</a></li>
+  <li>a vocabulary of the tags or data names specifying particular objects</li>
+  <li>a taxonomy, or classification scheme relating the specified objects</li>
+
+  <li>descriptions of the attributes and relationships of individual and related
+  objects</li>
+</ul>
+<p></p>
+
+<p>In the CIF framework, the objects of discourse are described in so-called
+data dictionary files, that provide the vocabulary and taxonomic elements. The
+dictionaries also contain information about the relationships and attributes of
+data items, and thus encapsulate most of the semantic content that is accessible
+to software. In practice, different dictionaries exist to service different
+domains of crystallography, and a CIF that conforms to a specific dictionary
+must be interpreted in terms of the semantic information conveyed in the
+dictionary.
+</p>
+
+<p>However, some common semantic features apply across all CIF applications, and
+the current document outlines the foundations upon which other dictionaries may
+build more elaborate taxonomies or informational models.
+</p>
+
+
+<a name="definitions"></a>
+<h2>Definition of terms</h2>
+
+2. The following terms are used in the CIF specification documents
+with the specific meanings indicated here.
+
+<ul>
+  <li>2.1. A <b>CIF</b> is a file conforming to the specification herein
+  stated, containing either information on a crystallographic experiment
+  or its results (or similar scientific content); or descriptions of the
+  data identifiers in such a file.
+
+  </li><li>2.2. A <b>data file</b> is understood to convey information relating
+  to a crystallographic experiment.
+
+  </li><li>2.3. A <b>dictionary file</b> is understood to contain information
+  about the data items in one or more data files as identified by their
+  data names.
+
+  </li><li>2.4. A <b>data name</b> is a case-insensitive identifier (a string
+  of characters beginning with an underscore character) of the content of
+  an associated data value.
+
+  </li><li>2.5. A <b>data value</b> is a string of characters representing a
+  particular item of information. It may represent a single numerical
+  value; a letter, word or phrase; extended discursive text; or in
+  principle any coherent unit of data such as an image, audio clip or
+  virtual-reality object.
+
+  </li><li>2.6. A <b>data item</b> is a specific piece of information defined
+  by a data name and an associated data value.
+
+  </li><li>2.7. A <b>tag</b> is understood in this document to be a synonym for
+  data name.
+
+  </li><li>2.8. A <b>data block</b> is the highest-level component of a CIF,
+  containing data items or save frames. A data block is identified by a
+  <b>data block header</b>, which is an isolated character string (that
+  is, bounded by white space and not forming part of a data value)
+  beginning with the case-insensitive reserved characters <tt>data_</tt>.
+
+  </li><li>2.9. A <b>block code</b> is the variable part of a data block
+  header, <i>e.g.</i> the string <tt>foo</tt> in the header
+  <tt>data_foo</tt>.
+
+  </li><li>2.10. A <b>save frame</b> is a partitioned collection of data items
+  within a data block, started by a <b>save frame header</b>, which is an
+  isolated character string beginning with the case-insensitive reserved
+  characters <tt>save_</tt>, and terminated with an isolated character
+  string containing only the case-insensitive reserved characters
+  <tt>save_</tt>.
+
+  </li><li>2.11. A <b>frame code</b> is the variable part of a save frame header,
+  <i>e.g.</i> the string <tt>foo</tt> in the header <tt>save_foo</tt>.</li>
+</ul>
+
+<a name="semantics"></a>
+<h2>Semantics of data items</h2>
+
+<p>3. While the STAR File syntax allows the identification and extraction of
+tags and associated values, the interpretation of the data thus extracted is
+application-dependent. In CIF applications, formal catalogues of standard data
+names and their associated attributes are maintained as external reference files
+called data dictionaries. These dictionary files share the same structure and
+syntax rules as data CIFs.</p>
+
+<p>4. At the current revision, two conventions (known as <i>Dictionary
+Definition Languages</i> or DDL) are supported for detailing the meaning
+and associated attributes of data names. These are known as DDL1 (<a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#HC95">Hall &amp; Cook, 1995</a>) and DDL2 (<a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#W95">Westbrook
+&amp; Hall, 1995</a>), and differ in the amount of detail they carry about
+data types, the relationships between specific data items and the
+large-scale classification of data items.</p>
+
+<p>5. While it may be formally possible to define the semantics of the
+data items in a given data file in both DDL1 and DDL2 data dictionaries,
+in practice different dictionaries are constructed to define the data
+names appropriate for particular crystallographic applications, and each
+such dictionary is written in DDL1 or DDL2 formalism according to which
+appears better able to describe the data model employed. There is thus in
+practice a bifurcation of CIF into two dialects according to the DDL used
+in composing the relevant dictionary file.  However, the use of aliases
+may permit applications tuned to one dialect to import data constructed
+according to the other.</p>
+
+<a name="names"></a>
+<h3>Data name semantics</h3>
+
+<p>6. Strictly, data names should be considered as void of semantic content -
+they are tags for locating associated values, and all information concerning the
+meaning of that value should be sought in an associated dictionary.</p>
+
+<p>7. However, it is customary to construct data names as a sequence of
+components elaborating the classification of the item within the logical
+structure of its associated dictionary. Hence a data name such as
+<tt>_atom_site_fract_x</tt> displays a hierarchical arrangement of components
+corresponding to membership of nested groupings of data elements. The choice of
+components readily indicates to a human reader that this data item refers to the
+fractional <i>x</i> coordinate of an atomic site within a crystal unit cell, but
+it should be emphasised from a computer programming viewpoint that this is
+coincidental; the attributes that constrain the value of this data item (and its
+relationship to others such as <tt>_atom_site_fract_y</tt> and
+
+<tt>_atom_site_fract_z</tt>) must be obtained from the dictionary and not
+otherwise inferred.</p>
+
+<small>
+<p>8. In practice data names described in a DDL2 dictionary are
+constructed with a period character separating their specific function from the
+name of the category to which they have been assigned. In the absence of a
+dictionary file, this convention permits the inference that the data item with
+name <tt>_atom_site.fract_x</tt> will appear in the same looped list as other
+items with names beginning <tt>_atom_site.</tt>, and that all such items belong
+to the same category.</p>
+</small>
+
+<a name="namespace"></a>
+<h4>Namespace</h4>
+
+9. The intention of the maintainers of public CIF dictionaries
+is to formulate a single authoritative set of data names for each CIF dialect
+(<i>i.e.</i> DDL1 and DDL2), thus facilitating the reliable archive and
+interchange of crystallographic data. However, it is also permissible for users
+to introduce local data names into a CIF. Two mechanisms exist to reduce the
+danger of collision of data names that are not incorporated into public
+dictionaries.
+
+<p>10. The character string <b><tt>[local]</tt></b> (including the literal
+bracket characters) is <b>reserved</b> for local use. That is, no public
+dictionary will define a data name that includes this string. This allows
+experimentation with data items in a strictly local context, <i>i.e.</i>
+in cases where the CIF is not intended for interchange with any other
+user.</p>
+
+<p>11. Where CIFs including local data items are expected to enjoy a public
+circulation, authors may register a <b>reserved prefix</b> for their sole use.
+The registry is available on the web at</p>
+
+<p align="center"><a href="http://www.iucr.org/iucr-top/cif/spec/reserved.html">http://www.iucr.org/iucr-top/cif/spec/reserved.html</a></p>
+
+<p>A reserved prefix, <i>e.g.</i> <i>foo</i>, must be used in the following
+ways</p>
+
+<ul>
+
+  <li>If the data file contains items defined in a DDL1 dictionary, the local
+  data names assigned under the reserved prefix must contain it as their first
+  component, <i>e.g.</i> <tt>_foo_atom_site_my_item</tt>.
+  </li><li>If the data file contains items defined in a DDL2 dictionary, then the
+  reserved prefix must be
+  <ul>
+    <li>the first component of data names in a category defined for local use,
+    <i>e.g.</i> <tt>_foo_my_category.my_item</tt></li>
+    <li>the first component following the period character in a data name
+    describing a new item in a category already defined in a public dictionary,
+    <i>e.g.</i> <tt>_atom_site.foo_my_item</tt></li>
+
+  </ul></li>
+</ul>
+
+<p>12. There is no syntactic property identifying such a reserved prefix, so
+that software validating or otherwise handling such local data names must scan
+the entire registry and match registered prefixes against the indicated
+components of data names. Note that reserved prefixes may not themselves
+contain underscore characters.</p>
+
+<a name="units"></a>
+<h3>Note on handling of units</h3>
+
+<p>13. The published specification for CIF Version 1.0 permitted data values
+expressed in different units to be tagged by variant data names (<a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#HAB91">Hall, Allen &amp; Brown, 1991</a>, p. 657:) </p>
+
+<blockquote><small><i>... Many numeric fields contain data for which the units
+  must be known. Each CIF data item has a default units code which is stated in
+  the CIF Dictionary. If a data item is not stored in the default units, the
+  units code is appended to the data name. For example, the default units for a
+  crystal cell dimension are ångströms. If it is necessary to include this data
+  item in a CIF with the units of picometres, the data name of
+  <tt>_cell_length_a</tt> is replaced by <tt>_cell_length_a_pm</tt>. Only those
+  units defined in the CIF Dictionary are acceptable. The default units, except
+  for the ångström, conform to the SI Standard adopted by the IUCr.
+</i></small></blockquote>
+
+<p><b>This approach is deprecated</b> and has not been supported by any official
+CIF dictionary published subsequent to version 1.0 of the Core. All data values
+must be expressed in the single unit assigned in the associated dictionary.</p>
+
+<p>A small number of archived CIFs exist with variant data names as permitted by
+the above clause. If it is necessary to validate them against versions of the
+Core dictionary subsequent to version 1.0, the formal compatibility dictionary
+<a href="https://www.iucr.org/__data/iucr/cif/dictionaries/cif_compat.dic">cif_compat.dic</a> may be
+used for the purpose. <b>No other use should be made of this
+dictionary.</b></p>
+
+<a name="values"></a>
+<h3>Data value semantics</h3>
+
+<p>14. The STAR syntax permits retrieval of data by simply requesting a
+specific data name within a specific data block. Prior knowledge about
+data type (<i>e.g.</i> text or numbers), whether the item is looped, or
+whether the item exists in the file at all, is unnecessary. However,
+applications in general need to know data type, valid ranges of values,
+and relationships between data items; and a program designer needs to know
+the purpose of the data item (<i>i.e.</i> what physical quantity or
+internal book-keeping function it represents). While such semantic
+information may be defined informally for local data items (ones not
+intended for exchange between different users or software applications),
+formal descriptions of the semantics associated with data values are
+catalogued in data dictionary files. Currently two formalisms (dictionary
+definition languages) for describing data value attributes are supported;
+full specifications of these formalisms (known as DDL1 and DDL2) are
+provided elsewhere.</p>
+
+<a name="typing"></a>
+<h4>Data typing</h4>
+
+<p>15. Four base data types are supported in CIF. These are
+</p><ul>
+  <li><b>numb</b>: a value interpretable as a decimal base number and supplied
+  as an integer, a floating-point number or in scientific notation;</li>
+  <li><b>char</b>: a value to be interpreted as character or text data (where
+  the value contains white-space characters, it must be quoted);</li>
+  <li><b>uchar</b>: a value to be interpreted as character or text data but in a
+  case-insensitive manner (<i>i.e.</i> the values <tt>FOO</tt> and <tt>foo</tt>
+
+  are to be taken as identical);</li>
+  <li><b>null</b>: a special data type associated with items for which no
+  definite value may be stored in computer memory. It is the type associated
+  with the special character literal values <tt>?</tt> (query mark) and
+  <tt>.</tt> (full point) which may appear as values for any data item within a
+  data file (see section on "Special generic values" below). It is also the type
+  assigned to items defined in dictionary files which may not occur in data
+  files.</li>
+</ul>
+
+<small>
+<p>16. Many applications distinguish between multi-line text fields and
+character string values that fit within a single line of text. While this
+is a convenient practical distinction for coding purposes, formally both
+manifestations should be regarded as having the same base type, which
+might be "char" or "uchar". Applications are at liberty to choose whether
+to define specific multi-line text subtypes, and whether to permit casting
+between subtypes of a base type. The examples of character string
+delimiters in <a href="https://www.iucr.org/resources/cif/spec/version1.1/cifsyntax#stringexamples">paragraph 20 of the
+document "Syntax"</a> are predicated on an approach that handles all
+subtypes of character or text data equivalently.</p>
+
+</small>
+
+<p>17. Where the attributes of a data value are not available in a
+dictionary listing, it may be assumed that a character string
+interpretable as a number should be taken to represent an item of type
+<b>numb</b>. However, an explicit dictionary declaration of type will
+override such an assumption.</p>
+
+<a name="subtyping"></a>
+<h4>Subtyping</h4>
+
+<p>18. The base data types detailed in the previous section are very general,
+and need to be refined for practical application. Refinement of types is to some
+extent application-dependent, and different subtypes are supported for data
+items defined by DDL1 and DDL2 dictionary files. The following notes indicate
+some considerations, but the relevant dictionary files and documentation should
+
+be consulted in each case.</p>
+
+<p>19. <b>DDL1 dictionaries</b><br>
+
+<i>Standard uncertainties</i>: Values of type
+<b>numb</b> may include a standard uncertainty in the final digit(s) of the
+number where the associated item definition includes the attribute</p>
+<pre>     _type_conditions     esd</pre>
+<p>(or <tt>_type_conditions su</tt>, 
+a synonym introduced to DDL1 in 2005).
+For example, a value of 34.5(12) means 34.5 with a standard uncertainty of
+1.2; it may also be expressed in scientific notation as 3.45E1(12).</p>
+
+<p>20. <b>DDL2 dictionaries</b><br>
+
+DDL2 provides a number of tags that may be used in a dictionary file to
+specify subtypes for data items defined by that dictionary alone. Examples
+of the subtypes specified for the macromolecular CIF dictionary are:</p>
+
+<table>
+  <tbody>
+  <tr>
+    <td><b>code</b></td>
+    <td>identifying code strings or single words</td></tr>
+  <tr>
+    <td><b>ucode</b></td>
+
+    <td>identifying code strings or single words (case-insensitive)</td></tr>
+  <tr>
+    <td><b>uchar1</b></td>
+    <td>single-character codes (case-insensitive)</td></tr>
+  <tr>
+    <td><b>uchar3</b></td>
+    <td>three-character codes (case-insensitive)</td></tr>
+
+  <tr>
+    <td><b>line</b></td>
+    <td>character strings forming a single line of text</td></tr>
+  <tr>
+    <td><b>uline</b></td>
+    <td>character strings forming a single line of text
+  (case-insensitive)</td></tr>
+  <tr>
+
+    <td><b>text</b></td>
+    <td>multi-line text</td></tr>
+  <tr>
+    <td><b>int</b></td>
+    <td>integers</td></tr>
+  <tr>
+    <td><b>float</b></td>
+
+    <td>floating-point real numbers</td></tr>
+  <tr>
+    <td><b>yyyy-mm-dd</b></td>
+    <td>dates</td></tr>
+  <tr>
+    <td><b>symop</b></td>
+    <td>symmetry operations</td></tr>
+
+  <tr>
+    <td><b>any</b></td>
+    <td>any type permitted</td></tr>
+</tbody>
+</table>
+<a name="specials"></a>
+<h4>Special generic values</h4>
+
+<p>21. The unquoted character literals <tt>?</tt>
+
+(query mark) and <tt>.</tt> (full point) are special and are valid expressions
+for any data type.</p>
+
+<p>22. The value <tt>?</tt> means that the actual value of a requested data item
+is <b>unknown</b>.</p>
+
+<p>23. The value <tt>.</tt> means that the actual value of a requested data item
+is <b>inapplicable</b>. This is most commonly used in a looped list where a data
+value is required for syntactic integrity.</p>
+
+<a name="embedded"></a>
+<h3>Embedded data semantics</h3>
+
+<p>24. The attributes of data items defined in CIF dictionaries serve to
+direct crystallographic applications in the retrieval, storage and
+validation of relevant data. In principle a CIF might include as data
+items suitably encoded fields representing data suitable for manipulation
+by text processing, image, spreadsheet, database or other applications. It
+would be useful to have a formal mechanism allowing a CIF to invoke
+appropriate content handlers for such data fields, and this is under
+investigation for the next CIF version specification.</p>
+
+<a name="specialchars"></a>
+<h4>CIF conventions for special characters in text</h4>
+
+<p>25. The one existing example of embedded semantics is the text
+character markup introduced in the CIF Version 1.0 specification and
+summarised in <a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#markup">paragraphs 30-37 below</a>. The
+specification is silent on which fields should be interpreted according to
+these markup conventions, but the published examples suggest that they may
+be used in any character field in a CIF data file except as prohibited by
+a dictionary directive. It is intended that the next CIF version
+specification shall formally declare where such markup may be used.
+
+<a name="longlines"></a>
+
+</p><h3>Handling of long lines</h3>
+
+<p>26. The restriction in line length within CIF requires techniques to
+handle without semantic loss the content of lines of text exceeding the
+limit (2048 characters in this revision, 80 characters in the initial CIF
+specification). The line folding protocol defined here provides a general
+mechanism for wrapping lines of text within CIFs to any extent within the
+overall line length limit. A specific application where this would be
+useful is the conversion of lines longer than 80 characters to the CIF 1.0
+limit. This 80-character limit is used in the examples below for
+illustrative purposes.</p>
+
+<p>These techniques are applied only to the contents of text fields and to
+comments.</p>
+
+<p>In order to permit such folding a special semantics is defined for use
+of the backslash. It is important to understand that this does not change
+the syntax of CIF 1.0. All existing CIFs conforming to the CIF 1.0
+specification can be viewed as having exactly the same semantics as they
+now have. Use of these transformational semantics is optional, but
+recommended.</p>
+
+<p>In order to avoid confusion between CIFs that have undergone these
+transformations and those that have not, the special comment beginning with a
+hash mark immediately followed by a backslash (#\) as the last non-blank
+characters on a line is reserved to mark the beginning of comments created by
+folding long-line comments, and the special text field beginning with the
+sequence line-termination, semicolon, backslash (&lt;eol&gt;;\) as the only
+non-blank characters on a line is reserved to mark the beginning of text fields
+created by folding long-line text fields.</p>
+
+<p>The backslash character is used to fold long lines in character strings and
+comments. Consider a comment which extends beyond column 80. In order to provide
+a comment with the same meaning which can be fitted into 80 character lines,
+prefix the comment with the special comment consisting of a hash mark followed
+by a backslash (#\) and the line terminator. Then on new lines take appropriate
+fragments of the original comment, beginning each fragment with a hash mark and
+ending all but the last fragment with a backslash. In doing this conversion,
+check for an original line that ends with a backslash followed only by blanks or
+tabs. To preserve that backslash in the conversion, add another backslash after
+it. If the next lexical token (not counting blanks or tabs) is another comment,
+to avoid fusing this comment with the next comment, be sure to insert a line
+with just a hash mark.</p>
+
+<p>Similarly, for a character string that extends beyond column 80,
+</p><ul>
+  <li>first convert it to be a text field delimited by
+  line-termination-semicolon (&lt;eol&gt;;) sequences</li>
+  <li>then change the initial line-termination-semicolon (&lt;eol&gt;;) sequence
+  to line-termination-semicolon-backslash-line-termination
+  (&lt;eol&gt;;\&lt;eol&gt;)</li>
+
+  <li>and break all subsequent lines that do not fit within 80 columns with a
+  trailing backslash. In the course of doing the translation,
+  <ul>
+    <li>check for any original text lines that end with a backslash followed
+    only by blanks or tabs;
+    </li><li>to preserve that backslash in the conversion, add another backslash
+    after it, and then an empty line.</li>
+  </ul>
+  </li>
+</ul>
+
+<p>(More formally, the line
+folding should be done separately and directly on single line non-semicolon
+delimited characters strings to allow for recognition of the fact that no
+terminal line-termination is intended - see below).</p>
+
+<p>In order to understand this scheme, suppose the CIF fragment (1) below
+were considered to have long lines, then they could be transformed as
+follows (2):</p>
+
+<!--
+<P><I>(1) Initial CIF</I>
+<PRE>###################################################
+#                                                 #
+#   Converted from PDB format to CIF format by    #
+#   pdb2cif version 2.3.1           24 Aug 96     #
+#                       by                        #
+# P.E. Bourne, H.J. Bernstein and F.C. Bernstein  #
+#                                                 #
+###################################################
+
+
+data_1DIN
+
+_entry.id        1DIN
+
+loop_
+_struct.entry_id
+_struct.title
+  1DIN
+;      DIENELACTONE HYDROLASE AT 2.8 ANGSTROMS
+  Compound::
+       MOL_ID: 1;
+       MOLECULE: DIENELACTONE HYDROLASE;
+       CHAIN: NULL;
+       SYNONYM: DLH;
+       EC: 3.1.1.45;
+       ENGINEERED: YES
+  Source::
+       MOL_ID: 1;
+       ORGANISM_SCIENTIFIC: PSEUDOMONAS SP.;
+       STRAIN: B13;
+       EXPRESSION_SYSTEM: EXPRESSED UNDER OWN PROMOTER;
+       EXPRESSION_SYSTEM_PLASMID: PDC100;
+       EXPRESSION_SYSTEM_GENE: CLC D
+;
+_exptl.entry_id 1DIN
+_exptl.method ' X-RAY DIFFRACTION '
+</PRE>
+<P><I>(2) Transformed CIF</I> <PRE>#\
+##########################\
+##########################
+#                                                 #
+#\
+#   Converted from PDB format\
+# to CIF format by    #
+#   pdb2cif version 2.3.1           24 Aug 96     #
+#                       by                        #
+# P.E. Bourne, H.J. Bernstein and F.C. Bernstein  #
+#                                                 #
+###################################################
+
+
+data_1DIN
+
+_entry.id        1DIN
+
+loop_
+_struct.entry_id
+_struct.title
+  1DIN
+;\
+      DIENELACTONE HYDROLASE\
+       AT 2.8 ANGSTROMS
+  Compound:\
+:
+       MOL_ID: 1;
+       MOLECULE: DIENELACTONE HYDROLASE;
+       CHAIN: NULL;
+       SYNONYM: DLH;
+       EC: 3.1.1.45;
+       ENGINEERED: YES
+  Source::
+       MOL_ID: 1;
+       ORGANISM_SCIENTIFIC: PSEUDOMONAS SP.;
+       STRAIN: B13;
+       EXPRESSION_SYSTEM:\
+EXPRESSED UNDER OWN PROMOTER;
+       EXPRESSION_SYSTEM_PLASMID: PDC100;
+       EXPRESSION_SYSTEM_GENE: CLC D
+;
+_exptl.entry_id 1DIN
+_exptl.method
+;\
+ X-RAY DIFFRACTION \
+;
+</PRE>
+
+-->
+<p><i>(1) Initial CIF</i>
+</p><pre>#######################################################
+### CIF submission form for Rietveld refinements    ###
+###                        Version 14 December 1998 ###
+#######################################################
+data_znvodata
+_chemical_name_systematic                           
+; zinc dihydroxide divanadate dihydrate
+;
+
+_chemical_formula_moiety        'H2 O9 V2 Zn3, 2(H2 O)'
+_chemical_formula_sum           'H6 O11 V2 Zn3'
+_chemical_formula_weight        480.05
+</pre>
+<p><i>(2) Transformed CIF</i> </p><pre>#\
+###########################\
+###########################
+### CIF submission form for Rietveld refinements    ###
+###                        Version 14 December 1998 ###
+#######################################################
+data_znvodata
+_chemical_name_systematic                           
+;\
+ zinc dihydroxide divan\
+adate dihydrate
+;
+
+_chemical_formula_moiety        
+;\
+H2 O9 V2 Zn3, 2(H2 O)\
+;
+_chemical_formula_sum           'H6 O11 V2 Zn3'
+_chemical_formula_weight        480.05
+</pre>
+
+<p>In making the transformation from the backslash folded form to long lines, it
+is very important to strip trailing blanks before attempting to recognize a
+backslash as the last character. When re-assembling text field lines, no
+reassembly should be done except in text fields that begin with the special
+sequence described above, line-termination-semicolon-backslash-line-termination,
+(&lt;eol&gt;;\&lt;eol&gt;), so that text fields which happen to contain
+backslashes, but which were not created by folding long lines, are not changed.
+It is also important to remove the trailing backslashes when reassembling long
+lines. The final line-termination-semicolon sequence of a text field takes
+priority over the reassembly process and ends it, but a trailing backslash on
+the last line of a text field very nicely conveys the information that no
+trailing line termination is intended to be included within the character
+string.</p>
+
+<p>Similarly, when reassembling long-line comments, the reassembly begins with a
+comment of the form hash-backslash-line-termination. The initial hash mark is
+retained and then a forward scan is made through line-terminations and blanks
+for the next comment, from which the initial hash mark is stripped and then the
+contents of the comment are appended. If that comment ends with a backslash, the
+trailing backslash is stripped and the process repeats. Note that the process
+will be ended by intervening tags, values, data blocks or other no-whitespace
+information, and that the process will not start at all without the special
+hash-backslash-line-termination comment.</p>
+
+<p>Since there are very few, if any, CIFs which contain text fields and comments
+beginning this way, in most cases, it is reasonable to adopt the policy of doing
+this processing unless it is disabled.</p>
+
+<p>Here is another example of folding. The following three text fields would be
+equivalent:
+</p><pre>;C:\foldername\filename
+;
+
+;\
+C:\foldername\filename
+;
+</pre>
+and
+<pre>;\
+C:\foldername\file\
+name
+;
+</pre>
+but the next example would be a two-line value where the first line had
+the value "C:\foldername\file\" and the second had the value "name":
+<pre>;
+C:\foldername\file\
+name
+;
+</pre>
+
+<p>Note that backslashes should not be used to fold lines outside of comments
+and text fields. That would introduce extraneous characters into the CIF and
+violate the basic syntax rules. In any case, such an action is not
+necessary.
+
+</p>
+
+<a name="compliance"></a>
+<h2>Dictionary compliance</h2>
+
+<p>27. Dictionary files containing the definitions
+and attribute sets for the data items contained in a CIF should be identified
+within the CIF by some or all of the data items
+</p><pre>    _audit_conform_dict_name
+    _audit_conform_dict_version
+    _audit_conform_dict_location
+</pre>
+corresponding to DDL1 dictionaries, or
+<pre>    _audit_conform.dict_name
+    _audit_conform.dict_version
+    _audit_conform.dict_location
+</pre>
+for DDL2 dictionaries. Where no such information is provided, it may be
+assumed that the file should conform against the core CIF dictionary.<p></p>
+
+<p>28. The <tt>_audit_conform</tt> data items may be looped in the case where
+more than one dictionary is used to define the items in a CIF, and they may
+include dictionaries of local data items provided such dictionary files have
+been prepared in accordance with the rules of the appropriate DDL.</p>
+
+<p>29. A <a href="https://www.iucr.org/resources/cif/spec/dictionaries/maintenance.html">detailed
+protocol</a> exists for locating, merging and overlaying multiple dictionary
+files (McMahon, Westbrook &amp; Bernstein, 2000).</p>
+
+<a name="markup"></a>
+<h2>CIF markup conventions</h2>
+
+<p>30. If permitted by the relevant dictionary and
+if no other indication is present, the contents of a text or character field are
+assumed to be interpretable as text in English or some other human language.
+Certain special codes are used to indicate special characters or accented
+letters not available in the ASCII character set, as listed below.</p>
+
+<a name="greek"></a>
+<h3>Greek letters</h3>
+
+<p>31. In general, the corresponding letter of the Latin
+alphabet, prefixed by a backslash character. The complete set is:
+</p><table cellpadding="0" border="1">
+  <tbody>
+  <tr valign="top">
+    <td>
+      <table cellpadding="5" border="0">
+
+        <tbody>
+        <tr valign="top">
+          <td><img height="8" alt="[alpha]" src="./CIF1-1 Common semantic features_files/img1.gif" width="10" align="bottom"></td>
+          <td>A</td>
+          <td><tt><b>\a</b></tt></td>
+          <td><tt><b>\A</b></tt></td>
+          <td>alpha</td></tr>
+
+        <tr valign="top">
+          <td><img height="24" alt="[beta]" src="./CIF1-1 Common semantic features_files/img2.gif" width="10" align="middle"></td>
+          <td>B</td>
+          <td><tt><b>\b</b></tt></td>
+          <td><tt><b>\B</b></tt></td>
+          <td>beta</td></tr>
+        <tr valign="top">
+
+          <td><img height="17" alt="[chi]" src="./CIF1-1 Common semantic features_files/img3.gif" width="10" align="middle"></td>
+          <td>X</td>
+          <td><tt><b>\c</b></tt></td>
+          <td><tt><b>\C</b></tt></td>
+          <td>chi</td></tr>
+        <tr valign="top">
+          <td><img height="12" alt="delta]" src="./CIF1-1 Common semantic features_files/img4.gif" width="8" align="bottom"></td>
+
+          <td><img height="12" alt="[Delta]" src="./CIF1-1 Common semantic features_files/img5.gif" width="12" align="bottom"></td>
+          <td><tt><b>\d</b></tt></td>
+          <td><tt><b>\D</b></tt></td>
+          <td>delta</td></tr>
+        <tr valign="top">
+          <td><img height="9" alt="[epsilon]" src="./CIF1-1 Common semantic features_files/img6.gif" width="7" align="bottom"></td>
+          <td>E</td>
+
+          <td><tt><b>\e</b></tt></td>
+          <td><tt><b>\E</b></tt></td>
+          <td>epsilon</td></tr>
+        <tr valign="top">
+          <td><img height="17" alt="[phi]" src="./CIF1-1 Common semantic features_files/img7.gif" width="10" align="middle"></td>
+          <td><img height="12" alt="[Phi]" src="./CIF1-1 Common semantic features_files/img8.gif" width="10" align="bottom"></td>
+          <td><tt><b>\f</b></tt></td>
+
+          <td><tt><b>\F</b></tt></td>
+          <td>phi</td></tr>
+        <tr valign="top">
+          <td><img height="17" alt="[gamma]" src="./CIF1-1 Common semantic features_files/img9.gif" width="9" align="middle"></td>
+          <td><img height="12" alt="[Gamma]" src="./CIF1-1 Common semantic features_files/img10.gif" width="10" align="bottom"></td>
+          <td><tt><b>\g</b></tt></td>
+          <td><tt><b>\G</b></tt></td>
+
+          <td>gamma</td></tr>
+        <tr valign="top">
+          <td><img height="17" alt="[eta]" src="./CIF1-1 Common semantic features_files/img11.gif" width="8" align="middle"></td>
+          <td>H</td>
+          <td><tt><b>\h</b></tt></td>
+          <td><tt><b>\H</b></tt></td>
+          <td>eta</td></tr>
+
+        <tr valign="top">
+          <td><img height="8" alt="[iota]" src="./CIF1-1 Common semantic features_files/img12.gif" width="4" align="bottom"></td>
+          <td>I</td>
+          <td><tt><b>\i</b></tt></td>
+          <td><tt><b>\I</b></tt></td>
+          <td>iota</td></tr>
+        <tr valign="top">
+
+          <td><img height="8" alt="[kappa]" src="./CIF1-1 Common semantic features_files/img13.gif" width="8" align="bottom"></td>
+          <td>K</td>
+          <td><tt><b>\k</b></tt></td>
+          <td><tt><b>\K</b></tt></td>
+          <td>kappa</td></tr>
+        <tr valign="top">
+          <td><img height="12" alt="[lambda]" src="./CIF1-1 Common semantic features_files/img14.gif" width="8" align="bottom"></td>
+
+          <td><img height="12" alt="[Lambda]" src="./CIF1-1 Common semantic features_files/img15.gif" width="11" align="bottom"></td>
+          <td><tt><b>\l</b></tt></td>
+          <td><tt><b>\L</b></tt></td>
+          <td>lambda</td></tr>
+        <tr valign="top">
+          <td><img height="17" alt="[mu]" src="./CIF1-1 Common semantic features_files/img16.gif" width="10" align="middle"></td>
+          <td>M</td>
+
+          <td><tt><b>\m</b></tt></td>
+          <td><tt><b>\M</b></tt></td>
+          <td>mu</td></tr></tbody></table></td>
+    <td>&nbsp;&nbsp;</td>
+    <td>
+      <table cellpadding="5" border="0">
+        <tbody>
+
+        <tr valign="top">
+          <td><img height="8" alt="[nu]" src="./CIF1-1 Common semantic features_files/img17.gif" width="8" align="bottom"></td>
+          <td>N</td>
+          <td><tt><b>\n</b></tt></td>
+          <td><tt><b>\N</b></tt></td>
+          <td>nu</td></tr>
+        <tr valign="top">
+
+          <td><i>o</i></td>
+          <td>O</td>
+          <td><tt><b>\o</b></tt></td>
+          <td><tt><b>\O</b></tt></td>
+          <td>omicron</td></tr>
+        <tr valign="top">
+
+          <td><img height="7" alt="[pi]" src="./CIF1-1 Common semantic features_files/img18.gif" width="9" align="bottom"></td>
+          <td><img height="12" alt="[Pi]" src="./CIF1-1 Common semantic features_files/img19.gif" width="12" align="bottom"></td>
+          <td><tt><b>\p</b></tt></td>
+          <td><tt><b>\P</b></tt></td>
+          <td>pi</td></tr>
+        <tr valign="top">
+          <td><img height="12" alt="[theta]" src="./CIF1-1 Common semantic features_files/img20.gif" width="8" align="bottom"></td>
+
+          <td><img height="13" alt="[Theta]" src="./CIF1-1 Common semantic features_files/img21.gif" width="11" align="bottom"></td>
+          <td><tt><b>\q</b></tt></td>
+          <td><tt><b>\Q</b></tt></td>
+          <td>theta</td></tr>
+        <tr valign="top">
+          <td><img height="17" alt="[rho]" src="./CIF1-1 Common semantic features_files/img22.gif" width="8" align="middle"></td>
+          <td>P</td>
+
+          <td><tt><b>\r</b></tt></td>
+          <td><tt><b>\R</b></tt></td>
+          <td>rho</td></tr>
+        <tr valign="top">
+          <td><img height="7" alt="[sigma]" src="./CIF1-1 Common semantic features_files/img23.gif" width="9" align="bottom"></td>
+          <td><img height="12" alt="[Sigma]" src="./CIF1-1 Common semantic features_files/img24.gif" width="10" align="bottom"></td>
+          <td><tt><b>\s</b></tt></td>
+
+          <td><tt><b>\S</b></tt></td>
+          <td>sigma</td></tr>
+        <tr valign="top">
+          <td><img height="7" alt="[tau]" src="./CIF1-1 Common semantic features_files/img25.gif" width="9" align="bottom"></td>
+          <td>T</td>
+          <td><tt><b>\t</b></tt></td>
+          <td><tt><b>\T</b></tt></td>
+
+          <td>tau</td></tr>
+        <tr valign="top">
+          <td><img height="8" alt="[upsilon]" src="./CIF1-1 Common semantic features_files/img26.gif" width="9" align="bottom"></td>
+          <td><img height="12" alt="[Upsilon]" src="./CIF1-1 Common semantic features_files/img27.gif" width="11" align="bottom"></td>
+          <td><tt><b>\u</b></tt></td>
+          <td><tt><b>\U</b></tt></td>
+          <td>upsilon</td></tr>
+
+        <tr valign="top">
+          <td><img height="8" alt="[omega]" src="./CIF1-1 Common semantic features_files/img28.gif" width="10" align="bottom"></td>
+          <td><img height="12" alt="[Omega]" src="./CIF1-1 Common semantic features_files/img29.gif" width="10" align="bottom"></td>
+          <td><tt><b>\w</b></tt></td>
+          <td><tt><b>\W</b></tt></td>
+          <td>omega</td></tr>
+        <tr valign="top">
+
+          <td><img height="25" alt="[xi]" src="./CIF1-1 Common semantic features_files/img30.gif" width="8" align="middle"></td>
+          <td><img height="12" alt="[Xi]" src="./CIF1-1 Common semantic features_files/img31.gif" width="10" align="bottom"></td>
+          <td><tt><b>\x</b></tt></td>
+          <td><tt><b>\X</b></tt></td>
+          <td>xi</td></tr>
+        <tr valign="top">
+          <td><img height="24" alt="[psi]" src="./CIF1-1 Common semantic features_files/img32.gif" width="11" align="middle"></td>
+
+          <td><img height="12" alt="[Psi]" src="./CIF1-1 Common semantic features_files/img33.gif" width="10" align="bottom"></td>
+          <td><tt><b>\y</b></tt></td>
+          <td><tt><b>\Y</b></tt></td>
+          <td>psi</td></tr>
+        <tr valign="top">
+          <td><img height="25" alt="[zeta]" src="./CIF1-1 Common semantic features_files/img34.gif" width="7" align="middle"></td>
+          <td>Z</td>
+
+          <td><tt><b>\z</b></tt></td>
+          <td><tt><b>\Z</b></tt></td>
+          <td>zeta</td></tr></tbody></table></td></tr>
+  </tbody> 
+</table>
+
+<a name="accent"></a>
+<h3>Accented letters</h3>
+
+<p>32. Accents should be indicated by using the following codes before
+the letter to be modified (<i>i.e.</i> use <b><tt>\'e</tt></b> for
+an acute e):
+</p><table cellpadding="5" border="1">
+  <tbody>
+  <tr valign="top">
+    <td><tt><b>\'</b></tt></td>
+    <td>acute (é)</td>
+
+    <td><tt><b>\"</b></tt></td>
+    <td>umlaut (ü)</td>
+    <td><tt><b>\=</b></tt></td>
+    <td>overbar</td></tr>
+  <tr valign="top">
+    <td><tt><b>\`</b></tt></td>
+
+    <td>grave (à)</td>
+    <td><tt><b>\~</b></tt></td>
+    <td>tilde (ñ)</td>
+    <td><tt><b>\.</b></tt></td>
+    <td>overdot</td></tr>
+  <tr valign="top">
+
+    <td><tt><b>\^</b></tt></td>
+    <td>circumflex (â)</td>
+    <td><tt><b>\;</b></tt></td>
+    <td>ogonek</td>
+    <td><tt><b>\&lt;</b></tt></td>
+    <td>hacek</td></tr>
+
+  <tr valign="top">
+    <td><tt><b>\,</b></tt></td>
+    <td>cedilla (ç)</td>
+    <td><tt><b>\&gt;</b></tt></td>
+    <td>Hungarian umlaut</td>
+    <td><tt><b>\(</b></tt></td>
+
+    <td>breve</td></tr></tbody></table>
+<p>These codes will always be followed by a non-whitespace character.</p>
+
+<a name="other"></a>
+<h3>Other characters</h3>
+
+<p>33. Other special alphabetic characters should be
+indicated as follows:
+</p><table cellpadding="5" border="1">
+  <tbody>
+  <tr valign="top">
+    <td><tt><b>\%a</b></tt></td>
+
+    <td>a-ring (å)</td>
+    <td><tt><b>\?i</b></tt></td>
+    <td>dotless i</td>
+    <td><tt><b>\&amp;s</b></tt></td>
+    <td>German "ss" (ß)</td></tr>
+  <tr valign="top">
+
+    <td><tt><b>\/o</b></tt></td>
+    <td>o-slash (ø)</td>
+    <td><tt><b>\/l</b></tt></td>
+    <td>Polish l (<img height="12" alt="[lstrok]" src="./CIF1-1 Common semantic features_files/img35.gif" width="4" align="bottom">)</td>
+    <td><tt><b>\/d</b></tt></td>
+    <td>barred d</td></tr></tbody></table>
+
+<p>Capital letters may also be used in these codes, so an
+ångström symbol (Å) may be given as <b><tt>\%A</tt></b>.</p>
+
+<p>34. Superscripts and subscripts should be indicated by bracketing relevant
+characters with circumflex or tilde characters, thus:</p>
+<table cellpadding="5" border="1">
+  <tbody>
+  <tr valign="top">
+    <td>superscripts</td>
+
+    <td><tt><b>Csp^3^</b></tt></td>
+    <td>for</td>
+    <td>Csp<sup>3</sup></td></tr>
+  <tr valign="top">
+    <td>subscripts</td>
+    <td><tt><b>U~eq~</b></tt></td>
+
+    <td>for</td>
+    <td>U<sub>eq</sub></td></tr></tbody></table>
+<p>The closing symbol is essential to return to normal text.</p>
+
+<p>35. Some other codes are accepted by convention. These are:</p>
+<table cellpadding="5" border="1">
+  <tbody>
+  <tr valign="top">
+
+    <td><tt><b>\%</b></tt></td>
+    <td>degree (°)</td>
+    <td><tt><b>\\times</b></tt></td>
+    <td>×</td></tr>
+  <tr valign="top">
+    <td><tt><b>-</b></tt><tt><b>-</b></tt></td>
+
+    <td>dash</td>
+    <td><tt><b>+-</b></tt></td>
+    <td>±</td></tr>
+  <tr valign="top">
+    <td><tt><b>-</b></tt><tt><b>-</b></tt><tt><b>-</b></tt></td>
+    <td>single bond</td>
+
+    <td><tt><b>-+</b></tt></td>
+    <td><img height="20" alt="[minus or plus]" src="./CIF1-1 Common semantic features_files/img39.gif" width="11" align="middle"></td></tr>
+  <tr valign="top">
+    <td><tt><b>\\db</b></tt></td>
+    <td>double bond</td>
+    <td><tt><b>\\square</b></tt></td>
+    <td>square</td></tr>
+
+  <tr valign="top">
+    <td><tt><b>\\tb</b></tt></td>
+    <td>triple bond</td>
+    <td><tt><b>\\neq</b></tt></td>
+    <td><img height="18" alt="[not equal]" src="./CIF1-1 Common semantic features_files/img41.gif" width="7" align="middle"></td></tr>
+  <tr valign="top">
+    <td><tt><b>\\ddb</b></tt></td>
+
+    <td>delocalized double bond</td>
+    <td><tt><b>\\rangle</b></tt></td>
+    <td><font size="6">&gt;</font></td></tr>
+  <tr valign="top">
+    <td><tt><b>\\sim</b></tt></td>
+    <td><font size="6">~</font></td>
+    <td><tt><b>\\langle</b></tt></td>
+
+    <td><font size="6">&lt;</font></td></tr>
+  <tr valign="top">
+    <td align="left" colspan="2">(<i>N.B.</i> <tt><b>~</b></tt>&nbsp; is the code
+      for subscript)</td>
+    <td><tt><b>\\rightarrow</b></tt></td>
+    <td><img height="9" alt="[rightarrow]" src="./CIF1-1 Common semantic features_files/img44.gif" width="15" align="bottom"></td></tr>
+
+  <tr valign="top">
+    <td><tt><b>\\simeq</b></tt></td>
+    <td><font face="Symbol" size="4">@</font></td>
+    <td><tt><b>\\leftarrow</b></tt></td>
+    <td><img height="9" alt="[leftarrow]" src="./CIF1-1 Common semantic features_files/img45.gif" width="15" align="bottom"></td></tr>
+  <tr valign="top">
+    <td><tt><b>\\infty</b></tt></td>
+
+    <td><img height="8" alt="[infinity]" src="./CIF1-1 Common semantic features_files/img38.gif" width="15" align="bottom"></td>
+    <td>&nbsp;</td>
+    <td>&nbsp;</td></tr></tbody></table>
+<p>Note that <b><tt>\\db</tt></b>, <b><tt>\\tb</tt></b> and
+<b><tt>\\ddb</tt></b> should always be followed by a space, <i>e.g.</i> C=C is
+denoted by <b><tt>C\\db C</tt></b>.</p>
+
+<a name="style"></a>
+<h3>Typographic style codes</h3>
+
+<p>36. The codes indicated above are designed to
+refer to special characters not expressible within the CIF character set, and
+the initial specification did not permit markup for typographic style such as
+italic or bold-face type. However, in some cases the ability to indicate type
+style is useful, and in addition to the codes above HTML-like conventions are
+allowed of surrounding text by <tt>&lt;i&gt; &lt;/i&gt;</tt> to indicate the
+beginning and end of italic, and by <tt>&lt;b&gt; &lt;/b&gt;</tt> to indicate
+the beginning and end of boldface type.</p>
+
+<p>37. If it is necessary to convey more complex typographic information than is
+permitted by these special character codes and conventions, the entire text
+field should be of a richer content type allowing detailed typographic
+markup.</p>
+
+<a name="refs"></a>
+<h2>References</h2>
+
+<p>38.
+</p><ul>
+<!-- <br>Hall, Allen &amp; Brown, 1991 (*the* CIF paper) -->
+  <li><a name="HAB91"></a>Hall, S. R., Allen, F. H. and Brown, I. D. (1991). "The
+  Crystallographic Information File (CIF): A New Standard Archive File for
+  Crystallography", <cite>Acta Cryst.</cite>, A<b>47</b>, 655-685.
+	<a target="_blank" href="http://journals.iucr.org/10.1107/S010876739101067X"><img src="./CIF1-1 Common semantic features_files/detailsa.gif" border="0"></a>
+
+	See also 
+     <a target="_blank" href="http://www.iucr.org/iucr-top/cif/standard/cifstd1.html">
+	  HTML version
+	  (http://www.iucr.org/iucr-top/cif/standard/cifstd1.html)</a></li>
+
+<!-- <br>Hall &amp; Cook, 1991 (DDL1) -->
+  <li><a name="HC95"></a>Hall, S. R. &amp; Cook, A. P. F. (1995). "{STAR} Dictionary
+  Definition Language: Initial Specification", <cite>J. Chem. Inf. Comput.
+  Sci.</cite>, <b>35</b>, 819-825.<a target="_blank" href="http://dx.doi.org/10.1021/ci00027a005"><img src="./CIF1-1 Common semantic features_files/details.gif" border="0"></a>
+
+    <a target="_blank" href="http://chemport.cas.org/cgi-bin/sdcgi?APP=ftslink&amp;action=reflink&amp;origin=iucr&amp;version=1.0&amp;coi=1:CAS:528:DyaK2MXnvFSrsb8%3D&amp;pissn=0021-8898&amp;pyear=2004&amp;md5=33623d24a786e31ad00571162be4c5c7"><img src="./CIF1-1 Common semantic features_files/chemportborder.gif" border="0"></a></li>
+
+<!-- <br>McMahon, Westbrook &amp; Bernstein, 2000 (dictionary maintenance protocol): -->
+  <li><a name="Mc00"></a>McMahon, B., Westbrook, J. &amp; Bernstein, H. (2000).
+  <i>Report of the COMCIFS Working Group on Dictionary Maintenance</i> <a href="http://www.iucr.org/iucr-top/cif/spec/dictionaries/maintenance.html">http://www.iucr.org/iucr-top/cif/spec/dictionaries/maintenance.html</a></li>
+
+<!-- <br>Westbrook &amp; Hall, 1995 (DDL2 spec): -->
+  <li><a name="W95"></a>Westbrook, J. D. &amp; Hall, S. R. (1995). <i>A Dictionary
+  Description Language for Macromolecular Structure.</i> Draft DDL v 2.1.1. <a href="http://ndbserver.rutgers.edu/mmcif/ddl/">http://ndbserver.rutgers.edu/mmcif/ddl/</a></li>
+
+</ul>
+
+</div>
+</div>
+     <div id="_layout_34" class="content three_quarter"></div>
+     <div id="_layout_full" class="content"></div>
+<!-- iucr indexable content ends here -->
+
+  <!--  Right sidebar can host a calendar navigator, navigation menu and adverts -->
+  <div class="sidebar one_quarter" style="float:right;"></div>
+  							
+    <style type="text/css">div#_layout_34{display:none;}/* allows proper flow */</style>
+  
+    <div class="sidebar one_quarter"> 
+      <nav class="sdb_holder">
+        <ul>
+          <li><a href="https://www.iucr.org/resources/cif/spec/version1.1/cifsyntax">File syntax</a></li><li><a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics">Common semantic features</a></li>        </ul>
+        </nav>
+      </div>
+  
+						
+  <div class="sidebar one_quarter" style="float:right;">
+<div class="subsidiary highlight" id="content_div_11154">
+<h1>International Tables for Crystallography</h1>
+<h3>Volume G: Definition and exchange of crystallographic data</h3>
+<p><a href="http://dx.doi.org/10.1107/97809553602060000107" target="_blank">First online edition (2006)</a></p>
+<h6>Edited by S. R. Hall and B. McMahon</h6>
+<table id="maincontentstable" class="invisible">
+  <tbody>
+    <tr>
+      <td rowspan="5"><img src="./CIF1-1 Common semantic features_files/g.gif" alt="[International Tables Vol. G]" style="border:1px solid grey;width:100px;" width="75"></td>
+      <td rowspan="5">&nbsp;</td>
+      <td><a href="https://it.iucr.org/Ga/contents/" target="_blank"><strong>contents</strong></a></td>
+    </tr>
+    <tr>
+      <td><span><a href="https://it.iucr.org/Ga/Gaindex.pdf" target="_blank">indexes</a></span></td>
+    </tr>
+    <tr>
+      <td><a href="https://www.iucr.org/iucr-top/it/general/itg.pdf" target="_blank">sample pages</a></td>
+    </tr>
+    <tr>
+      <td><a href="https://it.iucr.org/services/purchase/" target="_blank">purchase</a></td>
+    </tr>
+    <tr>
+      <td><a href="https://it.iucr.org/Ga/resources/" target="_blank">CIF dictionaries</a></td>
+    </tr>
+  </tbody>
+</table><!-- <p>Describes CIF, the data exchange standard of crystallography. Provides: information for scientists who wish to record or use the results of a single-crystal or powder diffraction experiment; the data ontology necessary for designing interoperable computer applications; accompanying software including machine-readable CIF dictionaries, libraries and utility programs.</p> -->
+<p>An essential guide and reference to CIF for programmers, data managers handling crystal-structure information and practising crystallographers.</p>
+
+</div>
+
+<div class="subsidiary highlight" id="iucrdata_promotion">
+<hr>
+<h1 class="subsidiary"><a href="http://iucrdata.iucr.org/" target="_blank"><span class="iucrlogo">IUCr</span>Data</a></h1><a href="https://iucrdata.iucr.org/" target="_blank"><img src="./CIF1-1 Common semantic features_files/x_96x112.png" width="96" height="111" alt="x_96x112" style="border-radius:5px;width:96px;"></a>
+
+</div>
+</div>
+  </div>
+  </main>
+</div>
+<!-- ################################### END OF MAIN BODY ################################## -->
+
+
+
+<!-- ####################################################################################### -->
+<!-- ############################# ITEMS OF INTEREST (ON HOME PAGE) ######################## -->
+<!-- ####################################################################################### -->
+
+<!-- ####################################################################################### -->
+
+<!-- ####################################################################################### -->
+<!-- ############################### LIST OF SPONSORS ###################################### -->
+<!-- ####################################################################################### -->
+
+<!-- ####################################################################################### -->
+
+<!-- ####################################################################################### -->
+<!-- ############################### SECONDARY BANNER ###################################### -->
+<!-- ####################################################################################### -->
+
+<!-- ####################################################################################### -->
+
+<!-- ####################################################################################### -->
+<!-- ######################## NEWSLETTER ITEMS (ON HOME PAGE) ############################## -->
+<!-- ####################################################################################### -->
+
+<!-- ####################################################################################### -->
+
+<!-- ####################################################################################### -->
+<!-- ################################# SITE MAP/INDEX ###################################### -->
+<!-- ####################################################################################### -->
+<div class="wrapper row1">
+  <div id="quicklinks" class="hoc clear"> 
+    <!-- ####################################################################################### -->
+    <div class="accordion ui-accordion ui-widget ui-helper-reset" role="tablist"> 
+      <!-- ####################################################################################### -->
+      <a href="javascript:void(0);" class="accordiontoggle heading ui-accordion-header ui-state-default ui-corner-all" role="tab" id="ui-id-1" aria-controls="ui-id-2" aria-selected="false" aria-expanded="false" tabindex="0">Quick links</a>
+
+      <!-- ####################################################################################### -->
+            <div class="linkblock group ui-accordion-content ui-helper-reset ui-widget-content ui-corner-bottom" id="ui-id-2" aria-labelledby="ui-id-1" role="tabpanel" aria-hidden="true" style="display: none;">
+        <div class="one_quarter first">
+          <!-- ################################################################################################ -->
+          <ul>
+            <li><a href="https://www.iucr.org/news/notices/announcements">Announcements</a></li>
+            <li><a href="https://www.iucr.org/people/associates">Associates Programme</a></li>
+            <li><a href="https://www.iucr.org/resources/blogs">Blogs</a></li>
+            <li><a href="https://www.iucr.org/iucr/bragg-prize">Bragg Prize</a></li>
+            <li><a href="https://www.iucr.org/calendar/calendar-of-events">Calendar of Events</a></li>
+            <li><a href="https://www.iucr.org/resources/commissions">Commissions</a></li>
+            <li><a href="https://www.iucr.org/iucr/governance/advisory-committees/committee-on-data">Committee on Data</a></li>
+            <li><a href="https://www.iucr.org/iucr/cong">Congress and General Assembly</a></li>
+            <li><a href="https://www.iucr.org/outreach/crystal-growing-competition">Crystal growing competition</a></li>
+            <li><a href="https://www.iucr.org/resources/cif">Crystallographic Information Framework (CIF)</a></li>
+            <li><a href="https://www.iucr.org/world">Crystallography around the world</a></li>
+            <li><a href="https://www.iucr.org/resources/forums">Discussion forums</a></li>
+            
+          </ul>
+          <!-- ################################################################################################ -->
+        </div>
+        <div class="one_quarter"> 
+          <!-- ################################################################################################ -->
+          <ul>
+
+            <li><a href="https://www.iucr.org/resources/lists">Discussion lists</a></li>
+            <li><a href="https://www.iucr.org/iucr/ewald-prize">Ewald Prize</a></li>
+            <li><a href="https://www.iucr.org/iucr/governance/ec">Executive Committee</a></li>
+            <li><a href="https://www.iucr.org/iucr/governance/finance.html">Finance Committee</a></li>
+<!--            <li><a href="./?a=143598">Gender Equity and Diversity Committee</a></li>  -->
+            <li><a href="https://www.iucr.org/iucr/governance/advisory-committees/gedc">Gender Equity and Diversity Committee</a></li>
+            <li><a href="https://www.iucr.org/iucr/history">History of the Union</a></li>
+            <li><a href="https://www.iucr.org/books2008/international-tables"><it>International Tables for Crystallography</it></a></li>
+            <li><a href="https://iycr2014.org/about"><it>International Year of Crystallography</it></a></li>
+            <li><a href="https://www.iucr.org/news/notices/employment">Jobs</a></li>
+            <li><a href="https://www.iucr.org/retired/journals">Journals</a></li>
+            <li><a href="https://www.iucr.org/resources/nexus">Lachlan Cranswick Crystallographic NeXus</a></li>
+          </ul>
+          <!-- ################################################################################################ -->
+        </div>
+        <div class="one_quarter"> 
+          <!-- ################################################################################################ -->
+          <ul>
+            <li><a href="https://www.iucr.org/outreach/laamp">Lightsources for Africa, the Americas, Asia and Middle East Project (LAAAMP)</a></li>
+            <li><a href="https://www.iucr.org/iucr/ab.html">Membership</a></li>
+            <li><a href="https://www.iucr.org/outreach/sponsorship/meetings.html">Meetings support</a></li>
+            <li><a href="https://www.iucr.org/news/newsletter">Newsletter</a></li>
+            <li><a href="https://www.iucr.org/people/nobel-prize">Nobel Prizes</a></li>
+            <li><a href="https://www.iucr.org/people/crystallographers">Obituaries</a></li>
+            <li><a href="https://www.iucr.org/outreach/openlabs">OpenLabs</a></li>
+            <li><a href="https://www.iucr.org/iucr/governance/advisory-committees/book-series">OUP Book Series</a></li>
+            <li><a href="https://www.iucr.org/outreach/sponsorship/iucr-outreach-fund">Outreach and Education Fund</a></li>
+            <li><a href="https://www.iucr.org/people/photos">Photo galleries</a></li>
+            <li><a href="https://www.iucr.org/publications">Publications</a></li>
+            <li><a href="https://www.iucr.org/news/rss-feeds">RSS feeds</a></li>
+          </ul>
+          <!-- ################################################################################################ -->
+        </div>
+        <div class="one_quarter"> 
+          <!-- ################################################################################################ -->
+          <ul>
+            <li><a href="https://www.iucr.org/iucr/2abbeysq.html">Secretariat</a></li>
+            <li><a href="https://www.iucr.org/resources/other-directories/software">Software list</a></li>
+            <li><a href="https://www.iucr.org/iucr/governance/statutes-and-by-laws">Statutes and By-Laws</a></li>
+            <li><a href="https://www.iucr.org/outreach/sponsorship/meetings.html">Support of Meetings</a></li>
+            <li><a href="https://www.iucr.org/resources/symmetry-font">Symmetry font</a></li>
+            <li><a href="https://www.iucr.org/education/pamphlets">Teaching Pamphlets</a></li>
+            <li><a href="https://www.iucr.org/outreach/sponsorship/vp.html">Visiting Professorship scheme</a></li>
+            <li><a href="https://www.iucr.org/people/wdc"><it>World Directory of Crystallographers</it></a></li>
+          </ul>
+          <!-- ################################################################################################ -->
+        </div>
+      </div>      <!-- ####################################################################################### -->
+
+      <!-- ####################################################################################### -->
+    </div>
+    <!-- ######################################################################################### -->
+  </div>
+</div>
+<!-- ####################################################################################### -->
+<!-- ############################# STANDARD FOOTER ######################################### -->
+<!-- ####################################################################################### -->
+<div class="wrapper row4">
+  <footer id="footer" class="hoc clear"> 
+    <div class="group">
+      <div class="one_third first">
+        <h6 class="title">International Union of Crystallography</h6>
+        <p class="btmspace-30">Scientific Union Member of the International Science Council (admitted 1947). Member of CODATA, the ISC Committee on Data. Partner with UNESCO, the United Nations Educational, Scientific and Cultural Organization in the International Year of Crystallography 2014.</p>
+        <ul class="nospace inline pushright">
+          <li><a href="https://www.iucr.org/home/contact-us">Contact</a></li>
+          <li><a href="https://www.iucr.org/cgi-bin/iucrsearch">Search</a></li>
+          <li><a href="https://journals.iucr.org/services/privacy.html">Privacy</a></li>
+        </ul>
+      </div>
+      <div class="one_third">
+        <h6 class="title">International Science Council Scientific Freedom Policy</h6>
+        <article>
+          <!-- <h2 class="nospace font-x1"><a href="#">ICSU Scientific Freedom Policy Statement</a></h2>
+          <time class="font-xs" datetime="2045-04-06">Friday,
+6<sup>th</sup> April 2045</time> -->
+          <p>The IUCr observes the basic policy of non-discrimination and affirms the right and freedom of scientists to associate in international scientific activity without regard to such factors as ethnic origin, religion, citizenship, language, political stance, gender, sex or age, in accordance with the Statutes of the International Council for Science.</p>
+        <p><a href="https://www.iucr.org/iucr/governance/advisory-committees/gedc">IUCr policy on Gender Equity and Diversity</a></p>
+        </article>
+      </div>
+      <div class="one_third">
+        <h6 class="title">Useful links</h6>
+        <ul class="nospace linklist">
+          <li><a href="https://www.iucr.org/outreach/sponsorship/iucr-outreach-fund">Donate to the Outreach and Education Fund</a></li>
+          <li><a href="https://www.iucr.org/people/associates">Join the Associates Programme</a></li>
+          <li><a href="https://www.iucr.org/outreach/sponsorship/meetings.html">Request support for meeting</a></li>
+          <li><a href="https://www.iucr.org/outreach/sponsorship/vp.html">Apply for Visiting Professorship</a></li>
+          <li><a href="https://www.iucr.org/calendar/etc/add-meeting">Post details of a meeting</a></li>
+        </ul>
+      </div>
+    </div>
+    <!-- ####################################################################################### -->
+  </footer>
+</div>
+
+<!-- ######################################################################################## -->
+<!-- ############################# COPYRIGHT/CREDITS ######################################## -->
+<!-- ######################################################################################## -->
+<div class="wrapper row5">
+  <div id="copyright" class="hoc clear"> 
+    <!-- ######################################################################################## -->
+    <p class="fl_left">Copyright © - All Rights Reserved - <a href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#">International Union of Crystallography</a></p>
+    <!-- <p>Template by <a target="_blank" href="http://www.os-templates.com/" title="Free Website Templates">OS Templates</a></p> -->
+    <!-- ######################################################################################## -->
+  </div>
+</div>
+
+<!-- ######################################################################################## -->
+<!-- ################################## POST-CONTENT SCRIPTS etc. ########################### -->
+<!-- ######################################################################################## -->
+<a id="backtotop" href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#top"><i class="fa fa-chevron-up"></i></a>
+<!-- JAVASCRIPTS -->
+<script src="./CIF1-1 Common semantic features_files/jquery.backtotop.js.download"></script>
+<script src="./CIF1-1 Common semantic features_files/jquery.mobilemenu.js.download"></script>
+<!-- IE9 Placeholder Support -->
+<script src="./CIF1-1 Common semantic features_files/jquery.placeholder.min.js.download"></script>
+<!-- / IE9 Placeholder Support -->
+
+<script type="text/javascript" src="./CIF1-1 Common semantic features_files/tabber.js.download"></script>
+<script type="text/javascript" src="./CIF1-1 Common semantic features_files/iucr.js.download"></script>
+<script type="text/javascript" src="./CIF1-1 Common semantic features_files/slimbox2.js.download"></script>
+
+
+<script defer="" src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;270a88145f4742eab139c5c36687be00&quot;,&quot;server_timing&quot;:{&quot;name&quot;:{&quot;cfCacheStatus&quot;:true,&quot;cfEdge&quot;:true,&quot;cfExtPri&quot;:true,&quot;cfL4&quot;:true,&quot;cfOrigin&quot;:true,&quot;cfSpeedBrain&quot;:true},&quot;location_startswith&quot;:null}}" crossorigin="anonymous"></script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9e68290dbc5585b6',t:'MTc3NTIyMDIyMQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><iframe height="1" width="1" style="position: absolute; top: 0px; left: 0px; border: none; visibility: hidden;" src="./CIF1-1 Common semantic features_files/saved_resource.html"></iframe>
+<div id="lbOverlay" style="display: none;"></div><div id="lbCenter" style="display: none;"><div id="lbImage"><div style="position: relative;"><a id="lbPrevLink" href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#"></a><a id="lbNextLink" href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#"></a></div></div></div><div id="lbBottomContainer" style="display: none;"><div id="lbBottom"><a id="lbCloseLink" href="https://www.iucr.org/resources/cif/spec/version1.1/semantics#"></a><div id="lbCaption"></div><div id="lbNumber"></div><div style="clear: both;"></div></div></div><div class="popup" style="bottom: 0px; left: 0px; min-width: 288px; position: fixed; right: 0px; padding: 0.5em; border: 1.5px solid rgb(170, 170, 170); border-radius: 5px; background: rgb(221, 221, 221); z-index: 99999; display: block;">We use cookies on our websites, and by using this site you are consenting to them: <b><a style="text-decoration:none;color:#990000;" onclick="IUCrCookieMonster.setPref(&#39;0&#39;);">allow all</a></b> or <b><a style="text-decoration:none;color:#990000;" href="https://journals.iucr.org/services/cookies.html">manage</a></b></div></body></html>

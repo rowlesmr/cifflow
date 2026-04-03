@@ -1,0 +1,7 @@
+#\#CIF_2.0
+
+data_strings
+_audit_dataset.id	3eb54f2e-5c48-4748-89f2-6d417efd205c
+_tag val:with:colon
+_pd_meas.datetime_initiated	2007-12-18T12:16:55+02:00
+_diffrn.id	30C

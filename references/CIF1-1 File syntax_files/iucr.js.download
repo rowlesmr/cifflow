@@ -1,0 +1,459 @@
+/* IUCr JavaScript tweaks to web page content */
+
+/* Impose style on instances of string "IUCr" in certain contexts */
+
+$(":header, nav").each(function(){
+ var iucr_text = $(this).html().replace(/IUCr/g, '<span class="iucrlogo">IUCr</span>');
+ $(this).html(iucr_text);
+});
+$("nav li>a").each(function(){
+ var iucr_text = $(this).html().replace(/iucr/g, '<span class="iucrlogo">IUCr</span>');
+ iucr_text = $(this).html().replace(/<span class="<span class="iucrlogo"IUCr<\/span>"logo">/g, '<span class="iucrlogo">IUCr>');
+ $(this).html(iucr_text);
+});
+$("a.heading").each(function(){
+ var iucr_text = $(this).html().replace(/IUCr/g, '<span class="iucrlogo">IUCr</span>');
+ $(this).html(iucr_text);
+});
+$("nav li>a").each(function(){
+ var iucr_text = $(this).html().replace(/iycr2014/g, '<span class="iucrlogo">IYCr2014</span>');
+ $(this).html(iucr_text);
+});
+$("a.btn").each(function(){
+ var iucr_text = $(this).html().replace(/IUCr/g, '<span class="iucrlogo">IUCr</span>');
+ $(this).html(iucr_text);
+});
+
+
+
+
+/* Additions and overrides to jquery.jmobilemenu.js */
+
+/* Modify the style of a second main menu 
+$('<form action="#"><select /></form>').appendTo("#mainav2");$("<option />",{selected:"selected",value:"",text:"also in this section"}).appendTo("#mainav2 select");$("#mainav2 a").each(function(){var e=$(this);if($(e).parents("ul ul ul").length>=1){$("<option />",{value:e.attr("href"),text:"- - - "+e.text()}).appendTo("#mainav2 select")}else if($(e).parents("ul ul").length>=1){$("<option />",{value:e.attr("href"),text:"- - "+e.text()}).appendTo("#mainav2 select")}else if($(e).parents("ul").length>=1){$("<option />",{value:e.attr("href"),text:""+e.text()}).appendTo("#mainav2 select")}else{$("<option />",{value:e.attr("href"),text:e.text()}).appendTo("#mainav2 select")}});$("#mainav2 select").change(function(){if($(this).find("option:selected").val()!=="#"){window.location=$(this).find("option:selected").val()}})
+*/
+
+/* Modify the style of a second main menu (as above, but only listing two levels) */
+$('<form action="#"><select /></form>').appendTo("#mainav2");$("<option />",{selected:"selected",value:"",text:"also in this section"}).appendTo("#mainav2 select");$("#mainav2 a").each(function(){var e=$(this);if($(e).parents("ul ul ul").length>=1){/* no-op */}else if($(e).parents("ul ul").length>=1){$("<option />",{value:e.attr("href"),text:"- - "+e.text()}).appendTo("#mainav2 select")}else if($(e).parents("ul").length>=1){$("<option />",{value:e.attr("href"),text:""+e.text()}).appendTo("#mainav2 select")}else{$("<option />",{value:e.attr("href"),text:e.text()}).appendTo("#mainav2 select")}});$("#mainav2 select").change(function(){if($(this).find("option:selected").val()!=="#"){window.location=$(this).find("option:selected").val()}})
+
+/* And this is actually needed to make the mobile menus work */
+$("nav select").change(function() {
+  window.location = $(this).find("option:selected").val();
+});
+
+
+/* -------------------- iucrscripts.js ------------------------ */
+
+var myProcessPage = function() {
+
+<!-- stats divs -->
+/*    var cnors = new Array();
+    $(".downloads").each(function() {
+      var cnor = $(this).attr('id');
+      cnor = cnor.replace('_stats','');
+      cnor = cnor.replace('_stnar','');
+      cnors.push(cnor);
+    });
+  var jqxhr = $.getJSON('/cgi-bin/get_stats.pl?cnors=cnor'+cnors.join(),
+    function(data) {
+      $.each(data, function(cnor,stats){
+          var stot = stats.s.p+stats.s.h;
+          var ttot = stats.t.p+stats.t.h;
+          var etot = stats.e.p+stats.e.h;
+          //normal
+          var div = "#"+cnor+"_stats";
+          $(div).html("<span class=\"popuphd\">Page views</span><br/><table><tr><th>Time</th><th>HTML</th><th>PDF</th><th>Total</th></tr><tr><td class=\"head\">Last seven days</td><td>"+stats.s.h+"</td><td>"+stats.s.p+"</td><td>"+stot+"</td></tr><tr><td class=\"head\">Last thirty days</td><td>"+stats.t.h+"</td><td>"+stats.t.p+"</td><td>"+ttot+"</td></tr><tr><td class=\"head\">Since going online</td><td>"+stats.e.h+"</td><td>"+stats.e.p+"</td><td>"+etot+"</td></tr><tr class=\"\"><td colspan=\"4\"><a class=\"\" href=\"//scripts.iucr.org/cgi-bin/citedin?"+cnor+"\" alt=\"more stats\">more article statistics ...</a></td></tr></table>");
+          //narrow
+          var divnar = "#"+cnor+"_stnar";
+          $(divnar).html("<span class=\"popuphd\">Page views</span><br/><table><tr><th>Time</th><th>HTML</th><th>PDF</th><th>Total</th></tr><tr><td class=\"head\">Last seven days</td><td>"+stats.s.h+"</td><td>"+stats.s.p+"</td><td>"+stot+"</td></tr><tr><td class=\"head\">Last thirty days</td><td>"+stats.t.h+"</td><td>"+stats.t.p+"</td><td>"+ttot+"</td></tr><tr><td class=\"head\">Since going online</td><td>"+stats.e.h+"</td><td>"+stats.e.p+"</td><td>"+etot+"</td></tr><tr class=\"\"><td colspan=\"4\"><a class=\"\" href=\"//scripts.iucr.org/cgi-bin/citedin?"+cnor+"\"more stats\">more article statistics ...</a></td></tr></table>");
+     });
+   });
+  jqxhr.done(function() { console.log("Done"); });
+  jqxhr.fail(function() { console.log("Failed"); }); 
+*/
+$('.downloads').one('mouseover', 
+ function() {
+    var cnor = $(this).attr('id');
+    cnor = cnor.replace('_divwide','');
+    cnor = cnor.replace('_divnrw','');
+    cnor = cnor.replace('_stats','');
+    cnor = cnor.replace('_stnar','');
+    var jqxhr = $.getJSON('/cgi-bin/get_stats.pl?cnors='+cnor,
+	  function(data) {
+	    $.each(data, function(cnor,stats){
+	     var stot = stats.s.p+stats.s.h;
+	     var ttot = stats.t.p+stats.t.h;
+	     var etot = stats.e.p+stats.e.h;
+	     //normal
+	     var div = "#"+cnor+"_stats";
+	     $(div).html("<span class=\"popuphd\">Page views</span><br/><table><tr><th>Time</th><th>HTML</th><th>PDF</th><th>Total</th></tr><tr><td class=\"head\">Last seven days</td><td>"+stats.s.h+"</td><td>"+stats.s.p+"</td><td>"+stot+"</td></tr><tr><td class=\"head\">Last thirty days</td><td>"+stats.t.h+"</td><td>"+stats.t.p+"</td><td>"+ttot+"</td></tr><tr><td class=\"head\">Since going online</td><td>"+stats.e.h+"</td><td>"+stats.e.p+"</td><td>"+etot+"</td></tr><tr class=\"\"><td colspan=\"4\"><a class=\"\" href=\"//scripts.iucr.org/cgi-bin/citedin?"+cnor+"\" alt=\"more stats\">more article statistics ...</a></td></tr></table>");
+	     //narrow
+	     var divnar = "#"+cnor+"_stnar";
+	     $(divnar).html("<span class=\"popuphd\">Page views</span><br/><table><tr><th>Time</th><th>HTML</th><th>PDF</th><th>Total</th></tr><tr><td class=\"head\">Last seven days</td><td>"+stats.s.h+"</td><td>"+stats.s.p+"</td><td>"+stot+"</td></tr><tr><td class=\"head\">Last thirty days</td><td>"+stats.t.h+"</td><td>"+stats.t.p+"</td><td>"+ttot+"</td></tr><tr><td class=\"head\">Since going online</td><td>"+stats.e.h+"</td><td>"+stats.e.p+"</td><td>"+etot+"</td></tr><tr class=\"\"><td colspan=\"4\"><a class=\"\" href=\"//scripts.iucr.org/cgi-bin/citedin?"+cnor+"\"more stats\">more article statistics ...</a></td></tr></table>");
+	  })
+	 });
+	 jqxhr.done(function() { console.log("Done"); });
+	 jqxhr.fail(function() { console.log("Failed"); }); 
+	});
+
+
+<!-- repress title popup for popup menus -->
+  var ttext;
+  $('.art_icon').hover(function(){
+    ttext = $(this).attr('title');
+    $(this).removeAttr('title');
+  },function(){
+    $(this).attr('title', ttext);
+  });
+  //var ttext2;
+  $('.sidebutton>a').each(function(){
+    $(this).removeAttr('title');
+  });
+  $('.popup>a').each(function(){
+    $(this).removeAttr('title');
+  });
+  $('.popuphd>a').each(function(){
+   $(this).removeAttr('title');
+  });
+
+
+<!-- popup menu script -->
+var zlevel = 50;
+function popUpMenu() {
+  butt_index=butt_index+1;
+   var distance = 10;
+   var leftStart = 31;
+   var time =1;
+   var hideDelay = 25;
+   var hideDelayTimer = null;
+   var beingShown = false;
+   var shown = false;
+   var trigger = $('.art_icon', this);    
+   var showplace = trigger.attr('id');
+   if (showplace === "nextart") { 
+     distance = -10;
+     leftStart = -240;
+   } 
+   var info = $('.popup', this).css('opacity', 0);
+   var offtop = trigger.css('top');
+   var offleft = trigger.css('left'); // added by dh2 for moving buttons at top so the can be used easier  20140915
+<!-- Added by cm 28/9/2013 to deal with horizontal grey buttons and those on the right-hand side -->
+   if (trigger.parents('.af_horizontal').length) {
+     var topStart = parseInt(offtop);
+     topStart = topStart + 20;
+     topStart = topStart + "px";
+     offtop = topStart;
+     leftStart = offleft;
+     var teststr = leftStart.replace("px","");
+     var winstr = $('.popup').css('min-width').replace("px","");
+     var menuSpaceNeeded = parseInt(teststr)+parseInt(winstr)+30;
+     
+     if (menuSpaceNeeded > $(window).width()) {
+       leftStart = $(window).width() - winstr -30;
+     //  alert(winstr + ' ' + ' ' + teststr + ' ' +  menuSpaceNeeded + ' '+ $(window).width() + ' '+leftStart);
+     }
+   }
+   if (trigger.parents('#art_leftbox_narrow').length) {
+     distance = -10;
+   }
+   if (trigger.parents('.art_issuecontentsfunctions').length) {
+     distance = -10;
+     leftStart = -200;
+   }
+<!-- End 28/9/2013 section -->
+   $([trigger.get(0), info.get(0)]).mouseover(function () {
+     zlevel++;
+     if (zlevel > 1000) {
+       zlevel = 50;
+     }	
+     info.css({"z-index": zlevel});
+     // console.log(zlevel); 
+     if (hideDelayTimer) clearTimeout(hideDelayTimer);
+       if (beingShown || shown) {
+         // don't trigger the animation again
+         return;
+       } else {
+         // reset position of info box
+         beingShown = true;
+         info.css({
+           top: offtop,
+           left: leftStart,
+           display: 'block'
+         }).animate({
+           <!--  left: '+=' + distance + 'px', no longer animate the position 20140910 dh2 -->
+           opacity: 1
+         }, time, 'swing', function() {
+            beingShown = false;
+            shown = true;
+         });
+       }
+       return false;
+     }).mouseout(function () {
+       if (hideDelayTimer) clearTimeout(hideDelayTimer);
+       hideDelayTimer = setTimeout(function () {
+         hideDelayTimer = null;
+         info.animate({
+      <!--  left: '+=' + distance + 'px', no longer animate the position 20140910 dh2 -->
+           opacity: 0
+         }, time, 'swing', function () {
+           shown = false;
+           info.css('display', 'none');
+         });
+        }, hideDelay);
+        return false;
+     });
+   };
+
+var num_buts = $('.bubbleInfo').length;
+var butt_index = 0;
+
+function doCalculation()
+{
+  //alert("hi " + butt_index);
+   //do your thing for a short time
+  for (var i=0, len=100; i<len; i++)
+    if ( popUpMenu.call($('.bubbleInfo')[butt_index], butt_index, $('.bubbleInfo')[butt_index]) === false ) break;
+   //figure out how complete you are
+  var percent_complete=(butt_index*100)/$('.bubbleInfo').length;
+  //alert(percent_complete);
+
+   return percent_complete;
+}
+
+
+
+};
+
+
+$(function () {
+    
+    myProcessPage();
+    /* $('.af_vertical>.bubbleInfo>.sidebutton>.addthis_button_compact').hover(function(){ 
+									    alert($(this).offset().top);
+									     });								       
+  */
+
+  // form label handler   
+  /* $(".inputWrap").inputmask(); */
+  /* spw 20170401 - inputmask library replaced - following defunct 
+  $(".inputWrap").each(function() {
+    var label = $(this).find('label');
+    var input = $(this).find('input, textarea');
+    if(input.val() > '') {
+      label.css({opacity: '0'});
+    };  
+  });
+  */
+
+// latest div handler
+ $(".latest").find(".artlisthead").click(function () {
+  $(this).find("img").toggleClass("hide");
+  $(this).parent().find(".artlist").toggleClass("artlistbody");
+  $(this).parent().find(".artlist").slideToggle(400);
+  $(this).toggleClass("closed");
+ });
+
+ // script specific handlers
+ $("div.checkCIF").click(function() {
+  $(this).next("div.checkCIFfile").toggleClass("hide");
+  $(this).find("img").toggleClass("hide");
+ });
+ $("h3.scrpt_subs_info").click(function() {
+  $(this).find("img").toggleClass("hide");
+  $("div.scrpt_subs_info").toggleClass("hide");
+ });
+
+/*
+ $("#buyform").validate({
+    rules: {
+      email: {
+        required: true,
+        email: true
+      },
+      email2: {
+        required: true,
+        email: true,
+        equalTo: "#email"
+      },
+      country: {
+        required: true,
+      }
+    },
+    messages: {
+      email: "Please provide a valid e-mail address",
+      email2: "Please enter the same e-mail address as above",
+      country: "Country is a required field",
+      },
+ });
+*/
+
+
+// This is for loading pages such as editor details into a templated page 
+ function myData(div) {
+   var myData =  window.location.search.toString().substring(1);
+   if (div === "#categoryside") {
+     myData = "catid="+$(div).attr('class')+"&limit=5";
+     if ($(div).find(".jid").get(0)) {
+       myData = myData + "&jid=" + $(div).find(".jid").text();
+     };
+     if ($(div).find(".dochead").get(0)) {
+       myData = myData + "&dochead=" + $(div).find(".dochead").text();
+     };
+   };
+   //alert( window.location.search.toString().substring(1) );
+   $.ajax({
+           type: "GET",
+           url: 'https://journals.iucr.org/cgi-bin/get_hl_for_www',
+	data: myData,
+           /* load returned data into the iucrmess div and unfade the message and remove the loading message */
+           success: function(data){
+              $(div).html(data);
+              //if (div === "#category") {
+	      //myProcessPage();
+	      //};
+           },
+           error: function(xhr, ajaxOptions, thrownError) {
+             $(div).remove();
+           }
+        });
+  
+ };
+// ^^^^^ 
+// if this is an editor details template page 
+ if ($("#editor").get(0)) {
+   myData("#editor");
+   hs.graphicsDir = '//scripts.iucr.org/javascript/highslide/graphics/';
+   hs.wrapperClassName = 'wide-border';
+   // close on mouse out
+   hs.Expander.prototype.onMouseOut = function (sender) {
+     sender.close();
+   };
+   // close if mouse is not over on expand (using the internal mouseIsOver property)
+   hs.Expander.prototype.onAfterExpand = function (sender) {
+    if (!sender.mouseIsOver) sender.close();
+   };
+ };
+
+ if ($("#category").get(0)) {
+   // alert ($("#category").get(0));
+   myData("#category");
+ }
+ if ($("#home_hl").get(0)) {
+   // alert ($("#category").get(0));
+   myAjax("home_hl", "all", "#home_hl");
+ }
+ if ($("#categoryside").get(0)) {
+   // alert ($("#category").get(0));
+   myData("#categoryside");
+ }
+
+// ^^^^
+
+
+// vvvv These lines are for pages where the "hd_navigatetitle" div is included 
+ $("#hd_navigatesmall").find(".hd_navigatetitle").click(function () {
+  $(this).find("img").toggleClass("hide");
+  //$(this).parent().find(".sitelink").toggleClass("hd_navlink");
+  $(this).parent().find(".sitelink").slideToggle(400);
+  //$(this).toggleClass("closed");
+ });
+// ^^^^^
+
+});
+ // vvvv This function is be included on pages with dynamic content. At the moment that is iucrmessages, highlights and latest div
+ function myAjax(dataset, jid, container) {
+  $.ajax({
+           type: "GET",
+           url: 'https://journals.iucr.org/cgi-bin/get_hl_for_www',
+           data: 'jid='+jid+'&dataset='+dataset,
+           /* load returned data into the iucrmess div and unfade the message and remove the loading message */
+           success: function(data){
+            if (dataset == "mess") {
+              $("#iucrmess").html(data);
+            } else if (dataset == "meet") {
+              $("#iucrmeet").html(data);
+            } else if (dataset == "home_hl") {
+              $("#home_hl").html(data);
+	 //     $(".bhl_synopsis").dotdotdot({watch: "window", ellipsis: " ... "}); 
+            } else if (dataset == "hl") {
+              var  bhl;
+              bhl = $(data).children().eq(0);
+              var hl;
+              hl = $(data).children().eq(1); 
+              if (jid == "m") {
+               $("#highlights").before("<h3>Articles from IUCrJ</h3>");
+              }
+              $("#highlights").before($(bhl).html());
+              $("#highlights").html($(hl).html());
+              //$("#highlights").html(data);
+              // $(".hl_synopsis").dotdotdot({watch: "window", ellipsis: " ... "}); 
+              // $(".hl_head").dotdotdot({watch: "window", ellipsis: " ... "}); 
+              // $(".bhl_synopsis").dotdotdot({watch: "window", ellipsis: " ... "}); 
+         //     $(".bhl_head").dotdotdot({watch: "window", ellipsis: " ... "}); 
+            } else { 
+              $("#s"+dataset).html(data);
+              $("#t"+dataset).html(data);
+            }
+            $(container).css("display", "block");
+           },
+           error: function(xhr, ajaxOptions, thrownError) {
+             if (dataset == "mess") {
+               $("#iucrmessages").remove();
+             } else if (dataset == "meet") {
+               $("#iucrmeetings").remove();
+             } else if (dataset == "home_hl") {
+               $("#home_hl").remove();
+            } else if (dataset == "hl") {
+               $("#highlights").remove();
+	     } else {
+               $("#s"+dataset).remove();
+               $("#t"+dataset).remove();
+             }        
+           }
+        });
+ };
+// ^^^^^ 
+
+
+// added for control of buttons on mobile devices
+$(".but_close").click(function () {
+  $(this).parent().css("display","none");
+  return false;
+});
+
+// Latest update 2017-01-27 (bm)
+var vat_rate={SE:"0.250", LT:"0.210", ES:"0.210", RO:"0.190", LU:"0.170", GR:"0.240", GB:"0.200", LV:"0.210", EE:"0.200", SI:"0.220", PT:"0.230", CY:"0.190", IT:"0.040", CZ:"0.210", SK:"0.200", IE:"0.230", BE:"0.210", FR:"0.200", MT:"0.180", BG:"0.200", DE:"0.190", NL:"0.210", HR:"0.250", PL:"0.230", HU:"0.270", AT:"0.200", DK:"0.250", FI:"0.240"};
+
+var prices={pdf:"40.0", html:"40.0",both:"50.0"};
+
+  var priceFunc = function(format, vat_per) {
+    var ele = "#"+format+"vat";
+    var newprice = ((100+vat_per)*prices[format])/100;
+    $(ele).html(" plus VAT at " + vat_per + "%, total US $" + newprice);
+  };
+
+  var setPrices = function(country) {
+    if (vat_rate[country] === undefined) {
+     $("#pdfvat").html("");
+     $("#htmlvat").html("");
+     $("#bothvat").html("");
+    } else {
+     var vat_per = vat_rate[country]*100;
+     priceFunc("pdf", vat_per);
+     priceFunc("html", vat_per);
+     priceFunc("both", vat_per);
+   }
+  };
+
+  var setInitialPrice = function(obj) {
+   var optionSelected = $(obj).find("[selected='selected']");
+   var valueSelected  = optionSelected.attr("value");
+   setPrices(valueSelected);
+  };  
+
+  var setPrice = function(obj) {
+   var optionSelected = $("option:selected", obj);
+   var valueSelected  = optionSelected.attr("value");
+   setPrices(valueSelected);
+  }; 
+

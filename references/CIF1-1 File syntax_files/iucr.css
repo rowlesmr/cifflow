@@ -1,0 +1,1013 @@
+/* ********************************************************* */
+/* ********************************************************* */
+/*                                                           */
+/*             iucr mods to escarine_edu distribution        */
+/*                                                           */
+/* ********************************************************* */
+/* ********************************************************* */
+
+.vanilla { font-variant:none; } /* useful for e.g. entities in headings */
+
+header#minisite { height:5em; }
+
+/* Second Top Navigation menu used in minisites */
+/* NB check if jquery.mobilemenu.js also needs to be updated */
+#mainav2, #breadcrumb, .sidebar nav{line-height:normal;}
+#mainav2 .drop::after, #mainav2 li li .drop::after, #breadcrumb li a::after, .sidebar nav a::after{position:absolute; font-family:"FontAwesome"; font-size:10px; line-height:10px;}
+
+#mainav2{}
+#mainav2 ul.clear{margin-top:3px;}
+#mainav2 ul ul{z-index:9999; position:absolute; width:180px; text-transform:none;}
+#mainav2 ul ul ul{left:180px; top:0;}
+#mainav2 li{display:inline-block; position:relative; margin:0 15px 6px 0; padding:0;}
+#mainav2 li:last-child{margin-right:0;}
+#mainav2 li li{width:100%; margin:0;}
+/* #mainav2 li a{display:block; padding:0 0 32px 0;} */
+#mainav2 li li a{border:solid; border-width:0 0 1px 0;}
+#mainav2 .drop{padding-left:15px;}
+#mainav2 li li a, #mainav2 li li .drop{display:block; margin:0; padding:10px 15px;}
+#mainav2 .drop::after, #mainav2 li li .drop::after{content:"\f0d7";}
+#mainav2 .drop::after{top:5px; left:5px;}
+#mainav2 li li .drop::after{top:15px; left:5px;}
+#mainav2 ul ul{visibility:hidden; opacity:0;}
+#mainav2 ul li:hover > ul{visibility:visible; opacity:1;}
+
+/* The following retains the menu marker on "current" as well as "drop" menu items */
+#mainav2 .current::after, #mainav li li .current::after, #breadcrumb li a::after, .sidebar nav a::after{position:absolute; font-family:"FontAwesome"; font-size:10px; line-height:10px;}
+#mainav2 .current{padding-left:15px;}
+#mainav2 .current::after, #mainav li li .drop::after{content:"\f0da";}
+#mainav2 .current::after{top:5px; left:5px;}
+#mainav2 li li .current::after{top:15px; left:5px;}
+
+#mainav2 form{display:none; margin:0; padding:0;}
+#mainav2 form select, #mainav2 form select option{display:block; cursor:pointer; outline:none;}
+#mainav2 form select{width:100%; padding:5px; border:1px solid;}
+#mainav2 form select option{margin:5px; padding:0; border:none;}
+
+#mainav2 li a{color:inherit;}
+#mainav2 .active a, #mainav a:hover, #mainav li:hover > a{color:#5B9BBD; background-color:inherit;}
+#mainav2 li li a, #mainav .active li a{color:#FFFFFF; background-color:rgba(0,0,0,.6); border-color:rgba(0,0,0,.6);}
+#mainav2 li li:hover > a, #mainav .active .active > a{color:#FFFFFF; background-color:#5B9BBD;}
+#mainav2 form select{color:#FFFFFF; background-color:#1E252B; border-color:rgba(1 36,136,136,.5);/* #888888 */}
+
+/* #mainav2 li a{display:block; padding:0 0 12px 0;} */ /* for narrower main menu bar */
+
+/* some new classes used in the bookshop store layout */
+
+div.bookshop {height:26em;overflow:hidden;text-align:center;line-height:1.3;font-size:11px;width:80%;margin:auto;}
+img.bookshop {height:180px;margin-bottom:10px;box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);}
+
+@media screen and (max-width:980px) { div.bookshop { height:24em; } }
+div.shopwindow {clear:both;}
+div.shopwindow article:nth-of-type(3n+1) { margin-left:0px; }
+
+/* Concertina
+--------------------------------------------------------------------------------------------------------------- */
+#concertina{}
+
+#concertina .ui-accordion{}/* main wrapper */
+#concertina .ui-accordion .ui-accordion-header{display:block; width:100%; margin:0; padding:25px 0; text-align:center; font-size:1.4em; text-transform:uppercase;}/* toggle */
+#concertina .ui-accordion .ui-accordion-header::before, #concertina .ui-accordion .ui-accordion-header::after{float:left; font-family:"FontAwesome"; font-size:inherit; content:"\f067";}
+#concertina .ui-accordion .ui-accordion-header::after{float:right;}
+#concertina .ui-accordion .ui-accordion-header-active::before, #concertina .ui-accordion .ui-accordion-header-active::after{content:"\f068";}
+#concertina .ui-accordion .ui-accordion-content{display:block; width:100%; padding:0 0 40px 0; border:solid; border-width:0 0 0px 0;}/* Content wrapper */
+
+#concertina .linkblock div{margin-bottom:0;}/* Required for smaller viewports when elements stack */
+
+#concertina ul{margin:0; padding:0; list-style-position:inside;}
+#concertina li{margin-bottom:10px;}
+
+
+/* ********************************************************* */
+/*                 overrides to layout.css                   */
+/* ********************************************************* */
+a{ color:#022C43; }
+div#pagetitle a { color: #ffffff !important; }
+
+h1, h2, h3, h4, h5, h6, .heading{margin: 20px 0 20px 0;}
+
+.container{ padding: 40px 0 0 0;}
+#quicklinks .ui-accordion .ui-accordion-header{display:block; width:100%; margin:0; padding:25px 0; text-align:center; font-size:1.4em; text-transform:uppercase;}/* toggle */
+
+.row0 { border-color: #63C4C9; }
+.row3 { color: #777777; }
+
+/* #topbar:before {margin:auto;content:"IUCr network services may be down for a short period between 09:00 and 11:00 UTC on Friday 19 November 2021";} */
+#topbar { background-color: #022C43; }
+#backtotop { background-color: #B9282C; }
+.faico img { width:16px;margin-top:0px;margin-right:6px;}
+#topbar form { display: inline-block;padding: 5px 2px; }
+input.inlinesearch { display:inline-block;border-radius:10px;border-color:white;background-color:white;text-align:left;color:gray; }
+div.calendar-search input { display:inline-block; }
+input#queries-meeting-query { display:inline-block; }
+
+.sidebar .sdb_holder { padding-right:1em; }
+.sidebar .sdb_holder:last-child { margin-bottom:1em; }
+
+#mainav {padding-top:10px;}
+#mainav li a{display:block; padding:0 0 12px 0;} /* for narrower main menu bar */
+
+/* The following retains the menu marker on "current" as well as "drop" menu items */
+#mainav .current::after, #mainav li li .current::after, #breadcrumb li a::after, .sidebar nav a::after{position:absolute; font-family:"FontAwesome"; font-size:10px; line-height:10px;}
+#mainav .current{padding-left:15px;}
+#mainav .current::after, #mainav li li .drop::after{content:"\f0da";}
+#mainav .current::after{top:5px; left:8px;}
+#mainav li li .current::after{top:15px; left:5px;}
+
+a.current { font-weight: bold; }
+/* #mainav a.current { background: gray; color: white; margin-top:-32px; padding: 13px 20px; } */
+
+#header{padding:0px 0 0 0;}
+#breadcrumb{padding:3px 0 3px 10px;}
+#breadcrumb{background-color: #d7d7d7;}
+#breadcrumb{color: #888888;}
+
+#breadcrumb a {color: #888888; font-size:small;}
+
+#pagetitle{padding: 40px 0 40px 0;}
+div#pagetitle a>img {float:left;}
+
+#pageintro{padding: 64px 0 64px 0;}
+
+.bgded {background-position: center;}
+footer .btn {width:16em;padding:6px;margin-right:6px !important;}
+footer.children {text-align:center;}
+footer.children .btn {width:20em;padding:20px;}
+
+
+/* home page style modifications */
+#introblocks ul li:nth-child(1){background-color:#0451a0;}/*Acta A*/
+#introblocks ul li:nth-child(2){background-color:#679f29;}/*Acta B*/
+#introblocks ul li:nth-child(3){background-color:#df3d01;}/*Acta C*/
+#introblocks ul li:nth-child(4){background-color:#a42c78;}/*Acta E*/
+#introblocks ul li:nth-child(1) i{background-color:#4890cd;}/*JSR*/
+#introblocks ul li:nth-child(2) i{background-color:#c4d931;}/*Acta F*/
+#introblocks ul li:nth-child(3) i{background-color:#e97905;}/*JAC*/
+#introblocks ul li:nth-child(4) i{background-color:#f8cc00;}/*Acta D*/
+
+i.clg img {margin-top: -10px!important; }
+
+#join{color:#FFFFFF; background-color:#142033;}
+
+/* end of home page style modifications */
+
+
+/* ********************************************************* */
+/* ********************************************************* */
+/*                                                           */
+/*              tweaks for iucr special items                */
+/*                                                           */
+/* ********************************************************* */
+/* ********************************************************* */
+
+/* normal page components reduced in importance */
+.subsidiary h1{font-size:22px;}
+.subsidiary h2{font-size:18px;}
+.subsidiary h3{font-size:16px;}
+.subsidiary h4{font-size:14px;}
+.subsidiary h5{font-size:12px;}
+.subsidiary h6{font-size:12px;text-transform:uppercase;font-weight:bold;}
+
+span.iucrlogo { 
+  text-transform: none !important;
+  font-variant: normal;
+}
+address {
+  font-weight: bold;
+  font-size: 90%;
+  margin-bottom: 1em;
+}
+
+.tight {margin-top: -40px;} /* bring page elements up tight(e.g. top of page) */
+
+/* footnote links */
+a.sdfootnotesym { position: relative;bottom: 0.5em;font-size: 0.8em;}
+
+div.figureright,
+div.figureright80, div.figureright160, div.figureright240, div.figureright320, div.figureright400 { 
+  clear: right; 
+  white-space: normal; 
+  position: relative;
+  margin: 0.5em 0.5em 0.5em 2em;
+  float: right; 
+  font-size: 0.8em;
+  line-height:1.3;
+}
+
+img.figureright, div.figureright { 
+  width: 320px;
+  border: 0;
+  margin-bottom:6px;
+}
+
+img.figureright80, div.figureright80 { 
+  width: 80px;
+  border: 0;
+  margin-bottom:6px;
+}
+img.figureright160, div.figureright160 { 
+  width: 160px;
+  border: 0;
+  margin-bottom:6px;
+}
+img.figureright240, div.figureright240 { 
+  width: 240px;
+  border: 0;
+  margin-bottom:6px;
+}
+img.figureright320, div.figureright320 { 
+  width: 320px;
+  border: 0;
+  margin-bottom:6px;
+}
+img.figureright400, div.figureright400 { 
+  width: 400px;
+  border: 0;
+  margin-bottom:6px;
+}
+div.clear { 
+  clear: right;
+}
+
+div.sidebar img { 
+  border-color: #600;
+ }
+
+div.whatsnew {
+  margin-bottom: 3px;
+  padding-top: .3em;  
+  padding-bottom: .1em;
+  background-color: #f7f7f7;
+}
+
+/*               list style in asset builder page            */
+ul li.sq-asset-builder-tab-active{
+  list-style-image: url("mysource_files/arrowlist_open.png");
+  list-style-position: inside;
+  color: #600;
+}
+ul li.sq-asset-builder-tab ul {
+  list-style-image: none;
+  list-style-type: circle;
+  font-size: 100%;
+}
+ul li.sq-asset-builder-tab-active ul li {
+  font-size: 135%;
+}
+
+/* hide the "Cascade changes" checboxes from metadata request fields */
+#metadata_field input[type=checkbox].sq-form-field { display: none; }
+#metadata_field label { display: none; }
+
+/* Positioning styles for the CCACH banner */
+.ccach_image_block {
+    height: 100px;
+  width: 100%;
+  min-width: 576px;
+    z-index:1;
+    position:relative;
+  text-align: center;
+}
+.ccach_image_block img{position:relative;z-index:2;} 
+.ccach_image_block span{
+    height: 100px;
+  width: 100%;
+  background: url("mysource_files/ccach_rubric.png") no-repeat left top;
+    position:absolute;
+    left:6px;
+    top:6px;
+    z-index:3;
+}
+
+/* generic error message format */
+.errorMessage {
+  font-weight: bold;
+}
+
+/* --------------------- home page specials ------------------ */
+
+#mainav ul li:first-of-type { /* for "The IUCr" */
+  text-transform: none;
+}
+
+#homepageintro {
+  padding: 64px 0 200px 0;
+}
+
+#homepageintro article {
+  display: block;
+  max-width: 80%;
+  margin: 0 auto;
+  padding: 0;
+  text-align: center;
+}  /* Top padding also takes the container class into consideration */
+#homepageintro article *{margin:0;}
+#homepageintro article .heading{margin-bottom:30px; font-size:46px;}
+#homepageintro article .underline::after{margin-top:20px;}
+#homepageintro article p{margin-bottom:50px; font-size:16px; line-height:1.4;}
+#homepageintro article footer{margin-bottom:0;}
+#homepageintro article footer .btn{
+  margin-bottom:10px;
+  width:16em;
+  font-size:12px;
+}
+
+a.bannerlink { color:antiquewhite; font-style: italic; }
+.compact {font-size:12px;}
+
+div.motd_display {
+  padding: 0px 20px;
+  margin-bottom: -40px;
+}
+
+div#latest_article_content { /* Newsletter articles on home page */
+    clear:both;
+    margin: auto;
+    max-width: 842px;
+}
+div#latest_article_content h1 { /* Newsletter articles on home page */
+    border-top:1px solid #d7d7d7;
+    padding-top:20px;
+}
+h5.latest_article {
+  margin-top:0px;
+  margin-bottom:5px;
+  font-weight:bold;
+  font-size:13px;
+}
+
+li.CA_cat1, li.CA_cat2, li.CA_cat3 {
+  padding-top:3px;
+  padding-left:3px;
+  background-repeat: no-repeat;
+  height: 120px;
+}
+
+li.CA_cat1 {
+  border: 3px solid silver;
+  /* background-image: url("//www.iucr.org/__data/assets/image/0005/143339/star_gold_25.png"); */
+}
+li.CA_cat1:before {
+  content: "Category 1"
+}
+li.CA_cat2 {
+  border: 3px solid silver;
+  /* background-image: url("//www.iucr.org/__data/assets/image/0015/143340/star_silver_25.png"); */
+}
+li.CA_cat2:before {
+  content: "Category 2"
+}
+li.CA_cat3 {
+  border: 3px solid silver;
+  /* background-image: url("//www.iucr.org/__data/assets/image/0016/143341/star_bronze_25.png"); */
+}
+li.CA_cat3:before {
+  content: "Category 3"
+}
+li.CA_cat1 img, li.CA_cat2 img, li.CA_cat3 img {
+  max-height: 60px;
+}
+.infolist li * {line-height:1.3;}
+
+/* list of announcements modelled on infolist */
+.announcelist, .announcelist ul{margin:0; padding:0; list-style:none; line-height:1;}
+.announcelist li{display:block; position:relative; min-height:90px; margin:0 0 20px 0; padding:0 0 10px 80px; border-bottom:1px solid #d7d7d7;margin-top:-10px;}
+.announcelist li:last-child{margin:0;}
+.boxed .announcelist > li:last-child{min-height:80px; padding-bottom:0; border:none;}
+.announcelist li::before, .announcelist li::after{display:table; content:"";}
+.announcelist li, .announcelist li::after{clear:both; overflow:hidden;}
+.announcelist li *{margin:0;}
+.announcelist li > div:first-of-type{display:block; position:absolute; top:0; left:0; width:128px; height:80px;}
+.announcelist li > div:first-of-type img{width: 100%;}
+.announcelist li > div:last-of-type{margin-left:60px;}
+.announcelist li ul{margin-top:8px;}
+.announcelist li li{display:block; min-height:0; margin:0 0 8px 0; padding:0; border:none;}
+.announcelist li > div:last-of-type li i{margin-right:5px;}
+.announcelist li li, .announcelist li p{font-size:.85rem;}
+.announcelist li p{margin-top:8px; line-height:1.5;}
+.announcelist > li:first-of-type  {padding:10px 10px 10px 80px;/*font-size: 1rem; font-weight:bold;*/ background-color: #142033;color: white;}
+.announcelist > li:first-of-type p {font-size:.85rem;}
+.announcelist > li:first-of-type a {color:antiquewhite}
+
+/* ------------------ end of home page specials ------------- */
+
+
+/* ----- highlights_all.css -----
+/* */
+/* */
+#highlights {position: relative; color: #666; display: block; }
+      #highlights_static {display: block; position: relative; color: #666; }
+     img.seperator {vertical-align: text-bottom;}
+    .hl_box {text-align: left; width: 29%; float: left;  font: 1em/1.58em Arial; margin: 4px; border: 1px solid #fff;}
+    .hl_subbox {padding: 0px 15px;}
+    .hl_head {line-height: 16px; margin-bottom: 0.25em; height: 48px; overflow: hidden;}
+       #highlights_static .hl_head {line-height: 16px; margin-bottom: 0.25em; height: 48px; overflow: hidden;}
+    .hl_title {color: #666; padding: 15px; text-transform: uppercase;  line-height: 100%; display: block; }
+    .hl_img {width: 25%;} 
+    img.hl_img {float: left; max-height: 60px; margin-right: 0.75em;}
+        .hl_synopsis {max-height: 4.74em; height: 4.74em;}
+    .hl_list_img {max-height: 4.74em; overflow: hidden; color: #000;}
+    a.hl_more {text-decoration: none; color: #900; font-weight: 800; }
+    .hl_head a {white-space: normal;}
+      #hl_box1 {border-left: 1px solid #eee; }
+      #hl_box2 {border-left: 1px solid #eee; }
+      #hl_box3 {border-top: 1px solid #eee; }
+      #hl_box4 {border-top: 1px solid #eee; border-left: 1px solid #eee; }
+      #hl_box5 {border-top: 1px solid #eee; border-left: 1px solid #eee; }
+      #hl_box6 {border-top: 1px solid #eee; }
+      #hl_box7 {border-top: 1px solid #eee; border-left: 1px solid #eee; }
+      #hl_box8 {border-top: 1px solid #eee; border-left: 1px solid #eee; }
+
+    .hl_sep { color: #142033 }
+    #main_bot h3 { margin-top: 2em; margin-bottom: 0; }
+   
+
+
+#bhl {
+  display: block; 
+  width: 100%;    
+  border-width: 1px 0px;
+  border-style: solid;
+  border-color: #EFEFEF;
+  margin-top: 1em;
+}
+
+
+div.bhl_line {
+  border-width: 1px 0px 0px 0px;
+  border-style: solid;
+  border-color: #EFEFEF; 
+  padding-bottom: 8px;
+}
+
+
+.bhl_box {
+
+    text-align: left;
+    width: 100%;
+    max-width: 900px !important;
+    float: left;
+    font: 1em/1.58em Arial;
+    margin: 4px;
+    padding: 8px 0px;
+
+}
+
+.bhl_title {
+  font-size:small;
+  color: #666;
+  /* padding: 0px 15px 5px 15px; */
+  text-transform: uppercase;
+  line-height: 100%;
+  display: block;
+}
+
+.bhl_box {
+  text-align: left;
+  width: 100%;
+  max-width: 900px !important;
+  float: left;
+  font: 1em/1.58em Arial;
+  margin: 4px;
+  padding: 4px 0px;
+}
+
+.bhl_subbox {
+    padding: 0px 15px;
+}
+
+.bhl_head {
+    line-height: 1.75em;
+    margin-bottom: 0.25em;
+    height: 3.5em;
+    overflow: hidden;
+    font-size: 130%;
+    font-family: Arial;
+}
+
+.bhl_head a {
+    white-space: normal;
+}
+
+a.bhl_more {
+    text-decoration: none;
+    color: #900;
+    font-weight: 800;
+}
+
+.bhl_list_img {
+    overflow: hidden;
+    color: #000;
+}
+
+img.bhl_img {
+    margin-right: 2em;
+    float: left;
+}
+
+img.bhl_img {   
+    max-width: 66%;
+    max-height: 225px;
+}
+
+
+.bhl_synopsis {  
+    max-height: 225px;
+    height: inherit;
+    font-size: 115%;
+}
+
+a.bhl_more {
+   font-size: 130%;
+    text-decoration: none;
+    color: #900;
+    font-weight: 800;
+}
+
+.hl_title img.hd_minilogoblockicon, .bhl_title img.hd_minilogoblockicon { 
+  vertical-align: middle;
+  margin-right: 0.5em;
+  -moz-box-shadow: 1px 1px 3px #aaa; /*x-offset y-offset radius colour */
+  -webkit-box-shadow: 1px 1px 3px #aaa;
+  box-shadow: 1px 1px 3px #aaa;
+  /* For IE 8 */
+  /* -ms-filter: "progid:DXImageTransform.Microsoft.Shadow(Strength=3, Direction=135, Color='#aaaaaa')"; */
+  /* For IE 5.5 - 7 */
+  /* filter: progid:DXImageTransform.Microsoft.Shadow(Strength=3, Direction=135, Color='#aaaaaa'); */
+}
+
+/* */
+
+ul.logo_list {
+  overflow:auto;
+  padding-inline-start: 0px;
+}
+
+ul.logo_list li img {
+  max-width: 80%;
+}
+
+.imgover {
+  display:inline-block;
+  position:relative;
+  max-width:100%;
+}
+.imgover::before,.imgover::after{
+  display:block;
+  position:absolute;
+  content:"";
+  text-align:center;
+  opacity:0;
+}
+.imgover::before{
+  top:0;
+  right:0;
+  bottom:0;
+  left:0;
+}
+.imgover::after{
+  top:50%;
+  left:50%;
+  width:50px;
+  height:50px;
+  line-height:50px;
+  margin:-25px 0 0 -25px;
+  font-family:"FontAwesome";
+  font-weight:900;
+  content:"\f067";
+  font-size:28px;
+}
+.imgover:hover::before,.imgover:hover::after{ opacity:1; }
+
+.imgover:hover::before{
+  background-color:rgba(185,70,173,.5);
+}
+.imgover,.imgover:hover::after{
+  color:#FFF;
+}
+a.imgover { padding:15px; }
+
+/* ********************************************************* */
+/* * Some additional special styles                        * */
+/* ********************************************************* */
+table.invisible {
+  background-color:white;
+  border:0px;
+}
+table.invisible tr td {
+  background-color:white;
+  border:0px;
+}
+
+.mtg_desc pre {      /* <pre> text in calendar listings should wrap */       
+    display: block;
+    font-family: monospace;
+    white-space: pre-wrap;
+    margin: 1em 0px;
+}
+
+div .exemplar {
+  border: 2px solid #600;
+  padding:12px;
+}
+
+img.portrait-nobel {
+  width:160px;
+}
+
+/* nested content in "world" RA pages */
+div .inset-mtgs {
+  width: 60%;
+}
+
+/* new-style Newsletter */
+div.article_body {padding-left:12px;padding-right:12px;}
+a#previous {
+  position:fixed;left:0px;
+  top:50%;
+  transform:translateY(-50%);
+  display:%previous_page_href^contains:result:inline:none%;
+}
+a#next {
+  position:fixed;right:
+  0px;top:50%;
+  transform:translateY(-50%);
+  display:%next_page_href^contains:result:inline:none%;
+}
+#next:hover,#previous:hover {opacity:1;}
+#next,#previous {
+  background-color: #b9282c;
+  color:#ffffff;
+  z-index:998;
+  display:inline-block;
+  width:24px;
+  height:24px;
+  line-height:24px;
+  font-size:16px;
+  text-align:center;
+  opacity:.2;
+}
+a#previous_page {
+  position:fixed;left:0px;
+  top:50%;
+  transform:translateY(-50%);
+  display:%previous_page_href^contains:result:inline:none%;
+}
+a#previous_page img { max-width:80px;opacity:.3; }
+a#next_page {
+  position:fixed;right:
+  0px;top:50%;
+  transform:translateY(-50%);
+  display:%next_page_href^contains:result:inline:none%;
+}
+a#next_page img { max-width:80px;opacity:.3; }
+
+
+/* Photo galleries */
+div.gallery_item {
+  float:left;
+  padding-right:8px;
+  padding-bottom:24px;
+  text-align:center;
+}
+
+div.gallery_item_index { /* on year index pages */
+  width: 360px;
+  float: right;
+  margin-top: -60px;
+  margin-bottom: 80px;
+}
+
+div.gallery_frame {
+  width:228px;
+  border:1px solid rgb(205,205,205);
+  border-radius:12px;
+  background-color:rgb(247,247,247);
+  padding:12px 33px;
+}
+
+div.gallery_frame_large { /* on year index pages */
+  width: 80%;
+  max-width: 680px;
+  margin: auto;
+  margin-bottom:-50px;
+  border: 1px solid rgb(205,205,205);
+  border-radius: 25px;
+  padding: 12px 33px;
+  background-color: rgb(247,247,247);
+  text-align: center;
+  box-shadow: 3px 6px 0px #6a879d, 20px 20px 15px rgba(0,0,0,.4), inset 0px 1px 0px rgba(255,255,255,.3), inset 0px 0px 3px rgba(255,255,255,.5);
+}
+
+div.gallery_caption {
+  overflow:hidden;
+  font-family:Arial,Helvetica,sans-serif;
+  font-size:7pt;
+  line-height:1.2em;
+  color:rgb(102, 102, 102);
+  height:4.8em;
+}
+
+div.gallery_thumb_container {
+  margin:3px 0px;
+  overflow:hidden;
+  height:160px;
+  width:160px;
+  position:relative;
+}
+
+div.gallery_thumb {
+  margin:0;
+  position:absolute;
+  top:50%;
+  left:50%;
+  margin-right:-50%;
+  transform:translate(-50%,-50%);
+}
+
+div.DividerThin {
+  border-top:1px solid red;
+  margin-bottom:3px;
+  margin-top:0px;
+}
+
+div.gallery_event {
+  height:4.8em;
+  text-align:center;
+  font-family:Arial,Helvetica,sans-serif;
+  font-weight:bold;
+  font-size:7pt;
+  line-height:1.2em;
+  color:rgb(102, 0, 0);
+}
+
+/* divs with id "selector" occur in what's-new pages */
+div#selector label {display:inline;}
+div#selector input {display:inline;}
+div#selector textarea {display:inline;}
+div#selector select {display:inline;}
+div#selector button {display:inline;}
+
+/* highlight is typically applied to a sidebar insert */
+div.highlight {
+  background-color: #142033;
+  color: white;
+  padding: 20px;
+  line-height: 1.3;
+}
+div.highlight table {
+  background-color:#142033 !important;
+  padding: 0px;
+}
+div.highlight tbody {
+  background-color:#142033 !important;
+  padding: 0px;
+}
+div.highlight tr {
+  background-color:#142033 !important;
+  padding: 0px;
+}
+div.highlight td {
+  background-color:#142033 !important;
+  padding: 0px;
+}
+div.highlight>h1 {
+  margin-top:0px;
+  padding-top:0px;
+}
+.highlight a:link {color: antiquewhite; }
+.highlight a:visited {color: antiquewhite; }
+.highlight a:hover {color: antiquewhite; }
+.highlight a:active {color: antiquewhite; }
+
+
+/* ********************************************************* */
+/* * Styles for the tabber library                         * */
+/* ********************************************************* */
+/* tabber styling Patrick Fitzgerald */
+/* $Id: example.css,v 1.5 2006/03/27 02:44:36 pat Exp $ */  
+/*-------------------------------------------------- 
+REQUIRED to hide the non-active tab content.   But do not hide them in the print stylesheet!
+--------------------------------------------------*/
+.tabberlive .tabbertabhide {  display:none; }
+/*--------------------------------------------------
+.tabber = before the tabber interface is set up
+.tabberlive = after the tabber interface is set up
+--------------------------------------------------*/
+.tabber { }
+.tabberlive {  margin-top:1em; }
+/*--------------------------------------------------
+ul.tabbernav = the tab navigation list
+li.tabberactive = the active tab
+--------------------------------------------------*/
+ul.tabbernav { margin:0;  padding: 3px 0;  border-bottom: 1px solid #778;  font: bold 12px Verdana, sans-serif; }
+ul.tabbernav li {  list-style: none;  margin: 0;  display: inline; }
+ul.tabbernav li a {  padding: 3px 0.5em;  margin-left: 3px;  border: 1px solid #778;  border-bottom: none;  background: #DDE;  text-decoration: none !important; }
+ul.tabbernav li a:link { color: #c22c2c; }
+ul.tabbernav li a:visited { color: #c22c2c; }
+ul.tabbernav li a:hover {  color: #c22c2c;  background: #ccc;  border-color: #227; }
+ul.tabbernav li.tabberactive a {  background-color: #fff;  border-bottom: 1px solid #fff; }
+ul.tabbernav li.tabberactive a:hover {  color: #c22c2c;  background: white;  border-bottom: 1px solid white; }
+ul.tabbernav { width:95% !important; }
+/*--------------------------------------------------
+.tabbertab = the tab content
+Add style only after the tabber interface is set up (.tabberlive)
+--------------------------------------------------*/
+.tabberlive .tabbertab {  padding:10px 5px;  border:0px solid #aaa;  border-top:0;
+  /* If you don't want the tab size changing whenever a tab is changed
+  you can set a fixed height */   /* height:200px; */
+  /* If you set a fix height set overflow to auto and you will get a
+  scrollbar when necessary */  /* overflow:auto; */
+}
+/* If desired, hide the heading since a heading is provided by the tab */
+/* .tabberlive .tabbertab h2 {  display:none; }
+.tabberlive .tabbertab h3 {  display:none; } */
+/* Example of using an ID to set different styles for the tabs on the page */
+.tabberlive#tab1 { }
+.tabberlive#tab2 { }
+.tabberlive#tab2 .tabbertab {  height:200px;  overflow:auto; } 
+/* end of tabber styling */
+/* ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Tabber ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
+
+
+/* Modifications of Simile timeline styling */
+.timeline-event-bubble-title, .timeline-event-bubble-body {
+    font-size: 10px !important;
+    line-height: 1.3 !important;
+}
+div.simileAjax-bubble-innerContainer table {
+  background-color:white;
+  border:0px;
+}
+div.simileAjax-bubble-innerContainer tr td {
+  background-color:white;
+  border:0px;
+}
+
+
+/* vvvvvvvvvvvvvvvvvvvvvvvvv Rotating globe vvvvvvvvvvvvvvvvvvvvvvvvv */
+/* Rotating globe implemented in CSS following the example of
+   Kushagra Gour: http://codepen.io/chinchang/pen/ygHBc    */
+
+div.globe {
+  padding: 20px;
+  font-family: Verdana, Arial, sans-serif;
+  width: 600px;
+  margin: auto;
+}
+
+div.globe h1 {
+  font-size: 200%;
+  margin-top: 10px;
+  /* color: darkgoldenrod !important; */
+}
+
+div.globe a {
+  /* color: darkgoldenrod !important; */
+  text-decoration: none;
+  font-weight: bold !important;
+}
+
+#earth {
+  float:left;
+  background-image: url('http://www.iucr.org/__data/assets/image/0007/119482/globe.jpg');
+  width: 85px;
+  height: 85px;
+  /* a black shadow from left and white from right */
+  box-shadow: inset 16px 0 40px 3px rgba(0,0,0,0.9),
+    inset -3px 0 5px 2px rgba(255,255,255,0.16);
+  background-size: 190px;
+  margin-left:25px;
+  border-radius: 50%;
+  position: relative;
+  animation-name: rotate;
+  animation-duration: 6s;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+
+@keyframes rotate {
+  0% { background-position: 0px; }
+  100% { background-position: 190px; }
+}
+#caption {
+ background-image: url('http://www.iucr.org/__data/assets/image/0004/119965/caption.png');
+  width: 130px;
+  height: 85px;
+  margin-left:-25px;
+  border-radius: 50%;
+  position: relative;
+  animation-name: rotate1;
+  animation-duration: 12s;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+ 
+@keyframes rotate1 {
+  0% { background-position: 400px; }
+  100% { background-position: 0px; }
+}
+
+#noitpac {
+ background-image: url('http://www.iucr.org/__data/assets/image/0006/119967/noitpac-pale.png');
+  width: 130px;
+  height: 85px;
+  margin-left:-25px;
+  border-radius: 50%;
+  position: relative;
+  animation-name: rotate2;
+  animation-duration: 12s;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+ 
+@keyframes rotate2 {
+  0% { background-position: 0px; }
+  100% { background-position: 400px; }
+}
+
+#globe-animation {
+  float:left;
+  margin-left: -18px;
+  margin-top: -30px;
+  margin-right:10px;
+  margin-bottom: -30px;
+  transform: rotate(-23.5deg);
+}
+/* ^^^^^^^^^^^^^^^^^^^^^^^^^ Rotating globe ^^^^^^^^^^^^^^^^^^^^^^^^^ */
+
+
+/* -----------------------------------------------------------------------------
+   Media Queries
+   -----------------------------------------------------------------------------
+   ---------------------------- */
+
+@media screen and (max-width: 1175px) and (min-width: 840px) { /* narrow footers to re-flow buttone */
+       footer.homepage-banner {max-width: 72%;margin: auto !important;}
+       footer.nl-banner {max-width: 55%;margin: auto !important;}
+       footer.nl-banner .btn {margin-bottom:10px;}
+}
+@media screen and (max-width:980px){
+        .container { padding: 5px 0; }
+  #topbar .fl_left {display:inline-block; float:left;} /* keep on one line */
+  #topbar .fl_right {display:inline-block; float:right;}
+        #pageintro article footer .btn{margin-bottom: 10px;} /* separate vertical buttons in banners */
+        footer .btn {margin-bottom: 6px;}  /* separate vertical buttons in banners */
+}
+@media screen and (max-width:900px){
+        #mainav{padding-top:0px;}
+        #mainav2{}
+        #mainav2 ul{display:none;}
+        #mainav2 form{display:block;}
+  #topbar .fl_left {display:inline-block; float:left;} /* keep on one line */
+  #topbar .fl_right {display:inline-block; float:right;}
+}
+@media screen and (max-width:750px){
+        div.sidebar {clear:both;}
+        #mainav{padding-top:0px;}
+        #mainav2{}
+        #mainav2 ul{display:none;}
+        #mainav2 form{display:block;}
+        #introblocks ul li{min-height: 20em;}
+        i.clg img {margin-top: 0px!important; }
+        .container { padding: 5px 0; }
+  #topbar .fl_left {display:inline-block; float:left;} /* keep on one line */
+  #topbar .fl_right {display:inline-block; float:right;}
+        .faico img {margin-top:0px;}
+        a#next_page img { max-width:60px;opacity:.3; }
+        a#previous_page img { max-width:60px;opacity:.3; }
+  .one_half, .one_third, .two_third, .one_quarter, .two_quarter, .three_quarter, .one_fifth, .two_fifth, .three_fifth, .four_fifth, .one_sixth, .two_sixth, .three_sixth, .four_sixth, .five_sixth{display:block;float:none;width:auto;margin: 0 0 30px 0;padding:0;}
+}
+@media screen and (max-width:980px) and (min-width:600px) { /* Corporate Associates logos */
+        div.CA_cat1, div.CA_cat2, div.CA_cat3 {width: 48%;clear: none;float: left;margin-right: 10px;}
+}
+@media screen and (max-width:650px){
+        #mainav{padding-top:0px;}
+        #mainav2{}
+        #mainav2 ul{display:none;}
+        #mainav2 form{display:block;}
+        .container { padding: 5px 0; }
+        #country_nav { display:none; }
+  #topbar .fl_left {display:inline-block; float:left;} /* keep on one line */
+  #topbar .fl_right {display:inline-block; float:right;}
+        a#next_page img { max-width:40px;opacity:.3; }
+        a#previous_page img { max-width:40px;opacity:.3; }
+  .one_half, .one_third, .two_third, .one_quarter, .two_quarter, .three_quarter, .one_fifth, .two_fifth, .three_fifth, .four_fifth, .one_sixth, .two_sixth, .three_sixth, .four_sixth, .five_sixth{display:block;float:none;width:auto;margin: 0 0 30px 0;padding:0;}
+        ul#navmenu { position:relative !important; width:160px !important; } /* Pamphlet 23 supplementary navigation menu */
+        div.gallery_item_index { width:320px; }
+        div.gallery_frame_large { margin-bottom:0px; }
+        /* h1,h2,h3,h4,h5,h6 { clear: both; display: flex; } */
+        h1,h2,h3,h4,h5,h6 { clear: both; }
+        #homepageintro article .heading{font-size:32px;margin-top:-30px;}
+        #homepageintro article p{font-size:14px; line-height:1.3;}
+        #join {padding:10px;}
+        #join div.figureright {max-width:100%;margin:auto;}
+        #join div.figureright80 {max-width:100%;margin:auto;}
+        #join div.figureright160 {max-width:100%;margin:auto;}
+        #join div.figureright240 {max-width:100%;margin:auto;}
+        #join div.figureright320 {max-width:100%;margin:auto;}
+        #join div.figureright400 {max-width:100%;margin:auto;}
+}
+@media screen and (max-width:320px){
+        #homepageintro article .heading{font-size:26px;}
+}

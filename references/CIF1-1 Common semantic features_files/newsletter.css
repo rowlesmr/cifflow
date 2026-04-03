@@ -1,0 +1,366 @@
+h1.newsletter {
+  font-size: 36px;
+  text-transform: none;
+}
+
+/* Modify the standard banner for Newsletter articles */
+h2.newsletter {
+    position: absolute;
+    top: 4px;
+    left: 10px;
+    font-size: 22px !important;
+}
+
+/* .underline::after{
+  display:none;
+} */
+
+div#article-banner {
+  background-image: url(/cgi-bin/getiucrphoto.php?ms=news&no=29) !important;
+  position: relative;
+}
+
+#pageintro:after {
+  /* content: "%asset_thumbnail_caption%"; */
+  position: absolute;
+  bottom:6px;
+  right:6px;
+}
+
+div#masthead_logo { display:none; }
+div#old_masthead { width:40%;}
+
+div#legacy_cover { float:right; margin-left:20px; margin-bottom:30px;width:50%; }
+img.cover_image { width:200px; margin-left:10px; float:right; }
+div.cover_caption { font-size:small; line-height:1.2; }
+
+div#pageintro {
+  /* padding-bottom:166px !important; */
+  padding-bottom:66px !important;
+}
+
+span#biblio:after {
+content:' (%asset_metadata_Year%) Volume asset_metadata_Volume%, number %asset_metadata_Number%'
+}
+
+#byline {
+  padding-top:10px !important;
+  padding-bottom: 10px !important;
+  border-bottom: 1px solid #d7d7d7 !important;
+  font-weight: bold !important;
+  color: cadetblue !important;  
+}
+
+div.magazine_article {
+  padding-left: 0;
+  padding-right:10%;
+}
+
+div#main_image {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+p.article_category { border-bottom: 1px solid #666; }
+
+span.main_caption { font-size: small; }
+span.created_date { text-align:right;float:right; }
+span.title_display { font-size: 18px; color: #777; font-weight: bold; }
+span.title_display a:link { color: #777; }
+span.title_display a:visited { color: #777; }
+span.title_display a:hover { color: #777; }
+span.title_display a:active { color: #777; }
+
+
+img.toc_image {
+  max-width: 160px;
+  max-height:100px;
+  vertical-align: middle;
+}
+
+.news_brief img { max-width: 50%; }
+
+#join a:link {color: antiquewhite; }
+#join a:visited {color: antiquewhite; }
+#join a:hover {color: antiquewhite; }
+#join a:active {color: antiquewhite; }
+
+.infolist li > div:first-of-type img{width: 60px;} /*height: 40px;}*/
+
+.overlay.coloured::after{color:inherit;background-color: rgba(255, 250, 227, 0.6);}/* #5B9BBD */
+footer.nl-banner .btn{color: darkslategray;}
+footer.nl-banner a.btn:hover{color: white;}
+
+h2.minisite-heading { margin:20px 0 20px 0; font-size:46px !important; line-height:normal; font-weight:normal; font-variant:small-caps; }
+
+/* Section and category headings */
+
+/* Show only first occurrence of a category heading in issue Table of Contents */
+
+.cat_01 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_01 ~ .cat_01 { display: none; }
+.cat_02 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_02 ~ .cat_02 { display: none; }
+.cat_03 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_03 ~ .cat_03 { display: none; }
+.cat_04 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_04 ~ .cat_04 { display: none; }
+.cat_05 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_05 ~ .cat_05 { display: none; }
+.cat_06 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_06 ~ .cat_06 { display: none; }
+.cat_07 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_07 ~ .cat_07 { display: none; }
+.cat_08 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_08 ~ .cat_08 { display: none; }
+.cat_09 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_09 ~ .cat_09 { display: none; }
+.cat_10 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_10 ~ .cat_10 { display: none; }
+.cat_11 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_11 ~ .cat_11 { display: none; }
+.cat_12 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_12 ~ .cat_12 { display: none; }
+.cat_13 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_13 ~ .cat_13 { display: none; }
+.cat_14 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_14 ~ .cat_14 { display: none; }
+.cat_15 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_15 ~ .cat_15 { display: none; }
+.cat_16 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_16 ~ .cat_16 { display: none; }
+.cat_17 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_17 ~ .cat_17 { display: none; }
+.cat_18 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_18 ~ .cat_18 { display: none; }
+.cat_19 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_19 ~ .cat_19 { display: none; }
+.cat_20 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_20 ~ .cat_20 { display: none; }
+.cat_21 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_21 ~ .cat_21 { display: none; }
+.cat_22 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_22 ~ .cat_22 { display: none; }
+.cat_23 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_23 ~ .cat_23 { display: none; }
+.cat_24 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_24 ~ .cat_24 { display: none; }
+.cat_25 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_25 ~ .cat_25 { display: none; }
+.cat_26 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_26 ~ .cat_26 { display: none; }
+.cat_27 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_27 ~ .cat_27 { display: none; }
+.cat_28 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_28 ~ .cat_28 { display: none; }
+.cat_29 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_29 ~ .cat_29 { display: none; }
+.cat_30 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_30 ~ .cat_30 { display: none; }
+.cat_31 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_31 ~ .cat_31 { display: none; }
+.cat_32 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_32 ~ .cat_32 { display: none; }
+.cat_33 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_33 ~ .cat_33 { display: none; }
+.cat_34 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_34 ~ .cat_34 { display: none; }
+.cat_35 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_35 ~ .cat_35 { display: none; }
+.cat_36 { display: block; border-bottom: 2px solid #d7d7d7; } .cat_36 ~ .cat_36 { display: none; }
+
+h2.cat_01 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_02 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_03 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_04 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_05 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_06 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_07 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_08 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_09 { background-image: url('https://www.iucr.org/__data/assets/image/0010/137458/NL_j_22.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_10 { background-image: url('https://www.iucr.org/__data/assets/image/0010/137458/NL_j_22.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_11 { background-image: url('https://www.iucr.org/__data/assets/image/0010/137458/NL_j_22.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_12 { background-image: url('https://www.iucr.org/__data/assets/image/0010/137458/NL_j_22.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_13 { background-image: url('https://www.iucr.org/__data/assets/image/0010/137458/NL_j_22.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_14 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_15 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_16 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_17 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_18 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_19 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_20 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_21 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_22 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_23 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_24 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_25 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_26 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_27 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_28 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_29 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_30 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_31 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_32 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_33 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_34 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_35 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.cat_36 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+
+/* Show only first occurrence of a section heading in issue Table of Contents */
+
+.sect_01 { display: block; border-bottom: 2px solid #d7d7d7; } .sect_01 ~ .sect_01 { display: none; }
+.sect_02 { display: block; border-bottom: 2px solid #d7d7d7; } .sect_02 ~ .sect_02 { display: none; }
+.sect_03 { display: block; border-bottom: 2px solid #d7d7d7; } .sect_03 ~ .sect_03 { display: none; }
+.sect_04 { display: block; border-bottom: 2px solid #d7d7d7; } .sect_04 ~ .sect_04 { display: none; }
+.sect_05 { display: block; border-bottom: 2px solid #d7d7d7; } .sect_05 ~ .sect_05 { display: none; }
+.sect_06 { display: block; border-bottom: 2px solid #d7d7d7; } .sect_06 ~ .sect_06 { display: none; }
+.sect_07 { display: block; border-bottom: 2px solid #d7d7d7; } .sect_07 ~ .sect_07 { display: none; }
+.sect_08 { display: block; border-bottom: 2px solid #d7d7d7; } .sect_08 ~ .sect_08 { display: none; }
+.sect_09 { display: block; border-bottom: 2px solid #d7d7d7; } .sect_09 ~ .sect_09 { display: none; }
+.sect_10 { display: block; border-bottom: 2px solid #d7d7d7; } .sect_10 ~ .sect_10 { display: none; }
+
+h2.sect_01 { background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.sect_02 { margin-top: 40px; background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.sect_03 { margin-top: 40px; background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.sect_04 { margin-top: 40px; background-image: url('https://www.iucr.org/__data/assets/image/0010/137458/NL_j_22.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.sect_05 { margin-top: 40px; background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.sect_06 { margin-top: 40px; background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.sect_07 { margin-top: 40px; background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.sect_08 { margin-top: 40px; background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.sect_09 { margin-top: 40px; background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+h2.sect_10 { margin-top: 40px; background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+
+h2.nl_logo { margin-top: 40px; background-image: url('https://www.iucr.org/__data/assets/image/0009/137457/Newsletter-post-22-new.png'); background-repeat: no-repeat; padding-left:30px; }
+
+/* Punctuate the (metadata) author lists */
+.author_first:before { }
+.author_others:not(:empty):before { content: ", "}
+.author_last:not(:empty):before { content: " and " }
+.author_first { color: cadetblue; }
+.author_others { color: cadetblue; }
+.author_last { color: cadetblue; }
+
+
+.tocbox {
+  /* border: 1px solid gray; */
+  padding: 3px 3px 3px 3px;
+  margin-top: 1em;
+  background-color: rgb(240,240,240);
+}
+
+.btmspace-0  { margin-bottom: 0px; }
+.btmspace-10  { margin-bottom: 10px; }
+.topspace-2 { margin-top: 2px; }
+
+span.title_display { font-size: 15px; line-height:1.2; }
+span.author_first { font-size: 15px; line-height:1.2; }
+span.author_others { font-size: 15px; line-height:1.2; }
+span.author_last { font-size: 15px; line-height:1.2; }
+
+
+/* Newsletter home page highlight image */
+
+div.nl_home_frame { position:relative; height: 566px; background-color: #777; }
+div.nl_home_image {  }
+div.nl_home_details {
+  width:100%;
+  position:absolute;
+  bottom:0px;
+  background-color:#000;
+  opacity:.7;
+  color:white;
+  padding:0px 20px 20px;
+  text-align:right
+}
+
+div.nl_cover { float:left; margin-right:20px; margin-bottom:40px; }
+
+/* landing page footer */
+div.subtle {
+  font-size:x-small;
+  line-height:1.2;
+  color:#aaa;
+  margin-bottom:-90px;
+}
+.subtle h4.nl_logo  {margin-top:-6px; }
+
+@media screen and (max-width: 980px){
+  span.title_display { font-size: 14px; }
+  span.author_first { font-size: 14px; }
+  span.author_others { font-size: 14px; }
+  span.author_last { font-size: 14px; }
+  img._toc_image { max-width: 60%; margin: auto; }
+  div#latest_cover { display:none; }
+  div.subtle { margin-bottom:0px; }
+  #featured article {padding-top:12px; padding-bottom:2px; padding-left:20px; box-shadow:3px 3px 20px 2px #999; }
+  div#old_masthead { width:60%;}
+  div#legacy_cover { width:100%; }
+  div.one_third { margin-bottom: 10px; }
+}
+
+@media screen and (max-width: 750px){
+  span.title_display { font-size: 12px; }
+  span.author_first { font-size: 12px; }
+  span.author_others { font-size: 12px; }
+  span.author_last { font-size: 12px; }
+  img._toc_image { max-width: 100%; margin: auto; }
+  .nl_home_details h1 { font-size:18px; }
+  div.nl_home_frame { display:none; }
+  div#latest_cover { display:none; }
+  div.subtle { margin-bottom:0px; }
+  #featured article {padding-top:12px; padding-bottom:2px; padding-left:20px; box-shadow:3px 3px 20px 2px #999; }
+  div#old_masthead { width:100%;}
+  div#legacy_cover { width:100%; }
+  div.one_third { margin-bottom: 8px; }
+}
+
+/* For scalable pseudo-covers */
+div.cover { width: 596px; height: 842px; }
+div.smallcover { width: 128px; height: 181px; margin-bottom:10px; }
+
+/* Archive cover gallery */
+div.legacy_cover { margin-right:10px; margin-bottom:10px; text-align: center; font-size: x-small; line-height:1.2; }
+div.legacy_cover img { height: 150px; margin-bottom:10px; box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);}
+
+/* Banner ads in Table of Contents */
+table.toc_ad { width:90%; margin-left:auto; margin-right:auto; margin-top:2em; margin-bottom: 2em; border: 1px solid #006; border-collapse:separate; }
+td.toc_ad { border-width: 0px; }
+
+/* Members of Editorial Board */
+table.biolist {
+  font-size: 75%;
+  line-height:1.3;
+  background-color:white;
+  border:0px;
+}
+table.biolist tr td {
+  background-color:white;
+  border:0px;
+}
+
+
+@media print {
+  a#previous_page img { display:none; }
+  a#next_page img { display:none; }
+  a { background-color:white; }
+  body { background-color: white !important; }
+  .wrapper { background-color: white !important; }
+  .row0 { border: 0px; }
+  .row5 { background-color: white !important; }
+  nav#mainav  { display:none; }
+  nav#nav-side  { display:none; }
+  div#topbar { display:none; }
+  div#article-banner { background-image: none !important; }
+  div#pageintro { padding:0px !important; }
+  h2.heading { font-size:12px !important; color:#ccc; }
+  h2.article_category { padding-left: 0px; }
+  div.sidebar h3 { display:none; }
+  div.sidebar { width:100%; }
+  a.addthis_button img { display:none; }
+  a#backtotop { display:none; }
+  a#home_link { display:none; }
+  a#isscont { display:none; }
+  div#quicklinks { display:none; }
+  footer#footer { display:none; }
+  div#copyright { display:none; }
+  h2.cat_01 { background-image:none; }
+  h2.cat_02 { background-image:none; }
+  h2.cat_03 { background-image:none; }
+  h2.cat_04 { background-image:none; }
+  h2.cat_05 { background-image:none; }
+  h2.cat_06 { background-image:none; }
+  h2.cat_07 { background-image:none; }
+  h2.cat_08 { background-image:none; }
+  h2.cat_09 { background-image:none; }
+  h2.cat_10 { background-image:none; }
+  h2.cat_11 { background-image:none; }
+  h2.cat_12 { background-image:none; }
+  h2.cat_13 { background-image:none; }
+  h2.cat_14 { background-image:none; }
+  h2.cat_15 { background-image:none; }
+  h2.cat_16 { background-image:none; }
+  h2.cat_17 { background-image:none; }
+  h2.cat_18 { background-image:none; }
+  h2.cat_19 { background-image:none; }
+  h2.cat_20 { background-image:none; }
+  h2.cat_21 { background-image:none; }
+  h2.cat_22 { background-image:none; }
+  h2.cat_23 { background-image:none; }
+  h2.cat_24 { background-image:none; }
+  h2.cat_25 { background-image:none; }
+  h2.cat_26 { background-image:none; }
+  h2.cat_27 { background-image:none; }
+  h2.cat_28 { background-image:none; }
+  h2.cat_29 { background-image:none; }
+  h2.cat_30 { background-image:none; }
+  h2.cat_31 { background-image:none; }
+  h2.cat_32 { background-image:none; }
+
+  div#masthead_logo { display:block; }
+
+}

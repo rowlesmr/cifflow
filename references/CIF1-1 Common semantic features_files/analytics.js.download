@@ -1,0 +1,165 @@
+(function() {
+    
+let iucr_gcode="";
+const loc=window.location.href;
+
+if (loc.search(/^https?:\/\/checkcif\.iucr\.org/)>-1) iucr_gcode="G-08THKHXQPR";
+else if (loc.search(/^https?:\/\/laaamp\.iucr\.org/)>-1) iucr_gcode="G-4KLTZQVBGJ";
+else if (loc.search(/^https?:\/\/publcif\.iucr\.org/)>-1) iucr_gcode="G-G127SPHC2F";
+else if (loc.search(/^https?:\/\/it\.iucr\.org/)>-1) iucr_gcode="G-JD3BFHTLD8";
+else if (loc.search(/^https?:\/\/www\.iucr\.org/)>-1) iucr_gcode="G-VYFG17ZX93";
+else if (loc.search(/^https?:\/\/journals\.iucr\.org/)>-1) iucr_gcode="G-B3VNLXKQ7W";
+else if (loc.search(/^https?:\/\/scripts\.iucr\.org/)>-1) iucr_gcode="G-42T0HTV67L";
+//else iucr_gcode="G-E6QK9DXPSH"; // simply a tag for IUCr in general?
+
+if (iucr_gcode!="") {
+    if (document.cookie.search(/iucr_cookie_prefs\s*=\s*1/i)>-1) window['ga-disable-'+iucr_gcode] = true; // i.e. user chose to disable google analytics via https://journals.iucr.org/services/cookies.html
+    
+    const ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = 'https://www.googletagmanager.com/gtag/js?id='+iucr_gcode;
+    document.head.appendChild(ga);
+    
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', iucr_gcode);
+}
+
+})();
+
+const IUCrCookieMonster = (function() {
+    
+    let _prefPopup;
+    
+    function _init() {
+        if (window.location.href.indexOf("onlinelibrary.wiley.com")>-1) {return;} // Wiley proxy - cookies pointless
+        
+        let tb=document.getElementById('cookieswitch');
+        let pref=_getCookie("iucr_cookie_prefs"); // 0 = already accepted all; 1 = already disable google analytics, etc
+        if (pref=="1") { // make sure third-party cookies removed
+            _deleteCookies();
+            if (tb) tb.checked=false;
+            setTimeout(function(){_deleteCookies();}, 4000); // just in case third-party libs slow to load (async)
+        }
+        else if (pref!="0") { // no prefernece set - ask user to accept cookies
+            if (window.location.href.indexOf("/services/cookies.html")>-1) { // on the cookie page - no need to ask!
+                // reasonable to set the acceptance cookie to avoid further prompts about cookies?
+                _setCookie("iucr_cookie_prefs", "0", 90);
+            }
+            else {
+                _getUserPref();
+            }
+        }
+    }
+    
+    function _getUserPref() {
+        if (_prefPopup) {
+            _prefPopup.style.display="block";
+            return;
+        }
+        // create an annoying popup:
+        _prefPopup=document.createElement("div");
+        _prefPopup.className="popup";
+        _prefPopup.style.bottom= 0;
+        _prefPopup.style.left= 0;
+        _prefPopup.style.minWidth="288px";
+        _prefPopup.style.position="fixed";
+        _prefPopup.style.right=0;
+        _prefPopup.style.padding="0.5em";
+        _prefPopup.style.border="1.5px solid #aaa";
+        _prefPopup.style.borderRadius="5px";
+        _prefPopup.style.background="#ddd";
+        _prefPopup.style.zIndex=99999;
+        _prefPopup.style.display="block";
+        _prefPopup.onclick=function(){this.style.display="none";};
+        document.body.appendChild(_prefPopup);
+        _prefPopup.innerHTML="We use cookies on our websites, and by using this site you are consenting to them: <b><a style=\"text-decoration:none;color:#990000;\" onclick=\"IUCrCookieMonster.setPref('0');\">allow all</a></b> or <b><a style=\"text-decoration:none;color:#990000;\" href=\"https://journals.iucr.org/services/cookies.html\">manage</a></b>";
+        
+    }
+    
+    
+    function _setCookie(cname, cvalue, exdays) {
+        let expires = "";
+        if (exdays) {
+            let d = new Date();
+            d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
+            expires = "expires="+d.toUTCString()+";";
+        }
+        document.cookie = cname + "=" + cvalue + ";" + expires + "path=/; domain=iucr.org; samesite=lax"; //; secure";
+    }
+
+    function _getCookie(cname) {
+        let name = cname + "=";
+        let ca = document.cookie.split(';');
+        for(let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) == ' ') {
+            c = c.substring(1);
+            }
+            if (c.indexOf(name) == 0) {
+            return c.substring(name.length, c.length);
+            }
+        }
+        return "";
+    }
+    function _deleteCookies(pattern) {
+        if (!pattern) {
+            pattern=/^\s*(__at|__ut|_ga|_gid)/i;
+        }
+        let remove=[];
+        let ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) == ' ') {
+            c = c.substring(1);
+            }
+            if (c.search(pattern) == 0) {
+                let name=c.split('=')[0].replace(/^\s*|\s*$/g, "");
+                remove.push(name);
+            }
+        }
+        
+        for (let r=0;r<remove.length; r++) {
+            _removeCookie(remove[r]);
+        }
+        
+    }
+    function _removeCookie(cname) {
+        document.cookie = cname + "=0;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/";
+        document.cookie = cname + "=0;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;domain=iucr.org";
+        document.cookie = cname + "=0;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;domain=publbio.iucr.org";
+        document.cookie = cname + "=0;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;domain=publcif.iucr.org";
+        document.cookie = cname + "=0;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;domain=scripts.iucr.org";
+        document.cookie = cname + "=0;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;domain=iucrdata.iucr.org";
+        document.cookie = cname + "=0;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;domain=shop.iucr.org";
+        document.cookie = cname + "=0;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;domain=journals.iucr.org";
+        document.cookie = cname + "=0;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;domain=it.iucr.org";
+        document.cookie = cname + "=0;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;domain=laaamp.iucr.org";
+    }
+  
+    return {
+        init: function() {
+        _init();
+        },
+        setPref: function(p) {
+            _setCookie("iucr_cookie_prefs", p, 90); 
+            if (p=="1") _deleteCookies();
+        },
+        getCookie(cname) {
+            return _getCookie(cname);
+        },
+        setCookie(cname, cvalue, exdays) {
+            _setCookie(cname, cvalue, exdays);
+        },
+        deleteCookies(pattern) {
+            _deleteCookies(pattern)
+        }
+    };
+    })();  
+    
+    
+if (window.addEventListener) window.addEventListener('load', function() {IUCrCookieMonster.init();}, false);  
+else if (window.attachEvent) window.attachEvent('onload', function() {IUCrCookieMonster.init();});
+
+
+
