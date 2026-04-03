@@ -1,0 +1,1594 @@
+#\#CIF_2.0
+
+
+#######  Begin wavelength information  #######
+data_the_first_wavelength
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_diffrn_radiation.id	mono
+_diffrn_radiation.probe	x-ray
+loop_
+_diffrn_radiation_wavelength.id
+_diffrn_radiation_wavelength.wt
+_diffrn_radiation_wavelength.value
+0	  1.0000000	  1.5405960
+_diffrn_source.current	45
+_diffrn_source.device	tube
+_diffrn_source.power	1800
+_diffrn_source.voltage	40
+_diffrn_source.target	Cu
+#######  End wavelength information  #######
+
+#######  Begin instrument information  #######
+data_the_first_instrument
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_instr.id	insitu_lab
+_pd_instr.radiation_id	mono
+_pd_instr.2theta_monochr_pre	26.6
+_pd_instr.cons_illum_flag	no
+_pd_instr.divg_eq_mono_spec	0.25
+_pd_instr.detector_circle_radius	275
+_pd_instr.geometry	Bragg-Brentano
+_pd_instr.monochr_pre_spec
+;Ge 111
+;
+_pd_instr.soller_ax_mono_spec	4
+
+_pd_instr_detector.id	A
+_pd_instr_detector.instr_id	insitu_lab
+_pd_instr.soller_ax_spec_detc	4
+#######  End instrument information  #######
+
+#######  Begin preferred orientation information  #######
+data_Selenium_10_the_first_preferred_orientation
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_phase.id	Selenium_10
+_pd_diffractogram.id	the_first
+_pd_pref_orient.geom	srefln
+loop_
+_pd_pref_orient_March_Dollase.id
+_pd_pref_orient_March_Dollase.hkl
+_pd_pref_orient_March_Dollase.r
+0	[ 1 2 -3 ]	0.654
+#######  End preferred orientation information  #######
+
+#######  Begin powder crystal structure  #######
+data_Selenium_10
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+
+_pd_phase.id	Selenium_10
+_pd_phase.name	Selenium
+_model.id	Sel_mod_0
+_structure.id	Sel_str_0
+_space_group.id	R-3m
+_model.structure_id	Sel_str_0
+_structure.diffrn_id	111K
+_structure.space_group_id	R-3m
+_structure.phase_id	Selenium_10
+
+_cell.length_a    3.9
+_cell.length_b    3.9
+_cell.length_c    3.1
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 120
+_cell.volume      40.8339638
+_cell.formula_units_Z	  3
+_chemical_formula.weight	78.96
+_chemical_formula.sum
+;Se
+;
+_pd_phase.density_diffrn	9.63288219
+_pd_phase.atten_coef_mu_calc	76.8790162
+_pd_phase.mass_atten_coef_mu_calc	79.8089448
+_cell_measurement.theta_min	5
+_cell_measurement.theta_max	35
+_space_group.crystal_system	hexagonal
+_space_group.name_H-M_alt
+;R-3m
+;
+loop_
+	_space_group_symop.id
+	_space_group_symop.operation_xyz
+	  1 'x, y, z '
+	  2 '-x, -y, -z '
+	  3 '-x+y, -x, z '
+	  4 '-x+y, y, z '
+	  5 '-y, -x, z '
+	  6 '-y, x-y, z '
+	  7 'y, -x+y, -z '
+	  8 'y, x, -z '
+	  9 'x-y, -y, -z '
+	 10 'x-y, x, -z '
+	 11 '-x, -x+y, -z '
+	 12 'x, x-y, z '
+	 13 'x-1/3, y+1/3, z+1/3 '
+	 14 '-x-1/3, -y+1/3, -z+1/3 '
+	 15 '-x+y-1/3, -x+1/3, z+1/3 '
+	 16 '-x+y-1/3, y+1/3, z+1/3 '
+	 17 '-y-1/3, -x+1/3, z+1/3 '
+	 18 '-y-1/3, x-y+1/3, z+1/3 '
+	 19 'y-1/3, -x+y+1/3, -z+1/3 '
+	 20 'y-1/3, x+1/3, -z+1/3 '
+	 21 'x-y-1/3, -y+1/3, -z+1/3 '
+	 22 'x-y-1/3, x+1/3, -z+1/3 '
+	 23 '-x-1/3, -x+y+1/3, -z+1/3 '
+	 24 'x-1/3, x-y+1/3, z+1/3 '
+	 25 'x+1/3, y-1/3, z-1/3 '
+	 26 '-x+1/3, -y-1/3, -z-1/3 '
+	 27 '-x+y+1/3, -x-1/3, z-1/3 '
+	 28 '-x+y+1/3, y-1/3, z-1/3 '
+	 29 '-y+1/3, -x-1/3, z-1/3 '
+	 30 '-y+1/3, x-y-1/3, z-1/3 '
+	 31 'y+1/3, -x+y-1/3, -z-1/3 '
+	 32 'y+1/3, x-1/3, -z-1/3 '
+	 33 'x-y+1/3, -y-1/3, -z-1/3 '
+	 34 'x-y+1/3, x-1/3, -z-1/3 '
+	 35 '-x+1/3, -x+y-1/3, -z-1/3 '
+	 36 'x+1/3, x-y-1/3, z-1/3 '
+loop_
+	_atom_site.label
+	_atom_site.type_symbol
+	_atom_site.site_symmetry_multiplicity
+	_atom_site.fract_x
+	_atom_site.fract_y
+	_atom_site.fract_z
+	_atom_site.occupancy
+	_atom_site.B_iso_or_equiv
+	Se1 Se   3 0 0 0 1 1
+loop_
+	_geom_bond_atom_site_label_1
+	_geom_bond_atom_site_label_2
+	_geom_bond_distance
+	_geom_bond_site_symmetry_1
+	_geom_bond_site_symmetry_2
+	Se1       Se1       2.47745 1_555  25_555
+	Se1       Se1       2.47745 1_555  13_545
+	Se1       Se1       2.47745 1_555  13_555
+	Se1       Se1       2.47745 1_555  25_565
+	Se1       Se1       2.47745 1_555  25_455
+	Se1       Se1       2.47745 1_555  13_655
+	Se1       Se1       3.05632 1_555  25_456
+	Se1       Se1       3.05632 1_555  13_654
+	Se1       Se1       3.05632 1_555  25_556
+	Se1       Se1       3.05632 1_555  13_554
+	Se1       Se1       3.05632 1_555  13_544
+	Se1       Se1       3.05632 1_555  25_566
+	Se1       Se1       3.10000 1_555   1_554
+	Se1       Se1       3.10000 1_555   1_556
+	loop_
+		_geom_angle_atom_site_label_1
+		_geom_angle_atom_site_label_2
+		_geom_angle_atom_site_label_3
+		_geom_angle
+		_geom_angle_site_symmetry_1
+		_geom_angle_site_symmetry_2
+		_geom_angle_site_symmetry_3
+	Se1       Se1       Se1        76.170    13_545 1_555  25_555
+	Se1       Se1       Se1        103.830   13_555 1_555  13_545
+	Se1       Se1       Se1        180.000   13_555 1_555  25_555
+	Se1       Se1       Se1        76.170    25_565 1_555  13_555
+	Se1       Se1       Se1        180.000   25_565 1_555  13_545
+	Se1       Se1       Se1        103.830   25_565 1_555  25_555
+	Se1       Se1       Se1        103.830   25_455 1_555  25_565
+	Se1       Se1       Se1        76.170    25_455 1_555  13_555
+	Se1       Se1       Se1        76.170    25_455 1_555  13_545
+	Se1       Se1       Se1        103.830   25_455 1_555  25_555
+	Se1       Se1       Se1        180.000   13_655 1_555  25_455
+	Se1       Se1       Se1        76.170    13_655 1_555  25_565
+	Se1       Se1       Se1        103.830   13_655 1_555  13_555
+	Se1       Se1       Se1        103.830   13_655 1_555  13_545
+	Se1       Se1       Se1        76.170    13_655 1_555  25_555
+	Se1       Se1       Se1        112.802   25_456 1_555  13_655
+	Se1       Se1       Se1        67.198    25_456 1_555  25_455
+	Se1       Se1       Se1        128.085   25_456 1_555  25_565
+	Se1       Se1       Se1        51.915    25_456 1_555  13_555
+	Se1       Se1       Se1        51.915    25_456 1_555  13_545
+	Se1       Se1       Se1        128.085   25_456 1_555  25_555
+	Se1       Se1       Se1        180.000   13_654 1_555  25_456
+	Se1       Se1       Se1        67.198    13_654 1_555  13_655
+	Se1       Se1       Se1        112.802   13_654 1_555  25_455
+	Se1       Se1       Se1        51.915    13_654 1_555  25_565
+	Se1       Se1       Se1        128.085   13_654 1_555  13_555
+	Se1       Se1       Se1        128.085   13_654 1_555  13_545
+	Se1       Se1       Se1        51.915    13_654 1_555  25_555
+	Se1       Se1       Se1        100.711   25_556 1_555  13_654
+	Se1       Se1       Se1        79.289    25_556 1_555  25_456
+	Se1       Se1       Se1        51.915    25_556 1_555  13_655
+	Se1       Se1       Se1        128.085   25_556 1_555  25_455
+	Se1       Se1       Se1        128.085   25_556 1_555  25_565
+	Se1       Se1       Se1        112.802   25_556 1_555  13_555
+	Se1       Se1       Se1        51.915    25_556 1_555  13_545
+	Se1       Se1       Se1        67.198    25_556 1_555  25_555
+	Se1       Se1       Se1        180.000   13_554 1_555  25_556
+	Se1       Se1       Se1        79.289    13_554 1_555  13_654
+	Se1       Se1       Se1        100.711   13_554 1_555  25_456
+	Se1       Se1       Se1        128.085   13_554 1_555  13_655
+	Se1       Se1       Se1        51.915    13_554 1_555  25_455
+	Se1       Se1       Se1        51.915    13_554 1_555  25_565
+	Se1       Se1       Se1        67.198    13_554 1_555  13_555
+	Se1       Se1       Se1        128.085   13_554 1_555  13_545
+	Se1       Se1       Se1        112.802   13_554 1_555  25_555
+	Se1       Se1       Se1        79.289    13_544 1_555  13_554
+	Se1       Se1       Se1        100.711   13_544 1_555  25_556
+	Se1       Se1       Se1        79.289    13_544 1_555  13_654
+	Se1       Se1       Se1        100.711   13_544 1_555  25_456
+	Se1       Se1       Se1        128.085   13_544 1_555  13_655
+	Se1       Se1       Se1        51.915    13_544 1_555  25_455
+	Se1       Se1       Se1        112.802   13_544 1_555  25_565
+	Se1       Se1       Se1        128.085   13_544 1_555  13_555
+	Se1       Se1       Se1        67.198    13_544 1_555  13_545
+	Se1       Se1       Se1        51.915    13_544 1_555  25_555
+	Se1       Se1       Se1        180.000   25_566 1_555  13_544
+	Se1       Se1       Se1        100.711   25_566 1_555  13_554
+	Se1       Se1       Se1        79.289    25_566 1_555  25_556
+	Se1       Se1       Se1        100.711   25_566 1_555  13_654
+	Se1       Se1       Se1        79.289    25_566 1_555  25_456
+	Se1       Se1       Se1        51.915    25_566 1_555  13_655
+	Se1       Se1       Se1        128.085   25_566 1_555  25_455
+	Se1       Se1       Se1        67.198    25_566 1_555  25_565
+	Se1       Se1       Se1        51.915    25_566 1_555  13_555
+	Se1       Se1       Se1        112.802   25_566 1_555  13_545
+	Se1       Se1       Se1        128.085   25_566 1_555  25_555
+	Se1       Se1       Se1        132.547    1_554 1_555  25_566
+	Se1       Se1       Se1        47.453     1_554 1_555  13_544
+	Se1       Se1       Se1        47.453     1_554 1_555  13_554
+	Se1       Se1       Se1        132.547    1_554 1_555  25_556
+	Se1       Se1       Se1        47.453     1_554 1_555  13_654
+	Se1       Se1       Se1        132.547    1_554 1_555  25_456
+	Se1       Se1       Se1        114.651    1_554 1_555  13_655
+	Se1       Se1       Se1        65.349     1_554 1_555  25_455
+	Se1       Se1       Se1        65.349     1_554 1_555  25_565
+	Se1       Se1       Se1        114.651    1_554 1_555  13_555
+	Se1       Se1       Se1        114.651    1_554 1_555  13_545
+	Se1       Se1       Se1        65.349     1_554 1_555  25_555
+	Se1       Se1       Se1        180.000    1_556 1_555   1_554
+	Se1       Se1       Se1        47.453     1_556 1_555  25_566
+	Se1       Se1       Se1        132.547    1_556 1_555  13_544
+	Se1       Se1       Se1        132.547    1_556 1_555  13_554
+	Se1       Se1       Se1        47.453     1_556 1_555  25_556
+	Se1       Se1       Se1        132.547    1_556 1_555  13_654
+	Se1       Se1       Se1        47.453     1_556 1_555  25_456
+	Se1       Se1       Se1        65.349     1_556 1_555  13_655
+	Se1       Se1       Se1        114.651    1_556 1_555  25_455
+	Se1       Se1       Se1        114.651    1_556 1_555  25_565
+	Se1       Se1       Se1        65.349     1_556 1_555  13_555
+	Se1       Se1       Se1        65.349     1_556 1_555  13_545
+	Se1       Se1       Se1        114.651    1_556 1_555  25_555
+#######  End powder crystal structure  #######
+
+
+#######  Begin powder crystal structure  #######
+data_Second_10
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+
+_pd_phase.id	Second_10
+_pd_phase.name	Second
+_model.id	Second_10
+_structure.id	Second_10
+_space_group.id	I4/mmm
+_model.structure_id	Second_10
+_structure.diffrn_id	111K
+_structure.space_group_id	I4/mmm
+_structure.phase_id	Second_10
+
+_cell.length_a    3.9
+_cell.length_b    3.9
+_cell.length_c    3.2
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+_cell.volume      48.672
+_cell.formula_units_Z	  2
+_chemical_formula.weight	231.03588
+_chemical_formula.sum
+;Sn
+;
+_pd_phase.density_diffrn	15.7644792
+_pd_phase.atten_coef_mu_calc	478.068588
+_pd_phase.mass_atten_coef_mu_calc	303.256822
+_cell_measurement.theta_min	5
+_cell_measurement.theta_max	35
+_space_group.crystal_system	tetragonal
+_space_group.name_H-M_alt
+;I4/mmm
+;
+loop_
+	_space_group_symop.id
+	_space_group_symop.operation_xyz
+	  1 'x, y, z '
+	  2 '-x, -y, z '
+	  3 '-x, y, -z '
+	  4 '-x, y, z '
+	  5 '-y, -x, -z '
+	  6 '-y, -x, z '
+	  7 '-y, x, -z '
+	  8 '-y, x, z '
+	  9 'y, -x, -z '
+	 10 'y, -x, z '
+	 11 'y, x, -z '
+	 12 'y, x, z '
+	 13 'x, -y, -z '
+	 14 'x, -y, z '
+	 15 'x, y, -z '
+	 16 '-x, -y, -z '
+	 17 'x+1/2, y+1/2, z+1/2 '
+	 18 '-x+1/2, -y+1/2, z+1/2 '
+	 19 '-x+1/2, y+1/2, -z+1/2 '
+	 20 '-x+1/2, y+1/2, z+1/2 '
+	 21 '-y+1/2, -x+1/2, -z+1/2 '
+	 22 '-y+1/2, -x+1/2, z+1/2 '
+	 23 '-y+1/2, x+1/2, -z+1/2 '
+	 24 '-y+1/2, x+1/2, z+1/2 '
+	 25 'y+1/2, -x+1/2, -z+1/2 '
+	 26 'y+1/2, -x+1/2, z+1/2 '
+	 27 'y+1/2, x+1/2, -z+1/2 '
+	 28 'y+1/2, x+1/2, z+1/2 '
+	 29 'x+1/2, -y+1/2, -z+1/2 '
+	 30 'x+1/2, -y+1/2, z+1/2 '
+	 31 'x+1/2, y+1/2, -z+1/2 '
+	 32 '-x+1/2, -y+1/2, -z+1/2 '
+loop_
+	_atom_site.label
+	_atom_site.type_symbol
+	_atom_site.site_symmetry_multiplicity
+	_atom_site.fract_x
+	_atom_site.fract_y
+	_atom_site.fract_z
+	_atom_site.occupancy
+	_atom_site.B_iso_or_equiv
+	Pa1 Pa   2 0 0 0 1 1
+loop_
+	_geom_bond_atom_site_label_1
+	_geom_bond_atom_site_label_2
+	_geom_bond_distance
+	_geom_bond_site_symmetry_1
+	_geom_bond_site_symmetry_2
+	Pa1       Pa1       3.18826 1_555  17_454
+	Pa1       Pa1       3.18826 1_555  17_455
+	Pa1       Pa1       3.18826 1_555  17_544
+	Pa1       Pa1       3.18826 1_555  17_545
+	Pa1       Pa1       3.18826 1_555  17_445
+	Pa1       Pa1       3.18826 1_555  17_554
+	Pa1       Pa1       3.18826 1_555  17_444
+	Pa1       Pa1       3.18826 1_555  17_555
+	Pa1       Pa1       3.20000 1_555   1_554
+	Pa1       Pa1       3.20000 1_555   1_556
+	loop_
+		_geom_angle_atom_site_label_1
+		_geom_angle_atom_site_label_2
+		_geom_angle_atom_site_label_3
+		_geom_angle
+		_geom_angle_site_symmetry_1
+		_geom_angle_site_symmetry_2
+		_geom_angle_site_symmetry_3
+	Pa1       Pa1       Pa1        60.244    17_455 1_555  17_454
+	Pa1       Pa1       Pa1        180.000   17_544 1_555  17_455
+	Pa1       Pa1       Pa1        119.756   17_544 1_555  17_454
+	Pa1       Pa1       Pa1        60.244    17_545 1_555  17_544
+	Pa1       Pa1       Pa1        119.756   17_545 1_555  17_455
+	Pa1       Pa1       Pa1        180.000   17_545 1_555  17_454
+	Pa1       Pa1       Pa1        75.413    17_445 1_555  17_545
+	Pa1       Pa1       Pa1        104.587   17_445 1_555  17_544
+	Pa1       Pa1       Pa1        75.413    17_445 1_555  17_455
+	Pa1       Pa1       Pa1        104.587   17_445 1_555  17_454
+	Pa1       Pa1       Pa1        180.000   17_554 1_555  17_445
+	Pa1       Pa1       Pa1        104.587   17_554 1_555  17_545
+	Pa1       Pa1       Pa1        75.413    17_554 1_555  17_544
+	Pa1       Pa1       Pa1        104.587   17_554 1_555  17_455
+	Pa1       Pa1       Pa1        75.413    17_554 1_555  17_454
+	Pa1       Pa1       Pa1        119.756   17_444 1_555  17_554
+	Pa1       Pa1       Pa1        60.244    17_444 1_555  17_445
+	Pa1       Pa1       Pa1        104.587   17_444 1_555  17_545
+	Pa1       Pa1       Pa1        75.413    17_444 1_555  17_544
+	Pa1       Pa1       Pa1        104.587   17_444 1_555  17_455
+	Pa1       Pa1       Pa1        75.413    17_444 1_555  17_454
+	Pa1       Pa1       Pa1        180.000   17_555 1_555  17_444
+	Pa1       Pa1       Pa1        60.244    17_555 1_555  17_554
+	Pa1       Pa1       Pa1        119.756   17_555 1_555  17_445
+	Pa1       Pa1       Pa1        75.413    17_555 1_555  17_545
+	Pa1       Pa1       Pa1        104.587   17_555 1_555  17_544
+	Pa1       Pa1       Pa1        75.413    17_555 1_555  17_455
+	Pa1       Pa1       Pa1        104.587   17_555 1_555  17_454
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_555
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_444
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_554
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_445
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_545
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_544
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_455
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_454
+	Pa1       Pa1       Pa1        180.000    1_556 1_555   1_554
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_555
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_444
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_554
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_445
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_545
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_544
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_455
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_454
+#######  End powder crystal structure  #######
+
+
+#######  Begin phase and diffractogram information  #######
+data_Selenium_10_the_first
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_phase.id	Selenium_10
+_pd_diffractogram.id	the_first
+_pd_phase_mass.percent	30.0744264
+loop_
+_refln.id
+_refln.index_h
+_refln.index_k
+_refln.index_l
+_refln.d_spacing
+_refln.wavelength_id
+_refln.F_squared_calc
+_refln.F_squared_meas
+10-2	    1    0   -2    1.408738   0     1.824776     0.087817
+101	    1    0    1    2.283844   0     3.169439     0.121636
+2-10	    2   -1    0    1.950000   0     2.729234     0.288287
+20-1	    2    0   -1    1.482980   0     1.966296     0.110797
+loop_
+_pd_calc_component.point_id
+_pd_calc_component.intensity_net
+        0       0.000000  
+        1       0.000000  
+        2       0.000000  
+        3       0.000002  
+        4       0.017164  
+        5       1.174990  
+        6      10.244189  
+        7       2.904314  
+        8       1.462903  
+        9       0.291171  
+       10       1.172084  
+       11       2.051906  
+       12       0.413292  
+#######  End phase and diffractogram information  #######
+
+
+#######  Begin phase and diffractogram information  #######
+data_Second_10_the_first
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_phase.id	Second_10
+_pd_diffractogram.id	the_first
+_pd_phase_mass.percent	69.9255736
+loop_
+_refln.id
+_refln.index_h
+_refln.index_k
+_refln.index_l
+_refln.d_spacing
+_refln.wavelength_id
+_refln.F_squared_calc
+_refln.F_squared_meas
+002	    0    0    2    1.600000   0     2.754013     0.217341
+101	    1    0    1    2.473835   0    15.977578 13860.046965
+110	    1    1    0    2.757716   0     8.518095 35950.283859
+112	    1    1    2    1.383936   0     9.251318     0.461719
+200	    2    0    0    1.950000   0     6.688723     0.657366
+211	    2    1    1    1.531432   0    20.966272     1.364987
+220	    2    2    0    1.378858   0     4.603383     0.228671
+loop_
+_pd_calc_component.point_id
+_pd_calc_component.intensity_net
+        0       0.000000  
+        1       0.000024  
+        2       0.196264  
+        3       3.990554  
+        4      23.797722  
+        5      37.050653  
+        6      21.767486  
+        7       9.024210  
+        8       5.648408  
+        9       6.159694  
+       10      11.990720  
+       11      11.228528  
+       12       7.349653  
+#######  End phase and diffractogram information  #######
+
+
+#######  Begin powder diffraction data  #######
+data_the_first
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+
+_pd_diffractogram.id	the_first
+_diffrn.id	111K
+_pd_instr.id	insitu_lab
+_pd_instr.radiation_id	mono
+_pd_diffractogram.diffrn_id	111K
+_pd_diffractogram.instr_id	insitu_lab
+
+_pd_meas.datetime_initiated	2022-01-11T14:32:57+0800
+_pd_calc.method	Rietveld
+_pd_meas.scan_method	cont
+_diffrn.ambient_temperature	111
+_diffrn.ambient_pressure	101.3
+_pd_proc_ls.peak_cutoff	0.0001
+_pd_proc_ls.prof_R_factor     	13.19565
+_pd_proc_ls.prof_wR_factor    	17.02651
+_pd_proc_ls.prof_wR_expected  	1.00000
+loop_
+	_pd_data.point_id
+	_pd_meas.2theta_scan
+	_pd_proc.2theta_corrected
+	_pd_proc.intensity_total
+	_pd_proc.ls_weight
+	_pd_calc.intensity_total
+	_pd_calc.intensity_bkg
+        0    10.000000     9.979244     1.000000     1.000000     4.000000     4.000000 
+        1    15.000000    14.979343     1.000000     1.000000     1.611135     1.611111 
+        2    20.000000    19.979482     1.000000     1.000000    -0.025959    -0.222222 
+        3    25.000000    24.979659     1.000000     1.000000     2.490555    -1.500000 
+        4    30.000000    29.979875     1.000000     1.000000    21.592664    -2.222222 
+        5    35.000000    34.980129     1.000000     1.000000    35.836754    -2.388889 
+        6    40.000000    39.980422     1.000000     1.000000    30.011675    -2.000000 
+        7    45.000000    44.980751     1.000000     1.000000    10.872969    -1.055556 
+        8    50.000000    49.981117     1.000000     1.000000     7.555755     0.444444 
+        9    55.000000    54.981519     1.000000     1.000000     8.950864     2.500000 
+       10    60.000000    59.981957     1.000000     1.000000    18.273915     5.111111 
+       11    65.000000    64.982428     1.000000     1.000000    21.558212     8.277778 
+       12    70.000000    69.982933     1.000000     1.000000    19.762945    12.000000 
+#######  End powder diffraction data  #######
+
+
+#######  Begin wavelength information  #######
+data_number_2_wavelength
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_diffrn_radiation.id	mono
+_diffrn_radiation.probe	x-ray
+loop_
+_diffrn_radiation_wavelength.id
+_diffrn_radiation_wavelength.wt
+_diffrn_radiation_wavelength.value
+0	  1.0000000	  1.5405960
+_diffrn_source.current	45
+_diffrn_source.device	tube
+_diffrn_source.power	1800
+_diffrn_source.voltage	40
+_diffrn_source.target	Cu
+#######  End wavelength information  #######
+
+#######  Begin instrument information  #######
+data_number_2_instrument
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_instr.id	insitu_lab
+_pd_instr.radiation_id	mono
+_pd_instr.2theta_monochr_pre	26.6
+_pd_instr.cons_illum_flag	no
+_pd_instr.divg_eq_mono_spec	0.25
+_pd_instr.detector_circle_radius	275
+_pd_instr.geometry	Bragg-Brentano
+_pd_instr.monochr_pre_spec
+;Ge 111
+;
+_pd_instr.soller_ax_mono_spec	4
+
+_pd_instr_detector.id	A
+_pd_instr_detector.instr_id	insitu_lab
+_pd_instr.soller_ax_spec_detc	4
+#######  End instrument information  #######
+
+#######  Begin preferred orientation information  #######
+data_Selenium_20_number_2_preferred_orientation
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_phase.id	Selenium_20
+_pd_diffractogram.id	number_2
+_pd_pref_orient.geom	srefln
+loop_
+_pd_pref_orient_March_Dollase.id
+_pd_pref_orient_March_Dollase.hkl
+_pd_pref_orient_March_Dollase.r
+0	[ 1 2 -3 ]	0.754
+#######  End preferred orientation information  #######
+
+#######  Begin powder crystal structure  #######
+data_Selenium_20
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+
+_pd_phase.id	Selenium_20
+_pd_phase.name	Selenium
+_model.id	Sel_mod_1
+_structure.id	Sel_str_1
+_space_group.id	R-3m
+_model.structure_id	Sel_str_1
+_structure.diffrn_id	222K
+_structure.space_group_id	R-3m
+_structure.phase_id	Selenium_20
+
+_cell.length_a    3.9
+_cell.length_b    3.9
+_cell.length_c    3.1
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 120
+_cell.volume      40.8339638
+_cell.formula_units_Z	  3
+_chemical_formula.weight	78.96
+_chemical_formula.sum
+;Se
+;
+_pd_phase.density_diffrn	9.63288219
+_pd_phase.atten_coef_mu_calc	76.8790162
+_pd_phase.mass_atten_coef_mu_calc	79.8089448
+_cell_measurement.theta_min	5
+_cell_measurement.theta_max	35
+_space_group.crystal_system	hexagonal
+_space_group.name_H-M_alt
+;R-3m
+;
+loop_
+	_space_group_symop.id
+	_space_group_symop.operation_xyz
+	  1 'x, y, z '
+	  2 '-x, -y, -z '
+	  3 '-x+y, -x, z '
+	  4 '-x+y, y, z '
+	  5 '-y, -x, z '
+	  6 '-y, x-y, z '
+	  7 'y, -x+y, -z '
+	  8 'y, x, -z '
+	  9 'x-y, -y, -z '
+	 10 'x-y, x, -z '
+	 11 '-x, -x+y, -z '
+	 12 'x, x-y, z '
+	 13 'x-1/3, y+1/3, z+1/3 '
+	 14 '-x-1/3, -y+1/3, -z+1/3 '
+	 15 '-x+y-1/3, -x+1/3, z+1/3 '
+	 16 '-x+y-1/3, y+1/3, z+1/3 '
+	 17 '-y-1/3, -x+1/3, z+1/3 '
+	 18 '-y-1/3, x-y+1/3, z+1/3 '
+	 19 'y-1/3, -x+y+1/3, -z+1/3 '
+	 20 'y-1/3, x+1/3, -z+1/3 '
+	 21 'x-y-1/3, -y+1/3, -z+1/3 '
+	 22 'x-y-1/3, x+1/3, -z+1/3 '
+	 23 '-x-1/3, -x+y+1/3, -z+1/3 '
+	 24 'x-1/3, x-y+1/3, z+1/3 '
+	 25 'x+1/3, y-1/3, z-1/3 '
+	 26 '-x+1/3, -y-1/3, -z-1/3 '
+	 27 '-x+y+1/3, -x-1/3, z-1/3 '
+	 28 '-x+y+1/3, y-1/3, z-1/3 '
+	 29 '-y+1/3, -x-1/3, z-1/3 '
+	 30 '-y+1/3, x-y-1/3, z-1/3 '
+	 31 'y+1/3, -x+y-1/3, -z-1/3 '
+	 32 'y+1/3, x-1/3, -z-1/3 '
+	 33 'x-y+1/3, -y-1/3, -z-1/3 '
+	 34 'x-y+1/3, x-1/3, -z-1/3 '
+	 35 '-x+1/3, -x+y-1/3, -z-1/3 '
+	 36 'x+1/3, x-y-1/3, z-1/3 '
+loop_
+	_atom_site.label
+	_atom_site.type_symbol
+	_atom_site.site_symmetry_multiplicity
+	_atom_site.fract_x
+	_atom_site.fract_y
+	_atom_site.fract_z
+	_atom_site.occupancy
+	_atom_site.B_iso_or_equiv
+	Se1 Se   3 0 0 0 1 1
+loop_
+	_geom_bond_atom_site_label_1
+	_geom_bond_atom_site_label_2
+	_geom_bond_distance
+	_geom_bond_site_symmetry_1
+	_geom_bond_site_symmetry_2
+	Se1       Se1       2.47745 1_555  25_555
+	Se1       Se1       2.47745 1_555  13_545
+	Se1       Se1       2.47745 1_555  13_555
+	Se1       Se1       2.47745 1_555  25_565
+	Se1       Se1       2.47745 1_555  25_455
+	Se1       Se1       2.47745 1_555  13_655
+	Se1       Se1       3.05632 1_555  25_456
+	Se1       Se1       3.05632 1_555  13_654
+	Se1       Se1       3.05632 1_555  25_556
+	Se1       Se1       3.05632 1_555  13_554
+	Se1       Se1       3.05632 1_555  13_544
+	Se1       Se1       3.05632 1_555  25_566
+	Se1       Se1       3.10000 1_555   1_554
+	Se1       Se1       3.10000 1_555   1_556
+	loop_
+		_geom_angle_atom_site_label_1
+		_geom_angle_atom_site_label_2
+		_geom_angle_atom_site_label_3
+		_geom_angle
+		_geom_angle_site_symmetry_1
+		_geom_angle_site_symmetry_2
+		_geom_angle_site_symmetry_3
+	Se1       Se1       Se1        76.170    13_545 1_555  25_555
+	Se1       Se1       Se1        103.830   13_555 1_555  13_545
+	Se1       Se1       Se1        180.000   13_555 1_555  25_555
+	Se1       Se1       Se1        76.170    25_565 1_555  13_555
+	Se1       Se1       Se1        180.000   25_565 1_555  13_545
+	Se1       Se1       Se1        103.830   25_565 1_555  25_555
+	Se1       Se1       Se1        103.830   25_455 1_555  25_565
+	Se1       Se1       Se1        76.170    25_455 1_555  13_555
+	Se1       Se1       Se1        76.170    25_455 1_555  13_545
+	Se1       Se1       Se1        103.830   25_455 1_555  25_555
+	Se1       Se1       Se1        180.000   13_655 1_555  25_455
+	Se1       Se1       Se1        76.170    13_655 1_555  25_565
+	Se1       Se1       Se1        103.830   13_655 1_555  13_555
+	Se1       Se1       Se1        103.830   13_655 1_555  13_545
+	Se1       Se1       Se1        76.170    13_655 1_555  25_555
+	Se1       Se1       Se1        112.802   25_456 1_555  13_655
+	Se1       Se1       Se1        67.198    25_456 1_555  25_455
+	Se1       Se1       Se1        128.085   25_456 1_555  25_565
+	Se1       Se1       Se1        51.915    25_456 1_555  13_555
+	Se1       Se1       Se1        51.915    25_456 1_555  13_545
+	Se1       Se1       Se1        128.085   25_456 1_555  25_555
+	Se1       Se1       Se1        180.000   13_654 1_555  25_456
+	Se1       Se1       Se1        67.198    13_654 1_555  13_655
+	Se1       Se1       Se1        112.802   13_654 1_555  25_455
+	Se1       Se1       Se1        51.915    13_654 1_555  25_565
+	Se1       Se1       Se1        128.085   13_654 1_555  13_555
+	Se1       Se1       Se1        128.085   13_654 1_555  13_545
+	Se1       Se1       Se1        51.915    13_654 1_555  25_555
+	Se1       Se1       Se1        100.711   25_556 1_555  13_654
+	Se1       Se1       Se1        79.289    25_556 1_555  25_456
+	Se1       Se1       Se1        51.915    25_556 1_555  13_655
+	Se1       Se1       Se1        128.085   25_556 1_555  25_455
+	Se1       Se1       Se1        128.085   25_556 1_555  25_565
+	Se1       Se1       Se1        112.802   25_556 1_555  13_555
+	Se1       Se1       Se1        51.915    25_556 1_555  13_545
+	Se1       Se1       Se1        67.198    25_556 1_555  25_555
+	Se1       Se1       Se1        180.000   13_554 1_555  25_556
+	Se1       Se1       Se1        79.289    13_554 1_555  13_654
+	Se1       Se1       Se1        100.711   13_554 1_555  25_456
+	Se1       Se1       Se1        128.085   13_554 1_555  13_655
+	Se1       Se1       Se1        51.915    13_554 1_555  25_455
+	Se1       Se1       Se1        51.915    13_554 1_555  25_565
+	Se1       Se1       Se1        67.198    13_554 1_555  13_555
+	Se1       Se1       Se1        128.085   13_554 1_555  13_545
+	Se1       Se1       Se1        112.802   13_554 1_555  25_555
+	Se1       Se1       Se1        79.289    13_544 1_555  13_554
+	Se1       Se1       Se1        100.711   13_544 1_555  25_556
+	Se1       Se1       Se1        79.289    13_544 1_555  13_654
+	Se1       Se1       Se1        100.711   13_544 1_555  25_456
+	Se1       Se1       Se1        128.085   13_544 1_555  13_655
+	Se1       Se1       Se1        51.915    13_544 1_555  25_455
+	Se1       Se1       Se1        112.802   13_544 1_555  25_565
+	Se1       Se1       Se1        128.085   13_544 1_555  13_555
+	Se1       Se1       Se1        67.198    13_544 1_555  13_545
+	Se1       Se1       Se1        51.915    13_544 1_555  25_555
+	Se1       Se1       Se1        180.000   25_566 1_555  13_544
+	Se1       Se1       Se1        100.711   25_566 1_555  13_554
+	Se1       Se1       Se1        79.289    25_566 1_555  25_556
+	Se1       Se1       Se1        100.711   25_566 1_555  13_654
+	Se1       Se1       Se1        79.289    25_566 1_555  25_456
+	Se1       Se1       Se1        51.915    25_566 1_555  13_655
+	Se1       Se1       Se1        128.085   25_566 1_555  25_455
+	Se1       Se1       Se1        67.198    25_566 1_555  25_565
+	Se1       Se1       Se1        51.915    25_566 1_555  13_555
+	Se1       Se1       Se1        112.802   25_566 1_555  13_545
+	Se1       Se1       Se1        128.085   25_566 1_555  25_555
+	Se1       Se1       Se1        132.547    1_554 1_555  25_566
+	Se1       Se1       Se1        47.453     1_554 1_555  13_544
+	Se1       Se1       Se1        47.453     1_554 1_555  13_554
+	Se1       Se1       Se1        132.547    1_554 1_555  25_556
+	Se1       Se1       Se1        47.453     1_554 1_555  13_654
+	Se1       Se1       Se1        132.547    1_554 1_555  25_456
+	Se1       Se1       Se1        114.651    1_554 1_555  13_655
+	Se1       Se1       Se1        65.349     1_554 1_555  25_455
+	Se1       Se1       Se1        65.349     1_554 1_555  25_565
+	Se1       Se1       Se1        114.651    1_554 1_555  13_555
+	Se1       Se1       Se1        114.651    1_554 1_555  13_545
+	Se1       Se1       Se1        65.349     1_554 1_555  25_555
+	Se1       Se1       Se1        180.000    1_556 1_555   1_554
+	Se1       Se1       Se1        47.453     1_556 1_555  25_566
+	Se1       Se1       Se1        132.547    1_556 1_555  13_544
+	Se1       Se1       Se1        132.547    1_556 1_555  13_554
+	Se1       Se1       Se1        47.453     1_556 1_555  25_556
+	Se1       Se1       Se1        132.547    1_556 1_555  13_654
+	Se1       Se1       Se1        47.453     1_556 1_555  25_456
+	Se1       Se1       Se1        65.349     1_556 1_555  13_655
+	Se1       Se1       Se1        114.651    1_556 1_555  25_455
+	Se1       Se1       Se1        114.651    1_556 1_555  25_565
+	Se1       Se1       Se1        65.349     1_556 1_555  13_555
+	Se1       Se1       Se1        65.349     1_556 1_555  13_545
+	Se1       Se1       Se1        114.651    1_556 1_555  25_555
+#######  End powder crystal structure  #######
+
+
+#######  Begin powder crystal structure  #######
+data_Second_20
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+
+_pd_phase.id	Second_20
+_pd_phase.name	Second
+_model.id	Second_20
+_structure.id	Second_20
+_space_group.id	I4/mmm
+_model.structure_id	Second_20
+_structure.diffrn_id	222K
+_structure.space_group_id	I4/mmm
+_structure.phase_id	Second_20
+
+_cell.length_a    3.9
+_cell.length_b    3.9
+_cell.length_c    3.2
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+_cell.volume      48.672
+_cell.formula_units_Z	  2
+_chemical_formula.weight	231.03588
+_chemical_formula.sum
+;Sn
+;
+_pd_phase.density_diffrn	15.7644792
+_pd_phase.atten_coef_mu_calc	478.068588
+_pd_phase.mass_atten_coef_mu_calc	303.256822
+_cell_measurement.theta_min	5
+_cell_measurement.theta_max	35
+_space_group.crystal_system	tetragonal
+_space_group.name_H-M_alt
+;I4/mmm
+;
+loop_
+	_space_group_symop.id
+	_space_group_symop.operation_xyz
+	  1 'x, y, z '
+	  2 '-x, -y, z '
+	  3 '-x, y, -z '
+	  4 '-x, y, z '
+	  5 '-y, -x, -z '
+	  6 '-y, -x, z '
+	  7 '-y, x, -z '
+	  8 '-y, x, z '
+	  9 'y, -x, -z '
+	 10 'y, -x, z '
+	 11 'y, x, -z '
+	 12 'y, x, z '
+	 13 'x, -y, -z '
+	 14 'x, -y, z '
+	 15 'x, y, -z '
+	 16 '-x, -y, -z '
+	 17 'x+1/2, y+1/2, z+1/2 '
+	 18 '-x+1/2, -y+1/2, z+1/2 '
+	 19 '-x+1/2, y+1/2, -z+1/2 '
+	 20 '-x+1/2, y+1/2, z+1/2 '
+	 21 '-y+1/2, -x+1/2, -z+1/2 '
+	 22 '-y+1/2, -x+1/2, z+1/2 '
+	 23 '-y+1/2, x+1/2, -z+1/2 '
+	 24 '-y+1/2, x+1/2, z+1/2 '
+	 25 'y+1/2, -x+1/2, -z+1/2 '
+	 26 'y+1/2, -x+1/2, z+1/2 '
+	 27 'y+1/2, x+1/2, -z+1/2 '
+	 28 'y+1/2, x+1/2, z+1/2 '
+	 29 'x+1/2, -y+1/2, -z+1/2 '
+	 30 'x+1/2, -y+1/2, z+1/2 '
+	 31 'x+1/2, y+1/2, -z+1/2 '
+	 32 '-x+1/2, -y+1/2, -z+1/2 '
+loop_
+	_atom_site.label
+	_atom_site.type_symbol
+	_atom_site.site_symmetry_multiplicity
+	_atom_site.fract_x
+	_atom_site.fract_y
+	_atom_site.fract_z
+	_atom_site.occupancy
+	_atom_site.B_iso_or_equiv
+	Pa1 Pa   2 0 0 0 1 1
+loop_
+	_geom_bond_atom_site_label_1
+	_geom_bond_atom_site_label_2
+	_geom_bond_distance
+	_geom_bond_site_symmetry_1
+	_geom_bond_site_symmetry_2
+	Pa1       Pa1       3.18826 1_555  17_454
+	Pa1       Pa1       3.18826 1_555  17_455
+	Pa1       Pa1       3.18826 1_555  17_544
+	Pa1       Pa1       3.18826 1_555  17_545
+	Pa1       Pa1       3.18826 1_555  17_445
+	Pa1       Pa1       3.18826 1_555  17_554
+	Pa1       Pa1       3.18826 1_555  17_444
+	Pa1       Pa1       3.18826 1_555  17_555
+	Pa1       Pa1       3.20000 1_555   1_554
+	Pa1       Pa1       3.20000 1_555   1_556
+	loop_
+		_geom_angle_atom_site_label_1
+		_geom_angle_atom_site_label_2
+		_geom_angle_atom_site_label_3
+		_geom_angle
+		_geom_angle_site_symmetry_1
+		_geom_angle_site_symmetry_2
+		_geom_angle_site_symmetry_3
+	Pa1       Pa1       Pa1        60.244    17_455 1_555  17_454
+	Pa1       Pa1       Pa1        180.000   17_544 1_555  17_455
+	Pa1       Pa1       Pa1        119.756   17_544 1_555  17_454
+	Pa1       Pa1       Pa1        60.244    17_545 1_555  17_544
+	Pa1       Pa1       Pa1        119.756   17_545 1_555  17_455
+	Pa1       Pa1       Pa1        180.000   17_545 1_555  17_454
+	Pa1       Pa1       Pa1        75.413    17_445 1_555  17_545
+	Pa1       Pa1       Pa1        104.587   17_445 1_555  17_544
+	Pa1       Pa1       Pa1        75.413    17_445 1_555  17_455
+	Pa1       Pa1       Pa1        104.587   17_445 1_555  17_454
+	Pa1       Pa1       Pa1        180.000   17_554 1_555  17_445
+	Pa1       Pa1       Pa1        104.587   17_554 1_555  17_545
+	Pa1       Pa1       Pa1        75.413    17_554 1_555  17_544
+	Pa1       Pa1       Pa1        104.587   17_554 1_555  17_455
+	Pa1       Pa1       Pa1        75.413    17_554 1_555  17_454
+	Pa1       Pa1       Pa1        119.756   17_444 1_555  17_554
+	Pa1       Pa1       Pa1        60.244    17_444 1_555  17_445
+	Pa1       Pa1       Pa1        104.587   17_444 1_555  17_545
+	Pa1       Pa1       Pa1        75.413    17_444 1_555  17_544
+	Pa1       Pa1       Pa1        104.587   17_444 1_555  17_455
+	Pa1       Pa1       Pa1        75.413    17_444 1_555  17_454
+	Pa1       Pa1       Pa1        180.000   17_555 1_555  17_444
+	Pa1       Pa1       Pa1        60.244    17_555 1_555  17_554
+	Pa1       Pa1       Pa1        119.756   17_555 1_555  17_445
+	Pa1       Pa1       Pa1        75.413    17_555 1_555  17_545
+	Pa1       Pa1       Pa1        104.587   17_555 1_555  17_544
+	Pa1       Pa1       Pa1        75.413    17_555 1_555  17_455
+	Pa1       Pa1       Pa1        104.587   17_555 1_555  17_454
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_555
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_444
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_554
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_445
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_545
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_544
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_455
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_454
+	Pa1       Pa1       Pa1        180.000    1_556 1_555   1_554
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_555
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_444
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_554
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_445
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_545
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_544
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_455
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_454
+#######  End powder crystal structure  #######
+
+
+#######  Begin phase and diffractogram information  #######
+data_Selenium_20_number_2
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_phase.id	Selenium_20
+_pd_diffractogram.id	number_2
+_pd_phase_mass.percent	30.0744264
+loop_
+_refln.id
+_refln.index_h
+_refln.index_k
+_refln.index_l
+_refln.d_spacing
+_refln.wavelength_id
+_refln.F_squared_calc
+_refln.F_squared_meas
+10-2	    1    0   -2    1.408738   0     1.824776     0.175634
+101	    1    0    1    2.283844   0     3.169439     0.251951
+2-10	    2   -1    0    1.950000   0     2.729234     0.564343
+20-1	    2    0   -1    1.482980   0     1.966296     0.221045
+loop_
+_pd_calc_component.point_id
+_pd_calc_component.intensity_net
+        0       0.000000  
+        1       0.000000  
+        2       0.000000  
+        3       0.000001  
+        4       0.014585  
+        5       0.999523  
+        6       8.773536  
+        7       3.042565  
+        8       1.710677  
+        9       0.328231  
+       10       1.237755  
+       11       2.017256  
+       12       0.407104  
+#######  End phase and diffractogram information  #######
+
+
+#######  Begin phase and diffractogram information  #######
+data_Second_20_number_2
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_phase.id	Second_20
+_pd_diffractogram.id	number_2
+_pd_phase_mass.percent	69.9255736
+loop_
+_refln.id
+_refln.index_h
+_refln.index_k
+_refln.index_l
+_refln.d_spacing
+_refln.wavelength_id
+_refln.F_squared_calc
+_refln.F_squared_meas
+002	    0    0    2    1.600000   0     2.754013     0.431228
+101	    1    0    1    2.473835   0    15.977578 13588.747159
+110	    1    1    0    2.757716   0     8.518095 35806.463829
+112	    1    1    2    1.383936   0     9.251318     0.922768
+200	    2    0    0    1.950000   0     6.688723     1.291155
+211	    2    1    1    1.531432   0    20.966272     2.716717
+220	    2    2    0    1.378858   0     4.603383     0.457170
+loop_
+_pd_calc_component.point_id
+_pd_calc_component.intensity_net
+        0       0.000000  
+        1       0.000024  
+        2       0.194762  
+        3       3.963123  
+        4      23.672954  
+        5      37.058209  
+        6      21.863928  
+        7       9.050684  
+        8       5.659197  
+        9       6.139468  
+       10      11.970401  
+       11      11.255042  
+       12       7.365912  
+#######  End phase and diffractogram information  #######
+
+
+#######  Begin powder diffraction data  #######
+data_number_2
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+
+_pd_diffractogram.id	number_2
+_diffrn.id	222K
+_pd_instr.id	insitu_lab
+_pd_instr.radiation_id	mono
+_pd_diffractogram.diffrn_id	222K
+_pd_diffractogram.instr_id	insitu_lab
+
+_pd_meas.datetime_initiated	2022-01-11T14:59:22+0800
+_pd_calc.method	Rietveld
+_pd_meas.scan_method	cont
+_diffrn.ambient_temperature	222
+_diffrn.ambient_pressure	101.3
+_pd_proc_ls.peak_cutoff	0.0001
+_pd_proc_ls.prof_R_factor     	6.15820
+_pd_proc_ls.prof_wR_factor    	8.03712
+_pd_proc_ls.prof_wR_expected  	0.70711
+loop_
+	_pd_data.point_id
+	_pd_meas.2theta_scan
+	_pd_proc.2theta_corrected
+	_pd_proc.intensity_total
+	_pd_proc.ls_weight
+	_pd_calc.intensity_total
+	_pd_calc.intensity_bkg
+        0    10.000000     9.958489     2.000000     0.500000     4.000000     4.000000 
+        1    15.000000    14.958687     2.000000     0.500000     1.611135     1.611111 
+        2    20.000000    19.958963     2.000000     0.500000    -0.027460    -0.222222 
+        3    25.000000    24.959318     2.000000     0.500000     2.463124    -1.500000 
+        4    30.000000    29.959750     2.000000     0.500000    21.465317    -2.222222 
+        5    35.000000    34.960259     2.000000     0.500000    35.668843    -2.388889 
+        6    40.000000    39.960843     2.000000     0.500000    28.637464    -2.000000 
+        7    45.000000    44.961502     2.000000     0.500000    11.037694    -1.055556 
+        8    50.000000    49.962234     2.000000     0.500000     7.814318     0.444444 
+        9    55.000000    54.963039     2.000000     0.500000     8.967699     2.500000 
+       10    60.000000    59.963913     2.000000     0.500000    18.319267     5.111111 
+       11    65.000000    64.964856     2.000000     0.500000    21.550076     8.277778 
+       12    70.000000    69.965866     2.000000     0.500000    19.773015    12.000000 
+#######  End powder diffraction data  #######
+
+
+#######  Begin wavelength information  #######
+data_thirdly_wavelength
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_diffrn_radiation.id	mono
+_diffrn_radiation.probe	x-ray
+loop_
+_diffrn_radiation_wavelength.id
+_diffrn_radiation_wavelength.wt
+_diffrn_radiation_wavelength.value
+0	  1.0000000	  1.5405960
+_diffrn_source.current	45
+_diffrn_source.device	tube
+_diffrn_source.power	1800
+_diffrn_source.voltage	40
+_diffrn_source.target	Cu
+#######  End wavelength information  #######
+
+#######  Begin instrument information  #######
+data_thirdly_instrument
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_instr.id	insitu_lab
+_pd_instr.radiation_id	mono
+_pd_instr.2theta_monochr_pre	26.6
+_pd_instr.cons_illum_flag	no
+_pd_instr.divg_eq_mono_spec	0.25
+_pd_instr.detector_circle_radius	275
+_pd_instr.geometry	Bragg-Brentano
+_pd_instr.monochr_pre_spec
+;Ge 111
+;
+_pd_instr.soller_ax_mono_spec	4
+
+_pd_instr_detector.id	A
+_pd_instr_detector.instr_id	insitu_lab
+_pd_instr.soller_ax_spec_detc	4
+#######  End instrument information  #######
+
+#######  Begin preferred orientation information  #######
+data_Selenium_30_thirdly_preferred_orientation
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_phase.id	Selenium_30
+_pd_diffractogram.id	thirdly
+_pd_pref_orient.geom	srefln
+loop_
+_pd_pref_orient_March_Dollase.id
+_pd_pref_orient_March_Dollase.hkl
+_pd_pref_orient_March_Dollase.r
+0	[ 1 2 -3 ]	0.854
+#######  End preferred orientation information  #######
+
+#######  Begin powder crystal structure  #######
+data_Selenium_30
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+
+_pd_phase.id	Selenium_30
+_pd_phase.name	Selenium
+_model.id	Sel_mod_2
+_structure.id	Sel_str_2
+_space_group.id	R-3m
+_model.structure_id	Sel_str_2
+_structure.diffrn_id	333K
+_structure.space_group_id	R-3m
+_structure.phase_id	Selenium_30
+
+_cell.length_a    3.9
+_cell.length_b    3.9
+_cell.length_c    3.1
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 120
+_cell.volume      40.8339638
+_cell.formula_units_Z	  3
+_chemical_formula.weight	78.96
+_chemical_formula.sum
+;Se
+;
+_pd_phase.density_diffrn	9.63288219
+_pd_phase.atten_coef_mu_calc	76.8790162
+_pd_phase.mass_atten_coef_mu_calc	79.8089448
+_cell_measurement.theta_min	5
+_cell_measurement.theta_max	35
+_space_group.crystal_system	hexagonal
+_space_group.name_H-M_alt
+;R-3m
+;
+loop_
+	_space_group_symop.id
+	_space_group_symop.operation_xyz
+	  1 'x, y, z '
+	  2 '-x, -y, -z '
+	  3 '-x+y, -x, z '
+	  4 '-x+y, y, z '
+	  5 '-y, -x, z '
+	  6 '-y, x-y, z '
+	  7 'y, -x+y, -z '
+	  8 'y, x, -z '
+	  9 'x-y, -y, -z '
+	 10 'x-y, x, -z '
+	 11 '-x, -x+y, -z '
+	 12 'x, x-y, z '
+	 13 'x-1/3, y+1/3, z+1/3 '
+	 14 '-x-1/3, -y+1/3, -z+1/3 '
+	 15 '-x+y-1/3, -x+1/3, z+1/3 '
+	 16 '-x+y-1/3, y+1/3, z+1/3 '
+	 17 '-y-1/3, -x+1/3, z+1/3 '
+	 18 '-y-1/3, x-y+1/3, z+1/3 '
+	 19 'y-1/3, -x+y+1/3, -z+1/3 '
+	 20 'y-1/3, x+1/3, -z+1/3 '
+	 21 'x-y-1/3, -y+1/3, -z+1/3 '
+	 22 'x-y-1/3, x+1/3, -z+1/3 '
+	 23 '-x-1/3, -x+y+1/3, -z+1/3 '
+	 24 'x-1/3, x-y+1/3, z+1/3 '
+	 25 'x+1/3, y-1/3, z-1/3 '
+	 26 '-x+1/3, -y-1/3, -z-1/3 '
+	 27 '-x+y+1/3, -x-1/3, z-1/3 '
+	 28 '-x+y+1/3, y-1/3, z-1/3 '
+	 29 '-y+1/3, -x-1/3, z-1/3 '
+	 30 '-y+1/3, x-y-1/3, z-1/3 '
+	 31 'y+1/3, -x+y-1/3, -z-1/3 '
+	 32 'y+1/3, x-1/3, -z-1/3 '
+	 33 'x-y+1/3, -y-1/3, -z-1/3 '
+	 34 'x-y+1/3, x-1/3, -z-1/3 '
+	 35 '-x+1/3, -x+y-1/3, -z-1/3 '
+	 36 'x+1/3, x-y-1/3, z-1/3 '
+loop_
+	_atom_site.label
+	_atom_site.type_symbol
+	_atom_site.site_symmetry_multiplicity
+	_atom_site.fract_x
+	_atom_site.fract_y
+	_atom_site.fract_z
+	_atom_site.occupancy
+	_atom_site.B_iso_or_equiv
+	Se1 Se   3 0 0 0 1 1
+loop_
+	_geom_bond_atom_site_label_1
+	_geom_bond_atom_site_label_2
+	_geom_bond_distance
+	_geom_bond_site_symmetry_1
+	_geom_bond_site_symmetry_2
+	Se1       Se1       2.47745 1_555  25_555
+	Se1       Se1       2.47745 1_555  13_545
+	Se1       Se1       2.47745 1_555  13_555
+	Se1       Se1       2.47745 1_555  25_565
+	Se1       Se1       2.47745 1_555  25_455
+	Se1       Se1       2.47745 1_555  13_655
+	Se1       Se1       3.05632 1_555  25_456
+	Se1       Se1       3.05632 1_555  13_654
+	Se1       Se1       3.05632 1_555  25_556
+	Se1       Se1       3.05632 1_555  13_554
+	Se1       Se1       3.05632 1_555  13_544
+	Se1       Se1       3.05632 1_555  25_566
+	Se1       Se1       3.10000 1_555   1_554
+	Se1       Se1       3.10000 1_555   1_556
+	loop_
+		_geom_angle_atom_site_label_1
+		_geom_angle_atom_site_label_2
+		_geom_angle_atom_site_label_3
+		_geom_angle
+		_geom_angle_site_symmetry_1
+		_geom_angle_site_symmetry_2
+		_geom_angle_site_symmetry_3
+	Se1       Se1       Se1        76.170    13_545 1_555  25_555
+	Se1       Se1       Se1        103.830   13_555 1_555  13_545
+	Se1       Se1       Se1        180.000   13_555 1_555  25_555
+	Se1       Se1       Se1        76.170    25_565 1_555  13_555
+	Se1       Se1       Se1        180.000   25_565 1_555  13_545
+	Se1       Se1       Se1        103.830   25_565 1_555  25_555
+	Se1       Se1       Se1        103.830   25_455 1_555  25_565
+	Se1       Se1       Se1        76.170    25_455 1_555  13_555
+	Se1       Se1       Se1        76.170    25_455 1_555  13_545
+	Se1       Se1       Se1        103.830   25_455 1_555  25_555
+	Se1       Se1       Se1        180.000   13_655 1_555  25_455
+	Se1       Se1       Se1        76.170    13_655 1_555  25_565
+	Se1       Se1       Se1        103.830   13_655 1_555  13_555
+	Se1       Se1       Se1        103.830   13_655 1_555  13_545
+	Se1       Se1       Se1        76.170    13_655 1_555  25_555
+	Se1       Se1       Se1        112.802   25_456 1_555  13_655
+	Se1       Se1       Se1        67.198    25_456 1_555  25_455
+	Se1       Se1       Se1        128.085   25_456 1_555  25_565
+	Se1       Se1       Se1        51.915    25_456 1_555  13_555
+	Se1       Se1       Se1        51.915    25_456 1_555  13_545
+	Se1       Se1       Se1        128.085   25_456 1_555  25_555
+	Se1       Se1       Se1        180.000   13_654 1_555  25_456
+	Se1       Se1       Se1        67.198    13_654 1_555  13_655
+	Se1       Se1       Se1        112.802   13_654 1_555  25_455
+	Se1       Se1       Se1        51.915    13_654 1_555  25_565
+	Se1       Se1       Se1        128.085   13_654 1_555  13_555
+	Se1       Se1       Se1        128.085   13_654 1_555  13_545
+	Se1       Se1       Se1        51.915    13_654 1_555  25_555
+	Se1       Se1       Se1        100.711   25_556 1_555  13_654
+	Se1       Se1       Se1        79.289    25_556 1_555  25_456
+	Se1       Se1       Se1        51.915    25_556 1_555  13_655
+	Se1       Se1       Se1        128.085   25_556 1_555  25_455
+	Se1       Se1       Se1        128.085   25_556 1_555  25_565
+	Se1       Se1       Se1        112.802   25_556 1_555  13_555
+	Se1       Se1       Se1        51.915    25_556 1_555  13_545
+	Se1       Se1       Se1        67.198    25_556 1_555  25_555
+	Se1       Se1       Se1        180.000   13_554 1_555  25_556
+	Se1       Se1       Se1        79.289    13_554 1_555  13_654
+	Se1       Se1       Se1        100.711   13_554 1_555  25_456
+	Se1       Se1       Se1        128.085   13_554 1_555  13_655
+	Se1       Se1       Se1        51.915    13_554 1_555  25_455
+	Se1       Se1       Se1        51.915    13_554 1_555  25_565
+	Se1       Se1       Se1        67.198    13_554 1_555  13_555
+	Se1       Se1       Se1        128.085   13_554 1_555  13_545
+	Se1       Se1       Se1        112.802   13_554 1_555  25_555
+	Se1       Se1       Se1        79.289    13_544 1_555  13_554
+	Se1       Se1       Se1        100.711   13_544 1_555  25_556
+	Se1       Se1       Se1        79.289    13_544 1_555  13_654
+	Se1       Se1       Se1        100.711   13_544 1_555  25_456
+	Se1       Se1       Se1        128.085   13_544 1_555  13_655
+	Se1       Se1       Se1        51.915    13_544 1_555  25_455
+	Se1       Se1       Se1        112.802   13_544 1_555  25_565
+	Se1       Se1       Se1        128.085   13_544 1_555  13_555
+	Se1       Se1       Se1        67.198    13_544 1_555  13_545
+	Se1       Se1       Se1        51.915    13_544 1_555  25_555
+	Se1       Se1       Se1        180.000   25_566 1_555  13_544
+	Se1       Se1       Se1        100.711   25_566 1_555  13_554
+	Se1       Se1       Se1        79.289    25_566 1_555  25_556
+	Se1       Se1       Se1        100.711   25_566 1_555  13_654
+	Se1       Se1       Se1        79.289    25_566 1_555  25_456
+	Se1       Se1       Se1        51.915    25_566 1_555  13_655
+	Se1       Se1       Se1        128.085   25_566 1_555  25_455
+	Se1       Se1       Se1        67.198    25_566 1_555  25_565
+	Se1       Se1       Se1        51.915    25_566 1_555  13_555
+	Se1       Se1       Se1        112.802   25_566 1_555  13_545
+	Se1       Se1       Se1        128.085   25_566 1_555  25_555
+	Se1       Se1       Se1        132.547    1_554 1_555  25_566
+	Se1       Se1       Se1        47.453     1_554 1_555  13_544
+	Se1       Se1       Se1        47.453     1_554 1_555  13_554
+	Se1       Se1       Se1        132.547    1_554 1_555  25_556
+	Se1       Se1       Se1        47.453     1_554 1_555  13_654
+	Se1       Se1       Se1        132.547    1_554 1_555  25_456
+	Se1       Se1       Se1        114.651    1_554 1_555  13_655
+	Se1       Se1       Se1        65.349     1_554 1_555  25_455
+	Se1       Se1       Se1        65.349     1_554 1_555  25_565
+	Se1       Se1       Se1        114.651    1_554 1_555  13_555
+	Se1       Se1       Se1        114.651    1_554 1_555  13_545
+	Se1       Se1       Se1        65.349     1_554 1_555  25_555
+	Se1       Se1       Se1        180.000    1_556 1_555   1_554
+	Se1       Se1       Se1        47.453     1_556 1_555  25_566
+	Se1       Se1       Se1        132.547    1_556 1_555  13_544
+	Se1       Se1       Se1        132.547    1_556 1_555  13_554
+	Se1       Se1       Se1        47.453     1_556 1_555  25_556
+	Se1       Se1       Se1        132.547    1_556 1_555  13_654
+	Se1       Se1       Se1        47.453     1_556 1_555  25_456
+	Se1       Se1       Se1        65.349     1_556 1_555  13_655
+	Se1       Se1       Se1        114.651    1_556 1_555  25_455
+	Se1       Se1       Se1        114.651    1_556 1_555  25_565
+	Se1       Se1       Se1        65.349     1_556 1_555  13_555
+	Se1       Se1       Se1        65.349     1_556 1_555  13_545
+	Se1       Se1       Se1        114.651    1_556 1_555  25_555
+#######  End powder crystal structure  #######
+
+
+#######  Begin powder crystal structure  #######
+data_Second_30
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+
+_pd_phase.id	Second_30
+_pd_phase.name	Second
+_model.id	Second_30
+_structure.id	Second_30
+_space_group.id	I4/mmm
+_model.structure_id	Second_30
+_structure.diffrn_id	333K
+_structure.space_group_id	I4/mmm
+_structure.phase_id	Second_30
+
+_cell.length_a    3.9
+_cell.length_b    3.9
+_cell.length_c    3.2
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+_cell.volume      48.672
+_cell.formula_units_Z	  2
+_chemical_formula.weight	231.03588
+_chemical_formula.sum
+;Sn
+;
+_pd_phase.density_diffrn	15.7644792
+_pd_phase.atten_coef_mu_calc	478.068588
+_pd_phase.mass_atten_coef_mu_calc	303.256822
+_cell_measurement.theta_min	5
+_cell_measurement.theta_max	35
+_space_group.crystal_system	tetragonal
+_space_group.name_H-M_alt
+;I4/mmm
+;
+loop_
+	_space_group_symop.id
+	_space_group_symop.operation_xyz
+	  1 'x, y, z '
+	  2 '-x, -y, z '
+	  3 '-x, y, -z '
+	  4 '-x, y, z '
+	  5 '-y, -x, -z '
+	  6 '-y, -x, z '
+	  7 '-y, x, -z '
+	  8 '-y, x, z '
+	  9 'y, -x, -z '
+	 10 'y, -x, z '
+	 11 'y, x, -z '
+	 12 'y, x, z '
+	 13 'x, -y, -z '
+	 14 'x, -y, z '
+	 15 'x, y, -z '
+	 16 '-x, -y, -z '
+	 17 'x+1/2, y+1/2, z+1/2 '
+	 18 '-x+1/2, -y+1/2, z+1/2 '
+	 19 '-x+1/2, y+1/2, -z+1/2 '
+	 20 '-x+1/2, y+1/2, z+1/2 '
+	 21 '-y+1/2, -x+1/2, -z+1/2 '
+	 22 '-y+1/2, -x+1/2, z+1/2 '
+	 23 '-y+1/2, x+1/2, -z+1/2 '
+	 24 '-y+1/2, x+1/2, z+1/2 '
+	 25 'y+1/2, -x+1/2, -z+1/2 '
+	 26 'y+1/2, -x+1/2, z+1/2 '
+	 27 'y+1/2, x+1/2, -z+1/2 '
+	 28 'y+1/2, x+1/2, z+1/2 '
+	 29 'x+1/2, -y+1/2, -z+1/2 '
+	 30 'x+1/2, -y+1/2, z+1/2 '
+	 31 'x+1/2, y+1/2, -z+1/2 '
+	 32 '-x+1/2, -y+1/2, -z+1/2 '
+loop_
+	_atom_site.label
+	_atom_site.type_symbol
+	_atom_site.site_symmetry_multiplicity
+	_atom_site.fract_x
+	_atom_site.fract_y
+	_atom_site.fract_z
+	_atom_site.occupancy
+	_atom_site.B_iso_or_equiv
+	Pa1 Pa   2 0 0 0 1 1
+loop_
+	_geom_bond_atom_site_label_1
+	_geom_bond_atom_site_label_2
+	_geom_bond_distance
+	_geom_bond_site_symmetry_1
+	_geom_bond_site_symmetry_2
+	Pa1       Pa1       3.18826 1_555  17_454
+	Pa1       Pa1       3.18826 1_555  17_455
+	Pa1       Pa1       3.18826 1_555  17_544
+	Pa1       Pa1       3.18826 1_555  17_545
+	Pa1       Pa1       3.18826 1_555  17_445
+	Pa1       Pa1       3.18826 1_555  17_554
+	Pa1       Pa1       3.18826 1_555  17_444
+	Pa1       Pa1       3.18826 1_555  17_555
+	Pa1       Pa1       3.20000 1_555   1_554
+	Pa1       Pa1       3.20000 1_555   1_556
+	loop_
+		_geom_angle_atom_site_label_1
+		_geom_angle_atom_site_label_2
+		_geom_angle_atom_site_label_3
+		_geom_angle
+		_geom_angle_site_symmetry_1
+		_geom_angle_site_symmetry_2
+		_geom_angle_site_symmetry_3
+	Pa1       Pa1       Pa1        60.244    17_455 1_555  17_454
+	Pa1       Pa1       Pa1        180.000   17_544 1_555  17_455
+	Pa1       Pa1       Pa1        119.756   17_544 1_555  17_454
+	Pa1       Pa1       Pa1        60.244    17_545 1_555  17_544
+	Pa1       Pa1       Pa1        119.756   17_545 1_555  17_455
+	Pa1       Pa1       Pa1        180.000   17_545 1_555  17_454
+	Pa1       Pa1       Pa1        75.413    17_445 1_555  17_545
+	Pa1       Pa1       Pa1        104.587   17_445 1_555  17_544
+	Pa1       Pa1       Pa1        75.413    17_445 1_555  17_455
+	Pa1       Pa1       Pa1        104.587   17_445 1_555  17_454
+	Pa1       Pa1       Pa1        180.000   17_554 1_555  17_445
+	Pa1       Pa1       Pa1        104.587   17_554 1_555  17_545
+	Pa1       Pa1       Pa1        75.413    17_554 1_555  17_544
+	Pa1       Pa1       Pa1        104.587   17_554 1_555  17_455
+	Pa1       Pa1       Pa1        75.413    17_554 1_555  17_454
+	Pa1       Pa1       Pa1        119.756   17_444 1_555  17_554
+	Pa1       Pa1       Pa1        60.244    17_444 1_555  17_445
+	Pa1       Pa1       Pa1        104.587   17_444 1_555  17_545
+	Pa1       Pa1       Pa1        75.413    17_444 1_555  17_544
+	Pa1       Pa1       Pa1        104.587   17_444 1_555  17_455
+	Pa1       Pa1       Pa1        75.413    17_444 1_555  17_454
+	Pa1       Pa1       Pa1        180.000   17_555 1_555  17_444
+	Pa1       Pa1       Pa1        60.244    17_555 1_555  17_554
+	Pa1       Pa1       Pa1        119.756   17_555 1_555  17_445
+	Pa1       Pa1       Pa1        75.413    17_555 1_555  17_545
+	Pa1       Pa1       Pa1        104.587   17_555 1_555  17_544
+	Pa1       Pa1       Pa1        75.413    17_555 1_555  17_455
+	Pa1       Pa1       Pa1        104.587   17_555 1_555  17_454
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_555
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_444
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_554
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_445
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_545
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_544
+	Pa1       Pa1       Pa1        120.122    1_554 1_555  17_455
+	Pa1       Pa1       Pa1        59.878     1_554 1_555  17_454
+	Pa1       Pa1       Pa1        180.000    1_556 1_555   1_554
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_555
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_444
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_554
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_445
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_545
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_544
+	Pa1       Pa1       Pa1        59.878     1_556 1_555  17_455
+	Pa1       Pa1       Pa1        120.122    1_556 1_555  17_454
+#######  End powder crystal structure  #######
+
+
+#######  Begin phase and diffractogram information  #######
+data_Selenium_30_thirdly
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_phase.id	Selenium_30
+_pd_diffractogram.id	thirdly
+_pd_phase_mass.percent	30.0744264
+loop_
+_refln.id
+_refln.index_h
+_refln.index_k
+_refln.index_l
+_refln.d_spacing
+_refln.wavelength_id
+_refln.F_squared_calc
+_refln.F_squared_meas
+10-2	    1    0   -2    1.408738   0     1.824776     0.263868
+101	    1    0    1    2.283844   0     3.169439     0.385613
+2-10	    2   -1    0    1.950000   0     2.729234     0.829797
+20-1	    2    0   -1    1.482980   0     1.966296     0.331285
+loop_
+_pd_calc_component.point_id
+_pd_calc_component.intensity_net
+        0       0.000000  
+        1       0.000000  
+        2       0.000000  
+        3       0.000001  
+        4       0.013073  
+        5       0.896799  
+        6       7.920628  
+        7       3.201873  
+        8       1.927293  
+        9       0.358015  
+       10       1.271313  
+       11       1.942692  
+       12       0.392610  
+#######  End phase and diffractogram information  #######
+
+
+#######  Begin phase and diffractogram information  #######
+data_Second_30_thirdly
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+_pd_phase.id	Second_30
+_pd_diffractogram.id	thirdly
+_pd_phase_mass.percent	69.9255736
+loop_
+_refln.id
+_refln.index_h
+_refln.index_k
+_refln.index_l
+_refln.d_spacing
+_refln.wavelength_id
+_refln.F_squared_calc
+_refln.F_squared_meas
+002	    0    0    2    1.600000   0     2.754013     0.642924
+101	    1    0    1    2.473835   0    15.977578 13317.451900
+110	    1    1    0    2.757716   0     8.518095 35662.651265
+112	    1    1    2    1.383936   0     9.251318     1.384557
+200	    2    0    0    1.950000   0     6.688723     1.903620
+211	    2    1    1    1.531432   0    20.966272     4.062222
+220	    2    2    0    1.378858   0     4.603383     0.686167
+loop_
+_pd_calc_component.point_id
+_pd_calc_component.intensity_net
+        0       0.000000  
+        1       0.000024  
+        2       0.193260  
+        3       3.935692  
+        4      23.548186  
+        5      37.065765  
+        6      21.960370  
+        7       9.077158  
+        8       5.669986  
+        9       6.119242  
+       10      11.950083  
+       11      11.281555  
+       12       7.382171  
+#######  End phase and diffractogram information  #######
+
+
+#######  Begin powder diffraction data  #######
+data_thirdly
+_audit_dataset.id	29c5e709-094e-45f7-99b2-1eeed500725e
+
+_pd_diffractogram.id	thirdly
+_diffrn.id	333K
+_pd_instr.id	insitu_lab
+_pd_instr.radiation_id	mono
+_pd_diffractogram.diffrn_id	333K
+_pd_diffractogram.instr_id	insitu_lab
+
+_pd_meas.datetime_initiated	2022-01-11T15:31:52+0800
+_pd_calc.method	Rietveld
+_pd_meas.scan_method	cont
+_diffrn.ambient_temperature	333
+_diffrn.ambient_pressure	101.3
+_pd_proc_ls.peak_cutoff	0.0001
+_pd_proc_ls.prof_R_factor     	3.88789
+_pd_proc_ls.prof_wR_factor    	5.07754
+_pd_proc_ls.prof_wR_expected  	0.57735
+loop_
+	_pd_data.point_id
+	_pd_meas.2theta_scan
+	_pd_proc.2theta_corrected
+	_pd_proc.intensity_total
+	_pd_proc.ls_weight
+	_pd_calc.intensity_total
+	_pd_calc.intensity_bkg
+        0    10.000000     9.937733     3.000000     0.333333     4.000000     4.000000 
+        1    15.000000    14.938030     3.000000     0.333333     1.611135     1.611111 
+        2    20.000000    19.938445     3.000000     0.333333    -0.028962    -0.222222 
+        3    25.000000    24.938977     3.000000     0.333333     2.435693    -1.500000 
+        4    30.000000    29.939625     3.000000     0.333333    21.339037    -2.222222 
+        5    35.000000    34.940388     3.000000     0.333333    35.573676    -2.388889 
+        6    40.000000    39.941265     3.000000     0.333333    27.880998    -2.000000 
+        7    45.000000    44.942253     3.000000     0.333333    11.223475    -1.055556 
+        8    50.000000    49.943352     3.000000     0.333333     8.041723     0.444444 
+        9    55.000000    54.944558     3.000000     0.333333     8.977257     2.500000 
+       10    60.000000    59.945870     3.000000     0.333333    18.332507     5.111111 
+       11    65.000000    64.947284     3.000000     0.333333    21.502025     8.277778 
+       12    70.000000    69.948799     3.000000     0.333333    19.774781    12.000000 
+#######  End powder diffraction data  #######
