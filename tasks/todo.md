@@ -7,10 +7,10 @@
 **Current position:** Stage 1 complete, including debug tooling. Ready to begin Stage 2 (IR).
 
 **Test suite state:**
-- 218 tests pass in ~2.5 s (default run: `pytest -m "not slow"`)
+- 252 tests pass in ~1:41 (default run: `pytest -m "not slow"`)
 - 5 additional slow tests against large real-world CIF files (`pytest -m slow`)
 - Test files: `tests/lexer/test_lexer.py`, `tests/parser/test_version.py`,
-  `tests/parser/test_parser.py`, `tests/parser/test_integration.py`
+  `tests/parser/test_parser.py`, `tests/parser/test_integration.py`, `tests/test_debug.py`
 
 **Just completed (Stage 1 — Lexer + Parser + Debug):**
 - Full CIF 2.0 and CIF 1.1 lexer with all string types and error recovery
@@ -18,6 +18,8 @@
 - Version detection (magic line, BOM, fallback)
 - Debug tooling: `src/pycifparse/debug.py` — `debug_lex()`, `debug_parse()`, `DebugHandler`
   (prints token stream and/or parser events + errors to stdout; ANSI colour on ttys)
+- `debug_lex()` and `debug_parse()` accept a raw string, `pathlib.Path`, or open file object;
+  `python -m pycifparse.debug myfile.cif` works directly from the command line
 
 **What comes next: Stage 2 — IR**
 See `prompts/CIF_Parser_Design_Prompt.md` §IR Rules for the full specification.
@@ -92,6 +94,8 @@ Key responsibilities:
 - [x] `DebugHandler(inner)` — wraps any handler; prints all events indented by nesting depth
 - [x] `debug_parse(source)` — convenience wrapper: tokens then events in one call
 - [x] ANSI colour on ttys; plain ASCII fallback on non-tty / Windows console
+- [x] All three entry points accept `str | pathlib.Path | IO[str]`; `__main__` block accepts CLI path arg
+- [x] 29 smoke tests in `tests/test_debug.py`
 
 ---
 

@@ -24,14 +24,31 @@ Usage — both token stream and parser events::
     debug_parse(source)
 """
 
+import pathlib
 import sys
 import textwrap
-from typing import List, Optional, TextIO
+from typing import IO, List, Optional, TextIO, Union
 
 from pycifparse.lexer.lexer import Lexer
 from pycifparse.parser.parser import CIFParser
 from pycifparse.parser.version import detect_version
 from pycifparse.types import CIFParserEvents, CIFVersion, ParseError, ValueType
+
+_Source = Union[str, pathlib.Path, IO[str]]
+
+
+def _resolve_source(source: _Source) -> str:
+    """Return CIF source as a string.
+
+    Accepts a raw string, a ``pathlib.Path`` (or any ``os.PathLike``), or an
+    already-open text file object.
+    """
+    if isinstance(source, str):
+        return source
+    if isinstance(source, pathlib.Path) or hasattr(source, '__fspath__'):
+        return pathlib.Path(source).read_text(encoding='utf-8')
+    # Assume file-like object
+    return source.read()
 
 
 # -- ANSI colours (suppressed when stdout is not a tty) -----------------------
@@ -60,15 +77,17 @@ def _c(text: str, *codes: str, file: TextIO) -> str:
 # -- Token stream printer ------------------------------------------------------
 
 def debug_lex(
-    source: str,
+    source: _Source,
     *,
     version: Optional[CIFVersion] = None,
     file: TextIO = sys.stdout,
 ) -> None:
     """Print the full token stream for *source* to *file*.
 
-    If *version* is None it is auto-detected from the magic line.
+    *source* may be a raw CIF string, a ``pathlib.Path``, or an open text
+    file object.  If *version* is None it is auto-detected from the magic line.
     """
+    source = _resolve_source(source)
     if version is None:
         version, remaining, line_offset, v_errors = detect_version(source)
         if v_errors:
@@ -251,7 +270,7 @@ class DebugHandler:
 # -- Convenience function ------------------------------------------------------
 
 def debug_parse(
-    source: str,
+    source: _Source,
     *,
     inner: Optional[CIFParserEvents] = None,
     file: TextIO = sys.stdout,
@@ -263,7 +282,8 @@ def debug_parse(
     Parameters
     ----------
     source:
-        Raw CIF source string.
+        CIF source: a raw string, a ``pathlib.Path``, or an open text file
+        object.
     inner:
         Optional downstream handler to receive all events.
     file:
@@ -274,9 +294,18 @@ def debug_parse(
     show_tokens:
         If True (default), also print the lexer token stream before events.
     """
+    source = _resolve_source(source)
     if show_tokens:
         debug_lex(source, file=file)
 
     handler = DebugHandler(inner, file=file, show_values=show_values)
     CIFParser(handler).parse(source)
     print(file=file)
+
+
+if __name__ == "__main__":
+    import sys as _sys
+    if len(_sys.argv) > 1:
+        debug_parse(pathlib.Path(_sys.argv[1]))
+    else:
+        debug_parse("#\\#CIF_2.0\ndata_hello \n  _tag_name 'don't eat this string' _tag hello _tagvel 12.34")
