@@ -314,11 +314,53 @@ def _print_namespace(ns, *, indent: int, file: TextIO) -> None:
         if tag in loop_tag_set:
             if tag in loop_by_first:
                 loop = loop_by_first[tag]
-                row_count = len(ns[loop[0]])
+                cols_data = [ns[t] for t in loop]
+                row_count = len(cols_data[0]) if cols_data else 0
+
+                # Decide which row indices to display
+                if row_count <= 5:
+                    show = list(range(row_count))
+                    ellipsis_after = -1   # no ellipsis
+                else:
+                    show = [0, 1, -1, row_count - 2, row_count - 1]
+                    ellipsis_after = 1    # insert '...' after index 1
+
+                # Format all displayed cells to compute column widths
+                cells: list[list[str]] = []  # cells[row_idx][col_idx]
+                for ri in show:
+                    if ri == -1:
+                        cells.append([])      # sentinel for ellipsis row
+                    else:
+                        cells.append([_fmt_value(cols_data[ci][ri])
+                                      for ci in range(len(loop))])
+
+                # Column widths: max of tag name and displayed cell widths
+                widths = [len(t) for t in loop]
+                for row_cells in cells:
+                    for ci, cell in enumerate(row_cells):
+                        widths[ci] = max(widths[ci], len(cell))
+
                 rows_label = _c(f'({row_count} rows)', _DIM, file=file)
                 print(f'{pad}{_c("loop_", _CYAN, file=file)}  {rows_label}', file=file)
-                cols = '  '.join(_c(t, _YELLOW, file=file) for t in loop)
-                print(f'{pad}  {cols}', file=file)
+
+                # Header
+                header = '  '.join(
+                    _c(t.ljust(widths[ci]), _YELLOW, file=file)
+                    for ci, t in enumerate(loop)
+                )
+                print(f'{pad}  {header}', file=file)
+
+                # Data rows
+                for ri, row_cells in zip(show, cells):
+                    if ri == -1:
+                        print(f'{pad}  {_c("...", _DIM, file=file)}', file=file)
+                    else:
+                        row = '  '.join(
+                            _c(cell.ljust(widths[ci]), _GREEN, file=file)
+                            for ci, cell in enumerate(row_cells)
+                        )
+                        print(f'{pad}  {row}', file=file)
+
                 for t in loop:
                     printed.add(t)
         else:
@@ -457,10 +499,10 @@ if __name__ == "__main__":
     _path = (
         pathlib.Path(_args[0])
         if _args
-        else pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\tests\cif_files\malformed\multiline.cif")
+        else pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\tests\cif_files\ideal_condensed.cif")
     )
 
     if _use_build:
         debug_build(_path, show_tokens=not _no_tokens)
     else:
-        debug_parse(_path, show_tokens=not _no_tokens)
+        debug_build(_path, show_tokens=not _no_tokens)
