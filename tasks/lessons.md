@@ -24,6 +24,18 @@
 
 ---
 
+## Lesson 4 — `@property` preferred over `cached_property` during incremental construction (2026-04-05)
+
+**Context:** `CifSaveFrame.loops` and `CifSaveFrame.tags` in `cifmodel/model.py`.
+
+**Decision:** Used plain `@property` (recomputed on every access) rather than `cached_property`.
+
+**Reason:** `_loops` and `_tag_order` are mutated during construction by `CifBuilder` (via `_add_loop`, `_append_value`). `cached_property` stores the result on first access and never recomputes — so every mutation would require explicit cache invalidation (`del self.loops`), adding noise to every internal mutation method.
+
+**How to apply:** Use `cached_property` only on data that is immutable after construction, or where the cache lifetime can be clearly defined. For properties backed by lists that grow during construction, plain `@property` is simpler and correct. Switch to `cached_property` only if profiling identifies it as a hot path.
+
+---
+
 ## Lesson 3 — `:` is not a bare-word terminator in CIF 2.0 (2026-04-04)
 
 **Context:** Lexer `_read_bare_word` and `tokens()` for CIF 2.0.
