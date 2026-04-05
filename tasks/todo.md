@@ -4,36 +4,21 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current position:** Stage 1 complete, including debug tooling. Ready to begin Stage 2 (IR).
+**Current position:** Stage 2 complete. Ready to begin Stage 3 (DDLm dictionary parsing).
 
 **Test suite state:**
-- 252 tests pass in ~1:41 (default run: `pytest -m "not slow"`)
+- 440 tests pass in ~1:43 (default run: `pytest -m "not slow"`)
 - 5 additional slow tests against large real-world CIF files (`pytest -m slow`)
-- Test files: `tests/lexer/test_lexer.py`, `tests/parser/test_version.py`,
-  `tests/parser/test_parser.py`, `tests/parser/test_integration.py`, `tests/test_debug.py`
+- New test files: `tests/cifmodel/test_textfield.py`, `tests/cifmodel/test_model.py`,
+  `tests/cifmodel/test_builder.py`, `tests/cifmodel/test_integration.py`
 
-**Just completed (Stage 1 — Lexer + Parser + Debug):**
-- Full CIF 2.0 and CIF 1.1 lexer with all string types and error recovery
-- Streaming event-driven parser: data blocks, save frames, loops, lists, tables, all error paths
-- Version detection (magic line, BOM, fallback)
-- Debug tooling: `src/pycifparse/debug.py` — `debug_lex()`, `debug_parse()`, `DebugHandler`
-  (prints token stream and/or parser events + errors to stdout; ANSI colour on ttys)
-- `debug_lex()` and `debug_parse()` accept a raw string, `pathlib.Path`, or open file object;
-  `python -m pycifparse.debug myfile.cif` works directly from the command line
-
-**What comes next: Stage 2 — IR**
-See `prompts/CIF_Parser_Design_Prompt.md` §IR Rules for the full specification.
-Key responsibilities:
-- Accumulate parser events into an in-memory structure (schema-agnostic)
-- Store all values as raw strings; scalars as `tag → list[str]`
-- Loop row-count validation (strict mode: error + stop; pad mode: warning + pad `?`)
-- Multiline text transformation pipeline (MULTILINE_STRING only):
-  1. Split into physical lines
-  2. Prefix detection and removal
-  3. Line unfolding (fold separators after prefix removal)
-  4. Reconstruct logical string
-- IR maintains its own container nesting depth to count complete values
-- Must not depend on dictionary availability
+**Just completed (Stage 2 — CIF model / IR):**
+- `src/pycifparse/cifmodel/` module: `CifFile`, `CifBlock`, `CifSaveFrame`, `CifBuilder`, `build()`
+- Multiline text transformation pipeline (`textfield.py`): prefix detection, line folding
+- Loop row-count validation (strict and pad modes); empty loop detection
+- Container nesting depth tracking; closed container counts as 1 loop slot
+- `build(source, *, mode='pad')` convenience function: returns `(CifFile, list[ParseError])`
+- 106 new tests: 30 builder, 20 model, 30 textfield, 26 integration
 
 **Open decisions to resolve before starting Stage 2:**
 1. **Malformed-input test files** ✓ — complete; tests added to `tests/parser/test_malformed.py`.
@@ -41,17 +26,19 @@ Key responsibilities:
    as 1 loop-column slot regardless of nesting depth or number of inner values.
 3. **Multiline prefix detection** ✓ — prefix stripping and line folding apply to both
    CIF 1.1 and CIF 2.0 text fields.
-4. **IR error handler interface** ✓ — `IRBuilder` implements `CIFParserEvents` and
+4. **IR error handler interface** ✓ — `CifBuilder` implements `CIFParserEvents` and
    accepts `on_error: Callable[[ParseError], None]` as a constructor argument.
    Caller passes `handler.on_error`; no rename of `CIFParserEvents` needed.
 5. **IR public API shape** ✓ — confirmed:
-   - `ir.blocks` → `list[str]` block names in file order
-   - `ir["blockname"]["_tag"]` → `list[str]` all values (scalars and loop columns alike)
-   - `ir["blockname"].tags` → `list[str]` all tag names in the block
-   - `ir["blockname"].loops` → `list[list[str]]` each inner list is one loop's tags
-   - `ir["blockname"].save_frames` → `list[str]` save frame names in order
-   - `ir["blockname"]["save_name"]["_tag"]` → same interface as blocks
-   - Missing tag raises `KeyError`
+   - Classes: `CifFile`, `CifBlock`, `CifSaveFrame`, `CifBuilder`
+   - `CifFile.blocks` → `list[str]` block names in file order
+   - `CifFile["blockname"]` → `CifBlock`
+   - `CifBlock["_tag"]` → `list[str]` all values (scalars and loop columns alike)
+   - `CifBlock.tags` → `list[str]` all tag names in the block
+   - `CifBlock.loops` → `list[list[str]]` each inner list is one loop's tags
+   - `CifBlock.save_frames` → `list[str]` save frame names in order
+   - `CifBlock["save_name"]` → `CifSaveFrame` (same interface as `CifBlock`)
+   - Missing tag or block raises `KeyError`
    - Duplicate tag values preserved; all values returned as `list[str]` including scalars
 
 ---
@@ -104,23 +91,22 @@ Key responsibilities:
 
 ---
 
-## Stage 2: IR (next)
+## Stage 2: CIF Model (IR) ✓ COMPLETE
 
-See `prompts/CIF_Parser_Design_Prompt.md` §IR Rules for full specification.
-Resolve open decisions 2–5 above before writing any code.
+### Step 8 — CIF model implementation (`src/pycifparse/cifmodel/`) ✓
+- [x] `CifFile`, `CifBlock`, `CifSaveFrame` data structures
+- [x] `CifBuilder` class implementing `CIFParserEvents`
+- [x] Per-block storage: `tag → list[str]` for scalars; loop table structure
+- [x] Container nesting depth tracking for complete-value counting
+- [x] Loop row-count validation (strict and pad modes)
+- [x] Empty loop detection (semantic error)
+- [x] Multiline text transformation pipeline (`textfield.py`)
+- [x] Unit tests (106 total across 4 test files)
 
-### Step 8 — IR implementation (`src/pycifparse/ir/`)
-- [ ] Agree IR public API (open decision 5)
-- [ ] `IRBuilder` class implementing `CIFParserEvents`
-- [ ] Per-block storage: `tag → list[str]` for scalars; loop table structure
-- [ ] Container nesting depth tracking for complete-value counting
-- [ ] Loop row-count validation (strict and pad modes)
-- [ ] Multiline text transformation pipeline
-- [ ] Unit tests
-
-### Step 9 — Parser → IR integration
-- [ ] Wire `CIFParser` output into `IRBuilder`
-- [ ] End-to-end tests: source string → IR query
+### Step 9 — Parser → IR integration ✓
+- [x] `build(source, *, mode='pad')` convenience function
+- [x] End-to-end tests: source string → IR query
+- [x] Real CIF files parse cleanly through full pipeline
 
 ---
 
