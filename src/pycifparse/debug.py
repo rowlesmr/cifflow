@@ -1,5 +1,5 @@
 """
-Debugging utilities for the lexer and parser.
+Debugging utilities for the lexer, parser, and CIF model.
 
 Usage — token stream only::
 
@@ -22,11 +22,15 @@ Usage — both token stream and parser events::
 
     from pycifparse.debug import debug_parse
     debug_parse(source)
+
+Usage — full pipeline through CIF model::
+
+    from pycifparse.debug import debug_build
+    debug_build(source)
 """
 
 import pathlib
 import sys
-import textwrap
 from typing import IO, List, Optional, TextIO, Union
 
 from pycifparse.lexer.lexer import Lexer
@@ -74,6 +78,24 @@ def _c(text: str, *codes: str, file: TextIO) -> str:
     return ''.join(codes) + text + _RESET
 
 
+# -- Value formatting for model summary ---------------------------------------
+
+def _fmt_value(v) -> str:
+    """Format a CifValue as a single-line string, truncated to 25 chars."""
+    if isinstance(v, list):
+        inner = ', '.join(_fmt_value(x) for x in v)
+        s = f'[{inner}]'
+    elif isinstance(v, dict):
+        inner = ', '.join(f'{k}: {_fmt_value(vv)}' for k, vv in v.items())
+        s = f'{{{inner}}}'
+    else:
+        s = str(v).replace('\n', '␤')
+
+    if len(s) <= 25:
+        return s
+    return s[:15] + ' ... ' + s[-5:]
+
+
 # -- Token stream printer ------------------------------------------------------
 
 def debug_lex(
@@ -119,10 +141,10 @@ def debug_lex(
         if len(raw) > 50:
             raw = raw[:47] + '…' + raw[-1]
 
-        line_part = _c(f'{tok.line:>5} {tok.column:>4}', _DIM, file=file)
-        type_part = _c(f'{tok.token_type.value:<10}', _CYAN, file=file)
+        line_part  = _c(f'{tok.line:>5} {tok.column:>4}', _DIM, file=file)
+        type_part  = _c(f'{tok.token_type.value:<10}', _CYAN, file=file)
         vtype_part = _c(f'{vtype:<22}', _BLUE, file=file)
-        val_part  = _c(raw, _GREEN if tok.token_type.value == 'value' else _YELLOW, file=file)
+        val_part   = _c(raw, _GREEN if tok.token_type.value == 'value' else _YELLOW, file=file)
 
         print(f'  {line_part}  {type_part}  {vtype_part}  {val_part}', file=file)
 
@@ -267,7 +289,75 @@ class DebugHandler:
         self._fwd('on_error', error)
 
 
-# -- Convenience function ------------------------------------------------------
+# -- Model summary printer -----------------------------------------------------
+
+def _print_namespace(ns, *, indent: int, file: TextIO) -> None:
+    """Print tags and loops from a CifBlock or CifSaveFrame."""
+    pad = '  ' * indent
+
+    loop_tag_set: set[str] = set()
+    for loop in ns.loops:
+        loop_tag_set.update(loop)
+
+    # Map first tag of each loop → loop tag list, for printing the header once
+    loop_by_first: dict[str, list[str]] = {}
+    for loop in ns.loops:
+        if loop:
+            loop_by_first[loop[0]] = loop
+
+    printed: set[str] = set()
+
+    for tag in ns.tags:
+        if tag in printed:
+            continue
+
+        if tag in loop_tag_set:
+            if tag in loop_by_first:
+                loop = loop_by_first[tag]
+                row_count = len(ns[loop[0]])
+                rows_label = _c(f'({row_count} rows)', _DIM, file=file)
+                print(f'{pad}{_c("loop_", _CYAN, file=file)}  {rows_label}', file=file)
+                cols = '  '.join(_c(t, _YELLOW, file=file) for t in loop)
+                print(f'{pad}  {cols}', file=file)
+                for t in loop:
+                    printed.add(t)
+        else:
+            values = ns[tag]
+            first  = _fmt_value(values[0])
+            n      = len(values)
+            suffix = ('  ' + _c(f'({n} values)', _DIM, file=file)) if n > 1 else ''
+            print(
+                f'{pad}{_c(tag, _YELLOW, file=file)}  {_c(first, _GREEN, file=file)}{suffix}',
+                file=file,
+            )
+            printed.add(tag)
+
+    # Save frames (CifBlock only)
+    if hasattr(ns, 'save_frames'):
+        for sf_name in ns.save_frames:
+            sf = ns[sf_name]
+            print(f'{pad}{_c(f"save: {sf_name}", _CYAN, file=file)}', file=file)
+            _print_namespace(sf, indent=indent + 1, file=file)
+
+
+def _print_model(cif, *, file: TextIO) -> None:
+    """Print a summary of a CifFile."""
+    print(_c('-- CifFile summary --', _BOLD, _DIM, file=file), file=file)
+
+    if not cif.blocks:
+        print(_c('  (no blocks)', _DIM, file=file), file=file)
+        print(file=file)
+        return
+
+    for block_name in cif.blocks:
+        block = cif[block_name]
+        print(_c(f'block: {block_name}', _BOLD, file=file), file=file)
+        _print_namespace(block, indent=1, file=file)
+
+    print(file=file)
+
+
+# -- Convenience functions -----------------------------------------------------
 
 def debug_parse(
     source: _Source,
@@ -303,11 +393,74 @@ def debug_parse(
     print(file=file)
 
 
+def debug_build(
+    source: _Source,
+    *,
+    mode: str = 'pad',
+    file: TextIO = sys.stdout,
+    show_values: bool = True,
+    show_tokens: bool = True,
+) -> None:
+    """Run the full pipeline through the CIF model and print a summary.
+
+    Prints (in order): token stream, parser events, CifFile summary, errors.
+
+    Parameters
+    ----------
+    source:
+        CIF source: a raw string, a ``pathlib.Path``, or an open text file
+        object.
+    mode:
+        Loop row-count mismatch mode passed to ``CifBuilder``: ``'pad'``
+        (default) or ``'strict'``.
+    file:
+        Output stream (default ``sys.stdout``).
+    show_values:
+        Forward to ``DebugHandler``; set False to suppress ``add_value`` lines.
+    show_tokens:
+        If True (default), also print the lexer token stream before events.
+    """
+    from pycifparse.cifmodel.builder import CifBuilder
+
+    source = _resolve_source(source)
+
+    if show_tokens:
+        debug_lex(source, file=file)
+
+    errors: list[ParseError] = []
+    builder = CifBuilder(on_error=errors.append, mode=mode)
+    handler = DebugHandler(builder, file=file, show_values=show_values)
+    CIFParser(handler).parse(source)
+    print(file=file)
+
+    _print_model(builder.result, file=file)
+
+    if errors:
+        print(_c('-- errors --', _BOLD, _DIM, file=file), file=file)
+        for err in errors:
+            loc  = _c(f'line {err.line} col {err.column}', _DIM, file=file)
+            kind = _c(f'[{err.error_type.upper()}]', _RED, _BOLD, file=file)
+            print(f'  {kind}  {loc}  {err.message}', file=file)
+            if err.recovery_action:
+                print(f'    {_c("->", _DIM, file=file)} {err.recovery_action}', file=file)
+        print(file=file)
+
+
 if __name__ == "__main__":
     import sys as _sys
-    if len(_sys.argv) > 1:
-        debug_parse(pathlib.Path(_sys.argv[1]))
+
+    _args = _sys.argv[1:]
+    _use_build   = '-b'          in _args or '--build'      in _args
+    _no_tokens   = '--no-tokens' in _args
+    _args = [a for a in _args if a not in ('-b', '--build', '--no-tokens')]
+
+    _path = (
+        pathlib.Path(_args[0])
+        if _args
+        else pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\tests\cif_files\malformed\multiline.cif")
+    )
+
+    if _use_build:
+        debug_build(_path, show_tokens=not _no_tokens)
     else:
-        debug_parse(pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\tests\cif_files\malformed\multiline.cif"))
-        #debug_parse(pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\tests\cif_files\ideal_condensed.cif"))
-        #debug_parse(pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\tests\cif_files\comcifs\cif1_quoting.cif"))
+        debug_parse(_path, show_tokens=not _no_tokens)
