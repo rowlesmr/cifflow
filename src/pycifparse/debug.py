@@ -308,4 +308,5 @@ if __name__ == "__main__":
     if len(_sys.argv) > 1:
         debug_parse(pathlib.Path(_sys.argv[1]))
     else:
-        debug_parse("#\\#CIF_2.0\ndata_hello \n  _tag_name 'don't eat this string' _tag hello _tagvel 12.34")
+        debug_parse(pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\tests\cif_files\malformed\loops.cif"))
+        #debug_parse(pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\tests\cif_files\comcifs\cif1_quoting.cif"))

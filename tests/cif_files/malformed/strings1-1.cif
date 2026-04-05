@@ -1,0 +1,34 @@
+#\#CIF_1.1
+
+data_malformed_quoted_strings
+
+_tag_ws_after_dq_inside_1 "this "should not" be here" _tag_might_get_swallowed_1 hithere
+_tag_should_read_1	  "this is ' ok '"
+_tag_ws_after_dq_inside_2 "this should not" be here"  _tag_might_get_swallowed_2 generalkenobi
+_tag_should_read_2	  'this is " OK "'
+
+
+_tag_matched_sq_inside 'this 'should not' be here' _tag_might_get_swallowed_3 hitheresomemore
+_tag_should_read_3	'"bookended double quotes"'
+_tag_unmatched_sq_inside 'this should not' be here'  _tag_might_get_swallowed_4 generalkenobiobiwan
+_tag_should_read_4	"'bookended single quotes'"
+
+
+_tag_mismatched_delim_1 "this is a string'   _tag_might_get_swallowed_5 123.45
+_tag_should_read_5	'a normal string'
+_tag_mismatched_delim_2 'this is a string"   _tag_might_get_swallowed_6 2123.45
+_tag_should_read_6	"a normal string"
+
+
+_tag_missing_delim_1 "this is a string   _tag_will_get_swallowed_1 123.45
+_tag_should_read_7   'a normal string'
+_tag_missing_delim_2 'this is a string   _tag_will_get_swallowed_2 2123.45
+_tag_should_read_8   "a normal string"
+
+
+
+
+
+
+
+

@@ -260,6 +260,16 @@ class Lexer:
         while not self._at_end():
             ch = self._peek()
 
+            if ch == '\n':
+                # EOL terminates a single/double quoted string — do not consume it
+                errors.append(LexerError(
+                    message=f'unterminated {vtype.value} string',
+                    line=line, column=col,
+                    context=f'{delimiter}{"".join(buf[:40])}',
+                ))
+                yield Token(TokenType.VALUE, ''.join(buf), vtype, line, col, errors)
+                return
+
             if ch == delimiter:
                 if not self._is_cif2:
                     # CIF 1.1: closing delimiter must be followed by whitespace or EOL/EOF
