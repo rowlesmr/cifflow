@@ -95,3 +95,44 @@
 **Practical justification:** Save frames appear almost exclusively in DDLm dictionaries, which are well-formed. An empty save frame name in a real file would indicate severe malformation; treating it as a recoverable condition adds complexity for no practical benefit.
 
 **How to apply:** Do not attempt to recover empty save frame names. `save_` outside a save frame remains a syntactic error and is ignored. This is a deliberate deviation from the general principle of allowing empty names with an error.
+
+---
+
+## Lesson 9 — Use a consistent docstring style to support autogeneration (2026-04-05)
+
+**Context:** Project-wide docstrings reviewed ahead of potential documentation autogeneration.
+
+**Problem:** Docstrings are currently inconsistent — a mix of one-liners, Sphinx-style `*name*`
+emphasis, and NumPy-style `Parameters` blocks. Public API methods (`__getitem__`, `__contains__`,
+`get_all`) have no parameter or return documentation. Private helpers sometimes have more
+documentation than public methods.
+
+**How to apply:** When writing or updating docstrings, follow a single style throughout.
+NumPy style is preferred (used in `debug.py`):
+
+```python
+def method(self, name: str) -> list[CifBlock]:
+    """Short one-line summary.
+
+    Longer description if needed.
+
+    Parameters
+    ----------
+    name:
+        Description of the parameter.
+
+    Returns
+    -------
+    list[CifBlock]
+        Description of what is returned.
+
+    Raises
+    ------
+    KeyError
+        If the name is not found.
+    """
+```
+
+Public methods must always document parameters, return values, and exceptions.
+Private methods (`_name`) need only a one-liner. This keeps autogeneration viable
+without adding noise to internal code.

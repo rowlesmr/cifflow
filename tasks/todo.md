@@ -120,6 +120,16 @@
 
 ---
 
+## Future documentation tasks
+
+- **Docstring pass for autogeneration** — all public methods and classes need
+  consistent `Args`, `Returns`, and `Raises` sections before an autogeneration
+  tool (pdoc, Sphinx, MkDocs) would produce useful output. Current docstrings
+  are readable in-source but inconsistent in style and sparse on public API.
+  Do after Stage 3 when the public surface has stabilised further.
+
+---
+
 ## Future refactors to consider
 
 - **`CifBlock`/`CifSaveFrame` inheritance** — currently `CifBlock extends CifSaveFrame`, which
