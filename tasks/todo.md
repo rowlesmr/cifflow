@@ -4,55 +4,34 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current position:** Stage 1 complete, including debug tooling. Ready to begin Stage 2 (IR).
+**Current position:** Stage 2 complete. Ready to begin Stage 3 (DDLm dictionary parsing).
 
 **Test suite state:**
-- 252 tests pass in ~1:41 (default run: `pytest -m "not slow"`)
+- 469 tests pass in ~1:44 (default run: `pytest -m "not slow"`)
 - 5 additional slow tests against large real-world CIF files (`pytest -m slow`)
-- Test files: `tests/lexer/test_lexer.py`, `tests/parser/test_version.py`,
-  `tests/parser/test_parser.py`, `tests/parser/test_integration.py`, `tests/test_debug.py`
 
-**Just completed (Stage 1 — Lexer + Parser + Debug):**
-- Full CIF 2.0 and CIF 1.1 lexer with all string types and error recovery
-- Streaming event-driven parser: data blocks, save frames, loops, lists, tables, all error paths
-- Version detection (magic line, BOM, fallback)
-- Debug tooling: `src/pycifparse/debug.py` — `debug_lex()`, `debug_parse()`, `DebugHandler`
-  (prints token stream and/or parser events + errors to stdout; ANSI colour on ttys)
-- `debug_lex()` and `debug_parse()` accept a raw string, `pathlib.Path`, or open file object;
-  `python -m pycifparse.debug myfile.cif` works directly from the command line
+**Completed this session (housekeeping and corrections):**
+- Renamed `CIF*` → `Cif*` throughout codebase, docs, and tests (`CifParser`, `CifVersion`, etc.)
+- Deleted stale `src/pycifparse/ir/` stub (superseded by `cifmodel/`)
+- Fixed `builder.on_error` — was silently discarding parser errors; now forwards to caller
+- Moved empty-loop detection from builder (semantic) to parser (syntactic); refactored
+  `_loop_value_count: int` → `_loop_has_values: bool` in `CifParser`
+- Added duplicate block/save-frame name handling: `_id`, `_block_list`/`_save_frame_list`,
+  `get_all(name)` on `CifFile` and `CifBlock`
+- `debug_build()` added to `debug.py`: prints model with row-wise loop display, column-aligned
+- Added `__init__.py` public exports: `pycifparse` exports `CifFile`, `CifBlock`,
+  `CifSaveFrame`, `CifBuilder`, `build`; `pycifparse.parser` exports `CifParser`
+- Created `prompts/API Reference.md` — public API reference for use alongside Stage 3 prompt
+- Fixed spec contradiction in `prompts/CIF Parser Design Prompt.md` (line-folding layer)
+- 29 tests added (duplicate names, empty-loop corrections, debug smoke tests); 5 corrected
 
-**What comes next: Stage 2 — IR**
-See `prompts/CIF_Parser_Design_Prompt.md` §IR Rules for the full specification.
-Key responsibilities:
-- Accumulate parser events into an in-memory structure (schema-agnostic)
-- Store all values as raw strings; scalars as `tag → list[str]`
-- Loop row-count validation (strict mode: error + stop; pad mode: warning + pad `?`)
-- Multiline text transformation pipeline (MULTILINE_STRING only):
-  1. Split into physical lines
-  2. Prefix detection and removal
-  3. Line unfolding (fold separators after prefix removal)
-  4. Reconstruct logical string
-- IR maintains its own container nesting depth to count complete values
-- Must not depend on dictionary availability
-
-**Open decisions to resolve before starting Stage 2:**
-1. **Malformed-input test files** ✓ — complete; tests added to `tests/parser/test_malformed.py`.
-2. **IR container value counting** ✓ — a properly closed container (list or table) counts
-   as 1 loop-column slot regardless of nesting depth or number of inner values.
-3. **Multiline prefix detection** ✓ — prefix stripping and line folding apply to both
-   CIF 1.1 and CIF 2.0 text fields.
-4. **IR error handler interface** ✓ — `IRBuilder` implements `CIFParserEvents` and
-   accepts `on_error: Callable[[ParseError], None]` as a constructor argument.
-   Caller passes `handler.on_error`; no rename of `CIFParserEvents` needed.
-5. **IR public API shape** ✓ — confirmed:
-   - `ir.blocks` → `list[str]` block names in file order
-   - `ir["blockname"]["_tag"]` → `list[str]` all values (scalars and loop columns alike)
-   - `ir["blockname"].tags` → `list[str]` all tag names in the block
-   - `ir["blockname"].loops` → `list[list[str]]` each inner list is one loop's tags
-   - `ir["blockname"].save_frames` → `list[str]` save frame names in order
-   - `ir["blockname"]["save_name"]["_tag"]` → same interface as blocks
-   - Missing tag raises `KeyError`
-   - Duplicate tag values preserved; all values returned as `list[str]` including scalars
+**Open decisions / prerequisites before starting Stage 3:**
+1. **Stage 3 prompt** — not yet written; must be drafted before implementation begins.
+   Check `prompts/` for any existing Stage 3 material first.
+2. **Malformed-input test gaps** — non-blocking for Stage 3; gaps listed under Step 6 below.
+   Resolve against spec and the error-correcting CIF 1.1 parser paper when convenient.
+3. **COMCIFS test files** — `tests/cif_files/comcifs/` not yet covered by
+   `test_real_file_no_semantic_errors`; add when Stage 3 is stable.
 
 ---
 
@@ -62,7 +41,7 @@ Key responsibilities:
 - [x] Directory structure, `pyproject.toml`, stub `__init__.py` files, `tasks/lessons.md`
 
 ### Step 2 — Shared types (`src/pycifparse/types.py`) ✓
-- [x] `ValueType`, `TokenType`, `ParseError`, `CIFVersion`, `CIFParserEvents`
+- [x] `ValueType`, `TokenType`, `ParseError`, `CifVersion`, `CifParserEvents`
 
 ### Step 3 — Version detection ✓
 - [x] `detect_version`; 15 tests
@@ -76,7 +55,7 @@ Key responsibilities:
 - Key lessons: Lesson 1 (multiline closing delimiter), Lesson 3 (`:` not a bare-word terminator)
 
 ### Step 5 — Parser (`src/pycifparse/parser/`) ✓
-- [x] `CIFParser`; 88 tests
+- [x] `CifParser`; 88 tests
 - [x] Data blocks, save frames, loops (sequential and `stop_`-terminated),
       lists, tables, orphan values, `global_` (fatal), all error-recovery paths
 - [x] Table key adjacency check: whitespace before `:` accepted with syntactic error
@@ -86,7 +65,17 @@ Key responsibilities:
 - [x] All non-comcifs files parse without errors
 - [x] Large files (≥1 MB) marked `@pytest.mark.slow`; run with `pytest -m slow`
 - [x] Timestamp values (`2007-12-18T12:16:55+02:00`) confirmed as single STRING tokens
-- [ ] Malformed-input file tests — deferred (user to provide files)
+- [~] Malformed-input file tests — partially complete; 5 malformed CIF files with tests in `tests/parser/test_malformed.py` covering loops, containers, strings (CIF 1.1 and 2.0), and multiline fields
+  - Known gaps (to be addressed against spec before closing):
+    - `global_` keyword (fatal — stop parsing immediately)
+    - `save_` outside a save frame; nested save frames; `data_` inside a save frame; EOF inside open save frame
+    - `loop_` with no tag names
+    - Keyword (`loop_`, `save_`, `data_`) appearing in value position
+    - Tag with no value at EOF; consecutive tags (tag with no value before next tag)
+    - Orphan bare-word values not triggered by container close
+    - Unterminated multiline text field at EOF (opening `;`, no closing `;` before EOF)
+    - CIF 1.1 character set violations (non-ASCII, VT/FF) — check `test_lexer.py` first for overlap
+    - Duplicate table keys; empty `{}` and `[]`
 
 ### Step 7 — CIF 1.1 paths ✓
 - [x] Character set validation in lexer
@@ -104,23 +93,53 @@ Key responsibilities:
 
 ---
 
-## Stage 2: IR (next)
+## Stage 2: CIF Model (IR) ✓ COMPLETE
 
-See `prompts/CIF_Parser_Design_Prompt.md` §IR Rules for full specification.
-Resolve open decisions 2–5 above before writing any code.
+### Step 8 — CIF model implementation (`src/pycifparse/cifmodel/`) ✓
+- [x] `CifFile`, `CifBlock`, `CifSaveFrame` data structures
+- [x] `CifBuilder` class implementing `CifParserEvents`
+- [x] Per-block storage: `tag → list[str]` for scalars; loop table structure
+- [x] Container nesting depth tracking for complete-value counting
+- [x] Loop row-count validation (strict and pad modes)
+- [x] Empty loop detection (semantic error)
+- [x] Multiline text transformation pipeline (`textfield.py`)
+- [x] Unit tests (106 total across 4 test files)
 
-### Step 8 — IR implementation (`src/pycifparse/ir/`)
-- [ ] Agree IR public API (open decision 5)
-- [ ] `IRBuilder` class implementing `CIFParserEvents`
-- [ ] Per-block storage: `tag → list[str]` for scalars; loop table structure
-- [ ] Container nesting depth tracking for complete-value counting
-- [ ] Loop row-count validation (strict and pad modes)
-- [ ] Multiline text transformation pipeline
-- [ ] Unit tests
+### Step 9 — Parser → IR integration ✓
+- [x] `build(source, *, mode='pad')` convenience function
+- [x] End-to-end tests: source string → IR query
+- [x] Real CIF files parse cleanly through full pipeline
 
-### Step 9 — Parser → IR integration
-- [ ] Wire `CIFParser` output into `IRBuilder`
-- [ ] End-to-end tests: source string → IR query
+---
+
+## Future features to consider
+
+- **Programmatic `CifFile` construction** — a user-facing builder API for constructing a
+  `CifFile` without parsing. Accepts native Python types (str, int, float) and converts to
+  strings with correct `ValueType` assignment. Friendlier loop API than `CifBuilder`.
+  Belongs in the output layer (Stage 5+) alongside CIF emission, since the two are tightly
+  coupled (construction → validation → serialisation).
+
+---
+
+## Future documentation tasks
+
+- **Docstring pass for autogeneration** — all public methods and classes need
+  consistent `Args`, `Returns`, and `Raises` sections before an autogeneration
+  tool (pdoc, Sphinx, MkDocs) would produce useful output. Current docstrings
+  are readable in-source but inconsistent in style and sparse on public API.
+  Do after Stage 3 when the public surface has stabilised further.
+
+---
+
+## Future refactors to consider
+
+- **`CifBlock`/`CifSaveFrame` inheritance** — currently `CifBlock extends CifSaveFrame`, which
+  is convenient but a mild LSP violation (a `CifBlock` is wider than a `CifSaveFrame`).
+  If either class is ever passed polymorphically, refactor to a private shared base
+  `_CifNamespace` with `CifSaveFrame(_CifNamespace)` and `CifBlock(_CifNamespace)` as siblings.
+  Mechanical change; all tests pass unchanged; only observable difference is
+  `isinstance(block, CifSaveFrame)` becomes `False`.
 
 ---
 

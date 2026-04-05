@@ -43,10 +43,13 @@ def value_after_tag(h: RecordingHandler, tag: str):
 
 class TestMalformedLoops:
     """
-    Loop error cases — all IR concerns; the parser must not error on any of them.
+    Loop error cases.
 
     data_malformed_loop_1: value count (5) not divisible by tag count (2).
+        Row-count validation is the IR's responsibility; the parser emits no error.
     data_malformed_loop_2: empty loop — zero values for two declared tags.
+        Empty-loop detection is the parser's responsibility (grammar violation);
+        one syntactic error is emitted.
     """
 
     def setup_method(self):
@@ -55,9 +58,11 @@ class TestMalformedLoops:
     def test_no_crash(self):
         pass  # setup_method would have raised
 
-    def test_no_parser_errors(self):
-        # Row-count and empty-loop validation are the IR's responsibility.
-        assert self.h.errors == []
+    def test_one_parser_error_for_empty_loop(self):
+        # data_malformed_loop_2 has an empty loop — syntactic error from parser.
+        assert len(self.h.errors) == 1
+        assert self.h.errors[0].error_type == 'syntactic'
+        assert self.h.has_error_containing('no values')
 
     # ── data_malformed_loop_1: unbalanced value count ────────────────────────
 

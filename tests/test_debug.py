@@ -12,7 +12,7 @@ import io
 import pytest
 
 from pycifparse.debug import DebugHandler, debug_lex, debug_parse
-from pycifparse.parser.parser import CIFParser
+from pycifparse.parser.parser import CifParser
 from pycifparse.types import ValueType
 
 # ---------------------------------------------------------------------------
@@ -77,9 +77,9 @@ class TestDebugLex:
         assert 'LEX ERROR' in out or 'invalid SU' in out
 
     def test_explicit_version_kwarg(self):
-        from pycifparse.types import CIFVersion
+        from pycifparse.types import CifVersion
         # Passing version explicitly should not raise.
-        _capture(debug_lex, 'data_d\n_t v\n', version=CIFVersion.CIF_1_1)
+        _capture(debug_lex, 'data_d\n_t v\n', version=CifVersion.CIF_1_1)
 
 
 # ---------------------------------------------------------------------------
@@ -89,33 +89,33 @@ class TestDebugLex:
 class TestDebugHandler:
     def test_runs_without_error(self):
         buf = io.StringIO()
-        CIFParser(DebugHandler(file=buf)).parse(_SIMPLE)
+        CifParser(DebugHandler(file=buf)).parse(_SIMPLE)
 
     def test_contains_data_block_event(self):
         buf = io.StringIO()
-        CIFParser(DebugHandler(file=buf)).parse(_SIMPLE)
+        CifParser(DebugHandler(file=buf)).parse(_SIMPLE)
         assert 'on_data_block' in buf.getvalue()
 
     def test_contains_add_tag(self):
         buf = io.StringIO()
-        CIFParser(DebugHandler(file=buf)).parse(_SIMPLE)
+        CifParser(DebugHandler(file=buf)).parse(_SIMPLE)
         assert 'add_tag' in buf.getvalue()
 
     def test_contains_add_value(self):
         buf = io.StringIO()
-        CIFParser(DebugHandler(file=buf)).parse(_SIMPLE)
+        CifParser(DebugHandler(file=buf)).parse(_SIMPLE)
         assert 'add_value' in buf.getvalue()
 
     def test_loop_events_present(self):
         buf = io.StringIO()
-        CIFParser(DebugHandler(file=buf)).parse(_WITH_LOOP)
+        CifParser(DebugHandler(file=buf)).parse(_WITH_LOOP)
         out = buf.getvalue()
         assert 'on_loop_start' in out
         assert 'on_loop_end'   in out
 
     def test_table_events_present(self):
         buf = io.StringIO()
-        CIFParser(DebugHandler(file=buf)).parse(_WITH_TABLE)
+        CifParser(DebugHandler(file=buf)).parse(_WITH_TABLE)
         out = buf.getvalue()
         assert 'on_table_start' in out
         assert 'on_table_key'   in out
@@ -123,17 +123,17 @@ class TestDebugHandler:
 
     def test_error_reported(self):
         buf = io.StringIO()
-        CIFParser(DebugHandler(file=buf)).parse(_WITH_ERROR)
+        CifParser(DebugHandler(file=buf)).parse(_WITH_ERROR)
         assert 'SYNTACTIC' in buf.getvalue() or 'syntactic' in buf.getvalue().lower()
 
     def test_adjacency_error_reported(self):
         buf = io.StringIO()
-        CIFParser(DebugHandler(file=buf)).parse(_WITH_TABLE_SPACED)
+        CifParser(DebugHandler(file=buf)).parse(_WITH_TABLE_SPACED)
         assert 'whitespace between' in buf.getvalue()
 
     def test_show_values_false_suppresses_add_value(self):
         buf = io.StringIO()
-        CIFParser(DebugHandler(file=buf, show_values=False)).parse(_SIMPLE)
+        CifParser(DebugHandler(file=buf, show_values=False)).parse(_SIMPLE)
         assert 'add_value' not in buf.getvalue()
 
     def test_forwarding_to_inner_handler(self):
@@ -141,7 +141,7 @@ class TestDebugHandler:
         from tests.parser.test_parser import RecordingHandler
         inner = RecordingHandler()
         buf   = io.StringIO()
-        CIFParser(DebugHandler(inner, file=buf)).parse(_WITH_LOOP)
+        CifParser(DebugHandler(inner, file=buf)).parse(_WITH_LOOP)
         names = inner.event_names()
         assert 'on_data_block'  in names
         assert 'on_loop_start'  in names
@@ -151,7 +151,7 @@ class TestDebugHandler:
     def test_nesting_indentation(self):
         """Loop values should be indented more than the loop_start line."""
         buf = io.StringIO()
-        CIFParser(DebugHandler(file=buf)).parse(_WITH_LOOP)
+        CifParser(DebugHandler(file=buf)).parse(_WITH_LOOP)
         lines = buf.getvalue().splitlines()
         loop_start = next(l for l in lines if 'on_loop_start' in l)
         value_line = next(l for l in lines if 'add_value' in l)

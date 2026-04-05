@@ -1,7 +1,7 @@
 """
 CIF Parser — streaming, event-driven.
 
-Consumes the token stream from the Lexer, emits events to a CIFParserEvents
+Consumes the token stream from the Lexer, emits events to a CifParserEvents
 handler.  Lexer errors attached to tokens are converted to on_error calls
 before the token is processed structurally.
 
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Iterator, List, Optional
 
 from pycifparse.types import (
-    CIFVersion, ValueType, TokenType, ParseError, CIFParserEvents,
+    CifVersion, ValueType, TokenType, ParseError, CifParserEvents,
 )
 from pycifparse.lexer.lexer import Lexer
 from pycifparse.lexer.tokens import Token
@@ -89,17 +89,17 @@ _QUOTED_VTYPES = frozenset({
 # Parser
 # ─────────────────────────────────────────────────────────────────────────────
 
-class CIFParser:
+class CifParser:
     """
     Streaming CIF parser.
 
     Usage::
 
-        parser = CIFParser(handler)
+        parser = CifParser(handler)
         parser.parse(cif_source_string)
     """
 
-    def __init__(self, handler: CIFParserEvents) -> None:
+    def __init__(self, handler: CifParserEvents) -> None:
         self._h = handler
 
     # ------------------------------------------------------------------
@@ -125,6 +125,7 @@ class CIFParser:
         self._in_save_frame: bool = False
         self._in_loop: bool = False
         self._loop_tags: List[str] = []
+        self._loop_has_values: bool = False  # True once any complete value is emitted in loop
         self._active_tag: Optional[str] = None
         self._tag_base_depth: int = 0      # container depth when tag was opened
         self._container_stack: list = []   # _ListFrame | _TableFrame
@@ -227,9 +228,15 @@ class CIFParser:
                 'syntactic',
                 f'unterminated container(s) in loop value ({reason})',
                 tok, 'containers implicitly closed'))
+        if not self._loop_has_values:
+            self._h.on_error(self._err(
+                'syntactic',
+                f'loop has tags {self._loop_tags!r} but no values',
+                tok, 'loop emitted empty'))
         self._h.on_loop_end()
         self._in_loop = False
         self._loop_tags = []
+        self._loop_has_values = False
 
     def _after_close_container(self) -> None:
         """Called immediately after a container frame is popped."""
@@ -243,6 +250,9 @@ class CIFParser:
         if (self._active_tag is not None
                 and len(self._container_stack) == self._tag_base_depth):
             self._active_tag = None
+        # A top-level container closing inside a loop means values were received.
+        if self._in_loop and not self._container_stack:
+            self._loop_has_values = True
 
     # ------------------------------------------------------------------
     # Pre-keyword cleanup
@@ -373,6 +383,7 @@ class CIFParser:
 
         self._in_loop = True
         self._loop_tags = tags[:]
+        self._loop_has_values = False
         self._h.on_loop_start(tags)
 
     # ------------------------------------------------------------------
@@ -411,7 +422,7 @@ class CIFParser:
         value, vtype = tok.value, tok.value_type
 
         # CIF 2.0 structural delimiters and table separator.
-        if self._version == CIFVersion.CIF_2_0:
+        if self._version == CifVersion.CIF_2_0:
             if value == '[':
                 self._open_list(tok); return
             if value == ']':
@@ -601,6 +612,7 @@ class CIFParser:
                 self._h.add_value(value, vtype)
         elif self._in_loop:
             self._h.add_value(value, vtype)
+            self._loop_has_values = True
         elif self._active_tag is not None:
             self._h.add_value(value, vtype)
             self._active_tag = None
@@ -621,22 +633,7 @@ class CIFParser:
         eof = _FakeToken(line, col)
 
         if self._in_loop:
-            # Close containers (with errors) then close loop (valid at EOF).
-            while self._container_stack:
-                frame = self._container_stack.pop()
-                if isinstance(frame, _ListFrame):
-                    self._h.on_list_end()
-                    self._h.on_error(self._err_at(
-                        'syntactic', 'unterminated list at EOF',
-                        line, col, '', 'emitted on_list_end'))
-                else:
-                    self._cleanup_table_frame(frame, eof)
-                    self._h.on_table_end()
-                    self._h.on_error(self._err_at(
-                        'syntactic', 'unterminated table at EOF',
-                        line, col, '', 'emitted on_table_end'))
-            self._h.on_loop_end()
-            self._in_loop = False
+            self._close_loop(eof, 'EOF')
 
         # Close any remaining containers outside a loop.
         while self._container_stack:

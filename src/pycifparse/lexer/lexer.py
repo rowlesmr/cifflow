@@ -5,7 +5,7 @@ Tokenises a CIF source string and yields Token objects.
 Each Token may carry LexerError objects for problems found during tokenisation;
 these are never emitted as parser events directly — the parser converts them.
 
-Version-specific behaviour is gated on the CIFVersion passed at construction.
+Version-specific behaviour is gated on the CifVersion passed at construction.
 Line endings are normalised to \\n before processing; the line_offset parameter
 allows correct absolute line numbers when the magic line has been consumed upstream.
 
@@ -18,7 +18,7 @@ precedes the closing `;` at column 1.
 import re
 from typing import Iterator, List, Optional
 
-from pycifparse.types import CIFVersion, TokenType, ValueType
+from pycifparse.types import CifVersion, TokenType, ValueType
 from pycifparse.lexer.tokens import LexerError, Token
 
 
@@ -98,11 +98,11 @@ class Lexer:
             ...
     """
 
-    def __init__(self, source: str, version: CIFVersion, line_offset: int = 0):
+    def __init__(self, source: str, version: CifVersion, line_offset: int = 0):
         # Normalise all line-ending styles to \\n, as required by CIF 2.0 §line-term.
         self._src = source.replace('\r\n', '\n').replace('\r', '\n')
         self._version = version
-        self._is_cif2 = (version == CIFVersion.CIF_2_0)
+        self._is_cif2 = (version == CifVersion.CIF_2_0)
         self._pos = 0
         self._line = line_offset + 1
         self._col = 1
