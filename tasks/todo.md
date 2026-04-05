@@ -26,9 +26,9 @@
    as 1 loop-column slot regardless of nesting depth or number of inner values.
 3. **Multiline prefix detection** ✓ — prefix stripping and line folding apply to both
    CIF 1.1 and CIF 2.0 text fields.
-4. **IR error handler interface** ✓ — `CifBuilder` implements `CIFParserEvents` and
+4. **IR error handler interface** ✓ — `CifBuilder` implements `CifParserEvents` and
    accepts `on_error: Callable[[ParseError], None]` as a constructor argument.
-   Caller passes `handler.on_error`; no rename of `CIFParserEvents` needed.
+   Caller passes `handler.on_error`; no rename of `CifParserEvents` needed.
 5. **IR public API shape** ✓ — confirmed:
    - Classes: `CifFile`, `CifBlock`, `CifSaveFrame`, `CifBuilder`
    - `CifFile.blocks` → `list[str]` block names in file order
@@ -49,7 +49,7 @@
 - [x] Directory structure, `pyproject.toml`, stub `__init__.py` files, `tasks/lessons.md`
 
 ### Step 2 — Shared types (`src/pycifparse/types.py`) ✓
-- [x] `ValueType`, `TokenType`, `ParseError`, `CIFVersion`, `CIFParserEvents`
+- [x] `ValueType`, `TokenType`, `ParseError`, `CifVersion`, `CifParserEvents`
 
 ### Step 3 — Version detection ✓
 - [x] `detect_version`; 15 tests
@@ -63,7 +63,7 @@
 - Key lessons: Lesson 1 (multiline closing delimiter), Lesson 3 (`:` not a bare-word terminator)
 
 ### Step 5 — Parser (`src/pycifparse/parser/`) ✓
-- [x] `CIFParser`; 88 tests
+- [x] `CifParser`; 88 tests
 - [x] Data blocks, save frames, loops (sequential and `stop_`-terminated),
       lists, tables, orphan values, `global_` (fatal), all error-recovery paths
 - [x] Table key adjacency check: whitespace before `:` accepted with syntactic error
@@ -95,7 +95,7 @@
 
 ### Step 8 — CIF model implementation (`src/pycifparse/cifmodel/`) ✓
 - [x] `CifFile`, `CifBlock`, `CifSaveFrame` data structures
-- [x] `CifBuilder` class implementing `CIFParserEvents`
+- [x] `CifBuilder` class implementing `CifParserEvents`
 - [x] Per-block storage: `tag → list[str]` for scalars; loop table structure
 - [x] Container nesting depth tracking for complete-value counting
 - [x] Loop row-count validation (strict and pad modes)
