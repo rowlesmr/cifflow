@@ -136,7 +136,7 @@ class TestMalformedTables:
         assert Event('on_table_end') in self.h.events
 
     def test_normal_tag_survives_after_implicit_close(self):
-        assert value_after_tag(self.h, '_tag_normal') == ('123.45', ValueType.STRING)
+        assert value_after_tag(self.h, '_tag_normal_1') == ('123.45', ValueType.STRING)
 
     def test_missing_close_on_loop_emits_error(self):
         errors = [e.message for e in self.h.errors]
@@ -153,11 +153,15 @@ class TestMalformedTables:
         ev = self.h.non_error_events()
         assert Event('on_table_key', ('key', ValueType.DOUBLE_QUOTED)) in ev
 
-    def test_missing_open_treated_as_unterminated_string(self):
-        # "key: value } has no opening { so it is read as a double-quoted string
-        # that runs to EOL — a lexer error, not a table.
-        assert self.h.has_error_containing('unterminated double_quoted string')
-        assert Event('on_table_start') not in self.h.events or True  # tables exist from earlier
+    def test_missing_open_value_is_quoted_key(self):
+        # "key": value } — no opening { so "key" is just the tag's value.
+        assert value_after_tag(self.h, '_tag_missing_open') == ('key', ValueType.DOUBLE_QUOTED)
+
+    def test_missing_open_colon_and_value_are_orphans(self):
+        assert self.h.has_error_containing('no preceding tag')
+
+    def test_missing_open_stray_brace_emits_error(self):
+        assert self.h.has_error_containing('no open table')
 
 
 class TestMalformedLists:
@@ -170,8 +174,8 @@ class TestMalformedLists:
         assert self.h.has_error_containing('implicitly closed unclosed list')
 
     def test_normal_tag_survives_after_implicit_list_close(self):
-        # _tag_normal appears in both the table and list blocks; check it appears twice
-        normals = [e for e in self.h.events if e == Event('add_tag', ('_tag_normal',))]
+        # _tag_normal_1 appears in both the table and list blocks
+        normals = [e for e in self.h.events if e == Event('add_tag', ('_tag_normal_1',))]
         assert len(normals) == 2
 
     def test_stray_close_bracket_emits_error(self):

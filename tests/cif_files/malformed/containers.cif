@@ -3,22 +3,24 @@
 data_malformed_tables
 
 _tag_missing_close_1 { "key": value 
-_tag_normal 123.45
+_tag_normal_1 123.45
 
 _tag_missing_close_2 { "key": value 
 loop_ _tag1 1 2 3
 
 _tag_key_ws { "key" : value }
 
-_tag_missing_open "key: value }
+_tag_missing_open "key": value }
+_tag_normal_2 1123.45
 
 
 data_malformed_lists
 
 _tag_missing_close_1 [ v1 v1
-_tag_normal 123.45
+_tag_normal_1 123.45
 
 _tag_missing_close_2 [ v1 v2 
 loop_ _tag1 1 2 3
 
 _tag_missing_open v1 v2 ]
+_tag_normal_2 1123.45
