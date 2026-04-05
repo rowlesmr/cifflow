@@ -121,3 +121,25 @@ def _apply_unfolding(lines: list[str]) -> list[str]:
         # Final line ended with a fold separator (no trailing newline)
         result.append(pending)
     return result
+
+
+if __name__ == "__main__":
+    u = r"""CIF>\
+CIF>data_example
+CIF>_text
+CIF>;This is an embedded text field
+CIF>;"""
+
+    print(transform_multiline(u))
+
+    print()
+
+    w = r"""prefix:\
+prefix:data_example
+prefix:_text
+prefix:;This line was\
+prefix: folded.
+prefix:;"""
+
+    print(transform_multiline(w))
+

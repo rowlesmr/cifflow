@@ -110,6 +110,27 @@
 
 ---
 
+## Future features to consider
+
+- **Programmatic `CifFile` construction** — a user-facing builder API for constructing a
+  `CifFile` without parsing. Accepts native Python types (str, int, float) and converts to
+  strings with correct `ValueType` assignment. Friendlier loop API than `CifBuilder`.
+  Belongs in the output layer (Stage 5+) alongside CIF emission, since the two are tightly
+  coupled (construction → validation → serialisation).
+
+---
+
+## Future refactors to consider
+
+- **`CifBlock`/`CifSaveFrame` inheritance** — currently `CifBlock extends CifSaveFrame`, which
+  is convenient but a mild LSP violation (a `CifBlock` is wider than a `CifSaveFrame`).
+  If either class is ever passed polymorphically, refactor to a private shared base
+  `_CifNamespace` with `CifSaveFrame(_CifNamespace)` and `CifBlock(_CifNamespace)` as siblings.
+  Mechanical change; all tests pass unchanged; only observable difference is
+  `isinstance(block, CifSaveFrame)` becomes `False`.
+
+---
+
 ## Stage 3+: Dictionary, SQLite, Output (future)
 
 Specifications will be added to `prompts/` before each stage begins.
