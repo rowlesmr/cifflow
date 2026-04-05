@@ -432,3 +432,95 @@ class TestMalformedStrings11:
         # strings1-1.cif has no data_malformed_triple_quoted_strings block
         blocks = [e.args[0] for e in self.h.events if e.name == 'on_data_block']
         assert not any('triple' in b for b in blocks)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# multiline.cif
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestMalformedMultiline:
+    """
+    Malformed multiline (semicolon-delimited) text fields.
+
+    The two missing-delimiter scenarios interact:
+
+    _tag_missing_opening_delimiter — no opening ';' after the tag, so the bare
+      words on the following lines are tokenised individually.  The ';' on
+      line 16 acts as an orphan opening delimiter, and the ';' on line 19 closes
+      it — swallowing _tag_missing_closing_delimiter as content of that orphan
+      multiline.  Recovery is impossible in a streaming parser.
+
+    _tag_missing_closing_delimiter — intended to have a multiline value opened
+      by line 19's ';', but that ';' was already consumed closing the orphan
+      multiline above.  The tag itself is swallowed into the orphan multiline's
+      content.
+
+    _tag_doesnt_get_swallowed — survives because both ';' delimiters were
+      consumed by the orphan multiline interaction above.
+    """
+
+    def setup_method(self):
+        self.h = parse(load('multiline.cif'))
+
+    def test_no_crash(self):
+        pass
+
+    # ── _tag_this_is_allowed: triple-quoted string containing ; at column 1 ──
+
+    def test_triple_quoted_with_semicolons_parses_cleanly(self):
+        val = value_after_tag(self.h, '_tag_this_is_allowed')
+        assert val is not None
+        assert val[1] == ValueType.TRIPLE_DOUBLE_QUOTED
+        assert '; looks like' in val[0]
+        assert "but it isn't" in val[0]
+
+    def test_triple_quoted_semicolons_not_treated_as_multiline(self):
+        # The ; chars inside the triple-quoted string must not open/close
+        # a multiline text field — confirmed by the tag parsing without error.
+        assert not any(
+            'unterminated' in e.message for e in self.h.errors
+            if e.line <= 10
+        )
+
+    # ── _tag_missing_opening_delimiter: unrecoverable ────────────────────────
+
+    def test_missing_opening_delimiter_gets_first_bare_word(self):
+        # Without an opening ';', the first bare word on the next line becomes
+        # the scalar value — the intended multiline content is unrecoverable.
+        assert value_after_tag(self.h, '_tag_missing_opening_delimiter') == (
+            'This', ValueType.STRING
+        )
+
+    def test_missing_opening_delimiter_content_becomes_orphans(self):
+        # The remaining words on lines 13-15 are all orphan values.
+        assert self.h.has_error_containing('no preceding tag')
+
+    def test_orphan_semicolon_opens_multiline(self):
+        # The ';' at col 1 on line 16 opens an orphan multiline text field.
+        # Its content includes _tag_missing_closing_delimiter.
+        orphan_multilines = [
+            e for e in self.h.events
+            if e.name == 'add_value'
+            and len(e.args) >= 2
+            and e.args[1] == ValueType.MULTILINE_STRING
+        ]
+        assert orphan_multilines, 'expected at least one orphan multiline value'
+        multiline_content = orphan_multilines[0].args[0]
+        assert '_tag_missing_closing_delimiter' in multiline_content
+
+    # ── _tag_missing_closing_delimiter: swallowed ────────────────────────────
+
+    def test_missing_closing_delimiter_tag_is_swallowed(self):
+        # The tag name ends up inside the orphan multiline's content — it never
+        # appears as a tag event.
+        assert '_tag_missing_closing_delimiter' not in tag_names(self.h)
+
+    # ── _tag_doesnt_get_swallowed: survives ──────────────────────────────────
+
+    def test_doesnt_get_swallowed_survives(self):
+        # Both ';' delimiters were consumed by the orphan multiline above, so
+        # nothing after line 22 is inside a text field.
+        assert '_tag_doesnt_get_swallowed' in tag_names(self.h)
+        assert value_after_tag(self.h, '_tag_doesnt_get_swallowed') == (
+            '123.45', ValueType.STRING
+        )

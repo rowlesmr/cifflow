@@ -36,18 +36,23 @@ Key responsibilities:
 - Must not depend on dictionary availability
 
 **Open decisions to resolve before starting Stage 2:**
-1. **Malformed-input test files** — user is writing these; parser error-recovery tests
-   will be added once files are available (deferred from Step 6).
-2. **IR container value counting** — the spec says "value index increments only on
-   complete value (scalar `add_value` OR fully closed container)". Confirm: does a
-   list containing N scalars count as 1 loop-column slot or N?
-3. **Multiline prefix detection** — the CIF 2.0 spec defines a prefix-stripping rule
-   for text fields. Confirm whether it applies to CIF 1.1 text fields as well.
-4. **IR error handler interface** — the IR emits errors (loop row count, etc.).
-   Confirm: reuse `CIFParserEvents.on_error`, or a separate callback?
-5. **IR public API shape** — what does the caller get back after ingestion?
-   A dict-like object? A class with `.get(tag)`, `.block(name)`, `.loop(tag)` methods?
-   Needs design agreement before implementation.
+1. **Malformed-input test files** ✓ — complete; tests added to `tests/parser/test_malformed.py`.
+2. **IR container value counting** ✓ — a properly closed container (list or table) counts
+   as 1 loop-column slot regardless of nesting depth or number of inner values.
+3. **Multiline prefix detection** ✓ — prefix stripping and line folding apply to both
+   CIF 1.1 and CIF 2.0 text fields.
+4. **IR error handler interface** ✓ — `IRBuilder` implements `CIFParserEvents` and
+   accepts `on_error: Callable[[ParseError], None]` as a constructor argument.
+   Caller passes `handler.on_error`; no rename of `CIFParserEvents` needed.
+5. **IR public API shape** ✓ — confirmed:
+   - `ir.blocks` → `list[str]` block names in file order
+   - `ir["blockname"]["_tag"]` → `list[str]` all values (scalars and loop columns alike)
+   - `ir["blockname"].tags` → `list[str]` all tag names in the block
+   - `ir["blockname"].loops` → `list[list[str]]` each inner list is one loop's tags
+   - `ir["blockname"].save_frames` → `list[str]` save frame names in order
+   - `ir["blockname"]["save_name"]["_tag"]` → same interface as blocks
+   - Missing tag raises `KeyError`
+   - Duplicate tag values preserved; all values returned as `list[str]` including scalars
 
 ---
 
