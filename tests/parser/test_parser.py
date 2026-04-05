@@ -353,8 +353,8 @@ class TestLoops:
         h = parse(src)
         assert h.has_error_containing('no tags')
 
-    def test_consecutive_loops_no_error(self):
-        # A loop_ inside another loop's values closes the first loop and starts a new one.
+    def test_consecutive_loops_first_empty_emits_error(self):
+        # First loop has no values before second loop_ terminates it — syntactic error.
         src = 'data_d\nloop_\n_x\nloop_\n_y\n1\n'
         h = parse(src)
         ev = h.non_error_events()
@@ -362,7 +362,8 @@ class TestLoops:
         loop_ends   = [e for e in ev if e.name == 'on_loop_end']
         assert len(loop_starts) == 2
         assert len(loop_ends)   == 2
-        assert h.errors == []
+        assert len(h.errors) == 1
+        assert h.has_error_containing('no values')
 
     def test_loop_outside_data_block_emits_error(self):
         src = 'loop_\n_x\n1\n'

@@ -233,16 +233,6 @@ class CifBuilder:
             self._in_loop = False
             return
 
-        if total == 0:
-            self._semantic_error(
-                message=f'loop declares {n} tag(s) but has no values: {self._loop_tags}',
-                recovery='loop ignored' if self._mode == 'strict' else 'loop stored empty',
-            )
-            if not self._stopped and ns is not None:
-                ns._add_loop(self._loop_tags, self._loop_buffers)
-            self._in_loop = False
-            return
-
         if total % n != 0:
             missing = n - (total % n)
             self._semantic_error(
@@ -270,9 +260,7 @@ class CifBuilder:
         self._loop_buffers = {}
 
     def on_error(self, error: ParseError) -> None:
-        # Parser errors are forwarded to the caller's handler via the parser
-        # directly; the builder does not need to act on them.
-        pass
+        self._on_error(error)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

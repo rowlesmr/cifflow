@@ -211,30 +211,23 @@ class TestLoopRowCountMismatch:
 
 
 class TestEmptyLoop:
-    def test_empty_loop_emits_semantic_error(self):
-        b, errs = make_builder()
-        b.on_data_block('d')
-        b.on_loop_start(['_x', '_y'])
-        b.on_loop_end()
-        assert len(errs) == 1
-        assert errs[0].error_type == 'semantic'
-        assert 'no values' in errs[0].message
-
     def test_empty_loop_stored_in_pad_mode(self):
+        # Empty loop detection is the parser's job (syntactic error).
+        # The builder stores whatever it receives without re-checking.
         b, _ = make_builder(mode='pad')
         b.on_data_block('d')
         b.on_loop_start(['_x'])
         b.on_loop_end()
         assert b.result['d'].loops == [['_x']]
 
-    def test_empty_loop_stops_in_strict_mode(self):
-        b, _ = make_builder(mode='strict')
+    def test_empty_loop_no_builder_error(self):
+        # The builder does not emit its own error for empty loops;
+        # that is the parser's responsibility.
+        b, errs = make_builder()
         b.on_data_block('d')
-        b.on_loop_start(['_x'])
+        b.on_loop_start(['_x', '_y'])
         b.on_loop_end()
-        b.add_tag('_after')
-        b.add_value('v', ST)
-        assert '_after' not in b.result['d']
+        assert errs == []
 
 
 # ─────────────────────────────────────────────────────────────────────────────

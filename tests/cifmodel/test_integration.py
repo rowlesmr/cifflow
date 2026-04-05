@@ -86,7 +86,7 @@ class TestBuildLoops:
         src = '#\\#CIF_2.0\ndata_d\n_x 1\nloop_ _a _b\ndata_next\n_y 2\n'
         cif, errs = build(src)
         assert len(errs) == 1
-        assert errs[0].error_type == 'semantic'
+        assert errs[0].error_type == 'syntactic'
         assert cif['next']['_y'] == ['2']
 
 
