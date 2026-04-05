@@ -7,39 +7,31 @@
 **Current position:** Stage 2 complete. Ready to begin Stage 3 (DDLm dictionary parsing).
 
 **Test suite state:**
-- 440 tests pass in ~1:43 (default run: `pytest -m "not slow"`)
+- 469 tests pass in ~1:44 (default run: `pytest -m "not slow"`)
 - 5 additional slow tests against large real-world CIF files (`pytest -m slow`)
-- New test files: `tests/cifmodel/test_textfield.py`, `tests/cifmodel/test_model.py`,
-  `tests/cifmodel/test_builder.py`, `tests/cifmodel/test_integration.py`
 
-**Just completed (Stage 2 — CIF model / IR):**
-- `src/pycifparse/cifmodel/` module: `CifFile`, `CifBlock`, `CifSaveFrame`, `CifBuilder`, `build()`
-- Multiline text transformation pipeline (`textfield.py`): prefix detection, line folding
-- Loop row-count validation (strict and pad modes); empty loop detection
-- Container nesting depth tracking; closed container counts as 1 loop slot
-- `build(source, *, mode='pad')` convenience function: returns `(CifFile, list[ParseError])`
-- 106 new tests: 30 builder, 20 model, 30 textfield, 26 integration
+**Completed this session (housekeeping and corrections):**
+- Renamed `CIF*` → `Cif*` throughout codebase, docs, and tests (`CifParser`, `CifVersion`, etc.)
+- Deleted stale `src/pycifparse/ir/` stub (superseded by `cifmodel/`)
+- Fixed `builder.on_error` — was silently discarding parser errors; now forwards to caller
+- Moved empty-loop detection from builder (semantic) to parser (syntactic); refactored
+  `_loop_value_count: int` → `_loop_has_values: bool` in `CifParser`
+- Added duplicate block/save-frame name handling: `_id`, `_block_list`/`_save_frame_list`,
+  `get_all(name)` on `CifFile` and `CifBlock`
+- `debug_build()` added to `debug.py`: prints model with row-wise loop display, column-aligned
+- Added `__init__.py` public exports: `pycifparse` exports `CifFile`, `CifBlock`,
+  `CifSaveFrame`, `CifBuilder`, `build`; `pycifparse.parser` exports `CifParser`
+- Created `prompts/API Reference.md` — public API reference for use alongside Stage 3 prompt
+- Fixed spec contradiction in `prompts/CIF Parser Design Prompt.md` (line-folding layer)
+- 29 tests added (duplicate names, empty-loop corrections, debug smoke tests); 5 corrected
 
-**Open decisions to resolve before starting Stage 2:**
-1. **Malformed-input test files** ✓ — complete; tests added to `tests/parser/test_malformed.py`.
-2. **IR container value counting** ✓ — a properly closed container (list or table) counts
-   as 1 loop-column slot regardless of nesting depth or number of inner values.
-3. **Multiline prefix detection** ✓ — prefix stripping and line folding apply to both
-   CIF 1.1 and CIF 2.0 text fields.
-4. **IR error handler interface** ✓ — `CifBuilder` implements `CifParserEvents` and
-   accepts `on_error: Callable[[ParseError], None]` as a constructor argument.
-   Caller passes `handler.on_error`; no rename of `CifParserEvents` needed.
-5. **IR public API shape** ✓ — confirmed:
-   - Classes: `CifFile`, `CifBlock`, `CifSaveFrame`, `CifBuilder`
-   - `CifFile.blocks` → `list[str]` block names in file order
-   - `CifFile["blockname"]` → `CifBlock`
-   - `CifBlock["_tag"]` → `list[str]` all values (scalars and loop columns alike)
-   - `CifBlock.tags` → `list[str]` all tag names in the block
-   - `CifBlock.loops` → `list[list[str]]` each inner list is one loop's tags
-   - `CifBlock.save_frames` → `list[str]` save frame names in order
-   - `CifBlock["save_name"]` → `CifSaveFrame` (same interface as `CifBlock`)
-   - Missing tag or block raises `KeyError`
-   - Duplicate tag values preserved; all values returned as `list[str]` including scalars
+**Open decisions / prerequisites before starting Stage 3:**
+1. **Stage 3 prompt** — not yet written; must be drafted before implementation begins.
+   Check `prompts/` for any existing Stage 3 material first.
+2. **Malformed-input test gaps** — non-blocking for Stage 3; gaps listed under Step 6 below.
+   Resolve against spec and the error-correcting CIF 1.1 parser paper when convenient.
+3. **COMCIFS test files** — `tests/cif_files/comcifs/` not yet covered by
+   `test_real_file_no_semantic_errors`; add when Stage 3 is stable.
 
 ---
 
@@ -73,7 +65,17 @@
 - [x] All non-comcifs files parse without errors
 - [x] Large files (≥1 MB) marked `@pytest.mark.slow`; run with `pytest -m slow`
 - [x] Timestamp values (`2007-12-18T12:16:55+02:00`) confirmed as single STRING tokens
-- [ ] Malformed-input file tests — deferred (user to provide files)
+- [~] Malformed-input file tests — partially complete; 5 malformed CIF files with tests in `tests/parser/test_malformed.py` covering loops, containers, strings (CIF 1.1 and 2.0), and multiline fields
+  - Known gaps (to be addressed against spec before closing):
+    - `global_` keyword (fatal — stop parsing immediately)
+    - `save_` outside a save frame; nested save frames; `data_` inside a save frame; EOF inside open save frame
+    - `loop_` with no tag names
+    - Keyword (`loop_`, `save_`, `data_`) appearing in value position
+    - Tag with no value at EOF; consecutive tags (tag with no value before next tag)
+    - Orphan bare-word values not triggered by container close
+    - Unterminated multiline text field at EOF (opening `;`, no closing `;` before EOF)
+    - CIF 1.1 character set violations (non-ASCII, VT/FF) — check `test_lexer.py` first for overlap
+    - Duplicate table keys; empty `{}` and `[]`
 
 ### Step 7 — CIF 1.1 paths ✓
 - [x] Character set validation in lexer
