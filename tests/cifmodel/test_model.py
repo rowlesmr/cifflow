@@ -125,3 +125,113 @@ class TestCifSaveFrame:
         sf._add_loop(['_t'], {'_t': ['v']})
         assert sf.loops == [['_t']]
         assert sf['_t'] == ['v']
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Duplicate block names
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestDuplicateBlocks:
+    def test_duplicate_block_both_in_blocks(self):
+        f = CifFile()
+        f._add_block(CifBlock('a'))
+        f._add_block(CifBlock('a'))
+        assert f.blocks == ['a', 'a']
+
+    def test_duplicate_block_getitem_returns_first(self):
+        f = CifFile()
+        b1 = CifBlock('a')
+        b2 = CifBlock('a')
+        b1._append_value('_x', 'first')
+        b2._append_value('_x', 'second')
+        f._add_block(b1)
+        f._add_block(b2)
+        assert f['a']['_x'] == ['first']
+
+    def test_duplicate_block_get_all_returns_both(self):
+        f = CifFile()
+        b1 = CifBlock('a')
+        b2 = CifBlock('a')
+        b1._append_value('_x', 'first')
+        b2._append_value('_x', 'second')
+        f._add_block(b1)
+        f._add_block(b2)
+        all_a = f.get_all('a')
+        assert len(all_a) == 2
+        assert all_a[0]['_x'] == ['first']
+        assert all_a[1]['_x'] == ['second']
+
+    def test_duplicate_block_ids_distinct(self):
+        f = CifFile()
+        b1 = CifBlock('a')
+        b2 = CifBlock('a')
+        f._add_block(b1)
+        f._add_block(b2)
+        assert b1._id != b2._id
+
+    def test_add_block_returns_duplicate_flag(self):
+        f = CifFile()
+        assert f._add_block(CifBlock('a')) is False
+        assert f._add_block(CifBlock('a')) is True
+
+    def test_get_all_non_duplicate_returns_one(self):
+        f = CifFile()
+        f._add_block(CifBlock('a'))
+        assert len(f.get_all('a')) == 1
+
+    def test_get_all_missing_name_returns_empty(self):
+        f = CifFile()
+        assert f.get_all('nonexistent') == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Duplicate save frame names
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestDuplicateSaveFrames:
+    def setup_method(self):
+        self.b = CifBlock('d')
+
+    def test_duplicate_save_frame_both_in_save_frames(self):
+        self.b._add_save_frame(CifSaveFrame('f'))
+        self.b._add_save_frame(CifSaveFrame('f'))
+        assert self.b.save_frames == ['f', 'f']
+
+    def test_duplicate_save_frame_getitem_returns_first(self):
+        sf1 = CifSaveFrame('f')
+        sf2 = CifSaveFrame('f')
+        sf1._append_value('_x', 'first')
+        sf2._append_value('_x', 'second')
+        self.b._add_save_frame(sf1)
+        self.b._add_save_frame(sf2)
+        assert self.b['f']['_x'] == ['first']
+
+    def test_duplicate_save_frame_get_all_returns_both(self):
+        sf1 = CifSaveFrame('f')
+        sf2 = CifSaveFrame('f')
+        sf1._append_value('_x', 'first')
+        sf2._append_value('_x', 'second')
+        self.b._add_save_frame(sf1)
+        self.b._add_save_frame(sf2)
+        all_f = self.b.get_all('f')
+        assert len(all_f) == 2
+        assert all_f[0]['_x'] == ['first']
+        assert all_f[1]['_x'] == ['second']
+
+    def test_duplicate_save_frame_ids_distinct(self):
+        sf1 = CifSaveFrame('f')
+        sf2 = CifSaveFrame('f')
+        self.b._add_save_frame(sf1)
+        self.b._add_save_frame(sf2)
+        assert sf1._id != sf2._id
+
+    def test_add_save_frame_returns_duplicate_flag(self):
+        assert self.b._add_save_frame(CifSaveFrame('f')) is False
+        assert self.b._add_save_frame(CifSaveFrame('f')) is True
+
+    def test_get_all_non_duplicate_returns_one(self):
+        self.b._add_save_frame(CifSaveFrame('f'))
+        assert len(self.b.get_all('f')) == 1
+
+    def test_get_all_missing_name_returns_empty(self):
+        assert self.b.get_all('nonexistent') == []

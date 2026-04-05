@@ -159,6 +159,48 @@ def test_real_file_has_blocks(filename):
     assert cif.blocks, f'{filename}: expected at least one block'
 
 
+class TestDuplicateNames:
+    def test_duplicate_block_error(self):
+        src = '#\\#CIF_2.0\ndata_d\n_x 1\ndata_d\n_x 2\n'
+        cif, errs = build(src)
+        semantic = [e for e in errs if e.error_type == 'semantic']
+        assert len(semantic) == 1
+        assert 'd' in semantic[0].message
+
+    def test_duplicate_block_both_in_blocks(self):
+        src = '#\\#CIF_2.0\ndata_d\n_x 1\ndata_d\n_x 2\n'
+        cif, _ = build(src)
+        assert cif.blocks == ['d', 'd']
+
+    def test_duplicate_block_getitem_returns_first(self):
+        src = '#\\#CIF_2.0\ndata_d\n_x 1\ndata_d\n_x 2\n'
+        cif, _ = build(src)
+        assert cif['d']['_x'] == ['1']
+
+    def test_duplicate_block_get_all_returns_both(self):
+        src = '#\\#CIF_2.0\ndata_d\n_x 1\ndata_d\n_x 2\n'
+        cif, _ = build(src)
+        all_d = cif.get_all('d')
+        assert len(all_d) == 2
+        assert all_d[0]['_x'] == ['1']
+        assert all_d[1]['_x'] == ['2']
+
+    def test_duplicate_save_frame_error(self):
+        src = '#\\#CIF_2.0\ndata_d\nsave_f\n_x 1\nsave_\nsave_f\n_x 2\nsave_\n'
+        cif, errs = build(src)
+        semantic = [e for e in errs if e.error_type == 'semantic']
+        assert len(semantic) == 1
+        assert 'f' in semantic[0].message
+
+    def test_duplicate_save_frame_get_all_returns_both(self):
+        src = '#\\#CIF_2.0\ndata_d\nsave_f\n_x 1\nsave_\nsave_f\n_x 2\nsave_\n'
+        cif, _ = build(src)
+        all_f = cif['d'].get_all('f')
+        assert len(all_f) == 2
+        assert all_f[0]['_x'] == ['1']
+        assert all_f[1]['_x'] == ['2']
+
+
 def test_real_file_values_accessible():
     cif, _ = build(load(CIF_DIR / 'single_one.cif'))
     block = cif[cif.blocks[0]]

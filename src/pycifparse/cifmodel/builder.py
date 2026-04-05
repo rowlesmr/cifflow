@@ -140,6 +140,11 @@ class CifBuilder:
     def on_data_block(self, name: str) -> None:
         if self._stopped:
             return
+        if name in self._file:
+            self._semantic_error(
+                message=f'duplicate data block name: {name!r}',
+                recovery='duplicate block stored with distinct internal id',
+            )
         self._block = CifBlock(name)
         self._file._add_block(self._block)
         self._save_frame = None
@@ -153,6 +158,11 @@ class CifBuilder:
     def on_save_frame_start(self, name: str) -> None:
         if self._stopped or self._block is None:
             return
+        if name in self._block:
+            self._semantic_error(
+                message=f'duplicate save frame name: {name!r}',
+                recovery='duplicate save frame stored with distinct internal id',
+            )
         self._save_frame = CifSaveFrame(name)
 
     def on_save_frame_end(self) -> None:

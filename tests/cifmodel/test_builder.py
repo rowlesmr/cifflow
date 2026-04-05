@@ -344,3 +344,111 @@ class TestMultilineTransformation:
         # A single-quoted value that starts with \ must NOT be transformed
         b.add_value('\\\nwould be folded', SQ)
         assert b.result['d']['_t'] == ['\\\nwould be folded']
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Duplicate block and save frame names
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestDuplicateBlockNames:
+    def test_duplicate_block_emits_error(self):
+        b, errs = make_builder()
+        b.on_data_block('d')
+        b.on_data_block('d')
+        assert len(errs) == 1
+        assert errs[0].error_type == 'semantic'
+        assert 'd' in errs[0].message
+
+    def test_duplicate_block_both_present(self):
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.add_tag('_x')
+        b.add_value('first', ST)
+        b.on_data_block('d')
+        b.add_tag('_x')
+        b.add_value('second', ST)
+        assert b.result.blocks == ['d', 'd']
+
+    def test_duplicate_block_getitem_returns_first(self):
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.add_tag('_x')
+        b.add_value('first', ST)
+        b.on_data_block('d')
+        b.add_tag('_x')
+        b.add_value('second', ST)
+        assert b.result['d']['_x'] == ['first']
+
+    def test_duplicate_block_get_all_returns_both(self):
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.add_tag('_x')
+        b.add_value('first', ST)
+        b.on_data_block('d')
+        b.add_tag('_x')
+        b.add_value('second', ST)
+        all_d = b.result.get_all('d')
+        assert len(all_d) == 2
+        assert all_d[0]['_x'] == ['first']
+        assert all_d[1]['_x'] == ['second']
+
+    def test_non_duplicate_block_no_error(self):
+        b, errs = make_builder()
+        b.on_data_block('a')
+        b.on_data_block('b')
+        assert errs == []
+
+
+class TestDuplicateSaveFrameNames:
+    def test_duplicate_save_frame_emits_error(self):
+        b, errs = make_builder()
+        b.on_data_block('d')
+        b.on_save_frame_start('f')
+        b.on_save_frame_end()
+        b.on_save_frame_start('f')
+        b.on_save_frame_end()
+        assert len(errs) == 1
+        assert errs[0].error_type == 'semantic'
+        assert 'f' in errs[0].message
+
+    def test_duplicate_save_frame_both_present(self):
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.on_save_frame_start('f')
+        b.add_tag('_x')
+        b.add_value('first', ST)
+        b.on_save_frame_end()
+        b.on_save_frame_start('f')
+        b.add_tag('_x')
+        b.add_value('second', ST)
+        b.on_save_frame_end()
+        assert b.result['d'].save_frames == ['f', 'f']
+
+    def test_duplicate_save_frame_getitem_returns_first(self):
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.on_save_frame_start('f')
+        b.add_tag('_x')
+        b.add_value('first', ST)
+        b.on_save_frame_end()
+        b.on_save_frame_start('f')
+        b.add_tag('_x')
+        b.add_value('second', ST)
+        b.on_save_frame_end()
+        assert b.result['d']['f']['_x'] == ['first']
+
+    def test_duplicate_save_frame_get_all_returns_both(self):
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.on_save_frame_start('f')
+        b.add_tag('_x')
+        b.add_value('first', ST)
+        b.on_save_frame_end()
+        b.on_save_frame_start('f')
+        b.add_tag('_x')
+        b.add_value('second', ST)
+        b.on_save_frame_end()
+        all_f = b.result['d'].get_all('f')
+        assert len(all_f) == 2
+        assert all_f[0]['_x'] == ['first']
+        assert all_f[1]['_x'] == ['second']
