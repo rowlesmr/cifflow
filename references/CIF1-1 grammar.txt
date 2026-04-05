@@ -1,0 +1,51 @@
+## CIF_1.1 grammar
+
+Basic Structure of a CIF
+<CIF>:              <Comments>? <WhiteSpace>? { <DataBlock> { <WhiteSpace> <DataBlock> }* { <WhiteSpace> }? }?
+<DataBlock>:        <DataBlockHeading> {<WhiteSpace> { <DataItems> | <SaveFrame>} }*
+<DataBlockHeading>: <DATA_> { <NonBlankChar> }+
+<SaveFrame>:        <SaveFrameHeading> { <WhiteSpace> <DataItems> }+ <WhiteSpace> <SAVE_>
+<SaveFrameHeading>: <SAVE_> { <NonBlankChar> }+
+<DataItems>:        { <Tag> <WhiteSpace> <Value> } | { <LoopHeader> <LoopBody> }
+<LoopHeader>:       <LOOP_> {<WhiteSpace> <Tag>}+
+<LoopBody>:         <Value> { <WhiteSpace> <Value> }*
+
+Reserved Words
+<DATA_>:   {'D' | 'd'} {'A' | 'a'} {'T' | 't'} {'A' | 'a'} '_'
+<LOOP_>:   {'L' | 'l'} {'O' | 'o'} {'O' | 'o'} {'P' | 'p'} '_'
+<GLOBAL_>: {'G' | 'g'} {'L' | 'l'} {'O' | 'o'} {'B' | 'b'} {'A' | 'a'} {'L' | 'l'} '_'
+<SAVE_>:   {'S' | 's'} {'A' | 'a'} {'V' | 'v'} {'E' | 'e'} '_'
+<STOP_>:   {'S' | 's'} {'T' | 't'} {'O' | 'o'} {'P' | 'p'}'_'
+
+Tags and Values
+<Tag>:   '_' { <NonBlankChar>}+
+<Value>: { '.' | '?' | <Numeric> | <CharString> | <TextField> }
+
+Numeric Values
+<Numeric>:         { <Number> | <Number> '(' <UnsignedInteger> ')' }
+<Number>:          { <Integer> | <Float> }
+<Integer>:         { '+' | '-' }? <UnsignedInteger>
+<Float>:           { <Integer> <Exponent>  | { {'+'|'-'} ? { {<Digit>} * '.' <UnsignedInteger> } | { <Digit>} + '.' } } {<Exponent>} ? }
+<Exponent>:        { {'e' | 'E' } | {'e' | 'E' } { '+' | '- ' } } <UnsignedInteger>
+<UnsignedInteger>: { <Digit> }+
+<Digit>:           { '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' }
+
+Character Strings and Text Fields
+<CharString>:                      <UnquotedString> | <SingleQuotedString> | <DoubleQuotedString>
+<eol><UnquotedString>:             <eol><OrdinaryChar> {<NonBlankChar>}*
+<noteol><UnquotedString>:          <noteol>{<OrdinaryChar>|';'} {<NonBlankChar>}*
+<SingleQuotedString> <WhiteSpace>: <single_quote> { <AnyPrintChar> }* <single_quote> <WhiteSpace>
+<DoubleQuotedString> <WhiteSpace>: <double_quote> { <AnyPrintChar> }* <double_quote> <WhiteSpace>
+<TextField>:                       { <SemiColonTextField> }
+<eol><SemiColonTextField>:         <eol>';' { { <AnyPrintChar> }* <eol> { { <TextLeadChar> { <AnyPrintChar> }* }? <eol> }* } ';'
+
+WhiteSpace and Comments
+<WhiteSpace>:        { <SP> | <HT> | <eol> | <TokenizedComments>}+
+<Comments>:          { '#' {<AnyPrintChar>}* <eol>}+
+<TokenizedComments>: { <SP> | <HT> | <eol> |}+ <Comments>
+
+Character Sets
+<OrdinaryChar>: { '!' | '%' | '&' | '(' | ')' | '*' | '+' | ',' | '-' | '.' | '/' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | ':' | '<' | '=' | '>' | '?' | '@' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | '\' | '^' | '`' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' | '{' | '|' | '}' | '~' }
+<NonBlankChar>: <OrdinaryChar> | <double_quote> | '#' | '$' | <single_quote> | '_' |';' | '[' | ']'
+<TextLeadChar>: <OrdinaryChar> | <double_quote> | '#' | '$' | <single_quote> | '_' | <SP> | <HT> |'[' | ']'
+<AnyPrintChar>: <OrdinaryChar> | <double_quote> | '#' | '$' | <single_quote> | '_' | <SP> | <HT> | ';' | '[' | ']'

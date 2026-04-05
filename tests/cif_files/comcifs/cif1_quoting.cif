@@ -2,6 +2,6 @@
 
 data_cif1_quoting
 
-_sq 'don't rock the boat'
+_sq 'don't rock the boat' #comment
 _dq "What's this ab\"out?"
 

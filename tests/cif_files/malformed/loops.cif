@@ -1,0 +1,20 @@
+#\#CIF_2.0
+
+data_malformed_loop_1
+
+_tag1 123.4
+
+# incorrect number of values
+loop_ _tag2 _tag3 1 2 3 4 5
+
+_tag4 456.4
+
+
+data_malformed_loop_2
+
+_tag1 456.5
+#no-value loop
+loop_ _tag2 _tag3
+
+data_blockname
+_tag 1

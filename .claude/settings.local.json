@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/python.exe -m pip install --upgrade pip setuptools -q)",
+      "Bash(.venv/Scripts/python.exe -m pip install -e \".[dev]\" -q)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(python -m pytest tests/parser/test_parser.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/parser/test_parser.py -v)",
+      "Bash(.venv/Scripts/python -m pytest -v)",
+      "Bash(.venv/Scripts/python:*)",
+      "Bash(C:/Users/User/Documents/github/pycifparse/.venv/Scripts/pytest.exe:*)",
+      "Bash(C:/Users/User/Documents/github/pycifparse/.venv/Scripts/python.exe:*)"
+    ]
+  }
+}

@@ -154,3 +154,5 @@ cython_debug/
 prompts
 
 *.zip
+.claude/
+

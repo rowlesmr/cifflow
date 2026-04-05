@@ -1,0 +1,24 @@
+#\#CIF_2.0
+
+data_malformed_text_fields
+
+# recovering from malformed text fields is almost impossible
+_tag_this_is_allowed """
+; looks like
+a text field
+but it isn't
+;"""
+
+_tag_missing_opening_delimiter
+This is a semicolon
+textfield missing an opening
+delimiter
+; #acts as an opening delimiter, not a closing one
+
+_tag_missing_closing_delimiter
+;  #acts as a closing delimiter, not a opening one
+This is a semicolon
+textfield missing a closing
+delimiter
+
+_tag_doesnt_get_swallowed 123.45 # because of the way the missing delimiters above interact

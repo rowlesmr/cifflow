@@ -1,0 +1,47 @@
+#\#CIF_2.0
+
+data_malformed_single_quoted_strings
+
+_tag_matched_dq_inside "this "should not" be here" _tag_might_get_swallowed_1 hithere
+_tag_should_read_1	"this is 'ok'"
+_tag_unmatched_dq_inside "this should not" be here"  _tag_might_get_swallowed_2 generalkenobi
+_tag_should_read_2	'this is "OK"'
+
+
+_tag_matched_sq_inside 'this 'should not' be here' _tag_might_get_swallowed_3 hitheresomemore
+_tag_should_read_3	'"bookended double quotes"'
+_tag_unmatched_sq_inside 'this should not' be here'  _tag_might_get_swallowed_4 generalkenobiobiwan
+_tag_should_read_4	"'bookended single quotes'"
+
+
+_tag_mismatched_delim_1 "this is a string'   _tag_might_get_swallowed_5 123.45
+_tag_should_read_5	'a normal string'
+_tag_mismatched_delim_2 'this is a string"   _tag_might_get_swallowed_6 2123.45
+_tag_should_read_6	"a normal string"
+
+
+_tag_missing_delim_1 "this is a string   _tag_will_get_swallowed_1 123.45
+_tag_should_read_6   'a normal string'
+_tag_missing_delim_2 'this is a string   _tag_will_get_swallowed_2 2123.45
+_tag_should_read_7   "a normal string"
+
+
+data_malformed_triple_quoted_strings
+
+# recovering from malformed triple-quote-strings is almost impossible
+_tag_this_is_allowed """this '''is a''' string with other tripled quotes"""   _tag_wont_get_swallowed_1 123.45
+_tag_mismatched_delim_1 """this is a string'''   _tag_will_get_swallowed_1 123.45
+_tag_mismatched_delim_2 '''this is a string"""   _tag_wont_get_swallowed_2 2123.45 # due to the way the different quote delimiters happen to line up
+_tag_mismatched_delim_3 '''_tag in a string"""   _tag_will_get_swallowed_3 2123.45
+_tag_will_get_swallowed_4 2123.45	
+_tag_will_get_swallowed_5 24123.45
+
+
+
+
+
+
+
+
+
+
