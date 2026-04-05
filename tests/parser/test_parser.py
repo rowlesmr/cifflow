@@ -11,8 +11,8 @@ from typing import List, Optional, Tuple
 
 import pytest
 
-from pycifparse.parser.parser import CIFParser
-from pycifparse.types import CIFParserEvents, ParseError, ValueType
+from pycifparse.parser.parser import CifParser
+from pycifparse.types import CifParserEvents, ParseError, ValueType
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ class RecordingHandler:
         self.events: List[Event] = []
         self.errors: List[ParseError] = []
 
-    # ── CIFParserEvents protocol ─────────────────────────────────────────
+    # ── CifParserEvents protocol ─────────────────────────────────────────
 
     def on_data_block(self, name: str) -> None:
         self.events.append(Event('on_data_block', (name,)))
@@ -94,7 +94,7 @@ class RecordingHandler:
 
 def parse(source: str) -> RecordingHandler:
     h = RecordingHandler()
-    CIFParser(h).parse(source)
+    CifParser(h).parse(source)
     return h
 
 

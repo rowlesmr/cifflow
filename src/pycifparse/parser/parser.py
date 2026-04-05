@@ -1,7 +1,7 @@
 """
 CIF Parser — streaming, event-driven.
 
-Consumes the token stream from the Lexer, emits events to a CIFParserEvents
+Consumes the token stream from the Lexer, emits events to a CifParserEvents
 handler.  Lexer errors attached to tokens are converted to on_error calls
 before the token is processed structurally.
 
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Iterator, List, Optional
 
 from pycifparse.types import (
-    CIFVersion, ValueType, TokenType, ParseError, CIFParserEvents,
+    CifVersion, ValueType, TokenType, ParseError, CifParserEvents,
 )
 from pycifparse.lexer.lexer import Lexer
 from pycifparse.lexer.tokens import Token
@@ -89,17 +89,17 @@ _QUOTED_VTYPES = frozenset({
 # Parser
 # ─────────────────────────────────────────────────────────────────────────────
 
-class CIFParser:
+class CifParser:
     """
     Streaming CIF parser.
 
     Usage::
 
-        parser = CIFParser(handler)
+        parser = CifParser(handler)
         parser.parse(cif_source_string)
     """
 
-    def __init__(self, handler: CIFParserEvents) -> None:
+    def __init__(self, handler: CifParserEvents) -> None:
         self._h = handler
 
     # ------------------------------------------------------------------
@@ -422,7 +422,7 @@ class CIFParser:
         value, vtype = tok.value, tok.value_type
 
         # CIF 2.0 structural delimiters and table separator.
-        if self._version == CIFVersion.CIF_2_0:
+        if self._version == CifVersion.CIF_2_0:
             if value == '[':
                 self._open_list(tok); return
             if value == ']':

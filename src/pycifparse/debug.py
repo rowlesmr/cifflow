@@ -9,14 +9,14 @@ Usage — token stream only::
 Usage — parser events only::
 
     from pycifparse.debug import DebugHandler
-    from pycifparse.parser.parser import CIFParser
+    from pycifparse.parser.parser import CifParser
 
-    CIFParser(DebugHandler()).parse(source)
+    CifParser(DebugHandler()).parse(source)
 
 Usage — parser events AND forwarding to a real handler::
 
     handler = MyHandler()
-    CIFParser(DebugHandler(handler)).parse(source)
+    CifParser(DebugHandler(handler)).parse(source)
 
 Usage — both token stream and parser events::
 
@@ -34,9 +34,9 @@ import sys
 from typing import IO, List, Optional, TextIO, Union
 
 from pycifparse.lexer.lexer import Lexer
-from pycifparse.parser.parser import CIFParser
+from pycifparse.parser.parser import CifParser
 from pycifparse.parser.version import detect_version
-from pycifparse.types import CIFParserEvents, CIFVersion, ParseError, ValueType
+from pycifparse.types import CifParserEvents, CifVersion, ParseError, ValueType
 
 _Source = Union[str, pathlib.Path, IO[str]]
 
@@ -101,7 +101,7 @@ def _fmt_value(v) -> str:
 def debug_lex(
     source: _Source,
     *,
-    version: Optional[CIFVersion] = None,
+    version: Optional[CifVersion] = None,
     file: TextIO = sys.stdout,
 ) -> None:
     """Print the full token stream for *source* to *file*.
@@ -164,7 +164,7 @@ def debug_lex(
 
 class DebugHandler:
     """
-    A `CIFParserEvents` implementation that prints every event and error.
+    A `CifParserEvents` implementation that prints every event and error.
 
     Pass an optional *inner* handler to forward all events after printing.
 
@@ -182,7 +182,7 @@ class DebugHandler:
 
     def __init__(
         self,
-        inner: Optional[CIFParserEvents] = None,
+        inner: Optional[CifParserEvents] = None,
         *,
         file: TextIO = sys.stdout,
         show_values: bool = True,
@@ -211,7 +211,7 @@ class DebugHandler:
         if self._inner is not None:
             getattr(self._inner, name)(*args, **kwargs)
 
-    # -- CIFParserEvents -------------------------------------------------------
+    # -- CifParserEvents -------------------------------------------------------
 
     def on_data_block(self, name: str) -> None:
         self._depth = 0
@@ -362,7 +362,7 @@ def _print_model(cif, *, file: TextIO) -> None:
 def debug_parse(
     source: _Source,
     *,
-    inner: Optional[CIFParserEvents] = None,
+    inner: Optional[CifParserEvents] = None,
     file: TextIO = sys.stdout,
     show_values: bool = True,
     show_tokens: bool = True,
@@ -389,7 +389,7 @@ def debug_parse(
         debug_lex(source, file=file)
 
     handler = DebugHandler(inner, file=file, show_values=show_values)
-    CIFParser(handler).parse(source)
+    CifParser(handler).parse(source)
     print(file=file)
 
 
@@ -430,7 +430,7 @@ def debug_build(
     errors: list[ParseError] = []
     builder = CifBuilder(on_error=errors.append, mode=mode)
     handler = DebugHandler(builder, file=file, show_values=show_values)
-    CIFParser(handler).parse(source)
+    CifParser(handler).parse(source)
     print(file=file)
 
     _print_model(builder.result, file=file)

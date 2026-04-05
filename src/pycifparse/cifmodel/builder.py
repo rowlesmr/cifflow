@@ -1,10 +1,10 @@
 """
-CifBuilder — constructs a CifFile from the CIFParserEvents stream.
+CifBuilder — constructs a CifFile from the CifParserEvents stream.
 
-CifBuilder implements CIFParserEvents and is wired directly to CIFParser:
+CifBuilder implements CifParserEvents and is wired directly to CifParser:
 
     builder = CifBuilder(on_error=handler.on_error)
-    CIFParser(builder).parse(source)
+    CifParser(builder).parse(source)
     cif = builder.result
 
 Semantic errors (empty loop, row-count mismatch) are reported via the
@@ -25,7 +25,7 @@ from typing import Callable, Literal, Union
 from pycifparse.types import ParseError, ValueType
 from pycifparse.cifmodel.model import CifBlock, CifFile, CifSaveFrame, CifValue
 from pycifparse.cifmodel.textfield import transform_multiline
-from pycifparse.parser.parser import CIFParser
+from pycifparse.parser.parser import CifParser
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ _Container = Union[list, _TableInProgress]
 
 class CifBuilder:
     """
-    Implements CIFParserEvents.  Accumulates events into a CifFile.
+    Implements CifParserEvents.  Accumulates events into a CifFile.
 
     Parameters
     ----------
@@ -135,7 +135,7 @@ class CifBuilder:
             ns._append_value(self._active_tag, value)
             self._active_tag = None
 
-    # ── CIFParserEvents ───────────────────────────────────────────────────────
+    # ── CifParserEvents ───────────────────────────────────────────────────────
 
     def on_data_block(self, name: str) -> None:
         if self._stopped:
@@ -279,5 +279,5 @@ def build(
     """
     errors: list[ParseError] = []
     builder = CifBuilder(on_error=errors.append, mode=mode)
-    CIFParser(builder).parse(source)
+    CifParser(builder).parse(source)
     return builder.result, errors

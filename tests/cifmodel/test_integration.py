@@ -1,5 +1,5 @@
 """
-Integration tests — CIFParser → CifBuilder → CifFile.
+Integration tests — CifParser → CifBuilder → CifFile.
 
 Uses the build() convenience function and the existing test CIF files.
 """
@@ -59,6 +59,14 @@ class TestBuildScalars:
         cif, _ = build('#\\#CIF_2.0\ndata_d\n_x 1\n')
         with pytest.raises(KeyError):
             _ = cif['d']['_missing']
+
+    def test_empty_block_name_emits_error_and_is_accessible(self):
+        cif, errs = build('#\\#CIF_2.0\ndata_\n_x 1\n')
+        syntactic = [e for e in errs if e.error_type == 'syntactic']
+        assert len(syntactic) == 1
+        assert 'empty name' in syntactic[0].message
+        assert '' in cif.blocks
+        assert cif['']['_x'] == ['1']
 
 
 class TestBuildLoops:

@@ -4,7 +4,7 @@ Lexer tests.
 Conventions:
   - Helper `lex(src, version)` returns a flat list of Token objects.
   - Helper `vals(tokens)` extracts (value, value_type) pairs for quick assertions.
-  - All CIF 2.0 sources use CIFVersion.CIF_2_0; CIF 1.1 sources use CIFVersion.CIF_1_1.
+  - All CIF 2.0 sources use CifVersion.CIF_2_0; CIF 1.1 sources use CifVersion.CIF_1_1.
 """
 
 import pathlib
@@ -12,13 +12,13 @@ import pytest
 
 from pycifparse.lexer.lexer import Lexer
 from pycifparse.lexer.tokens import Token
-from pycifparse.types import CIFVersion, TokenType, ValueType
+from pycifparse.types import CifVersion, TokenType, ValueType
 
-CIF2 = CIFVersion.CIF_2_0
-CIF1 = CIFVersion.CIF_1_1
+CIF2 = CifVersion.CIF_2_0
+CIF1 = CifVersion.CIF_1_1
 
 
-def lex(src: str, version: CIFVersion = CIF2, line_offset: int = 0):
+def lex(src: str, version: CifVersion = CIF2, line_offset: int = 0):
     return list(Lexer(src, version, line_offset).tokens())
 
 

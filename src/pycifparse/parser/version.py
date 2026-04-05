@@ -11,7 +11,7 @@ Must be called before the lexer is instantiated.
 import re
 from typing import List, Tuple
 
-from pycifparse.types import CIFVersion, ParseError
+from pycifparse.types import CifVersion, ParseError
 
 # Magic line pattern: optional BOM, #\#CIF_, version token, optional trailing whitespace
 _MAGIC_RE = re.compile(r'^\ufeff?#\\#CIF_(\S+)\s*$')
@@ -19,12 +19,12 @@ _MAGIC_RE = re.compile(r'^\ufeff?#\\#CIF_(\S+)\s*$')
 
 def detect_version(
     source: str,
-) -> Tuple[CIFVersion, str, int, List[ParseError]]:
+) -> Tuple[CifVersion, str, int, List[ParseError]]:
     """
     Detect the CIF version from *source*.
 
     Returns:
-        version       – detected CIFVersion
+        version       – detected CifVersion
         remaining     – source with the magic line consumed (or full source if not consumed)
         line_offset   – number of lines consumed before the lexer starts (for line-number tracking)
         errors        – any ParseErrors generated during detection
@@ -46,16 +46,16 @@ def detect_version(
         if m is None:
             # Not a magic line; leave it for normal processing
             remaining = ''.join(lines[i:])
-            return CIFVersion.CIF_1_1, remaining, i, errors
+            return CifVersion.CIF_1_1, remaining, i, errors
 
         version_str = m.group(1)
         remaining = ''.join(lines[i + 1:])
         line_offset = i + 1
 
         if version_str == '2.0':
-            return CIFVersion.CIF_2_0, remaining, line_offset, errors
+            return CifVersion.CIF_2_0, remaining, line_offset, errors
         elif version_str == '1.1':
-            return CIFVersion.CIF_1_1, remaining, line_offset, errors
+            return CifVersion.CIF_1_1, remaining, line_offset, errors
         else:
             errors.append(ParseError(
                 error_type='lexical',
@@ -65,7 +65,7 @@ def detect_version(
                 context=raw_line.rstrip(),
                 recovery_action='defaulting to CIF 2.0',
             ))
-            return CIFVersion.CIF_2_0, remaining, line_offset, errors
+            return CifVersion.CIF_2_0, remaining, line_offset, errors
 
     # EOF before any non-whitespace content
-    return CIFVersion.CIF_1_1, source, 0, errors
+    return CifVersion.CIF_1_1, source, 0, errors

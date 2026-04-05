@@ -3,7 +3,7 @@ from enum import Enum
 from typing import List, Literal, Protocol
 
 
-class CIFVersion(Enum):
+class CifVersion(Enum):
     CIF_1_1 = "1.1"
     CIF_2_0 = "2.0"
 
@@ -34,7 +34,7 @@ class ParseError:
     recovery_action: str
 
 
-class CIFParserEvents(Protocol):
+class CifParserEvents(Protocol):
     def on_data_block(self, name: str) -> None: ...
     def on_save_frame_start(self, name: str) -> None: ...
     def on_save_frame_end(self) -> None: ...
