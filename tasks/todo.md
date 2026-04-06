@@ -117,7 +117,7 @@
 - **Programmatic `CifFile` construction** — a user-facing builder API for constructing a
   `CifFile` without parsing. Accepts native Python types (str, int, float) and converts to
   strings with correct `ValueType` assignment. Friendlier loop API than `CifBuilder`.
-  Belongs in the output layer (Stage 5+) alongside CIF emission, since the two are tightly
+  Belongs in the output layer (Stage 5+) alongside CIF emission, as the two are tightly
   coupled (construction → validation → serialisation).
 
 ---

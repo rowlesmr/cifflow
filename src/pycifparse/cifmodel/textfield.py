@@ -143,3 +143,9 @@ prefix:;"""
 
     print(transform_multiline(w))
 
+
+    x=r"""\
+https://raw.githubusercontent.com/COMCIFS/MultiBlock_Dictionary/main/\
+multi_block_core.dic"""
+
+    print("|" + transform_multiline(x) + "|")

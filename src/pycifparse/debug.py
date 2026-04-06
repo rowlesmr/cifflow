@@ -499,10 +499,10 @@ if __name__ == "__main__":
     _path = (
         pathlib.Path(_args[0])
         if _args
-        else pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\tests\cif_files\ideal_condensed.cif")
+        else pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\references\dictionaries\cif_core.dic")
     )
 
     if _use_build:
         debug_build(_path, show_tokens=not _no_tokens)
     else:
-        debug_build(_path, show_tokens=not _no_tokens)
+        debug_parse(_path, show_tokens=not _no_tokens)
