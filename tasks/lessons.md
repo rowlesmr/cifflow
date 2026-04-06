@@ -165,3 +165,23 @@ unresolvable once `:value` is a single token.
 
 **How to apply:** Never break on `:` inside `_read_bare_word`.  Standalone `:` tokens
 are only valid when the lexer is in a non-whitespace context (adjacent to a prior token).
+
+---
+
+## Lesson 11 — SU validation does not belong in the lexer (2026-04-06)
+
+**Context:** `_check_su` function in `lexer/lexer.py`.
+
+**Mistake:** Added a heuristic to flag bare words that look like `number(su)` but fail
+the `\(\d+\)$` pattern as lexical errors.  This caused false positives on fax numbers
+with area codes in parentheses (e.g. `12(34)9477334` in `cif_core.dic`) and any other
+string that happens to start with a numeric pattern followed by `(`.
+
+**Correct rule:** The CIF lexer has no concept of "numeric value with SU" distinct
+from any other bare word.  Both are `ValueType.STRING` tokens.  Whether the SU
+sub-expression is well-formed is a semantic question, not a lexical one.
+
+**Fix:** Removed `_check_su`, `_NUMERIC_PREFIX_RE`, and `_VALID_SU_RE` entirely.
+
+**How to apply:** Do not validate numeric sub-structure in the lexer.  SU format
+validation belongs in the dictionary/ingestion layer where the expected type is known.

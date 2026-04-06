@@ -157,12 +157,12 @@ def test_numeric_su_valid():
     assert errors(tokens) == []
 
 def test_numeric_su_malformed():
+    # SU validation is not the lexer's responsibility — '12.3(AB)' is a valid
+    # STRING token; semantic validation of SU notation happens downstream.
     tokens = lex('12.3(AB)')
     assert tokens[0].value_type == ValueType.STRING
     assert tokens[0].value == '12.3(AB)'
-    errs = errors(tokens)
-    assert len(errs) == 1
-    assert 'invalid SU' in errs[0].message
+    assert errors(tokens) == []
 
 def test_numeric_su_negative():
     tokens = lex('-0.12(3)')

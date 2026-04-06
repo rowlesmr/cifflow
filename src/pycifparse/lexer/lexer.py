@@ -15,7 +15,6 @@ Content starts immediately after the opening `;` and excludes the `\\n` that
 precedes the closing `;` at column 1.
 """
 
-import re
 from typing import Iterator, List, Optional
 
 from pycifparse.types import CifVersion, TokenType, ValueType
@@ -30,14 +29,6 @@ _EXACT_KEYWORDS = frozenset({'loop_', 'stop_', 'global_'})
 
 # CIF 2.0 structural delimiter characters (emitted as standalone VALUE tokens).
 _CIF2_DELIMITERS = frozenset({'[', ']', '{', '}'})
-
-# Pattern for detecting malformed SU: word starts numeric, has '(', bad content.
-_NUMERIC_PREFIX_RE = re.compile(
-    r'^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\('
-)
-_VALID_SU_RE = re.compile(
-    r'^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\(\d+\)$'
-)
 
 
 def _classify_bare_word(word: str) -> tuple[TokenType, ValueType | None]:
@@ -262,9 +253,8 @@ class Lexer:
             )
             return
 
-        errors = _check_su(word, line, col)
         token_type, value_type = _classify_bare_word(word)
-        yield Token(token_type, word, value_type, line, col, errors)
+        yield Token(token_type, word, value_type, line, col)
 
     def _read_quoted(self, delimiter: str) -> Iterator[Token]:
         """Single- or double-quoted string."""

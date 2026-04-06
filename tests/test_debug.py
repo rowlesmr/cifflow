@@ -72,9 +72,9 @@ class TestDebugLex:
         assert '2.0' in out
 
     def test_lexer_error_reported(self):
-        # Malformed SU in CIF 2.0 should show a lex error line.
-        out = _capture(debug_lex, '#\\#CIF_2.0\ndata_d\n_t 1.0(bad)\n')
-        assert 'LEX ERROR' in out or 'invalid SU' in out
+        # An unterminated string produces a lexer error line.
+        out = _capture(debug_lex, '#\\#CIF_2.0\ndata_d\n_t "unterminated\n')
+        assert 'LEX ERROR' in out
 
     def test_explicit_version_kwarg(self):
         from pycifparse.types import CifVersion
