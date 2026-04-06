@@ -249,3 +249,25 @@ its label.
 
 **How to apply:** Any future import resolution code must include this two-step
 lookup. Never assume template files conform to the `_definition.id` convention.
+
+## Lesson 15 — Category `_name.category_id` is the parent, not the table name (2026-04-06)
+
+**Context:** `generate_schema` table naming and domain-item lookup.
+
+**Mistake:** Used `cat_item.category_id` (= `_name.category_id` of the category frame)
+as the SQL table name and as the filter for domain items.  In DDLm, a category
+frame's `_name.category_id` is its **parent** category in the hierarchy — for
+`ATOM_TYPE`, that is `ATOM`.  This produced a table named `atom` instead of
+`atom_type`, with the wrong class and wrong PK.
+
+**Correct rule:**
+- Table name = `_table_name(cat_item.definition_id)` — the category's own
+  canonical identifier.
+- Domain items = items whose `item.category_id == cat_item.definition_id` — because
+  items carry `_name.category_id` pointing to the category's `_definition.id`,
+  not to the parent.
+- `cat_item.category_id` is only relevant for understanding the category
+  hierarchy; it plays no role in schema generation.
+
+**How to apply:** Whenever iterating over categories to build tables, always key
+on `definition_id`, never on `category_id`.

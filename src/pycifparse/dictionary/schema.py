@@ -211,13 +211,17 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 )
             continue
 
-        tbl_name = _table_name(cat_item.category_id)
+        # Table name is derived from the category's own definition_id.
+        # cat_item.category_id is the PARENT category in the DDLm hierarchy —
+        # not the table name.  Items belonging to this category carry
+        # _name.category_id == cat_item.definition_id.
+        tbl_name = _table_name(cat_item.definition_id)
 
-        # Items whose category_id matches this category (the domain columns).
+        # Domain items: those whose _name.category_id points to this category.
         domain_items: dict[str, DdlmItem] = {
             item.object_id: item
             for item in dictionary.items.values()
-            if item.category_id == cat_item.category_id
+            if item.category_id == cat_item.definition_id
             and item.object_id is not None
         }
 
