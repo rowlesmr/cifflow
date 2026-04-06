@@ -444,9 +444,16 @@ class DictionaryLoader:
         warn: Callable[[str], None],
     ) -> dict[str, list] | None:
         """
-        Search all save frames in *cif* for one whose ``_definition.id``
-        matches *definition_id* (case-insensitive).  Returns its working dict
-        or ``None`` if not found.
+        Search all save frames in *cif* for one matching *definition_id*.
+
+        Match strategy (case-insensitive, in priority order):
+
+        1. ``_definition.id`` value — used by full dictionary frames.
+        2. Save frame label — used by template files (e.g. ``templ_attr.cif``)
+           that declare no ``_definition.id``.
+
+        Returns the frame's working dict filtered to ``_FRAME_TAGS``, or
+        ``None`` if no match is found.
         """
         if not cif.blocks:
             return None
@@ -454,10 +461,12 @@ class DictionaryLoader:
         target = definition_id.lower()
         for sf_name in block.save_frames:
             sf = block[sf_name]
-            if '_definition.id' not in sf:
-                continue
-            raw_id = sf['_definition.id'][0]
-            if isinstance(raw_id, str) and raw_id.lower() == target:
+            if '_definition.id' in sf:
+                raw_id = sf['_definition.id'][0]
+                if isinstance(raw_id, str) and raw_id.lower() == target:
+                    return {tag: sf[tag] for tag in sf.tags if tag in _FRAME_TAGS}
+            elif sf_name.lower() == target:
+                # Template files carry no _definition.id; match by frame label.
                 return {tag: sf[tag] for tag in sf.tags if tag in _FRAME_TAGS}
         return None
 

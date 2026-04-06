@@ -231,3 +231,21 @@ large, nested, or opaque enough that ad-hoc inspection is consistently painful.
 **How to apply:** When starting a new stage, ask: what is the primary artifact
 a developer inspects when this stage misbehaves?  Write one debug function for
 that artifact.  Keep it in `debug.py` alongside existing helpers.
+
+## Lesson 14 — Template files use save frame label as identifier, not `_definition.id` (2026-04-06)
+
+**Context:** `_import.get` frame lookup in `DictionaryLoader._find_frame_by_definition_id`.
+
+**Mistake:** Spec says to locate imported frames by `_definition.id` match. Implemented
+exactly that. But template files (`templ_attr.cif`, `templ_enum.cif`) carry zero
+`_definition.id` entries — their save frame label is their sole identifier. The import
+looked up by `_definition.id`, found nothing, treated it as a miss, and aborted,
+leaving `_type.contents` / `_type.purpose` unpopulated for hundreds of items.
+
+**Correct rule:** Match by `_definition.id` when present (full dictionary frames);
+fall back to save frame label when absent (template files). The `elif` is deliberate:
+a frame that declares `_definition.id` is matched exclusively by that value, not
+its label.
+
+**How to apply:** Any future import resolution code must include this two-step
+lookup. Never assume template files conform to the `_definition.id` convention.
