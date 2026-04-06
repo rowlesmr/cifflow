@@ -129,7 +129,7 @@ class TestDebugHandler:
     def test_adjacency_error_reported(self):
         buf = io.StringIO()
         CifParser(DebugHandler(file=buf)).parse(_WITH_TABLE_SPACED)
-        assert 'whitespace between' in buf.getvalue()
+        assert 'not followed by : separator' in buf.getvalue()
 
     def test_show_values_false_suppresses_add_value(self):
         buf = io.StringIO()
