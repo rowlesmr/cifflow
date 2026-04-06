@@ -655,5 +655,5 @@ if __name__ == "__main__":
     if _use_schema:
         debug_schema(_path, show_ddl=_show_ddl)
     else:
-        #debug_build(_path, show_tokens=not _no_tokens)
-        debug_schema(_path, show_ddl=_show_ddl)
+        debug_build(_path, show_tokens=not _no_tokens)
+        #debug_schema(_path, show_ddl=_show_ddl)

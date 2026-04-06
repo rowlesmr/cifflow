@@ -307,12 +307,19 @@ class TestCategorySkipping:
         schema = generate_schema(d)
         assert schema.warnings == []
 
-    def test_unsupported_class_skipped_with_warning(self):
+    def test_functions_class_skipped_silently(self):
         cats = [_cat('funcs', 'funcs', 'Functions')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         assert len(schema.tables) == 0
-        assert any('funcs' in w and 'Functions' in w for w in schema.warnings)
+        assert schema.warnings == []
+
+    def test_truly_unsupported_class_skipped_with_warning(self):
+        cats = [_cat('weird', 'weird', 'Bizarre')]
+        d = _make_dict(cats, [])
+        schema = generate_schema(d)
+        assert len(schema.tables) == 0
+        assert any('weird' in w and 'Bizarre' in w for w in schema.warnings)
 
 
 # ---------------------------------------------------------------------------

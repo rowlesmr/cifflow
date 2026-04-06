@@ -176,9 +176,10 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
     Derive a :class:`SchemaSpec` from a loaded ``DdlmDictionary``.
 
     Iterates over all categories in *dictionary*, creating one
-    :class:`TableDef` for each ``Set`` or ``Loop`` category.  ``Head``
-    categories are silently skipped; any other class emits a warning and is
-    also skipped.
+    :class:`TableDef` for each ``Set`` or ``Loop`` category.  ``Head`` and
+    ``Functions`` categories are silently skipped (they never appear in data
+    instance files); any other unrecognised class emits a warning and is also
+    skipped.
 
     Foreign-key constraints are built in a second pass over all items whose
     ``type_purpose`` is ``"Link"``.  ``SU`` items populate
@@ -205,7 +206,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
     for cat_id, cat_item in dictionary.categories.items():
         cat_class = cat_item.definition_class
         if cat_class not in ('Set', 'Loop'):
-            if cat_class != 'Head':
+            if cat_class not in ('Head', 'Functions'):
                 warnings.append(
                     f"category {cat_id!r} has unsupported class {cat_class!r} — skipped"
                 )
