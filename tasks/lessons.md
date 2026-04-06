@@ -271,3 +271,55 @@ frame's `_name.category_id` is its **parent** category in the hierarchy — for
 
 **How to apply:** Whenever iterating over categories to build tables, always key
 on `definition_id`, never on `category_id`.
+
+## Lesson 16 — Import identity tags must never be merged from a source frame (2026-04-06)
+
+**Context:** `DictionaryLoader._merge_frame` — `_import.get` mode `"Contents"`.
+
+**Mistake:** Initial merge logic treated `_definition.id`, `_definition.class`,
+`_definition.scope`, and `_name.*` as ordinary tags subject to the `dupl` policy.
+With `dupl=Exit` (default) these caused an abort whenever source and target shared
+them.  With `dupl=Replace` they overwrote the target frame's own identity, so the
+extracted `DdlmItem` carried the template's `definition_id` instead of the target's.
+
+**Correct rule:** The set `_IMPORT_IDENTITY_TAGS` (`_definition.id`,
+`_definition.scope`, `_definition.class`, `_name.category_id`, `_name.object_id`,
+`_name.linked_item_id`, `_import.get`) defines the frame's own identity and must
+always be skipped during merging — regardless of the `dupl` policy.  Only
+attribute tags (`_type.*`, `_units.code`, `_description.text`, etc.) are merged.
+
+**How to apply:** Any future import or merge operation must exclude identity tags
+before applying conflict resolution.
+
+## Lesson 17 — SQL identifiers must be double-quoted to handle reserved keywords (2026-04-06)
+
+**Context:** `emit_create_statements` and `apply_schema`.
+
+**Mistake:** Used bare table and column names in generated DDL.  `ddl.dic` contains
+a category whose `definition_id` normalises to `update` — a reserved SQL keyword —
+which caused a `sqlite3.OperationalError` when applying the schema.
+
+**Correct rule:** Always wrap every SQL identifier (table name, column name, FK
+reference) in double quotes in generated DDL: `"identifier"`.  Embedded double
+quotes are escaped by doubling: `"it""s"`.  This is standard SQL and SQLite accepts
+it unconditionally.
+
+**How to apply:** Use a `_qi(name)` helper wherever an identifier appears in a
+generated SQL string.  Never interpolate bare names directly into DDL.
+
+## Lesson 18 — Python sqlite3 auto-commits DDL; use explicit BEGIN for transactional DDL (2026-04-06)
+
+**Context:** `apply_schema` rollback-on-failure requirement.
+
+**Mistake:** Used `with conn:` context manager expecting it to roll back a failed
+`CREATE TABLE`.  Python's `sqlite3` module implicitly commits any pending
+transaction before executing a DDL statement, so `CREATE TABLE` escapes the
+context manager's rollback scope.
+
+**Correct rule:** For transactional DDL in Python's `sqlite3`, set
+`conn.isolation_level = None` (autocommit mode), issue `BEGIN` manually, execute
+all DDL, then `COMMIT` or `ROLLBACK`.  Restore `isolation_level` in a `finally`
+block.  This guarantees that all DDL within the block is atomic.
+
+**How to apply:** Any function that executes DDL and must guarantee rollback on
+failure should follow this pattern.  Do not rely on `with conn:` for DDL.

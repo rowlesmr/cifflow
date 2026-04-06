@@ -4,32 +4,41 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current position:** Stage 3 COMPLETE.
+**Current position:** Stage 3 COMPLETE. Stage 4 prompt not yet written.
 
 **Test suite state:**
-- 611 tests pass (non-slow): `pytest -m "not slow"`
-- 21 additional slow tests: `pytest -m slow`
+- ~623 tests pass (non-slow): `pytest -m "not slow"`
+- ~27 additional slow tests: `pytest -m slow`
 
-**Completed this session (Stage 3):**
-- Step 10: `DdlmItem` dataclass — 14 tests
-- Step 11: `DictionaryLoader` + `DdlmDictionary` — 45 non-slow + 1 slow test;
-  bug fix: import identity tags (`_definition.id`, `_definition.class`,
-  `_name.*`) must never be merged from source frame (Lesson 13 candidate)
-- Step 12: `generate_schema` + `emit_create_statements` — 58 tests;
-  bug fix: SQL identifiers quoted with `"..."` to handle reserved keywords
-  (e.g. `update`) — lesson 14 candidate
-- Step 13: `apply_schema` — 9 tests;
-  bug fix: Python sqlite3 auto-commits DDL; must use explicit BEGIN/COMMIT/ROLLBACK
-  via `isolation_level = None` for transactional DDL (Lesson 15 candidate)
-- Step 14: `ResolvedTag` + `resolve_tag` — 17 tests
-- Step 15: module wiring (`dictionary/__init__.py`, top-level `__init__.py`);
-  integration tests (`test_integration.py`) — 16 slow tests;
-  `prompts/API Reference.md` updated with dictionary public API
+**What was just completed (end of Stage 3):**
+- Steps 10–15: `DdlmItem`, `DictionaryLoader`, `DdlmDictionary`, `generate_schema`,
+  `emit_create_statements`, `apply_schema`, `ResolvedTag`, `resolve_tag`,
+  module wiring, integration tests — see stage 3 section for full detail
+- `debug_schema(source, *, show_ddl=False)` in `debug.py` + 11 smoke tests
+- Three post-completion bug fixes discovered via `debug_schema` on real dictionaries:
+  1. Template frames (`templ_attr.cif`) have no `_definition.id`; lookup must fall
+     back to save frame label — Lesson 14
+  2. `cat_item.category_id` is the parent category, not the table name; table name
+     and domain-item lookup must use `cat_item.definition_id` — Lesson 15
+  3. `definition_class == 'Functions'` must be silently skipped (same as `'Head'`)
+- Lessons 13–18 written to `tasks/lessons.md`
+- `prompts/API Reference.md` updated with full dictionary public API
+
+**What comes next: Stage 4 — SQLite ingestion**
+- No prompt exists yet in `prompts/`; write and agree the prompt before implementing
+- Scope: parse a CIF data file → load into SQLite using a dictionary-defined schema
+- Key open questions for the prompt:
+  - How are multi-block CIF files handled? (`_block_id` column suggests one DB per
+    dictionary, many blocks per DB — confirm)
+  - SU columns: stored separately; how does the ingestion layer know to link them?
+    (via `ColumnDef.linked_item_id`)
+  - Unmapped tags (not in dictionary): discard silently, warn, or store in overflow table?
+  - Type coercion: values arrive as raw strings; when/how are they cast to INTEGER/REAL?
+  - PLACEHOLDER (`.`, `?`) handling: stored as NULL or as literal string?
 
 **Open items (non-blocking):**
 - Malformed-input test gaps — listed under Step 6; resolve against spec when convenient
 - COMCIFS files not yet in `test_real_file_no_semantic_errors` — add when convenient
-- Lesson entries for import identity tags, SQL quoting, transactional DDL — write to `tasks/lessons.md`
 
 ---
 
@@ -195,15 +204,17 @@ a well-formed model with no structural `ParseError`s.
 - [x] `prompts/API Reference.md` updated with full dictionary public API
 - [x] 611 non-slow + 21 slow tests pass
 
-### Open decisions / review notes
+### Review notes
 - SQL reserved-keyword table names (e.g. `update` in `ddl.dic`) require
-  double-quoting all identifiers in `emit_create_statements` and `apply_schema`.
+  double-quoting all identifiers in `emit_create_statements` and `apply_schema`
+  — Lesson 17.
 - Python's `sqlite3` auto-commits DDL outside implicit transactions;
   `apply_schema` must set `isolation_level = None` and issue explicit
-  BEGIN/COMMIT/ROLLBACK to guarantee rollback on failure.
+  BEGIN/COMMIT/ROLLBACK to guarantee rollback on failure — Lesson 18.
 - `ddl.dic` produces 0 FK constraints (Link items target non-schema categories);
   this is expected. FK tests use `cif_core.dic`.
-- Lessons to write: import identity tags, SQL quoting, transactional DDL.
+- Three post-completion bugs found via `debug_schema` on real dictionaries;
+  all fixed — Lessons 14, 15, and Functions silent-skip.
 
 ---
 

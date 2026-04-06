@@ -67,6 +67,11 @@ class ColumnDef:
         measurand item, lowercased.  ``None`` for all other column types.
         Does not produce a ``FOREIGN KEY`` constraint; used by the output
         layer.
+    is_status_column:
+        ``True`` for the ``{name}_status`` companion columns that record the
+        CIF data-presence state (``"value"``, ``"inapplicable"``, ``"unknown"``,
+        or ``"absent"``).  ``False`` for all value columns and infrastructure
+        columns.  Status columns are never included in ``column_to_tag``.
     """
 
     name: str
@@ -76,6 +81,7 @@ class ColumnDef:
     is_primary_key: bool
     is_synthetic: bool
     linked_item_id: str | None
+    is_status_column: bool = False
 
 
 @dataclass
@@ -264,7 +270,34 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         # --- Build columns in specified order ---
         columns: list[ColumnDef] = []
 
-        # 1. _block_id (always first)
+        # Collect all domain object_ids for collision detection.
+        # A true collision occurs when one domain column's object_id equals
+        # another's object_id + "_status".  In that case the companion for
+        # the first column is renamed to {name}_cif_status.
+        all_domain_ids: frozenset[str] = frozenset(domain_items)
+
+        def _status_col(value_col: ColumnDef) -> ColumnDef:
+            """Return the status companion for *value_col*."""
+            candidate = f"{value_col.name}_status"
+            if candidate in all_domain_ids:
+                warnings.append(
+                    f"table {tbl_name!r}: status column name {candidate!r} "
+                    f"collides with domain column — using "
+                    f"{value_col.name!r}_cif_status instead"
+                )
+                candidate = f"{value_col.name}_cif_status"
+            return ColumnDef(
+                name=candidate,
+                definition_id='',
+                sql_type='TEXT',
+                nullable=False,
+                is_primary_key=False,
+                is_synthetic=False,
+                linked_item_id=None,
+                is_status_column=True,
+            )
+
+        # 1. _block_id (always first; no status companion)
         block_id_is_pk = '_block_id' in primary_keys
         columns.append(ColumnDef(
             name='_block_id',
@@ -276,7 +309,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             linked_item_id=None,
         ))
 
-        # 2. _row_id (Loop tables only)
+        # 2. _row_id (Loop tables only; no status companion)
         if cat_class == 'Loop':
             row_id_is_pk = '_row_id' in primary_keys
             columns.append(ColumnDef(
@@ -320,6 +353,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 )
                 column_to_tag[(tbl_name, obj_id)] = item.definition_id
             columns.append(col)
+            columns.append(_status_col(col))
 
         # 4. Remaining domain columns (alphabetically, excluding PKs)
         pk_set = set(non_synthetic_pks)
@@ -338,6 +372,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 ),
             )
             columns.append(col)
+            columns.append(_status_col(col))
             column_to_tag[(tbl_name, obj_id)] = item.definition_id
 
         tables[tbl_name] = TableDef(
@@ -434,6 +469,8 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
             line = f"    {_qi(col.name)}  {col.sql_type}"
             if not col.nullable:
                 line += "  NOT NULL"
+            if col.is_status_column:
+                line += "  DEFAULT 'absent'"
             if col.is_synthetic and col.name == '_row_id':
                 line += "  UNIQUE"
             parts.append(line)
