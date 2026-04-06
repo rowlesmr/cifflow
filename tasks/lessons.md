@@ -136,3 +136,32 @@ def method(self, name: str) -> list[CifBlock]:
 Public methods must always document parameters, return values, and exceptions.
 Private methods (`_name`) need only a one-liner. This keeps autogeneration viable
 without adding noise to internal code.
+
+---
+
+## Lesson 10 — `:` at the start of a bare-word value (2026-04-06)
+
+**Context:** Lexer `tokens()` — CIF 2.0 table key/value separator handling.
+
+**Mistake:** The `:` standalone-token path fired unconditionally whenever `:` appeared
+as the first character in NORMAL state.  This split valid values like `:100.0`
+(CIF enumeration range lower-bound) into a standalone `:` token followed by `100.0`,
+causing the `:` to be assigned as the tag value and `100.0` to become an orphan.
+
+**Correct rule:** `:` is only a table separator when it is directly adjacent to the
+preceding token (no whitespace between them).  When preceded by whitespace it is
+the start of a bare-word value and must be read by `_read_bare_word`, which does
+not break on `:` — so `:100.0` becomes a single token.
+
+**Fix:** Added `_last_was_ws: bool = True` to the lexer.  Set `True` after consuming
+whitespace/newlines/comments; `False` after emitting any token.  Standalone `:` is
+only emitted when `not self._last_was_ws`.
+
+**Side effect:** `{ "key" :value }` (whitespace before `:`, no space after) now
+produces value `":value"` rather than `"value"`, with a "not followed by : separator"
+error instead of "whitespace between key and `:` separator".  The key is still
+recovered correctly.  This is an acceptable trade-off — the ambiguity is
+unresolvable once `:value` is a single token.
+
+**How to apply:** Never break on `:` inside `_read_bare_word`.  Standalone `:` tokens
+are only valid when the lexer is in a non-whitespace context (adjacent to a prior token).

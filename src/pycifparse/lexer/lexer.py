@@ -106,6 +106,10 @@ class Lexer:
         self._pos = 0
         self._line = line_offset + 1
         self._col = 1
+        # True when the last thing consumed was whitespace/comment (not a token).
+        # Used to decide whether ':' is a table separator (adjacent to a token)
+        # or the start of a bare-word value (preceded by whitespace).
+        self._last_was_ws: bool = True
 
     # ------------------------------------------------------------------
     # Low-level cursor helpers
@@ -145,32 +149,38 @@ class Lexer:
             # ── Inline whitespace ───────────────────────────────────────
             if ch in ' \t':
                 self._advance()
+                self._last_was_ws = True
                 continue
 
             # ── Line terminator ─────────────────────────────────────────
             if ch == '\n':
                 self._advance()
+                self._last_was_ws = True
                 continue
 
             # ── Comment  (# to EOL) ─────────────────────────────────────
             if ch == '#':
                 self._skip_to_eol()
+                self._last_was_ws = True
                 continue
 
             # ── Multiline text field  (; at column 1) ───────────────────
             if ch == ';' and self._col == 1:
                 yield from self._read_multiline()
+                self._last_was_ws = False
                 continue
 
             # ── Triple-quoted strings  (CIF 2.0 only) ───────────────────
             if ch == "'" and self._is_cif2 and (
                     self._peek(1) == "'" and self._peek(2) == "'"):
                 yield from self._read_triple("'")
+                self._last_was_ws = False
                 continue
 
             if ch == '"' and self._is_cif2 and (
                     self._peek(1) == '"' and self._peek(2) == '"'):
                 yield from self._read_triple('"')
+                self._last_was_ws = False
                 continue
 
             # ── Single/double quoted strings ────────────────────────────
@@ -180,6 +190,7 @@ class Lexer:
                     yield from self._read_triple_cif1("'")
                 else:
                     yield from self._read_quoted("'")
+                self._last_was_ws = False
                 continue
 
             if ch == '"':
@@ -188,6 +199,7 @@ class Lexer:
                     yield from self._read_triple_cif1('"')
                 else:
                     yield from self._read_quoted('"')
+                self._last_was_ws = False
                 continue
 
             # ── CIF 2.0 structural delimiters ───────────────────────────
@@ -195,17 +207,23 @@ class Lexer:
                 line, col = self._line, self._col
                 self._advance()
                 yield Token(TokenType.VALUE, ch, ValueType.STRING, line, col)
+                self._last_was_ws = False
                 continue
 
             # ── CIF 2.0 table key/value separator ───────────────────────
-            if self._is_cif2 and ch == ':':
+            # Only emit ':' as a standalone token when directly adjacent to the
+            # preceding token (no whitespace between them).  If whitespace
+            # preceded ':', it starts a bare-word value (e.g. ':100.0').
+            if self._is_cif2 and ch == ':' and not self._last_was_ws:
                 line, col = self._line, self._col
                 self._advance()
                 yield Token(TokenType.VALUE, ':', ValueType.STRING, line, col)
+                self._last_was_ws = False
                 continue
 
             # ── Bare word ───────────────────────────────────────────────
             yield from self._read_bare_word()
+            self._last_was_ws = False
 
     # ------------------------------------------------------------------
     # State handlers

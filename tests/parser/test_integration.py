@@ -288,18 +288,23 @@ class TestTableKeyAdjacency:
         assert not h.has_error_containing('whitespace between')
 
     def test_space_before_colon_emits_error(self):
+        # With whitespace before ':', ':v' is lexed as a single bare-word token.
+        # The parser never sees a standalone ':' so the "whitespace between" path
+        # is not reached; instead the key gets a "not followed by : separator" error.
         h = parse("#\\#CIF_2.0\ndata_d\n_t {'k' :v}\n")
-        assert h.has_error_containing('whitespace between')
+        assert h.has_error_containing('not followed by : separator')
 
     def test_space_before_colon_still_produces_key_value(self):
+        # ':v' is a single token; the key is recovered but the value is ':v'.
         h = parse("#\\#CIF_2.0\ndata_d\n_t {'k' :v}\n")
         ev = h.non_error_events()
         assert Event('on_table_key', ('k', ValueType.SINGLE_QUOTED)) in ev
-        assert Event('add_value', ('v', ValueType.STRING)) in ev
+        assert Event('add_value', (':v', ValueType.STRING)) in ev
 
     def test_newline_before_colon_emits_error(self):
+        # Same as space: newline before ':' means ':v' is a bare-word token.
         h = parse("#\\#CIF_2.0\ndata_d\n_t {'k'\n:v}\n")
-        assert h.has_error_containing('whitespace between')
+        assert h.has_error_containing('not followed by : separator')
 
     def test_space_after_colon_no_error(self):
         # Whitespace AFTER the colon is permitted (wspace-data-value).
@@ -312,3 +317,36 @@ class TestTableKeyAdjacency:
         adjacency_errors = [e for e in h.errors
                             if 'whitespace between' in e.message]
         assert adjacency_errors == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Colon-prefixed bare-word values (enumeration ranges)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestColonPrefixedValues:
+    """
+    Unquoted values that begin with ':' — e.g. ':100.0' in enumeration ranges.
+
+    Per CIF 2.0 EBNF, ':' is a restrict-char and may appear anywhere in a
+    wsdelim-string, including as the first character.  The ':' table separator
+    is only a standalone token when directly adjacent to a preceding token
+    (no whitespace between them).
+    """
+
+    def setup_method(self):
+        self.h = parse(load(CIF_DIR / 'enumeration_range.cif'))
+
+    def test_no_errors(self):
+        assert self.h.errors == []
+
+    def test_mid_colon_value(self):
+        # '0.0:100.0' — colon in the middle of a bare word
+        assert Event('add_value', ('0.0:100.0', ValueType.STRING)) in self.h.events
+
+    def test_trailing_colon_value(self):
+        # '0.0:' — bare word ending with colon
+        assert Event('add_value', ('0.0:', ValueType.STRING)) in self.h.events
+
+    def test_leading_colon_value(self):
+        # ':100.0' — bare word starting with colon (the bug case)
+        assert Event('add_value', (':100.0', ValueType.STRING)) in self.h.events
