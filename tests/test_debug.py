@@ -11,7 +11,7 @@ import io
 
 import pytest
 
-from pycifparse.debug import DebugHandler, debug_lex, debug_parse
+from pycifparse.debug import DebugHandler, debug_lex, debug_parse, debug_schema
 from pycifparse.parser.parser import CifParser
 from pycifparse.types import ValueType
 
@@ -224,3 +224,94 @@ class TestDebugLexFileInput:
         import io
         out = _capture(debug_lex, io.StringIO(_SIMPLE))
         assert 'token stream' in out
+
+
+# ---------------------------------------------------------------------------
+# debug_schema
+# ---------------------------------------------------------------------------
+
+_SCHEMA_DIC = """\
+#\\#CIF_2.0
+data_TEST
+
+save_WIDGET
+  _definition.id           WIDGET
+  _definition.scope        Category
+  _definition.class        Loop
+  _name.category_id        widget
+  _category_key.name       '_widget.id'
+save_
+
+save_widget.id
+  _definition.id           '_widget.id'
+  _definition.class        Attribute
+  _name.category_id        widget
+  _name.object_id          id
+  _type.purpose            Key
+  _type.contents           Text
+save_
+
+save_widget.val
+  _definition.id           '_widget.val'
+  _definition.class        Attribute
+  _name.category_id        widget
+  _name.object_id          val
+  _type.contents           Real
+save_
+"""
+
+
+class TestDebugSchema:
+    def test_runs_without_raising_from_spec(self):
+        from pycifparse.dictionary.loader import DictionaryLoader
+        from pycifparse.dictionary.schema import generate_schema
+        loader = DictionaryLoader()
+        d = loader.load(_SCHEMA_DIC)
+        schema = generate_schema(d)
+        out = _capture(debug_schema, schema)
+        assert out  # non-empty
+
+    def test_runs_from_string(self):
+        out = _capture(debug_schema, _SCHEMA_DIC)
+        assert 'widget' in out
+
+    def test_runs_from_path(self, tmp_path):
+        p = tmp_path / 'test.dic'
+        p.write_text(_SCHEMA_DIC, encoding='utf-8')
+        out = _capture(debug_schema, p)
+        assert 'widget' in out
+
+    def test_summary_line_present(self):
+        out = _capture(debug_schema, _SCHEMA_DIC)
+        assert 'table' in out
+
+    def test_table_name_shown(self):
+        out = _capture(debug_schema, _SCHEMA_DIC)
+        assert 'widget' in out
+
+    def test_loop_class_shown(self):
+        out = _capture(debug_schema, _SCHEMA_DIC)
+        assert 'Loop' in out
+
+    def test_pk_shown(self):
+        out = _capture(debug_schema, _SCHEMA_DIC)
+        assert 'id' in out
+
+    def test_synthetic_columns_shown(self):
+        out = _capture(debug_schema, _SCHEMA_DIC)
+        assert '_block_id' in out
+        assert '_row_id' in out
+
+    def test_definition_id_shown(self):
+        out = _capture(debug_schema, _SCHEMA_DIC)
+        assert '_widget.id' in out
+
+    def test_show_ddl_includes_create_table(self):
+        out = _capture(debug_schema, _SCHEMA_DIC, show_ddl=True)
+        assert 'CREATE TABLE' in out
+
+    def test_no_parse_errors_in_output(self):
+        out = _capture(debug_schema, _SCHEMA_DIC)
+        assert 'LEXICAL' not in out
+        assert 'SYNTACTIC' not in out
+        assert '[ERROR]' not in out
