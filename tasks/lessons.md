@@ -185,3 +185,22 @@ sub-expression is well-formed is a semantic question, not a lexical one.
 
 **How to apply:** Do not validate numeric sub-structure in the lexer.  SU format
 validation belongs in the dictionary/ingestion layer where the expected type is known.
+
+---
+
+## Lesson 12 — Never infer category from tag name; always use `_name.category_id` (2026-04-06)
+
+**Context:** Stage 3 import processing and all future dictionary/ingestion layers.
+
+**Rule:** A tag's category is always the value of `_name.category_id` in its save
+frame definition.  The dot-notation convention (`_category.object`) is not reliable —
+`_name.category_id` can differ from the prefix of `_definition.id` (see the
+`pd_instr` / `pd_meas` example in the Stage 3 prompt).
+
+**Never** split a tag name on `.` or any other character to infer the category.
+Always look up the tag's save frame and read `_name.category_id` directly.
+
+**How to apply:** Wherever a tag's category or table name is needed — Loop category
+detection, schema generation, FK resolution, ingestion routing — obtain it via
+`DdlmItem.category_id` or by reading `_name.category_id` from the relevant save
+frame.  String manipulation of tag names is never a substitute.

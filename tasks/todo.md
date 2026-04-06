@@ -7,7 +7,7 @@
 **Current position:** Stage 2 complete. Ready to begin Stage 3 (DDLm dictionary parsing).
 
 **Test suite state:**
-- 469 tests pass in ~1:44 (default run: `pytest -m "not slow"`)
+- 473 tests pass in ~1:47 (default run: `pytest -m "not slow"`)
 - 5 additional slow tests against large real-world CIF files (`pytest -m slow`)
 
 **Completed this session (housekeeping and corrections):**
@@ -26,8 +26,8 @@
 - 29 tests added (duplicate names, empty-loop corrections, debug smoke tests); 5 corrected
 
 **Open decisions / prerequisites before starting Stage 3:**
-1. **Stage 3 prompt** — not yet written; must be drafted before implementation begins.
-   Check `prompts/` for any existing Stage 3 material first.
+1. **Stage 3 prompt** ✓ — exists at `prompts/Stage3_Dictionary_Schema_Prompt.md`;
+   pre-implementation Q&A clarifications recorded in prompt Appendix and Lesson 12.
 2. **Malformed-input test gaps** — non-blocking for Stage 3; gaps listed under Step 6 below.
    Resolve against spec and the error-correcting CIF 1.1 parser paper when convenient.
 3. **COMCIFS test files** — `tests/cif_files/comcifs/` not yet covered by

@@ -1,0 +1,1458 @@
+#\#CIF_2.0
+##########################################################################
+#                                                                        #
+#  MULTIBLOCK CIF CORE DICTIONARY                                        #
+#                                                                        #
+##########################################################################
+
+data_MULTIBLOCK_DIC
+
+    _dictionary.title             MULTIBLOCK_DIC
+    _dictionary.class             Instance
+    _dictionary.version           1.1.0
+    _dictionary.date              2026-01-19
+    _dictionary.uri
+;\
+https://raw.githubusercontent.com/COMCIFS/MultiBlock_Dictionary/main/\
+multi_block_core.dic
+;
+    _dictionary.ddl_conformance   4.2.0
+    _dictionary.namespace         CifCore
+    _description.text
+;
+    The multi block dictionary adds data names to the core dictionary which
+    allow description of data spread over multiple data units (blocks).
+
+    Under the default schema, all data names in Set categories must be
+    single-valued in any given data block. If these Set categories are
+    provided with one or more key data names, information in these
+    categories spread over multiple data blocks can be combined
+    together.
+
+    When key data names are specified, all child data names in other
+    categories should be specified at the same time, as well as data
+    names that reference items in the given Set category.
+
+    This dictionary redefines Set categories to include the new
+    key data names, adds the key data name definitions, and defines
+    any linked and child data names.
+;
+
+save_MULTIBLOCK_CORE
+
+    _definition.id                MULTIBLOCK_CORE
+    _definition.scope             Category
+    _definition.class             Head
+    _definition.update            2024-05-15
+    _description.text
+;
+    The MULTIBLOCK_CORE category becomes the overarching category
+    for all core data names used in one or more data units.
+;
+    _name.category_id             MULTIBLOCK_DIC
+    _name.object_id               MULTIBLOCK_CORE
+
+    _import.get
+        [
+         {'dupl':Ignore  'file':cif_core.dic  'mode':Full  'save':CIF_CORE_HEAD}
+        ]
+
+save_
+
+save_AUDIT_DATASET
+
+    _definition.id                AUDIT_DATASET
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2025-04-14
+    _description.text
+;
+    The CATEGORY of data items used for linking data blocks to aid in grouping
+    blocks which contain information which are interrelated.
+
+    Data blocks which should be interpreted together are identified with the
+    same unique _audit_dataset.id.
+;
+    _name.category_id             AUDIT
+    _name.object_id               AUDIT_DATASET
+    _category_key.name            '_audit_dataset.id'
+
+    loop_
+      _description_example.case
+      _description_example.detail
+;
+         data_structure1
+         _audit_dataset.id  82c0a1e2-29ad-47b8-ace1-01e653e1cae8
+         _pd_phase.name "First phase"
+         #cell parameters and atom positions
+         #...
+
+         data_structure2
+         _audit_dataset.id  82c0a1e2-29ad-47b8-ace1-01e653e1cae8
+         _pd_phase.id "Second phase"
+         #cell parameters and atom positions
+         #...
+
+         data_diffraction_data1
+         _audit_dataset.id  82c0a1e2-29ad-47b8-ace1-01e653e1cae8
+         _pd_diffractogram.id "First dataset"
+         #diffracted intensities vs angle
+         #...
+
+         data_information
+         _audit_dataset.id  82c0a1e2-29ad-47b8-ace1-01e653e1cae8
+         #wavelength, specimen preparation, temperature, pressure...
+         #...
+;
+;
+         Four data blocks for a powder diffraction experiment.
+         By the presence of an identical _audit_dataset.id value, it is made
+         clear that all four data blocks are to be interpreted together as
+         a whole. It is clear that there are two crystal structures, one
+         diffractogram, and a block containing other experimental information.
+
+         These blocks may be contained in the same file, or many files, but
+         the presence of an _audit_dataset.id value removes doubt as to their
+         relationship to each other.
+;
+;
+         data_structure1
+         _pd_phase.name "First phase"
+         #cell parameters and atom positions
+         #...
+
+         data_structure2
+         _pd_phase.id "Second phase"
+         #cell parameters and atom positions
+         #...
+
+         data_diffraction_data1
+         _pd_diffractogram.id "First dataset"
+         #diffracted intensities vs angle
+         #...
+
+         data_information
+         #wavelength, specimen preparation, temperature, pressure...
+         #...
+;
+;
+         Four data blocks for a powder diffraction experiment.
+         The absence of an _audit_dataset.id value does not preclude
+         interpreting these data blocks together. The
+         consumer of the information may be able to infer that they belong
+         together due to contextual information.
+;
+;
+         data_structure1
+         _audit_dataset.id  34e58dee-900c-47cf-8f8c-1f52e5a9a3b9
+         _pd_phase.name "First phase"
+         #cell parameters and atom positions
+         #...
+
+         data_calibration_structure
+         loop_
+           _audit_dataset.id
+           34e58dee-900c-47cf-8f8c-1f52e5a9a3b9
+           2d7ee621-d916-4302-9045-ec68f56add45
+           255bb051-a3d5-43f0-8384-fa8ccb2ce3c7
+         _pd_phase.id "Calibration phase"
+         #cell parameters and atom positions
+         #...
+
+         data_diffraction_data
+         _audit_dataset.id  34e58dee-900c-47cf-8f8c-1f52e5a9a3b9
+         _pd_diffractogram.id "First dataset"
+         #diffracted intensities vs angle
+         #...
+;
+;
+         Three data blocks for a powder diffraction experiment.
+         The identical _audit_dataset.id value makes it
+         clear that all data blocks are to be interpreted together as
+         a whole. The presence of multiple _audit_dataset.id values for the
+         second data block indicates it is included in more than one dataset.
+
+         Because they have different
+         _audit_dataset.id values, the diffractogram _pd_diffractogram.id
+         "First dataset" in the first example is different to the diffractogram
+         _pd_diffractogram.id "First dataset" in this example.
+;
+
+save_
+
+save_audit_dataset.id
+
+    _definition.id                '_audit_dataset.id'
+    _definition.update            2025-04-14
+    _description.text
+;
+    Globally unique identifier for data blocks that are meant to be interpreted
+    together as a whole.
+
+    Data blocks which belong together, for instance, as they form part of the
+    same experiment, are given an identical _audit_dataset.id value.
+
+    Data blocks, such as calibration information, can be designated with more
+    than one _audit_dataset.id value.
+
+    Data blocks which do not contain an _audit_dataset.id may still be related,
+    depending on the presence of other data names and values. Data blocks which
+    contain different _audit_dataset.id values are not related in a CIF-sense,
+    even if other data names and values are common.
+
+    To ensure global uniqueness, a UUID-like identifier is suggested.
+;
+    _name.category_id             audit_dataset
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Related
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_DIFFRN
+
+    _definition.id                DIFFRN
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2022-05-09
+    _description.text
+;
+    The CATEGORY of data items used to describe the diffraction experiment.
+;
+    _name.category_id             DIFFRACTION
+    _name.object_id               DIFFRN
+    _category_key.name            '_diffrn.id'
+
+save_
+
+save_diffrn.crystal_id
+
+    _definition.id                '_diffrn.crystal_id'
+    _definition.update            2022-05-09
+    _description.text
+;
+    Identifier for the crystal from which diffraction data were
+    collected. This is a pointer to _exptl_crystal.id.
+;
+    _name.category_id             diffrn
+    _name.object_id               crystal_id
+    _name.linked_item_id          '_exptl_crystal.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_diffrn.diffrn_radiation_id
+
+    _definition.id                '_diffrn.diffrn_radiation_id'
+    _definition.update            2024-11-12
+    _description.text
+;
+    Identifies the characteristics of the radiation source
+    for the diffraction data. This is a pointer to
+    _diffrn_radiation.id.
+;
+    _name.category_id             diffrn
+    _name.object_id               diffrn_radiation_id
+    _name.linked_item_id          '_diffrn_radiation.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_diffrn.id
+
+    _definition.id                '_diffrn.id'
+    _definition.update            2022-05-09
+    _description.text
+;
+    Unique identifier for a set of particular diffraction conditions.
+;
+    _name.category_id             diffrn
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_CELL
+
+    _definition.id                CELL
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2023-03-02
+    _description.text
+;
+    The CATEGORY of data items used to describe the parameters of
+    the crystal unit cell.
+;
+    _name.category_id             DIFFRN
+    _name.object_id               CELL
+    _category_key.name            '_cell.structure_id'
+
+save_
+
+save_cell.structure_id
+
+    _definition.id                '_cell.structure_id'
+    _definition.update            2024-02-05
+    _description.text
+;
+    A code identifying the crystallographic structure associated with this cell
+    description.
+;
+    _name.category_id             cell
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_CELL_MEASUREMENT
+
+    _definition.id                CELL_MEASUREMENT
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2022-05-25
+    _description.text
+;
+    The CATEGORY of data items used to describe the measurement of
+    the cell parameters.
+;
+    _name.category_id             CELL
+    _name.object_id               CELL_MEASUREMENT
+    _category_key.name            '_cell_measurement.structure_id'
+
+save_
+
+save_cell_measurement.condition_id
+
+    _definition.id                '_cell_measurement.condition_id'
+    _definition.update            2023-02-01
+    _description.text
+;
+    A pointer to the diffraction conditions used for cell measurement,
+    where different to the diffraction conditions used for data
+    collection.
+;
+    _name.category_id             cell_measurement
+    _name.object_id               condition_id
+    _name.linked_item_id          '_diffrn.id'
+    _type.purpose                 Link
+    _type.source                  Related
+    _type.container               Single
+    _type.contents                Word
+    _method.purpose               Definition
+    _method.expression
+;
+    _enumeration.default = _cell_measurement.diffrn_id
+;
+
+save_
+
+save_cell_measurement.diffrn_id
+
+    _definition.id                '_cell_measurement.diffrn_id'
+    _definition.update            2023-10-26
+    _description.text
+;
+    A pointer to the diffraction experiment to which the measured cell
+    has been applied.
+;
+    _name.category_id             cell_measurement
+    _name.object_id               diffrn_id
+    _name.linked_item_id          '_diffrn.id'
+    _type.purpose                 Link
+    _type.source                  Related
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_cell_measurement.structure_id
+
+    _definition.id                '_cell_measurement.structure_id'
+    _definition.update            2024-02-05
+    _description.text
+;
+    A code identifying the structure to which the cell being measured belongs.
+;
+    _name.category_id             cell_measurement
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_CELL_MEASUREMENT_REFLN
+
+    _definition.id                CELL_MEASUREMENT_REFLN
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2023-10-16
+    _description.text
+;
+    The CATEGORY of data items used to describe the reflection data
+    used in the measurement of the crystal unit cell.
+;
+    _name.category_id             CELL_MEASUREMENT
+    _name.object_id               CELL_MEASUREMENT_REFLN
+
+    loop_
+      _category_key.name
+         '_cell_measurement_refln.index_h'
+         '_cell_measurement_refln.index_k'
+         '_cell_measurement_refln.index_l'
+         '_cell_measurement_refln.structure_id'
+
+save_
+
+save_cell_measurement_refln.structure_id
+
+    _definition.id                '_cell_measurement_refln.structure_id'
+    _definition.update            2023-10-16
+    _description.text
+;
+    A code identifying the structure for which the reflections were measured.
+;
+    _name.category_id             cell_measurement_refln
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_DIFFRN_DETECTOR
+
+    _definition.id                DIFFRN_DETECTOR
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2025-06-30
+    _description.text
+;
+    The category of data items which specify the detectors used
+    in the measurement of diffraction intensities.
+;
+    _name.category_id             DIFFRN
+    _name.object_id               DIFFRN_DETECTOR
+
+    loop_
+      _category_key.name
+         '_diffrn_detector.diffrn_id'
+         '_diffrn_detector.id'
+
+save_
+
+save_diffrn_detector.diffrn_id
+
+    _definition.id                '_diffrn_detector.diffrn_id'
+    _definition.update            2025-06-30
+    _description.text
+;
+    Code identifying the _diffrn.id to which this detector
+    relates.
+
+    Exists to maintain compatibility with current imgCIF definitions.
+;
+    _name.category_id             diffrn_detector
+    _name.object_id               diffrn_id
+    _name.linked_item_id          '_diffrn.id'
+    _type.purpose                 Link
+    _type.source                  Related
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_diffrn_detector.id
+
+    _definition.id                '_diffrn_detector.id'
+    _definition.update            2025-06-26
+    _description.text
+;
+    Unique identifier for a detector description.
+;
+    _name.category_id             diffrn_detector
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Text
+
+save_
+
+save_DIFFRN_RADIATION
+
+    _definition.id                DIFFRN_RADIATION
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2024-11-12
+    _description.text
+;
+    The CATEGORY of data items which specify the wavelength of the
+    radiation used in measuring diffraction intensities. To identify
+    and assign weights to distinct wavelength components from a
+    polychromatic beam, see DIFFRN_RADIATION_WAVELENGTH.
+;
+    _name.category_id             DIFFRACTION
+    _name.object_id               DIFFRN_RADIATION
+    _category_key.name            '_diffrn_radiation.id'
+
+save_
+
+save_diffrn_radiation.diffrn_id
+
+    _definition.id                '_diffrn_radiation.diffrn_id'
+    _definition.update            2025-06-30
+    _description.text
+;
+    Code identifying the _diffrn.id to which this radiation description
+    relates.
+
+    Exists to maintain compatibility with current imgCIF definitions.
+;
+    _name.category_id             diffrn_radiation
+    _name.object_id               diffrn_id
+    _name.linked_item_id          '_diffrn.id'
+    _type.purpose                 Link
+    _type.source                  Related
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_diffrn_radiation.id
+
+    _definition.id                '_diffrn_radiation.id'
+    _definition.update            2024-11-15
+    _description.text
+;
+    Unique identifier for a radiation source description.
+;
+    _name.category_id             diffrn_radiation
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_DIFFRN_RADIATION_WAVELENGTH
+
+    _definition.id                DIFFRN_RADIATION_WAVELENGTH
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2024-11-12
+    _description.text
+;
+    The CATEGORY of data items which specify the wavelength of the
+    radiation used in measuring diffraction intensities. Items may be
+    looped to identify and assign weights to distinct wavelength
+    components from a polychromatic beam.
+;
+    _name.category_id             DIFFRN_RADIATION
+    _name.object_id               DIFFRN_RADIATION_WAVELENGTH
+    loop_
+      _category_key.name
+         '_diffrn_radiation_wavelength.id'
+         '_diffrn_radiation_wavelength.radiation_id'
+
+save_
+
+save_diffrn_radiation_wavelength.radiation_id
+
+    _definition.id                '_diffrn_radiation_wavelength.radiation_id'
+    _definition.update            2024-11-12
+    _description.text
+;
+    Code identifying the radiation description to which this wavelength
+    relates.
+;
+    _name.category_id             diffrn_radiation_wavelength
+    _name.object_id               radiation_id
+    _name.linked_item_id          '_diffrn_radiation.id'
+    _type.purpose                 Link
+    _type.source                  Related
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_DIFFRN_SOURCE
+
+    _definition.id                DIFFRN_SOURCE
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2025-06-18
+    _description.text
+;
+    The category of data items which specify information about the
+    radiation source.
+;
+    _name.category_id             DIFFRN
+    _name.object_id               DIFFRN_SOURCE
+    _category_key.name            '_diffrn_source.radiation_id'
+
+save_
+
+save_diffrn_source.radiation_id
+
+    _definition.id                '_diffrn_source.radiation_id'
+    _definition.update            2025-06-18
+    _description.text
+;
+    Identifies the characteristics of the radiation source.
+    This is a pointer to _diffrn_radiation.id.
+;
+    _name.category_id             diffrn_source
+    _name.object_id               radiation_id
+    _name.linked_item_id          '_diffrn_radiation.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_EXPTL_CRYSTAL
+
+    _definition.id                EXPTL_CRYSTAL
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2022-05-09
+    _description.text
+;
+    The CATEGORY of data items used to specify information about
+    crystals used in the diffraction measurements.
+;
+    _name.category_id             EXPTL
+    _name.object_id               EXPTL_CRYSTAL
+    _category_key.name            '_exptl_crystal.id'
+
+save_
+
+save_exptl_crystal.id
+
+    _definition.id                '_exptl_crystal.id'
+    _alias.definition_id          '_exptl_crystal_id'
+    _definition.update            2022-05-09
+    _description.text
+;
+    Code identifying a crystal.
+;
+    _name.category_id             exptl_crystal
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_SPACE_GROUP
+
+    _definition.id                SPACE_GROUP
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2023-10-16
+    _description.text
+;
+    The CATEGORY of data items used to specify space group
+    information about the crystal used in the diffraction measurements.
+
+    Space-group types are identified by their number as listed in
+    International Tables for Crystallography Volume A, or by their
+    Schoenflies symbol. Specific settings of the space groups can
+    be identified by their Hall symbol, by specifying their
+    symmetry operations or generators, or by giving the
+    transformation that relates the specific setting to the
+    reference setting based on International Tables Volume A and
+    stored in this dictionary.
+
+    The commonly used Hermann-Mauguin symbol determines the
+    space-group type uniquely, but several different Hermann-Mauguin
+    symbols may refer to the same space-group type. A
+    Hermann-Mauguin symbol contains information on the choice of
+    the basis, but not on the choice of origin.
+
+    Ref: International Tables for Crystallography (2002). Volume A,
+         Space-group symmetry, edited by Th. Hahn, 5th ed.
+         Dordrecht: Kluwer Academic Publishers.
+;
+    _name.category_id             EXPTL
+    _name.object_id               SPACE_GROUP
+    _category_key.name            '_space_group.id'
+
+save_
+
+save_space_group.id
+
+    _definition.id                '_space_group.id'
+    _definition.update            2023-10-25
+    _description.text
+;
+    Unique identifier for a space group.
+
+    Two space groups can share the same identifier if and only if they have
+    the same space group name, number, setting, and have their their symmetry
+    operations listed with the same symop ids (see SPACE_GROUP_SYMOP).
+;
+    _name.category_id             space_group
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_SPACE_GROUP_GENERATOR
+
+    _definition.id                SPACE_GROUP_GENERATOR
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2025-04-29
+    _description.text
+;
+    The CATEGORY of data items used to list generators for
+    the space group
+;
+    _name.category_id             SPACE_GROUP
+    _name.object_id               SPACE_GROUP_GENERATOR
+
+    loop_
+      _category_key.name
+         '_space_group_generator.id'
+         '_space_group_generator.space_group_id'
+
+save_
+
+save_space_group_generator.space_group_id
+
+    _definition.id                '_space_group_generator.space_group_id'
+    _definition.update            2023-01-17
+    _description.text
+;
+    A code which identifies the space group to which the generator belongs.
+;
+    _name.category_id             space_group_generator
+    _name.object_id               space_group_id
+    _name.linked_item_id          '_space_group.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_SPACE_GROUP_SYMOP
+
+    _definition.id                SPACE_GROUP_SYMOP
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2023-10-16
+    _description.text
+;
+    The CATEGORY of data items used to describe symmetry equivalent sites
+    in the crystal unit cell.
+;
+    _name.category_id             SPACE_GROUP
+    _name.object_id               SPACE_GROUP_SYMOP
+
+    loop_
+      _category_key.name
+         '_space_group_symop.id'
+         '_space_group_symop.space_group_id'
+
+save_
+
+save_space_group_symop.space_group_id
+
+    _definition.id                '_space_group_symop.space_group_id'
+    _definition.update            2023-01-17
+    _description.text
+;
+    A code which identifies the space group to which the symop belongs.
+;
+    _name.category_id             space_group_symop
+    _name.object_id               space_group_id
+    _name.linked_item_id          '_space_group.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_SPACE_GROUP_WYCKOFF
+
+    _definition.id                SPACE_GROUP_WYCKOFF
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2023-10-16
+    _description.text
+;
+    Contains information about Wyckoff positions of a space group.
+    Only one site can be given for each special position, but the
+    remainder can be generated by applying the symmetry operations
+    stored in _space_group_symop.operation_xyz.
+;
+    _name.category_id             SPACE_GROUP
+    _name.object_id               SPACE_GROUP_WYCKOFF
+
+    loop_
+      _category_key.name
+         '_space_group_Wyckoff.id'
+         '_space_group_Wyckoff.space_group_id'
+
+save_
+
+save_space_group_wyckoff.space_group_id
+
+    _definition.id                '_space_group_Wyckoff.space_group_id'
+    _definition.update            2023-01-17
+    _description.text
+;
+    A code which identifies the space group to which the Wyckoff position
+    belongs.
+;
+    _name.category_id             space_group_Wyckoff
+    _name.object_id               space_group_id
+    _name.linked_item_id          '_space_group.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_MODEL
+
+    _definition.id                MODEL
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2025-07-07
+    _description.text
+;
+    Items in the MODEL Category specify data for the crystal structure
+    postulated and modelled from the atomic coordinates derived and
+    refined from the diffraction information. The structural model is
+    described principally in terms of the geometry of the 'connected'
+    atom sites and the crystal symmetry in which they reside.
+;
+    _name.category_id             MULTIBLOCK_CORE
+    _name.object_id               MODEL
+    _category_key.name            '_model.id'
+
+save_
+
+save_model.id
+
+    _definition.id                '_model.id'
+    _definition.update            2025-06-04
+    _description.text
+;
+    Arbitrary code identifying the model.
+;
+    _name.category_id             model
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_model.structure_id
+
+    _definition.id                '_model.structure_id'
+    _definition.update            2025-06-04
+    _description.text
+;
+    A code identifying the structure to which the model was applied.
+;
+    _name.category_id             model
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_GEOM
+
+    _definition.id                GEOM
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2025-06-04
+    _description.text
+;
+    The CATEGORY of data items used to specify the geometry
+    of the structural model as derived from the atomic sites.
+    The geometry is expressed in terms of the interatomic
+    angles (GEOM_ANGLE data), covalent bond distances
+    (GEOM_BOND data), contact distances (GEOM_CONTACT data),
+    hydrogen bonds (GEOM_HBOND data) and torsion geometry
+    (GEOM_TORSION data).
+    Geometry data are usually redundant, in that they can be
+    calculated from other more fundamental quantities in the data
+    block. However, they serve the dual purposes of providing a
+    check on the correctness of both sets of data and of enabling
+    the most important geometric data to be identified for
+    publication by setting the appropriate publication flag.
+;
+    _name.category_id             MODEL
+    _name.object_id               GEOM
+    _category_key.name            '_geom.model_id'
+
+save_
+
+save_geom.model_id
+
+    _definition.id                '_geom.model_id'
+    _definition.update            2025-06-04
+    _description.text
+;
+    A code identifying the model to which the geometry relates.
+;
+    _name.category_id             geom
+    _name.object_id               model_id
+    _name.linked_item_id          '_model.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_GEOM_ANGLE
+
+    _definition.id                GEOM_ANGLE
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2025-06-04
+    _description.text
+;
+    The CATEGORY of data items used to specify the geometry angles in the
+    structural model as derived from the atomic sites.
+;
+    _name.category_id             GEOM
+    _name.object_id               GEOM_ANGLE
+
+    loop_
+      _category_key.name
+         '_geom_angle.atom_site_label_1'
+         '_geom_angle.atom_site_label_2'
+         '_geom_angle.atom_site_label_3'
+         '_geom_angle.model_id'
+         '_geom_angle.site_symmetry_1'
+         '_geom_angle.site_symmetry_2'
+         '_geom_angle.site_symmetry_3'
+
+save_
+
+save_geom_angle.model_id
+
+    _definition.id                '_geom_angle.model_id'
+    _definition.update            2025-06-04
+    _description.text
+;
+    A code identifying the model to which the geometry relates.
+;
+    _name.category_id             geom_angle
+    _name.object_id               model_id
+    _name.linked_item_id          '_model.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_GEOM_BOND
+
+    _definition.id                GEOM_BOND
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2025-06-04
+    _description.text
+;
+    The CATEGORY of data items used to specify the geometry bonds in the
+    structural model as derived from the atomic sites.
+;
+    _name.category_id             GEOM
+    _name.object_id               GEOM_BOND
+
+    loop_
+      _category_key.name
+         '_geom_bond.atom_site_label_1'
+         '_geom_bond.atom_site_label_2'
+         '_geom_bond.model_id'
+         '_geom_bond.site_symmetry_1'
+         '_geom_bond.site_symmetry_2'
+
+save_
+
+save_geom_bond.model_id
+
+    _definition.id                '_geom_bond.model_id'
+    _definition.update            2025-06-04
+    _description.text
+;
+    A code identifying the model to which the geometry relates.
+;
+    _name.category_id             geom_bond
+    _name.object_id               model_id
+    _name.linked_item_id          '_model.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_GEOM_CONTACT
+
+    _definition.id                GEOM_CONTACT
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2025-06-04
+    _description.text
+;
+    The CATEGORY of data items used to specify the interatomic
+    contact distances in the structural model.
+;
+    _name.category_id             GEOM
+    _name.object_id               GEOM_CONTACT
+
+    loop_
+      _category_key.name
+         '_geom_contact.atom_site_label_1'
+         '_geom_contact.atom_site_label_2'
+         '_geom_contact.model_id'
+         '_geom_contact.site_symmetry_1'
+         '_geom_contact.site_symmetry_2'
+
+save_
+
+save_geom_contact.model_id
+
+    _definition.id                '_geom_contact.model_id'
+    _definition.update            2025-06-04
+    _description.text
+;
+    A code identifying the model to which the geometry relates.
+;
+    _name.category_id             geom_contact
+    _name.object_id               model_id
+    _name.linked_item_id          '_model.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_GEOM_HBOND
+
+    _definition.id                GEOM_HBOND
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2025-06-04
+    _description.text
+;
+    The CATEGORY of data items used to specify the hydrogen bond
+    distances in the structural model as derived from atomic sites.
+;
+    _name.category_id             GEOM
+    _name.object_id               GEOM_HBOND
+
+    loop_
+      _category_key.name
+         '_geom_hbond.atom_site_label_D'
+         '_geom_hbond.atom_site_label_H'
+         '_geom_hbond.atom_site_label_A'
+         '_geom_hbond.model_id'
+         '_geom_hbond.site_symmetry_D'
+         '_geom_hbond.site_symmetry_H'
+         '_geom_hbond.site_symmetry_A'
+
+save_
+
+save_geom_hbond.model_id
+
+    _definition.id                '_geom_hbond.model_id'
+    _definition.update            2025-06-04
+    _description.text
+;
+    A code identifying the model to which the geometry relates.
+;
+    _name.category_id             geom_hbond
+    _name.object_id               model_id
+    _name.linked_item_id          '_model.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_GEOM_TORSION
+
+    _definition.id                GEOM_TORSION
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2025-06-04
+    _description.text
+;
+    The CATEGORY of data items used to specify the torsion angles in the
+    structural model as derived from the atomic sites.
+;
+    _name.category_id             GEOM
+    _name.object_id               GEOM_TORSION
+
+    loop_
+      _category_key.name
+         '_geom_torsion.atom_site_label_1'
+         '_geom_torsion.atom_site_label_2'
+         '_geom_torsion.atom_site_label_3'
+         '_geom_torsion.atom_site_label_4'
+         '_geom_torsion.model_id'
+         '_geom_torsion.site_symmetry_1'
+         '_geom_torsion.site_symmetry_2'
+         '_geom_torsion.site_symmetry_3'
+         '_geom_torsion.site_symmetry_4'
+
+save_
+
+save_geom_torsion.model_id
+
+    _definition.id                '_geom_torsion.model_id'
+    _definition.update            2025-06-04
+    _description.text
+;
+    A code identifying the model to which the geometry relates.
+;
+    _name.category_id             geom_torsion
+    _name.object_id               model_id
+    _name.linked_item_id          '_model.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_MODEL_SITE
+
+    _definition.id                MODEL_SITE
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2025-06-04
+    _description.text
+;
+    The CATEGORY of data items used to describe atomic sites and
+    connections in the proposed atomic model.
+;
+    _name.category_id             MODEL
+    _name.object_id               MODEL_SITE
+
+    loop_
+      _category_key.name
+         '_model_site.label'
+         '_model_site.model_id'
+         '_model_site.symop'
+
+save_
+
+save_model_site.model_id
+
+    _definition.id                '_model_site.model_id'
+    _definition.update            2025-06-04
+    _description.text
+;
+    A code identifying the model to which the model site belongs.
+;
+    _name.category_id             model_site
+    _name.object_id               model_id
+    _name.linked_item_id          '_model.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_STRUCTURE
+
+    _definition.id                STRUCTURE
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2023-10-25
+    _description.text
+;
+    A category for collecting information about a crystallographic structure.
+;
+    _name.category_id             MULTIBLOCK_CORE
+    _name.object_id               STRUCTURE
+    _category_key.name            '_structure.id'
+
+save_
+
+save_structure.diffrn_id
+
+    _definition.id                '_structure.diffrn_id'
+    _definition.update            2023-01-17
+    _description.text
+;
+    A code which identifies the diffraction conditions under which the data for
+    this structure were collected.
+;
+    _name.category_id             structure
+    _name.object_id               diffrn_id
+    _name.linked_item_id          '_diffrn.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_structure.id
+
+    _definition.id                '_structure.id'
+    _definition.update            2023-10-16
+    _description.text
+;
+    Unique identifier for a structure.
+;
+    _name.category_id             structure
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_structure.space_group_id
+
+    _definition.id                '_structure.space_group_id'
+    _definition.update            2023-01-17
+    _description.text
+;
+    A code which identifies the space group associated with the structure.
+;
+    _name.category_id             structure
+    _name.object_id               space_group_id
+    _name.linked_item_id          '_space_group.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_ATOM_SITE
+
+    _definition.id                ATOM_SITE
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2023-10-16
+    _description.text
+;
+    The CATEGORY of data items used to describe atom site information
+    used in crystallographic structure studies.
+;
+    _name.category_id             ATOM
+    _name.object_id               ATOM_SITE
+
+    loop_
+      _category_key.name
+         '_atom_site.label'
+         '_atom_site.structure_id'
+
+    loop_
+      _description_example.case
+      _description_example.detail
+;
+         loop_
+           _atom_site.label
+           _atom_site.occupancy
+           _atom_site.disorder_assembly
+           _atom_site.disorder_group
+            C1     1      .     .
+            H11A   .5     M     1
+            H12A   .5     M     1
+            H13A   .5     M     1
+            H11B   .5     M     2
+            H12B   .5     M     2
+            H13B   .5     M     2
+;
+;
+         A hypothetical example of a positional disorder description. Disorder
+         assembly 'M' describes a methyl group with two alternative
+         configurations '1' and '2':
+
+                            H11B    H11A      H13B
+                              .      |      .
+                                .    |    .
+                                  .  |  .
+                                     C1 --------C2---
+                                   / .  \
+                                 /   .    \
+                               /     .      \
+                            H12A    H12B    H13A
+;
+;
+         loop_
+           _atom_site.label
+           _atom_site.type_symbol
+           _atom_site.fract_x
+           _atom_site.fract_y
+           _atom_site.fract_z
+           _atom_site.occupancy
+           _atom_site.disorder_assembly
+           _atom_site.disorder_group
+            Cu1 Cu 0.78443(2) 0.88297(4) 0.37825(2)  1       . .
+            Co1 Co 0.77504(2) 0.66957(4) 0.54249(2)  0.78(3) A 1
+            Mn1 Mn 0.77504(2) 0.66957(4) 0.54249(2)  0.22(3) A 2
+            O1   O 0.85532(9) 0.95747(19) 0.28965(9) 1       . .
+            O2   O 0.84868(9) 0.94662(19) 0.14953(8) 1       . .
+            # ...
+;
+;
+         An example of a compositional disorder description. Disorder assembly
+         'A' describes a site that is simultaneously occupied by Co and Mn
+         atoms which are assigned to disorder group '1' and disorder group '2'
+         respectively.
+
+         The example was created based on data from:
+             Li, Ang et al. (2021). Dalton Transactions, 50(2), 681-688.
+             https://doi.org/10.1039/d0dt03269g
+;
+
+save_
+
+save_atom_site.structure_id
+
+    _definition.id                '_atom_site.structure_id'
+    _definition.update            2023-10-16
+    _description.text
+;
+    A code identifying the structure to which this atom site belongs.
+;
+    _name.category_id             atom_site
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_ATOM_SITE_ANISO
+
+    _definition.id                ATOM_SITE_ANISO
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2023-10-16
+    _description.text
+;
+    The CATEGORY of data items used to describe the anisotropic atomic
+    displacement parameters of the atomic sites in a crystal structure.
+;
+    _name.category_id             ATOM_SITE
+    _name.object_id               ATOM_SITE_ANISO
+
+    loop_
+      _category_key.name
+         '_atom_site_aniso.label'
+         '_atom_site_aniso.structure_id'
+
+save_
+
+save_atom_site_aniso.structure_id
+
+    _definition.id                '_atom_site_aniso.structure_id'
+    _definition.update            2023-10-16
+    _description.text
+;
+    A code identifying the structure to which this atom site belongs.
+;
+    _name.category_id             atom_site_aniso
+    _name.object_id               structure_id
+    _name.linked_item_id          '_atom_site.structure_id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+    loop_
+      _dictionary_audit.version
+      _dictionary_audit.date
+      _dictionary_audit.revision
+         1.0.0                    2023-09-15
+;
+       All multi-block items from core 3.2.0 added.
+;
+         1.1.0                    2026-01-19
+;
+       # Update date above and add audit comments below. Remove
+       this comment when ready for release.
+
+       Add STRUCTURE and related data names and links.
+
+       Update definitions of _cell.structure_id and
+       _cell_measurement.structure_id. Removed _cell.diffrn_id.
+
+       Update the CIF_CORE dictionary import statement with the new Head
+       category name.
+
+       Added _diffrn_radiation.diffrn_id as key for diffrn_radiation
+       category.
+
+       Added AUDIT_DATASET.
+
+       Renamed _space_group_generator.key to _space_group_generator.id
+       to reflect changes in the CIF_CORE dictionary.
+
+       Added _model.id as key to MODEL.
+
+       Added GEOM_* and MODEL_SITE categories with _model.id child key data
+       names.
+
+       Add DIFFRN_SOURCE category with _diffrn_source.radiation_id key data
+       name.
+
+       Add DIFFRN_DETECTOR category with _diffrn_detector.id and
+        _diffrn_detector.diffrn_id key data names. Included
+        _diffrn_detector.diffrn_id to maintain compatibility with imgCIF.
+
+       Add DIFFRN_RADIATION category with _diffrn_radiation.id as key. Included
+        _diffrn_radiation.diffrn_id to maintain compatibility with imgCIF.
+;
+
