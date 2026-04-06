@@ -204,3 +204,30 @@ Always look up the tag's save frame and read `_name.category_id` directly.
 detection, schema generation, FK resolution, ingestion routing — obtain it via
 `DdlmItem.category_id` or by reading `_name.category_id` from the relevant save
 frame.  String manipulation of tag names is never a substitute.
+
+## Lesson 13 — Scope one debug_{thing} function per stage (2026-04-06)
+
+**Context:** Stage 3 complete; considering debug utilities for new layers.
+
+**Rule:** Each major pipeline stage that produces a non-trivial in-memory structure
+should have exactly one `debug_{thing}` function scoped to its primary output:
+
+| Stage | Primary output | Debug function |
+|-------|---------------|----------------|
+| Lexer | token stream | `debug_lex` |
+| Parser + IR | `CifFile` | `debug_build` |
+| Schema generator | `SchemaSpec` | `debug_schema` |
+| Ingestion | SQLite rows | `debug_db` (future) |
+
+The function should visualise whatever a developer needs to inspect when
+something goes wrong at that stage — not a raw dataclass dump.
+
+**What to skip:** A debug function for an intermediate structure
+(`DdlmDictionary`, `TableDef`) is rarely worth the maintenance cost unless it
+repeatedly comes up in practice.  A REPL with `resolve_tag` or a targeted
+`print` is usually enough.  Add `debug_{thing}` only when the structure is
+large, nested, or opaque enough that ad-hoc inspection is consistently painful.
+
+**How to apply:** When starting a new stage, ask: what is the primary artifact
+a developer inspects when this stage misbehaves?  Write one debug function for
+that artifact.  Keep it in `debug.py` alongside existing helpers.

@@ -4,29 +4,32 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current position:** Stage 3 in progress. Step 10 is next.
+**Current position:** Stage 3 COMPLETE.
 
 **Test suite state:**
-- 473 tests pass in ~1:47 (default run: `pytest -m "not slow"`)
-- 5 additional slow tests against large real-world CIF files (`pytest -m slow`)
+- 611 tests pass (non-slow): `pytest -m "not slow"`
+- 21 additional slow tests: `pytest -m slow`
 
-**Completed this session (Stage 2 housekeeping + Stage 1 bug fixes):**
-- Renamed `CIF*` → `Cif*` throughout codebase, docs, and tests
-- Deleted stale `src/pycifparse/ir/` stub
-- Fixed `builder.on_error` silently discarding parser errors
-- Moved empty-loop detection to parser; `_loop_value_count` → `_loop_has_values`
-- Added duplicate block/save-frame name handling with `get_all(name)`
-- Added `debug_build()` with row-wise loop display
-- Added `__init__.py` public exports for `pycifparse` and `pycifparse.parser`
-- Created `prompts/API Reference.md`
-- Fixed lexer bug: `:value` at start of bare word (Lesson 10); `_last_was_ws` flag
-- Removed SU validation from lexer (Lesson 11); `cif_core.dic` now parses with 0 errors
-- Stage 3 prompt reviewed; pre-implementation Q&A recorded in prompt Appendix and Lesson 12
-- Implementation plan written to Stage 3 section below
+**Completed this session (Stage 3):**
+- Step 10: `DdlmItem` dataclass — 14 tests
+- Step 11: `DictionaryLoader` + `DdlmDictionary` — 45 non-slow + 1 slow test;
+  bug fix: import identity tags (`_definition.id`, `_definition.class`,
+  `_name.*`) must never be merged from source frame (Lesson 13 candidate)
+- Step 12: `generate_schema` + `emit_create_statements` — 58 tests;
+  bug fix: SQL identifiers quoted with `"..."` to handle reserved keywords
+  (e.g. `update`) — lesson 14 candidate
+- Step 13: `apply_schema` — 9 tests;
+  bug fix: Python sqlite3 auto-commits DDL; must use explicit BEGIN/COMMIT/ROLLBACK
+  via `isolation_level = None` for transactional DDL (Lesson 15 candidate)
+- Step 14: `ResolvedTag` + `resolve_tag` — 17 tests
+- Step 15: module wiring (`dictionary/__init__.py`, top-level `__init__.py`);
+  integration tests (`test_integration.py`) — 16 slow tests;
+  `prompts/API Reference.md` updated with dictionary public API
 
-**Open items (non-blocking for Stage 3):**
+**Open items (non-blocking):**
 - Malformed-input test gaps — listed under Step 6; resolve against spec when convenient
-- COMCIFS files not yet in `test_real_file_no_semantic_errors` — add when Stage 3 stable
+- COMCIFS files not yet in `test_real_file_no_semantic_errors` — add when convenient
+- Lesson entries for import identity tags, SQL quoting, transactional DDL — write to `tasks/lessons.md`
 
 ---
 
@@ -138,7 +141,7 @@
 
 ---
 
-## Stage 3: Dictionary Parsing and SQLite Schema Generation
+## Stage 3: Dictionary Parsing and SQLite Schema Generation ✓ COMPLETE
 
 Prompt: `prompts/Stage3_Dictionary_Schema_Prompt.md`
 Data files: `data/dictionaries/`
@@ -146,90 +149,61 @@ Tests: `tests/dictionary/`
 Module: `src/pycifparse/dictionary/`
 API Reference: `prompts/API Reference.md`
 
-### Step 10 — `DdlmItem` (`dictionary/ddlm_item.py`)
-- [ ] Dataclass with all fields and defaults as specified
-- [ ] Unit tests: field defaults, independent list fields, `is_deprecated` default
+### Step 10 — `DdlmItem` (`dictionary/ddlm_item.py`) ✓
+- [x] Dataclass with all fields and defaults as specified
+- [x] Unit tests: field defaults, independent list fields, `is_deprecated` default
 
-### Step 11 — `DictionaryLoader` + `DdlmDictionary` (`dictionary/loader.py`, `dictionary/ddlm_parser.py`)
+### Step 11 — `DictionaryLoader` + `DdlmDictionary` (`dictionary/loader.py`, `dictionary/ddlm_parser.py`) ✓
 
 **Assumption:** dictionary CIF files are structurally sound — `build()` will return
-a well-formed model with no structural `ParseError`s. Semantic errors (e.g. missing
-tags, unexpected values) may be discovered once the schema is produced and will be
-handled as warnings. No defensive code paths are needed for malformed CIF structure.
+a well-formed model with no structural `ParseError`s.
 
-**Phase A — no-import parsing:**
-- [ ] Parse a DDLm CIF via `build()`; locate first `data_` block
-- [ ] Extract `_dictionary.title`, `_dictionary.version`, `_dictionary.uri`
-- [ ] Iterate save frames; read all relevant tags into working dict per frame
-- [ ] Extract `DdlmItem` from working dict (scope, class, category/object IDs,
-      type fields, aliases, deprecations, category keys, enumeration states)
-- [ ] Skip `"Dictionary"`-scope frames silently; warn on unknown scope
-- [ ] Skip frames missing `_definition.id` or (for items) `_name.category_id`
-- [ ] Build `DdlmDictionary` lookup tables:
-      `categories`, `items`, `tag_to_item`, `alias_to_definition_id`, `deprecated_ids`
-- [ ] Unit tests: all frame types, alias collision warning, `_name.category_id`
-      always used (mismatched dot-notation case), duplicate handling
+- [x] Phase A — no-import parsing: all frame types, lookup tables, alias collision,
+      `_name.category_id` always authoritative
+- [x] Phase B — `_import.get` resolution: `mode="Contents"`, `if_dupl` ×3, `if_miss` ×2,
+      `mode="Full"` skip, ordering, caching, `directory_resolver`
+- [x] `@pytest.mark.slow` test: `cif_core.dic` loads with 0 errors; aliases resolve;
+      `deprecated_ids` non-empty
+- [x] Bug: import identity tags (`_definition.id`, `_definition.class`, `_name.*`)
+      must be excluded from `_import.get` merge — see lessons.md
 
-**Phase B — `_import.get` resolution:**
-- [ ] Parse `frame["_import.get"][0]` as list of directive dicts
-- [ ] `directory_resolver(path)` factory
-- [ ] `_get_source(uri)` / `_get_parsed(uri)` with source + parse caching
-- [ ] `_resolve_imports()`: sort by `order`, apply each directive:
-      - `mode != "Contents"` → warn and skip
-      - Resolve source file; apply `if_miss` policy on failure
-      - Locate named frame by `_definition.id` match (not by frame label)
-      - Merge tags per `if_dupl` policy (`Ignore` / `Replace` / `Exit`)
-      - `Replace` + Loop category: look up tag's `_name.category_id` via source
-        frame; check source category `_definition.class == "Loop"`; if so remove
-        all tags with that `category_id` from working dict before inserting
-- [ ] Unit tests: Contents/no-conflict, `if_dupl` ×3, `if_miss` ×2, `mode="Full"`
-      skip, multi-directive ordering, caching, `directory_resolver`
-- [ ] `@pytest.mark.slow` integration test: load `cif_core.dic` via
-      `directory_resolver("data/dictionaries")`; 0 errors; `_type.*` populated;
-      aliases resolve; `deprecated_ids` non-empty
+### Step 12 — Schema generator (`dictionary/schema.py`) ✓
+- [x] `ForeignKeyDef`, `ColumnDef`, `TableDef`, `SchemaSpec` dataclasses
+- [x] `generate_schema`: Set/Loop → tables; Head silently skipped; other → warn;
+      synthetic columns; PK from category_keys (5 fallback cases); FK detection;
+      `column_to_tag` reverse mapping; all SQL identifiers double-quoted
+- [x] `emit_create_statements`: valid SQLite DDL; `DEFERRABLE INITIALLY DEFERRED`;
+      `_row_id UNIQUE`
+- [x] 58 unit tests including PRAGMA verification
 
-### Step 12 — Schema generator (`dictionary/schema.py`)
-- [ ] `ForeignKeyDef`, `ColumnDef`, `TableDef`, `SchemaSpec` dataclasses
-- [ ] `generate_schema(dictionary)`:
-      - `Set` and `Loop` categories → tables; `Head` and other → skip (warn)
-      - Table name from `_name.category_id` (strip leading `_`, replace `.` with `_`)
-      - Synthetic columns: `_block_id` (all), `_row_id` NOT NULL UNIQUE (Loop only)
-      - Domain columns: one per item; SQL type from `type_contents`
-      - PK from `_category_key.name`; fallback `_block_id` (Set) or
-        `_block_id` + `_row_id` (Loop) with appropriate warnings
-      - Column ordering: `_block_id`, `_row_id`, natural PKs, remaining alpha
-      - FK detection: `Link` items → `ForeignKeyDef`; `SU` items → `ColumnDef.linked_item_id` only
-      - `column_to_tag` reverse mapping (non-synthetic columns only)
-- [ ] `emit_create_statements(schema)` → valid SQLite DDL with `DEFERRABLE INITIALLY DEFERRED`
-- [ ] Unit tests: all PK cases (5), FK cases (5 per spec), synthetic columns,
-      type mapping, column ordering, `column_to_tag`, `Head` skipped,
-      `emit_create_statements` executes against in-memory SQLite,
-      `_row_id UNIQUE` confirmed via `PRAGMA index_list(...)`
+### Step 13 — Schema application (`dictionary/schema_apply.py`) ✓
+- [x] `apply_schema`: `PRAGMA foreign_keys = ON`, WAL mode, explicit
+      BEGIN/COMMIT/ROLLBACK via `isolation_level = None` for transactional DDL
+- [x] 9 unit tests: pragmas, FK registration, `drop_existing`, rollback
 
-### Step 13 — Schema application (`dictionary/schema_apply.py`)
-- [ ] `apply_schema(conn, schema, *, drop_existing=False)`:
-      `PRAGMA foreign_keys = ON`, WAL mode, execute DDL in transaction,
-      rollback on failure
-- [ ] Unit tests: pragmas set, FK constraints registered, `drop_existing=True`,
-      rollback on failure
+### Step 14 — Tag resolver (`dictionary/resolver.py`) ✓
+- [x] `ResolvedTag` dataclass
+- [x] `resolve_tag`: case-insensitive; `was_alias`, `is_deprecated`; `None` for unknown
+- [x] 17 unit tests
 
-### Step 14 — Tag resolver (`dictionary/resolver.py`)
-- [ ] `ResolvedTag` dataclass
-- [ ] `resolve_tag(tag, dictionary)`: case-insensitive lookup in `tag_to_item`;
-      set `was_alias`, `is_deprecated`; return `None` if unknown
-- [ ] Unit tests: current tag, alias, deprecated, unknown, case-insensitive
+### Step 15 — Module wiring and integration ✓
+- [x] `dictionary/__init__.py` with all specified exports
+- [x] Updated `pycifparse/__init__.py` to re-export dictionary API
+- [x] Integration tests: `ddl.dic` + `cif_core.dic` → load → schema → apply;
+      table count; synthetic columns; FK via PRAGMA; `column_to_tag` round-trip;
+      `_row_id UNIQUE` via `PRAGMA index_list`
+- [x] `prompts/API Reference.md` updated with full dictionary public API
+- [x] 611 non-slow + 21 slow tests pass
 
-### Step 15 — Module wiring and integration
-- [ ] `dictionary/__init__.py` with all specified exports
-- [ ] Update `pycifparse/__init__.py` to re-export dictionary API
-- [ ] Integration tests (`tests/dictionary/test_integration.py`):
-      `ddl.dic` → load → schema → `apply_schema`; table count; synthetic columns;
-      FK via `PRAGMA foreign_key_list(...)`; `column_to_tag` round-trip
-- [ ] Update `prompts/API Reference.md` with dictionary public API
-- [ ] All 473+ existing tests still pass
-
-### Open decisions
-- None currently. Record any deviations in `tasks/lessons.md` per prompt §Allowed Deviations.
+### Open decisions / review notes
+- SQL reserved-keyword table names (e.g. `update` in `ddl.dic`) require
+  double-quoting all identifiers in `emit_create_statements` and `apply_schema`.
+- Python's `sqlite3` auto-commits DDL outside implicit transactions;
+  `apply_schema` must set `isolation_level = None` and issue explicit
+  BEGIN/COMMIT/ROLLBACK to guarantee rollback on failure.
+- `ddl.dic` produces 0 FK constraints (Link items target non-schema categories);
+  this is expected. FK tests use `cif_core.dic`.
+- Lessons to write: import identity tags, SQL quoting, transactional DDL.
 
 ---
 
