@@ -38,7 +38,7 @@ Layer responsibilities are strictly separated. This separation MUST be preserved
 | **Parser** | Token sequence interpretation, event emission, stack state, error events |
 | **IR** | Event accumulation, loop validation, multiline text transformation |
 | **Dictionary** | DDLm parsing, schema derivation, semantic mapping |
-| **SQLite** | Persistent storage via dictionary-defined schema |
+| **SQLite** | Persistent storage; structured tables when a dictionary is present, fallback tier otherwise |
 | **Output** | Valid CIF regeneration, Python/NumPy/pandas API |
 
 Do not allow responsibilities to bleed between layers. If a proposed change would blur a boundary,
@@ -56,7 +56,7 @@ These must never be violated under any circumstances:
 4. Duplicate tag values must be preserved — never overwritten
 5. Parser must not crash on malformed input
 6. All malformed constructs must generate explicit on_error events
-7. Schema-less ingestion is NOT permitted at runtime
+7. When no dictionary is provided, all tags are routed to the fallback tier (`_cif_fallback`); no data is discarded
 8. The output layer must never emit invalid CIF
 
 ---

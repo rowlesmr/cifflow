@@ -165,3 +165,199 @@ unresolvable once `:value` is a single token.
 
 **How to apply:** Never break on `:` inside `_read_bare_word`.  Standalone `:` tokens
 are only valid when the lexer is in a non-whitespace context (adjacent to a prior token).
+
+---
+
+## Lesson 11 — SU validation does not belong in the lexer (2026-04-06)
+
+**Context:** `_check_su` function in `lexer/lexer.py`.
+
+**Mistake:** Added a heuristic to flag bare words that look like `number(su)` but fail
+the `\(\d+\)$` pattern as lexical errors.  This caused false positives on fax numbers
+with area codes in parentheses (e.g. `12(34)9477334` in `cif_core.dic`) and any other
+string that happens to start with a numeric pattern followed by `(`.
+
+**Correct rule:** The CIF lexer has no concept of "numeric value with SU" distinct
+from any other bare word.  Both are `ValueType.STRING` tokens.  Whether the SU
+sub-expression is well-formed is a semantic question, not a lexical one.
+
+**Fix:** Removed `_check_su`, `_NUMERIC_PREFIX_RE`, and `_VALID_SU_RE` entirely.
+
+**How to apply:** Do not validate numeric sub-structure in the lexer.  SU format
+validation belongs in the dictionary/ingestion layer where the expected type is known.
+
+---
+
+## Lesson 12 — Never infer category from tag name; always use `_name.category_id` (2026-04-06)
+
+**Context:** Stage 3 import processing and all future dictionary/ingestion layers.
+
+**Rule:** A tag's category is always the value of `_name.category_id` in its save
+frame definition.  The dot-notation convention (`_category.object`) is not reliable —
+`_name.category_id` can differ from the prefix of `_definition.id` (see the
+`pd_instr` / `pd_meas` example in the Stage 3 prompt).
+
+**Never** split a tag name on `.` or any other character to infer the category.
+Always look up the tag's save frame and read `_name.category_id` directly.
+
+**How to apply:** Wherever a tag's category or table name is needed — Loop category
+detection, schema generation, FK resolution, ingestion routing — obtain it via
+`DdlmItem.category_id` or by reading `_name.category_id` from the relevant save
+frame.  String manipulation of tag names is never a substitute.
+
+## Lesson 13 — Scope one debug_{thing} function per stage (2026-04-06)
+
+**Context:** Stage 3 complete; considering debug utilities for new layers.
+
+**Rule:** Each major pipeline stage that produces a non-trivial in-memory structure
+should have exactly one `debug_{thing}` function scoped to its primary output:
+
+| Stage | Primary output | Debug function |
+|-------|---------------|----------------|
+| Lexer | token stream | `debug_lex` |
+| Parser + IR | `CifFile` | `debug_build` |
+| Schema generator | `SchemaSpec` | `debug_schema` |
+| Ingestion | SQLite rows | `debug_db` (future) |
+
+The function should visualise whatever a developer needs to inspect when
+something goes wrong at that stage — not a raw dataclass dump.
+
+**What to skip:** A debug function for an intermediate structure
+(`DdlmDictionary`, `TableDef`) is rarely worth the maintenance cost unless it
+repeatedly comes up in practice.  A REPL with `resolve_tag` or a targeted
+`print` is usually enough.  Add `debug_{thing}` only when the structure is
+large, nested, or opaque enough that ad-hoc inspection is consistently painful.
+
+**How to apply:** When starting a new stage, ask: what is the primary artifact
+a developer inspects when this stage misbehaves?  Write one debug function for
+that artifact.  Keep it in `debug.py` alongside existing helpers.
+
+## Lesson 14 — Template files use save frame label as identifier, not `_definition.id` (2026-04-06)
+
+**Context:** `_import.get` frame lookup in `DictionaryLoader._find_frame_by_definition_id`.
+
+**Mistake:** Spec says to locate imported frames by `_definition.id` match. Implemented
+exactly that. But template files (`templ_attr.cif`, `templ_enum.cif`) carry zero
+`_definition.id` entries — their save frame label is their sole identifier. The import
+looked up by `_definition.id`, found nothing, treated it as a miss, and aborted,
+leaving `_type.contents` / `_type.purpose` unpopulated for hundreds of items.
+
+**Correct rule:** Match by `_definition.id` when present (full dictionary frames);
+fall back to save frame label when absent (template files). The `elif` is deliberate:
+a frame that declares `_definition.id` is matched exclusively by that value, not
+its label.
+
+**How to apply:** Any future import resolution code must include this two-step
+lookup. Never assume template files conform to the `_definition.id` convention.
+
+## Lesson 15 — Category `_name.category_id` is the parent, not the table name (2026-04-06)
+
+**Context:** `generate_schema` table naming and domain-item lookup.
+
+**Mistake:** Used `cat_item.category_id` (= `_name.category_id` of the category frame)
+as the SQL table name and as the filter for domain items.  In DDLm, a category
+frame's `_name.category_id` is its **parent** category in the hierarchy — for
+`ATOM_TYPE`, that is `ATOM`.  This produced a table named `atom` instead of
+`atom_type`, with the wrong class and wrong PK.
+
+**Correct rule:**
+- Table name = `_table_name(cat_item.definition_id)` — the category's own
+  canonical identifier.
+- Domain items = items whose `item.category_id == cat_item.definition_id` — because
+  items carry `_name.category_id` pointing to the category's `_definition.id`,
+  not to the parent.
+- `cat_item.category_id` is only relevant for understanding the category
+  hierarchy; it plays no role in schema generation.
+
+**How to apply:** Whenever iterating over categories to build tables, always key
+on `definition_id`, never on `category_id`.
+
+## Lesson 16 — Import identity tags must never be merged from a source frame (2026-04-06)
+
+**Context:** `DictionaryLoader._merge_frame` — `_import.get` mode `"Contents"`.
+
+**Mistake:** Initial merge logic treated `_definition.id`, `_definition.class`,
+`_definition.scope`, and `_name.*` as ordinary tags subject to the `dupl` policy.
+With `dupl=Exit` (default) these caused an abort whenever source and target shared
+them.  With `dupl=Replace` they overwrote the target frame's own identity, so the
+extracted `DdlmItem` carried the template's `definition_id` instead of the target's.
+
+**Correct rule:** The set `_IMPORT_IDENTITY_TAGS` (`_definition.id`,
+`_definition.scope`, `_definition.class`, `_name.category_id`, `_name.object_id`,
+`_name.linked_item_id`, `_import.get`) defines the frame's own identity and must
+always be skipped during merging — regardless of the `dupl` policy.  Only
+attribute tags (`_type.*`, `_units.code`, `_description.text`, etc.) are merged.
+
+**How to apply:** Any future import or merge operation must exclude identity tags
+before applying conflict resolution.
+
+## Lesson 17 — SQL identifiers must be double-quoted to handle reserved keywords (2026-04-06)
+
+**Context:** `emit_create_statements` and `apply_schema`.
+
+**Mistake:** Used bare table and column names in generated DDL.  `ddl.dic` contains
+a category whose `definition_id` normalises to `update` — a reserved SQL keyword —
+which caused a `sqlite3.OperationalError` when applying the schema.
+
+**Correct rule:** Always wrap every SQL identifier (table name, column name, FK
+reference) in double quotes in generated DDL: `"identifier"`.  Embedded double
+quotes are escaped by doubling: `"it""s"`.  This is standard SQL and SQLite accepts
+it unconditionally.
+
+**How to apply:** Use a `_qi(name)` helper wherever an identifier appears in a
+generated SQL string.  Never interpolate bare names directly into DDL.
+
+## Lesson 18 — Python sqlite3 auto-commits DDL; use explicit BEGIN for transactional DDL (2026-04-06)
+
+**Context:** `apply_schema` rollback-on-failure requirement.
+
+**Mistake:** Used `with conn:` context manager expecting it to roll back a failed
+`CREATE TABLE`.  Python's `sqlite3` module implicitly commits any pending
+transaction before executing a DDL statement, so `CREATE TABLE` escapes the
+context manager's rollback scope.
+
+**Correct rule:** For transactional DDL in Python's `sqlite3`, set
+`conn.isolation_level = None` (autocommit mode), issue `BEGIN` manually, execute
+all DDL, then `COMMIT` or `ROLLBACK`.  Restore `isolation_level` in a `finally`
+block.  This guarantees that all DDL within the block is atomic.
+
+**How to apply:** Any function that executes DDL and must guarantee rollback on
+failure should follow this pattern.  Do not rely on `with conn:` for DDL.
+
+## Lesson 19 — CIF presence-state encoding in SQLite (2026-04-07)
+
+**Context:** Structured table schema design; replaced status-column approach.
+
+**Rule:** All value columns store TEXT. CIF presence states are encoded directly
+in the value column using the following convention:
+
+| Stored value | CIF meaning |
+|---|---|
+| `NULL` | tag absent from this data block |
+| `'.'` | inapplicable (unquoted `.` — `ValueType.PLACEHOLDER`) |
+| `'?'` | unknown (unquoted `?` — `ValueType.PLACEHOLDER`) |
+| `'"."'` | literal string `"."` (quoted dot — any quoted `ValueType`) |
+| `'"?"'` | literal string `"?"` (quoted question mark — any quoted `ValueType`) |
+| anything else | real value, stored as raw string |
+
+**Why:** Status companion columns (`{col}_status`) doubled the column count and
+added complexity to schema generation, ingestion, and queries. This encoding
+preserves all CIF semantics in a single column. NULL means exactly one thing
+(absent), which matches natural SQL semantics. `.` and `?` are the CIF
+representations that any CIF user immediately recognises.
+
+**`_cif_fallback` retains `value_type`:** The fallback table keeps its
+`value_type` column because there is no schema type information to distinguish
+bare-word values from quoted ones. `value_type` enables numeric coercion to
+operate only on bare words, and the output layer to know which values to quote
+on round-trip.
+
+**How to apply:**
+- At ingestion: inspect `ValueType`. `PLACEHOLDER` → store `'.'` or `'?'`.
+  Quoted `.` or `?` → store `'"."'` or `'"?"'`. All other values → store raw string.
+  Tag absent → do not insert row / leave column NULL.
+- At query time: `WHERE col IS NOT NULL AND col NOT IN ('.', '?')` selects rows
+  with real values.
+- At output: `NULL` → omit tag. `'.'` → emit `.`. `'?'` → emit `?`.
+  `'"."'` → emit `"."`. `'"?"'` → emit `"?"`. All other values → use `value_type`
+  from `_cif_fallback` (or schema type) to decide quoting.

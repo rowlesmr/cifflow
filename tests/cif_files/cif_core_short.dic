@@ -1,0 +1,116 @@
+#\#CIF_2.0
+# SPDX-License-Identifier: CC-BY-4.0
+##########################################################################
+#                                                                        #
+#  CIF CORE DICTIONARY                                                   #
+#                                                                        #
+##########################################################################
+
+data_CIF_CORE
+
+    _dictionary.title             CIF_CORE
+    _dictionary.class             Instance
+    _dictionary.version           3.3.0
+    _dictionary.date              2026-02-26
+    _dictionary.uri
+        https://raw.githubusercontent.com/COMCIFS/cif_core/master/cif_core.dic
+    _dictionary.ddl_conformance   4.2.0
+    _dictionary.licensing_SPDX    CC-BY-4.0
+    _dictionary.namespace         CifCore
+    _description.text
+;
+    The CIF_CORE dictionary defines data items that are common to all domains
+    of crystallographic studies. These definitions are mostly used within the
+    Crystallographic Information Framework (CIF).
+;
+
+save_CIF_CORE_HEAD
+
+    _definition.id                CIF_CORE_HEAD
+    _definition.scope             Category
+    _definition.class             Head
+    _definition.update            2024-05-15
+    _description.text
+;
+    The CIF_CORE_HEAD category is the top-level category for all categories in
+    the CIF_CORE dictionary.
+;
+    _name.category_id             CIF_CORE
+    _name.object_id               CIF_CORE_HEAD
+
+save_
+
+save_DIFFRACTION
+
+    _definition.id                DIFFRACTION
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2024-05-15
+    _description.text
+;
+    The dictionary group encompassing the core diffraction data items defined
+    and used within the Crystallographic Information Framework (CIF).
+;
+    _name.category_id             CIF_CORE_HEAD
+    _name.object_id               DIFFRACTION
+
+save_
+
+save_DIFFRN
+
+    _definition.id                DIFFRN
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2022-05-09
+    _description.text
+;
+    The category of data items used to describe the diffraction experiment.
+;
+    _name.category_id             DIFFRACTION
+    _name.object_id               DIFFRN
+    _category_key.name            '_diffrn.id'
+
+save_
+
+save_diffrn.ambient_pressure
+
+    _definition.id                '_diffrn.ambient_pressure'
+    _alias.definition_id          '_diffrn_ambient_pressure'
+    _definition.update            2023-01-13
+    _description.text
+;
+    Mean hydrostatic pressure at which intensities were measured.
+;
+    _name.category_id             diffrn
+    _name.object_id               ambient_pressure
+    _type.purpose                 Measurand
+    _type.source                  Recorded
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.range            0.0:
+    _units.code                   kilopascals
+
+save_
+
+save_diffrn.ambient_pressure_su
+
+    _definition.id                '_diffrn.ambient_pressure_su'
+
+    loop_
+      _alias.definition_id
+         '_diffrn_ambient_pressure_su'
+         '_diffrn.ambient_pressure_esd'
+
+    _definition.update            2023-07-01
+    _description.text
+;
+    Standard uncertainty of _diffrn.ambient_pressure.
+;
+    _name.category_id             diffrn
+    _name.object_id               ambient_pressure_su
+    _name.linked_item_id          '_diffrn.ambient_pressure'
+    _units.code                   kilopascals
+
+    _import.get                   [{'file':templ_attr.cif  'save':general_su}]
+
+save_

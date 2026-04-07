@@ -1,5 +1,5 @@
 """
-Debugging utilities for the lexer, parser, and CIF model.
+Debugging utilities for the lexer, parser, CIF model, and schema.
 
 Usage — token stream only::
 
@@ -27,6 +27,12 @@ Usage — full pipeline through CIF model::
 
     from pycifparse.debug import debug_build
     debug_build(source)
+
+Usage — schema from a dictionary file::
+
+    from pycifparse.debug import debug_schema
+    debug_schema(pathlib.Path('data/dictionaries/cif_core.dic'))
+    debug_schema(pathlib.Path('data/dictionaries/cif_core.dic'), show_ddl=True)
 """
 
 import pathlib
@@ -488,21 +494,166 @@ def debug_build(
         print(file=file)
 
 
+# -- Schema printer ------------------------------------------------------------
+
+def debug_schema(
+    source: 'Union[str, pathlib.Path, SchemaSpec]',
+    *,
+    show_ddl: bool = False,
+    file: TextIO = sys.stdout,
+) -> None:
+    """Print a structured summary of a ``SchemaSpec`` to *file*.
+
+    *source* may be:
+
+    - A :class:`~pycifparse.dictionary.schema.SchemaSpec` — used directly.
+    - A ``pathlib.Path`` to a DDLm dictionary file — loaded via
+      :class:`~pycifparse.dictionary.loader.DictionaryLoader` with
+      ``directory_resolver(path.parent)`` so ``_import.get`` directives
+      resolve from the same directory.
+    - A raw CIF source string — parsed with no resolver (imports that require
+      external files are silently skipped).
+
+    Only schema-level information is shown.  Lex, parse, and loader warnings
+    are suppressed; fix those with ``debug_build`` before inspecting the schema.
+
+    Parameters
+    ----------
+    source:
+        Dictionary source or a pre-built ``SchemaSpec``.
+    show_ddl:
+        If ``True``, append the raw ``CREATE TABLE`` DDL under each table.
+        Default ``False``.
+    file:
+        Output stream.  Default ``sys.stdout``.
+    """
+    from pycifparse.dictionary.loader import DictionaryLoader, directory_resolver
+    from pycifparse.dictionary.schema import SchemaSpec, generate_schema, emit_create_statements
+
+    if isinstance(source, SchemaSpec):
+        schema = source
+    elif isinstance(source, pathlib.Path) or (
+        isinstance(source, str) and not source.lstrip().startswith('#')
+        and '\n' not in source.strip()
+    ):
+        # Treat as a file path.
+        path = pathlib.Path(source)
+        raw = path.read_text(encoding='utf-8')
+        loader = DictionaryLoader(resolver=directory_resolver(path.parent))
+        dictionary = loader.load(raw)
+        schema = generate_schema(dictionary)
+    else:
+        # Raw CIF source string.
+        loader = DictionaryLoader(resolver=None)
+        dictionary = loader.load(source)
+        schema = generate_schema(dictionary)
+
+    n_tables = len(schema.tables)
+    n_set    = sum(1 for t in schema.tables.values() if t.category_class == 'Set')
+    n_loop   = sum(1 for t in schema.tables.values() if t.category_class == 'Loop')
+    n_fk     = sum(len(t.foreign_keys) for t in schema.tables.values())
+    n_warn   = len(schema.warnings)
+
+    summary = (
+        f'{n_tables} table{"s" if n_tables != 1 else ""}'
+        f'  ({n_set} Set, {n_loop} Loop)'
+        f'  {n_fk} FK{"s" if n_fk != 1 else ""}'
+        f'  {n_warn} warning{"s" if n_warn != 1 else ""}'
+    )
+    print(_c('-- schema --', _BOLD, _DIM, file=file), file=file)
+    print(_c(summary, _DIM, file=file), file=file)
+    print(file=file)
+
+    ddl_stmts = emit_create_statements(schema) if show_ddl else []
+    ddl_by_table: dict[str, str] = {}
+    if show_ddl:
+        for stmt, table in zip(ddl_stmts, schema.tables.values()):
+            ddl_by_table[table.name] = stmt
+
+    for table in sorted(schema.tables.values(), key=lambda t: t.name):
+        cls_colour = _CYAN if table.category_class == 'Loop' else _BLUE
+        header = (
+            _c(table.name, _BOLD, file=file)
+            + '  '
+            + _c(f'[{table.category_class}]', cls_colour, file=file)
+        )
+        print(header, file=file)
+
+        # PK line
+        pk_str = ', '.join(_c(k, _YELLOW, file=file) for k in table.primary_keys)
+        print(f'  PK  {pk_str}', file=file)
+
+        # Columns — compute widths for alignment
+        col_name_w = max((len(c.name) for c in table.columns), default=8)
+        type_w     = max((len(c.sql_type) for c in table.columns), default=4)
+
+        print(f'  {_c("columns", _DIM, file=file)}', file=file)
+        for col in table.columns:
+            name_part = _c(col.name.ljust(col_name_w), _YELLOW, file=file)
+            type_part = _c(col.sql_type.ljust(type_w), _GREEN, file=file)
+
+            flags: list[str] = []
+            if not col.nullable:
+                flags.append(_c('NOT NULL', _DIM, file=file))
+            if col.is_synthetic and col.name == '_row_id':
+                flags.append(_c('UNIQUE', _DIM, file=file))
+            if col.is_primary_key:
+                flags.append(_c('PK', _YELLOW, file=file))
+            if col.is_synthetic:
+                flags.append(_c('synthetic', _DIM, file=file))
+
+            tag_part = ''
+            if not col.is_synthetic:
+                tag_part = '  ' + _c(col.definition_id, _DIM, file=file)
+            if col.linked_item_id:
+                tag_part += '  ' + _c(f'->su {col.linked_item_id}', _MAGENTA, file=file)
+
+            flag_str = '  '.join(flags)
+            print(f'    {name_part}  {type_part}  {flag_str}{tag_part}', file=file)
+
+        # FKs
+        if table.foreign_keys:
+            print(f'  {_c("foreign keys", _DIM, file=file)}', file=file)
+            for fk in table.foreign_keys:
+                src = _c(fk.source_column, _YELLOW, file=file)
+                tgt = _c(f'{fk.target_table}.{fk.target_column}', _CYAN, file=file)
+                print(f'    {src} -> {tgt}  DEFERRABLE', file=file)
+
+        # Optional DDL
+        if show_ddl and table.name in ddl_by_table:
+            print(f'  {_c("ddl", _DIM, file=file)}', file=file)
+            for ddl_line in ddl_by_table[table.name].splitlines():
+                print(f'    {_c(ddl_line, _DIM, file=file)}', file=file)
+
+        print(file=file)
+
+    # Schema-level warnings
+    if schema.warnings:
+        print(_c('-- schema warnings --', _BOLD, _DIM, file=file), file=file)
+        for w in schema.warnings:
+            print(f'  {_c("!", _YELLOW, file=file)}  {w}', file=file)
+        print(file=file)
+
+
 if __name__ == "__main__":
     import sys as _sys
 
     _args = _sys.argv[1:]
     _use_build   = '-b'          in _args or '--build'      in _args
+    _use_schema  = '-s'          in _args or '--schema'     in _args
     _no_tokens   = '--no-tokens' in _args
-    _args = [a for a in _args if a not in ('-b', '--build', '--no-tokens')]
+    _show_ddl    = '--ddl'       in _args
+    _args = [a for a in _args
+             if a not in ('-b', '--build', '-s', '--schema', '--no-tokens', '--ddl')]
 
     _path = (
         pathlib.Path(_args[0])
         if _args
-        else pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\references\dictionaries\cif_core.dic")
+        else pathlib.Path(r"C:\Users\User\Documents\github\pycifparse\data\dictionaries\cif_core.dic")
     )
 
-    if _use_build:
-        debug_build(_path, show_tokens=not _no_tokens)
+    if _use_schema:
+        debug_schema(_path, show_ddl=_show_ddl)
     else:
-        debug_parse(_path, show_tokens=not _no_tokens)
+        debug_build(_path, show_tokens=not _no_tokens)
+        #debug_schema(_path, show_ddl=_show_ddl)
