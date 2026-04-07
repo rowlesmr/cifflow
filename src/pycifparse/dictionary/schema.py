@@ -436,6 +436,44 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
     )
 
 
+def emit_fallback_create_statements() -> list[str]:
+    """
+    Return the fixed DDL statements for the ``_cif_fallback`` table and its index.
+
+    The fallback tier stores values for tags that are not mapped to any
+    structured table — either because no dictionary was loaded, the tag is
+    unknown to the loaded dictionary, or the tag's dictionary was not
+    available at ingestion time.
+
+    The returned list contains two statements: the ``CREATE TABLE IF NOT
+    EXISTS`` for ``_cif_fallback`` and the ``CREATE INDEX IF NOT EXISTS`` for
+    the ``(tag, _block_id)`` lookup index.  Both are valid SQLite DDL and can
+    be executed directly against a ``sqlite3.Connection``.
+
+    Returns
+    -------
+    list[str]
+        Two SQL strings: the table DDL followed by the index DDL.
+    """
+    table = (
+        f"CREATE TABLE IF NOT EXISTS {_qi('_cif_fallback')} (\n"
+        f"    {_qi('_block_id')}   TEXT     NOT NULL,\n"
+        f"    {_qi('_row_id')}     INTEGER  NOT NULL,\n"
+        f"    {_qi('tag')}         TEXT     NOT NULL,\n"
+        f"    {_qi('value')}       TEXT,\n"
+        f"    {_qi('value_type')}  TEXT     NOT NULL,\n"
+        f"    {_qi('loop_id')}     INTEGER,\n"
+        f"    {_qi('col_index')}   INTEGER,\n"
+        f"    PRIMARY KEY ({_qi('_block_id')}, {_qi('_row_id')})\n"
+        f")"
+    )
+    index = (
+        f"CREATE INDEX IF NOT EXISTS {_qi('idx_cif_fallback_tag_block')} "
+        f"ON {_qi('_cif_fallback')} ({_qi('tag')}, {_qi('_block_id')})"
+    )
+    return [table, index]
+
+
 def emit_create_statements(schema: SchemaSpec) -> list[str]:
     """
     Render each :class:`TableDef` in *schema* as a ``CREATE TABLE`` statement.

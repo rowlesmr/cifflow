@@ -4,7 +4,11 @@ SQLite schema application — executes a ``SchemaSpec`` against a live connectio
 
 import sqlite3
 
-from pycifparse.dictionary.schema import SchemaSpec, emit_create_statements
+from pycifparse.dictionary.schema import (
+    SchemaSpec,
+    emit_create_statements,
+    emit_fallback_create_statements,
+)
 
 
 def apply_schema(
@@ -67,6 +71,60 @@ def apply_schema(
                 for table_name in schema.tables:
                     quoted = '"' + table_name.replace('"', '""') + '"'
                     conn.execute(f'DROP TABLE IF EXISTS {quoted}')
+            for stmt in stmts:
+                conn.execute(stmt)
+        except sqlite3.Error:
+            conn.execute('ROLLBACK')
+            raise
+        else:
+            conn.execute('COMMIT')
+
+    finally:
+        conn.isolation_level = old_isolation
+
+
+def apply_fallback_schema(
+    conn: sqlite3.Connection,
+    *,
+    drop_existing: bool = False,
+) -> None:
+    """
+    Create the ``_cif_fallback`` table and its lookup index on *conn*.
+
+    This function is the fallback-tier equivalent of :func:`apply_schema`.
+    It must be called on any database that will receive CIF data, whether or
+    not a dictionary-defined schema has also been applied.  When both tiers
+    are used, call :func:`apply_schema` first and then this function.
+
+    Parameters
+    ----------
+    conn:
+        An open ``sqlite3.Connection``.  Must not have an active transaction
+        when called.
+    drop_existing:
+        When ``True``, drop ``_cif_fallback`` and its index before
+        (re-)creating them.  Defaults to ``False``.
+
+    Raises
+    ------
+    sqlite3.Error
+        If any DDL statement fails.  The transaction is rolled back before
+        re-raising.
+    """
+    old_isolation = conn.isolation_level
+    conn.isolation_level = None
+
+    try:
+        conn.execute('PRAGMA foreign_keys = ON')
+        conn.execute('PRAGMA journal_mode = WAL')
+
+        stmts = emit_fallback_create_statements()
+
+        conn.execute('BEGIN')
+        try:
+            if drop_existing:
+                conn.execute('DROP INDEX IF EXISTS "idx_cif_fallback_tag_block"')
+                conn.execute('DROP TABLE IF EXISTS "_cif_fallback"')
             for stmt in stmts:
                 conn.execute(stmt)
         except sqlite3.Error:

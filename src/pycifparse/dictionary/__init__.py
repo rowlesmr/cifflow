@@ -33,9 +33,10 @@ from pycifparse.dictionary.schema import (
     SchemaSpec,
     TableDef,
     emit_create_statements,
+    emit_fallback_create_statements,
     generate_schema,
 )
-from pycifparse.dictionary.schema_apply import apply_schema
+from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
 from pycifparse.dictionary.resolver import ResolvedTag, resolve_tag
 from pycifparse.dictionary.cache import save_dictionary, load_dictionary
 
@@ -51,7 +52,9 @@ __all__ = [
     'SchemaSpec',
     'generate_schema',
     'emit_create_statements',
+    'emit_fallback_create_statements',
     'apply_schema',
+    'apply_fallback_schema',
     'ResolvedTag',
     'resolve_tag',
     'save_dictionary',
