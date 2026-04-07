@@ -187,27 +187,6 @@ class TestCifCoreDic:
                 f"Loop table {table.name!r} missing UNIQUE on _row_id"
             )
 
-    def test_status_columns_present_with_default(self, conn, schema):
-        # atom_site is a Loop table in cif_core with b_iso_or_equiv
-        pragma = {
-            row[1]: row
-            for row in conn.execute('PRAGMA table_info("atom_site")')
-        }
-        assert 'b_iso_or_equiv' in pragma, "b_iso_or_equiv column missing"
-        assert 'b_iso_or_equiv_status' in pragma, "b_iso_or_equiv_status column missing"
-        status_row = pragma['b_iso_or_equiv_status']
-        assert status_row[2] == 'TEXT'        # type
-        assert status_row[3] == 1             # notnull
-        assert status_row[4] == "'absent'"    # dflt_value
-
-    def test_status_columns_not_in_column_to_tag(self, schema):
-        for table in schema.tables.values():
-            for col in table.columns:
-                if col.is_status_column:
-                    assert (table.name, col.name) not in schema.column_to_tag, (
-                        f"status column ({table.name}, {col.name}) found in column_to_tag"
-                    )
-
 
 # ---------------------------------------------------------------------------
 # Stage 3C: metadictionary loading and cache round-trip

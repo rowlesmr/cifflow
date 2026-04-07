@@ -323,3 +323,41 @@ block.  This guarantees that all DDL within the block is atomic.
 
 **How to apply:** Any function that executes DDL and must guarantee rollback on
 failure should follow this pattern.  Do not rely on `with conn:` for DDL.
+
+## Lesson 19 — CIF presence-state encoding in SQLite (2026-04-07)
+
+**Context:** Structured table schema design; replaced status-column approach.
+
+**Rule:** All value columns store TEXT. CIF presence states are encoded directly
+in the value column using the following convention:
+
+| Stored value | CIF meaning |
+|---|---|
+| `NULL` | tag absent from this data block |
+| `'.'` | inapplicable (unquoted `.` — `ValueType.PLACEHOLDER`) |
+| `'?'` | unknown (unquoted `?` — `ValueType.PLACEHOLDER`) |
+| `'"."'` | literal string `"."` (quoted dot — any quoted `ValueType`) |
+| `'"?"'` | literal string `"?"` (quoted question mark — any quoted `ValueType`) |
+| anything else | real value, stored as raw string |
+
+**Why:** Status companion columns (`{col}_status`) doubled the column count and
+added complexity to schema generation, ingestion, and queries. This encoding
+preserves all CIF semantics in a single column. NULL means exactly one thing
+(absent), which matches natural SQL semantics. `.` and `?` are the CIF
+representations that any CIF user immediately recognises.
+
+**`_cif_fallback` retains `value_type`:** The fallback table keeps its
+`value_type` column because there is no schema type information to distinguish
+bare-word values from quoted ones. `value_type` enables numeric coercion to
+operate only on bare words, and the output layer to know which values to quote
+on round-trip.
+
+**How to apply:**
+- At ingestion: inspect `ValueType`. `PLACEHOLDER` → store `'.'` or `'?'`.
+  Quoted `.` or `?` → store `'"."'` or `'"?"'`. All other values → store raw string.
+  Tag absent → do not insert row / leave column NULL.
+- At query time: `WHERE col IS NOT NULL AND col NOT IN ('.', '?')` selects rows
+  with real values.
+- At output: `NULL` → omit tag. `'.'` → emit `.`. `'?'` → emit `?`.
+  `'"."'` → emit `"."`. `'"?"'` → emit `"?"`. All other values → use `value_type`
+  from `_cif_fallback` (or schema type) to decide quoting.

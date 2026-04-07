@@ -4,40 +4,33 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current position:** Stage 3 COMPLETE. Stage 4 prompt not yet written.
+**Current position:** Stage 3D COMPLETE. Stage 4 prompt not yet written.
 
 **Test suite state:**
-- ~623 tests pass (non-slow): `pytest -m "not slow"`
+- 675 tests pass (non-slow): `pytest -m "not slow"`
 - ~27 additional slow tests: `pytest -m slow`
 
-**What was just completed (end of Stage 3):**
-- Steps 10–15: `DdlmItem`, `DictionaryLoader`, `DdlmDictionary`, `generate_schema`,
-  `emit_create_statements`, `apply_schema`, `ResolvedTag`, `resolve_tag`,
-  module wiring, integration tests — see stage 3 section for full detail
-- `debug_schema(source, *, show_ddl=False)` in `debug.py` + 11 smoke tests
-- Three post-completion bug fixes discovered via `debug_schema` on real dictionaries:
-  1. Template frames (`templ_attr.cif`) have no `_definition.id`; lookup must fall
-     back to save frame label — Lesson 14
-  2. `cat_item.category_id` is the parent category, not the table name; table name
-     and domain-item lookup must use `cat_item.definition_id` — Lesson 15
-  3. `definition_class == 'Functions'` must be silently skipped (same as `'Head'`)
-- Lessons 13–18 written to `tasks/lessons.md`
-- `prompts/API Reference.md` updated with full dictionary public API
+**What was just completed (Stage 3D):**
+- `_cif_fallback` table design finalised (see `prompts/Stage3D_fallbakc_schema.md`)
+- `emit_fallback_create_statements()` added to `schema.py`
+- `apply_fallback_schema(conn, *, drop_existing=False)` added to `schema_apply.py`
+- Both exported from `dictionary/__init__.py`
+- 22 tests in `tests/dictionary/test_fallback_schema.py`
+- `CLAUDE.md` constraint 7 updated: no-dictionary ingestion now routes all tags to
+  `_cif_fallback`; SQLite layer description updated to reflect two-tier model
 
 **What comes next: Stage 4 — SQLite ingestion**
 - No prompt exists yet in `prompts/`; write and agree the prompt before implementing
-- Scope: parse a CIF data file → load into SQLite using a dictionary-defined schema
-- Key open questions for the prompt:
+- Scope: parse a CIF data file → load into SQLite using the two-tier schema
+- Open questions for the prompt:
   - How are multi-block CIF files handled? (`_block_id` column suggests one DB per
     dictionary, many blocks per DB — confirm)
-  - SU columns: stored separately; how does the ingestion layer know to link them?
-    (via `ColumnDef.linked_item_id`)
-  - Unmapped tags (not in dictionary): discard silently, warn, or store in overflow table?
-  - Type coercion: values arrive as raw strings; when/how are they cast to INTEGER/REAL?
-  - PLACEHOLDER (`.`, `?`) handling: stored as NULL or as literal string?
+  - SU handling: split measurand/SU at ingestion time using `ColumnDef.linked_item_id`
+  - All values stored as TEXT; numeric coercion deferred to `convert_database()` (Stage 5+)
+  - Unmapped tags route to `_cif_fallback`; no-dictionary mode routes all tags there
 
 **Open items (non-blocking):**
-- Malformed-input test gaps — listed under Step 6; resolve against spec when convenient
+- Malformed-input test gaps — listed under Stage 1 Step 6; resolve against spec when convenient
 - COMCIFS files not yet in `test_real_file_no_semantic_errors` — add when convenient
 
 ---
@@ -72,7 +65,9 @@
 - [x] All non-comcifs files parse without errors
 - [x] Large files (≥1 MB) marked `@pytest.mark.slow`; run with `pytest -m slow`
 - [x] Timestamp values (`2007-12-18T12:16:55+02:00`) confirmed as single STRING tokens
-- [~] Malformed-input file tests — partially complete; 5 malformed CIF files with tests in `tests/parser/test_malformed.py` covering loops, containers, strings (CIF 1.1 and 2.0), and multiline fields
+- [~] Malformed-input file tests — partially complete; 5 malformed CIF files with tests in
+      `tests/parser/test_malformed.py` covering loops, containers, strings (CIF 1.1 and 2.0),
+      and multiline fields
   - Known gaps (to be addressed against spec before closing):
     - `global_` keyword (fatal — stop parsing immediately)
     - `save_` outside a save frame; nested save frames; `data_` inside a save frame; EOF inside open save frame
@@ -119,37 +114,6 @@
 
 ---
 
-## Future features to consider
-
-- **Programmatic `CifFile` construction** — a user-facing builder API for constructing a
-  `CifFile` without parsing. Accepts native Python types (str, int, float) and converts to
-  strings with correct `ValueType` assignment. Friendlier loop API than `CifBuilder`.
-  Belongs in the output layer (Stage 5+) alongside CIF emission, as the two are tightly
-  coupled (construction → validation → serialisation).
-
----
-
-## Future documentation tasks
-
-- **Docstring pass for autogeneration** — all public methods and classes need
-  consistent `Args`, `Returns`, and `Raises` sections before an autogeneration
-  tool (pdoc, Sphinx, MkDocs) would produce useful output. Current docstrings
-  are readable in-source but inconsistent in style and sparse on public API.
-  Do after Stage 3 when the public surface has stabilised further.
-
----
-
-## Future refactors to consider
-
-- **`CifBlock`/`CifSaveFrame` inheritance** — currently `CifBlock extends CifSaveFrame`, which
-  is convenient but a mild LSP violation (a `CifBlock` is wider than a `CifSaveFrame`).
-  If either class is ever passed polymorphically, refactor to a private shared base
-  `_CifNamespace` with `CifSaveFrame(_CifNamespace)` and `CifBlock(_CifNamespace)` as siblings.
-  Mechanical change; all tests pass unchanged; only observable difference is
-  `isinstance(block, CifSaveFrame)` becomes `False`.
-
----
-
 ## Stage 3: Dictionary Parsing and SQLite Schema Generation ✓ COMPLETE
 
 Prompt: `prompts/Stage3_Dictionary_Schema_Prompt.md`
@@ -163,10 +127,6 @@ API Reference: `prompts/API Reference.md`
 - [x] Unit tests: field defaults, independent list fields, `is_deprecated` default
 
 ### Step 11 — `DictionaryLoader` + `DdlmDictionary` (`dictionary/loader.py`, `dictionary/ddlm_parser.py`) ✓
-
-**Assumption:** dictionary CIF files are structurally sound — `build()` will return
-a well-formed model with no structural `ParseError`s.
-
 - [x] Phase A — no-import parsing: all frame types, lookup tables, alias collision,
       `_name.category_id` always authoritative
 - [x] Phase B — `_import.get` resolution: `mode="Contents"`, `if_dupl` ×3, `if_miss` ×2,
@@ -202,23 +162,69 @@ a well-formed model with no structural `ParseError`s.
       table count; synthetic columns; FK via PRAGMA; `column_to_tag` round-trip;
       `_row_id UNIQUE` via `PRAGMA index_list`
 - [x] `prompts/API Reference.md` updated with full dictionary public API
-- [x] 611 non-slow + 21 slow tests pass
 
 ### Review notes
 - SQL reserved-keyword table names (e.g. `update` in `ddl.dic`) require
-  double-quoting all identifiers in `emit_create_statements` and `apply_schema`
-  — Lesson 17.
+  double-quoting all identifiers — Lesson 17.
 - Python's `sqlite3` auto-commits DDL outside implicit transactions;
-  `apply_schema` must set `isolation_level = None` and issue explicit
-  BEGIN/COMMIT/ROLLBACK to guarantee rollback on failure — Lesson 18.
-- `ddl.dic` produces 0 FK constraints (Link items target non-schema categories);
-  this is expected. FK tests use `cif_core.dic`.
-- Three post-completion bugs found via `debug_schema` on real dictionaries;
-  all fixed — Lessons 14, 15, and Functions silent-skip.
+  `apply_schema` must use explicit BEGIN/COMMIT/ROLLBACK — Lesson 18.
+- `ddl.dic` produces 0 FK constraints (Link items target non-schema categories); expected.
+- Three post-completion bugs found via `debug_schema` on real dictionaries — Lessons 14, 15,
+  and Functions silent-skip.
 
 ---
 
-## Stage 4+: Ingestion, Output (future)
+## Stage 3D: Schema-less Fallback Tier ✓ COMPLETE
 
-- Stage 4: SQLite ingestion via dictionary-defined schema
-- Stage 5+: Output layer (CIF regeneration, Python/NumPy/pandas API)
+Prompt: `prompts/Stage3D_fallbakc_schema.md`
+Tests: `tests/dictionary/test_fallback_schema.py`
+
+- [x] `emit_fallback_create_statements()` — fixed DDL for `_cif_fallback` table + index
+- [x] `apply_fallback_schema(conn, *, drop_existing=False)` — transactional DDL application
+- [x] Both exported from `dictionary/__init__.py`
+- [x] `CLAUDE.md` constraint 7 updated to permit no-dictionary ingestion via fallback tier
+- [x] 22 unit tests: DDL structure, column nullability, PK, index, idempotency,
+      `drop_existing`, coexistence with structured schema
+
+---
+
+## Future work
+
+### Planned features
+
+- **`convert_database(src, dst, schema, *, on_coercion_failure='null') -> list[str]`** —
+  copies a TEXT-storage database to a new connection with numeric columns cast to their
+  schema-declared types (INTEGER/REAL). Round-trip fidelity is explicitly sacrificed.
+  Rules:
+  - Always a copy; original is never modified.
+  - SU values are already split at ingestion (measurand column holds bare numeric).
+  - PLACEHOLDERs already handled via status columns; no special treatment needed.
+  - `_cif_fallback`: best-effort CAST on `value`; populate `numeric_value REAL` column
+    (NULL on failure).
+  - `on_coercion_failure`: `'null'` (default) — failed cast → NULL; `'keep'` — leave
+    TEXT value; `'error'` — raise.
+  - Returns list of warnings (one per coercion failure in `'null'`/`'keep'` modes).
+  - Stage 5+ output layer.
+
+- **Programmatic `CifFile` construction** — user-facing builder API accepting native Python
+  types (str, int, float), converting to strings with correct `ValueType` assignment.
+  Stage 5+, tightly coupled to CIF emission.
+
+### Documentation
+
+- **SQLite value encoding convention** — document the presence-state encoding
+  (Lesson 19) in `prompts/API Reference.md` and any future user-facing docs before
+  Stage 4 is complete. Consumers querying the database directly must know that
+  `NULL` = absent, `'.'` = inapplicable, `'?'` = unknown, `'"."'`/`'"?"'` = literal
+  quoted dot/question-mark, and that `_cif_fallback.value_type` drives quoting on
+  round-trip.
+
+- **Docstring pass for autogeneration** — all public methods and classes need consistent
+  NumPy-style `Parameters`/`Returns`/`Raises` sections (see Lesson 9). Do when the public
+  surface has stabilised (after Stage 4+).
+
+### Refactors
+
+- **`CifBlock`/`CifSaveFrame` inheritance** — `CifBlock extends CifSaveFrame` is a mild LSP
+  violation. Refactor to a private `_CifNamespace` base with both as siblings if either class
+  is ever passed polymorphically. Mechanical change; all tests pass unchanged.

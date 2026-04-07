@@ -357,7 +357,7 @@ class TestTypeMapping:
 
 class TestColumnOrdering:
     def test_set_column_order(self):
-        # Set table: _block_id, then PK+status pairs, then alpha non-PK+status pairs
+        # Set table: _block_id, PK cols, then alpha non-PK cols
         cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
         items = [
             _item('_cfg.id', 'cfg', 'id', type_contents='Text'),
@@ -368,15 +368,12 @@ class TestColumnOrdering:
         schema = generate_schema(d)
         names = [c.name for c in schema.tables['cfg'].columns]
         assert names[0] == '_block_id'
-        assert names[1] == 'id'           # PK
-        assert names[2] == 'id_status'
-        assert names[3] == 'a_first'      # alpha first non-PK
-        assert names[4] == 'a_first_status'
-        assert names[5] == 'z_last'
-        assert names[6] == 'z_last_status'
+        assert names[1] == 'id'       # PK
+        assert names[2] == 'a_first'  # alpha first non-PK
+        assert names[3] == 'z_last'
 
     def test_loop_column_order(self):
-        # Loop table: _block_id, _row_id, PK+status pairs, alpha non-PK+status pairs
+        # Loop table: _block_id, _row_id, PK cols, then alpha non-PK cols
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
         items = [
             _item('_meas.id', 'meas', 'id', type_contents='Text'),
@@ -388,12 +385,9 @@ class TestColumnOrdering:
         names = [c.name for c in schema.tables['meas'].columns]
         assert names[0] == '_block_id'
         assert names[1] == '_row_id'
-        assert names[2] == 'id'            # PK
-        assert names[3] == 'id_status'
-        assert names[4] == 'a_name'        # alpha non-PK
-        assert names[5] == 'a_name_status'
-        assert names[6] == 'z_val'
-        assert names[7] == 'z_val_status'
+        assert names[2] == 'id'       # PK
+        assert names[3] == 'a_name'   # alpha non-PK
+        assert names[4] == 'z_val'
 
     def test_composite_pk_order_follows_category_keys(self):
         cats = [_cat('point', 'point', 'Loop', ['_point.y', '_point.x'])]
@@ -404,11 +398,9 @@ class TestColumnOrdering:
         d = _make_dict(cats, items)
         schema = generate_schema(d)
         names = [c.name for c in schema.tables['point'].columns]
-        # y comes before x because that's category_keys order; each followed by status
+        # y comes before x because that's category_keys order
         assert names[2] == 'y'
-        assert names[3] == 'y_status'
-        assert names[4] == 'x'
-        assert names[5] == 'x_status'
+        assert names[3] == 'x'
 
 
 # ---------------------------------------------------------------------------
@@ -689,131 +681,3 @@ class TestEmitCreateStatements:
         assert fk[4] == 'id'         # to column
 
 
-# ---------------------------------------------------------------------------
-# Status columns (Stage 3B)
-# ---------------------------------------------------------------------------
-
-class TestStatusColumns:
-    def test_loop_table_has_status_companions(self):
-        cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
-        items = [
-            _item('_meas.id', 'meas', 'id', type_contents='Text'),
-            _item('_meas.val', 'meas', 'val', type_contents='Real'),
-        ]
-        d = _make_dict(cats, items)
-        schema = generate_schema(d)
-        names = [c.name for c in schema.tables['meas'].columns]
-        # synthetics have no companion; each domain column is followed by its status
-        assert '_block_id' in names
-        assert '_block_id_status' not in names
-        assert '_row_id' in names
-        assert '_row_id_status' not in names
-        assert 'id' in names
-        assert 'id_status' in names
-        assert 'val' in names
-        assert 'val_status' in names
-
-    def test_set_table_has_status_companions(self):
-        cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
-        items = [_item('_cfg.id', 'cfg', 'id', type_contents='Text')]
-        d = _make_dict(cats, items)
-        schema = generate_schema(d)
-        names = [c.name for c in schema.tables['cfg'].columns]
-        assert 'id' in names
-        assert 'id_status' in names
-
-    def test_status_column_immediately_follows_value_column(self):
-        cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
-        items = [
-            _item('_meas.id', 'meas', 'id', type_contents='Text'),
-            _item('_meas.val', 'meas', 'val', type_contents='Real'),
-        ]
-        d = _make_dict(cats, items)
-        schema = generate_schema(d)
-        cols = schema.tables['meas'].columns
-        for i, col in enumerate(cols):
-            if not col.is_status_column and col.name not in ('_block_id', '_row_id'):
-                assert cols[i + 1].name == f'{col.name}_status'
-
-    def test_status_column_attributes(self):
-        cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
-        items = [_item('_cfg.id', 'cfg', 'id', type_contents='Text')]
-        d = _make_dict(cats, items)
-        schema = generate_schema(d)
-        status = next(c for c in schema.tables['cfg'].columns if c.is_status_column)
-        assert status.name == 'id_status'
-        assert status.sql_type == 'TEXT'
-        assert status.nullable is False
-        assert status.is_primary_key is False
-        assert status.is_synthetic is False
-        assert status.definition_id == ''
-        assert status.linked_item_id is None
-
-    def test_value_column_is_not_status_column(self):
-        cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
-        items = [_item('_cfg.id', 'cfg', 'id', type_contents='Text')]
-        d = _make_dict(cats, items)
-        schema = generate_schema(d)
-        value_col = next(c for c in schema.tables['cfg'].columns if c.name == 'id')
-        assert value_col.is_status_column is False
-
-    def test_pk_column_gets_status_companion(self):
-        cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
-        items = [_item('_meas.id', 'meas', 'id', type_contents='Text')]
-        d = _make_dict(cats, items)
-        schema = generate_schema(d)
-        names = [c.name for c in schema.tables['meas'].columns]
-        assert 'id_status' in names
-        status = next(c for c in schema.tables['meas'].columns if c.name == 'id_status')
-        assert status.is_status_column is True
-
-    def test_status_columns_excluded_from_column_to_tag(self):
-        cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
-        items = [
-            _item('_cfg.id', 'cfg', 'id', type_contents='Text'),
-            _item('_cfg.name', 'cfg', 'name', type_contents='Text'),
-        ]
-        d = _make_dict(cats, items)
-        schema = generate_schema(d)
-        assert ('cfg', 'id_status') not in schema.column_to_tag
-        assert ('cfg', 'name_status') not in schema.column_to_tag
-
-    def test_status_column_default_absent_in_ddl(self):
-        cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
-        items = [_item('_cfg.id', 'cfg', 'id', type_contents='Text')]
-        d = _make_dict(cats, items)
-        schema = generate_schema(d)
-        stmt = emit_create_statements(schema)[0]
-        assert "\"id_status\"  TEXT  NOT NULL  DEFAULT 'absent'" in stmt
-
-    def test_status_columns_execute_against_sqlite(self):
-        cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
-        items = [
-            _item('_cfg.id', 'cfg', 'id', type_contents='Text'),
-            _item('_cfg.val', 'cfg', 'val', type_contents='Real'),
-        ]
-        d = _make_dict(cats, items)
-        schema = generate_schema(d)
-        conn = _execute_schema(schema)
-        pragma = {row[1]: row for row in conn.execute("PRAGMA table_info(\"cfg\")")}
-        assert 'id_status' in pragma
-        assert pragma['id_status'][2] == 'TEXT'       # type
-        assert pragma['id_status'][3] == 1            # notnull
-        assert pragma['id_status'][4] == "'absent'"   # dflt_value
-        assert 'val_status' in pragma
-
-    def test_collision_renames_to_cif_status(self):
-        # _meas.val_status is a real column; companion for 'val' would collide.
-        cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
-        items = [
-            _item('_meas.id', 'meas', 'id', type_contents='Text'),
-            _item('_meas.val', 'meas', 'val', type_contents='Real'),
-            _item('_meas.val_status', 'meas', 'val_status', type_contents='Text'),
-        ]
-        d = _make_dict(cats, items)
-        schema = generate_schema(d)
-        names = [c.name for c in schema.tables['meas'].columns]
-        # 'val_status' is a real domain column; companion for 'val' → 'val_cif_status'
-        assert 'val_cif_status' in names
-        assert sum(1 for n in names if n == 'val_status') == 1  # only the real one
-        assert any(w for w in schema.warnings if 'val_status' in w and 'collides' in w)
