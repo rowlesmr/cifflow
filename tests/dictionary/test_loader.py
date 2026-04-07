@@ -652,7 +652,8 @@ save_
 
 
 class TestImportModeFull:
-    def test_mode_full_skipped_with_warning(self):
+    def test_mode_full_item_level_merges_attributes(self):
+        # mode="Full" on an item frame merges attributes like mode="Contents".
         src = """\
 #\\#CIF_2.0
 data_D
@@ -674,8 +675,12 @@ save_
 """
         warnings = []
         resolver = _make_resolver({'t.cif': template})
-        DictionaryLoader(resolver=resolver, on_warning=warnings.append).load(src)
-        assert any('not supported' in w or 'Full' in w for w in warnings)
+        d = DictionaryLoader(resolver=resolver, on_warning=warnings.append).load(src)
+        # Attribute imported, no "not supported" warning
+        assert not any('not supported' in w for w in warnings)
+        item = d.tag_to_item.get('_widget.x')
+        assert item is not None
+        assert item.type_purpose == 'Key'
 
 
 class TestImportOrdering:
@@ -819,3 +824,179 @@ class TestRealDictionary:
     def test_deprecated_ids_non_empty(self, cif_core):
         d, _ = cif_core
         assert len(d.deprecated_ids) > 0
+
+
+# ---------------------------------------------------------------------------
+# Stage 3C: mode="Full" dictionary-level imports
+# ---------------------------------------------------------------------------
+
+def _head_cif(name: str, imports: str = '') -> str:
+    return (
+        f"#\\#CIF_2.0\ndata_{name}\n"
+        f"save_{name}_HEAD\n"
+        f"  _definition.id    {name}_HEAD\n"
+        f"  _definition.scope Category\n"
+        f"  _definition.class Head\n"
+        f"  _name.category_id {name}\n"
+        f"  _name.object_id   {name}_HEAD\n"
+        f"{imports}"
+        f"save_\n"
+    )
+
+
+def _item_cif(name: str, tag: str, cat: str, obj: str, purpose: str = 'Describe') -> str:
+    # Save frame label must not start with '_'; use the tag without leading underscore.
+    sf_label = tag.lstrip('_').replace('.', '_')
+    return _head_cif(name) + (
+        f"\nsave_{sf_label}\n"
+        f"  _definition.id    '{tag}'\n"
+        f"  _name.category_id {cat}\n"
+        f"  _name.object_id   {obj}\n"
+        f"  _type.purpose     {purpose}\n"
+        f"save_\n"
+    )
+
+
+class TestModeFull:
+    def test_constituent_definitions_appear_in_result(self):
+        constituent = _item_cif('CORE', '_core.id', 'core', 'id', 'Key')
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [{'file':core.dic  'mode':Full  'save':CORE_HEAD  'dupl':Ignore}]\n",
+        )
+        d = DictionaryLoader(resolver=_make_resolver({'core.dic': constituent})).load(primary)
+        assert '_core.id' in d.tag_to_item
+
+    def test_primary_overrides_constituent(self):
+        constituent = _item_cif('CORE', '_shared.id', 'shared', 'id', 'Key')
+        primary = (
+            _head_cif(
+                'PRIMARY',
+                "  _import.get\n"
+                "    [{'file':core.dic  'mode':Full  'save':CORE_HEAD  'dupl':Ignore}]\n",
+            )
+            + "\nsave_shared_id\n"
+            "  _definition.id    '_shared.id'\n"
+            "  _name.category_id shared\n"
+            "  _name.object_id   id\n"
+            "  _type.purpose     Link\n"
+            "save_\n"
+        )
+        d = DictionaryLoader(resolver=_make_resolver({'core.dic': constituent})).load(primary)
+        assert d.tag_to_item['_shared.id'].type_purpose == 'Link'
+
+    def test_dupl_ignore_first_constituent_wins(self):
+        c1 = _item_cif('C1', '_shared.id', 'shared', 'id', 'Key')
+        c2 = _item_cif('C2', '_shared.id', 'shared', 'id', 'Link')
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [\n"
+            "      {'file':c1.dic  'mode':Full  'save':C1_HEAD  'dupl':Ignore  'order':1}\n"
+            "      {'file':c2.dic  'mode':Full  'save':C2_HEAD  'dupl':Ignore  'order':2}\n"
+            "    ]\n",
+        )
+        d = DictionaryLoader(
+            resolver=_make_resolver({'c1.dic': c1, 'c2.dic': c2})
+        ).load(primary)
+        assert d.tag_to_item['_shared.id'].type_purpose == 'Key'
+
+    def test_dupl_replace_later_constituent_wins(self):
+        c1 = _item_cif('C1', '_shared.id', 'shared', 'id', 'Key')
+        c2 = _item_cif('C2', '_shared.id', 'shared', 'id', 'Link')
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [\n"
+            "      {'file':c1.dic  'mode':Full  'save':C1_HEAD  'dupl':Replace  'order':1}\n"
+            "      {'file':c2.dic  'mode':Full  'save':C2_HEAD  'dupl':Replace  'order':2}\n"
+            "    ]\n",
+        )
+        d = DictionaryLoader(
+            resolver=_make_resolver({'c1.dic': c1, 'c2.dic': c2})
+        ).load(primary)
+        assert d.tag_to_item['_shared.id'].type_purpose == 'Link'
+
+    def test_miss_ignore_allows_partial_load(self):
+        warnings = []
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [{'file':missing.dic  'mode':Full  'save':MISSING_HEAD  'miss':Ignore}]\n",
+        )
+        d = DictionaryLoader(
+            resolver=_make_resolver({}),
+            on_warning=warnings.append,
+        ).load(primary)
+        assert any('missing.dic' in w for w in warnings)
+        assert d.name == 'PRIMARY'
+
+    def test_miss_exit_aborts_load(self):
+        warnings = []
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [{'file':missing.dic  'mode':Full  'save':MISSING_HEAD}]\n",
+        )
+        DictionaryLoader(
+            resolver=_make_resolver({}),
+            on_warning=warnings.append,
+        ).load(primary)
+        assert any('aborting' in w for w in warnings)
+
+    def test_circular_import_detected(self):
+        a_imports = (
+            "  _import.get\n"
+            "    [{'file':b.dic  'mode':Full  'save':B_HEAD  'miss':Ignore}]\n"
+        )
+        b_imports = (
+            "  _import.get\n"
+            "    [{'file':a.dic  'mode':Full  'save':A_HEAD  'miss':Ignore}]\n"
+        )
+        a = _head_cif('A', a_imports)
+        b = _head_cif('B', b_imports)
+        warnings = []
+        DictionaryLoader(
+            resolver=_make_resolver({'a.dic': a, 'b.dic': b}),
+            on_warning=warnings.append,
+        ).load(a)
+        assert any('circular' in w for w in warnings)
+
+    def test_constituent_warnings_prefixed(self):
+        # A broken item frame inside constituent produces a prefixed warning.
+        constituent = (
+            _head_cif('CORE')
+            + "\nsave_broken\n"
+            "  _definition.scope Item\n"
+            "  _name.object_id   x\n"
+            "save_\n"
+        )
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [{'file':core.dic  'mode':Full  'save':CORE_HEAD  'dupl':Ignore}]\n",
+        )
+        warnings = []
+        DictionaryLoader(
+            resolver=_make_resolver({'core.dic': constituent}),
+            on_warning=warnings.append,
+        ).load(primary)
+        assert any(w.startswith('[core.dic]') for w in warnings)
+
+    def test_transitive_import(self):
+        leaf = _item_cif('LEAF', '_leaf.val', 'leaf', 'val', 'Describe')
+        mid = _head_cif(
+            'MID',
+            "  _import.get\n"
+            "    [{'file':leaf.dic  'mode':Full  'save':LEAF_HEAD  'dupl':Ignore}]\n",
+        )
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [{'file':mid.dic  'mode':Full  'save':MID_HEAD  'dupl':Ignore}]\n",
+        )
+        d = DictionaryLoader(
+            resolver=_make_resolver({'leaf.dic': leaf, 'mid.dic': mid})
+        ).load(primary)
+        assert '_leaf.val' in d.tag_to_item

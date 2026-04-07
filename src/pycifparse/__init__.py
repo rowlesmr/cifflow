@@ -15,6 +15,8 @@ from pycifparse.dictionary import (
     apply_schema,
     ResolvedTag,
     resolve_tag,
+    save_dictionary,
+    load_dictionary,
 )
 
 __all__ = [
@@ -27,4 +29,5 @@ __all__ = [
     'generate_schema', 'emit_create_statements',
     'apply_schema',
     'ResolvedTag', 'resolve_tag',
+    'save_dictionary', 'load_dictionary',
 ]

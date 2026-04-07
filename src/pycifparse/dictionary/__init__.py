@@ -37,6 +37,7 @@ from pycifparse.dictionary.schema import (
 )
 from pycifparse.dictionary.schema_apply import apply_schema
 from pycifparse.dictionary.resolver import ResolvedTag, resolve_tag
+from pycifparse.dictionary.cache import save_dictionary, load_dictionary
 
 __all__ = [
     'DdlmItem',
@@ -53,4 +54,6 @@ __all__ = [
     'apply_schema',
     'ResolvedTag',
     'resolve_tag',
+    'save_dictionary',
+    'load_dictionary',
 ]

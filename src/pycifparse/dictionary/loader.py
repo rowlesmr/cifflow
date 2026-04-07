@@ -202,13 +202,47 @@ def _build_lookup_tables(
     return categories, items, tag_to_item, alias_to_definition_id, deprecated_ids
 
 
+def _merge_constituent(
+    pool: dict[str, DdlmItem],
+    constituent: DdlmDictionary,
+    dupl: str,
+    warn: Callable[[str], None],
+) -> bool:
+    """
+    Merge all items from *constituent* into *pool*.
+
+    Iterates over all categories and items in *constituent*, applying the *dupl*
+    policy to resolve conflicts with items already in *pool*.
+
+    Returns ``True`` if the load should be aborted (``dupl == "Exit"`` and a
+    conflict was found), ``False`` otherwise.
+    """
+    all_items = {**constituent.categories, **constituent.items}
+    for def_id, item in all_items.items():
+        if def_id not in pool:
+            pool[def_id] = item
+        elif dupl == 'Ignore':
+            pass
+        elif dupl == 'Replace':
+            pool[def_id] = item
+        else:  # 'Exit'
+            warn(
+                f"_import.get dupl=Exit: constituent definition {def_id!r} "
+                f"conflicts with existing pool entry — aborting"
+            )
+            return True
+    return False
+
+
 class DictionaryLoader:
     """
     Loads a DDLm dictionary from a CIF 2.0 source string.
 
-    Resolves ``_import.get`` directives (mode ``"Contents"`` only) using the
-    supplied ``SourceResolver``.  File access is fully delegated to the resolver;
-    this class never accesses the filesystem or network directly.
+    Resolves ``_import.get`` directives using the supplied ``SourceResolver``.
+    Both ``mode="Contents"`` (frame-level attribute merge) and ``mode="Full"``
+    (constituent dictionary incorporation) are supported.  File access is fully
+    delegated to the resolver; this class never accesses the filesystem or
+    network directly.
 
     Parsed files are cached for the lifetime of the loader instance.  To
     invalidate the cache, create a new instance.
@@ -240,21 +274,38 @@ class DictionaryLoader:
         Parse a DDLm dictionary source string and resolve all ``_import.get``
         directives.
 
+        Both ``mode="Contents"`` (frame-level attribute merge) and
+        ``mode="Full"`` (constituent dictionary incorporation) are supported.
+        When a ``mode="Full"`` import targets a Head category, the entire
+        constituent dictionary is loaded recursively and its definitions are
+        merged into the result, with local definitions taking precedence.
+
+        Circular imports are detected and skipped with a warning.
+
         Parameters
         ----------
         source:
             Raw CIF 2.0 source string of the dictionary to parse.
         base_uri:
             URI of the dictionary being parsed, used as the base for resolving
-            relative import URIs.  If ``None`` and ``_dictionary.uri`` is present
-            in the dictionary, that value is used.  If neither is available,
-            relative URIs are passed to the resolver as-is.
+            relative import URIs.  If ``None`` and ``_dictionary.uri`` is
+            present in the dictionary, that value is used.  If neither is
+            available, relative URIs are passed to the resolver as-is.
 
         Returns
         -------
         DdlmDictionary
             The fully loaded dictionary with all imports resolved.
         """
+        return self._load_recursive(source, base_uri, set())
+
+    def _load_recursive(
+        self,
+        source: str,
+        base_uri: str | None,
+        loading: set[str],
+    ) -> DdlmDictionary:
+        """Parse and resolve one dictionary, tracking *loading* for cycle detection."""
         warnings: list[str] = []
 
         def warn(msg: str) -> None:
@@ -293,7 +344,11 @@ class DictionaryLoader:
         if isinstance(version, str) and version in ('.', '?'):
             version = None
 
-        all_items: list[DdlmItem] = []
+        # pool accumulates DdlmItems from mode="Full" constituent imports.
+        # Primary items (from this file's frames) are appended afterwards so
+        # they overwrite constituent definitions with the same definition_id.
+        pool: dict[str, DdlmItem] = {}
+        primary_items: list[DdlmItem] = []
 
         for sf_name in block.save_frames:
             sf = block[sf_name]
@@ -303,11 +358,16 @@ class DictionaryLoader:
                 directives_val = frame_data['_import.get']
                 if directives_val and isinstance(directives_val[0], list):
                     directives = directives_val[0]
-                    self._resolve_imports(frame_data, directives, base_uri, warn)
+                    self._resolve_imports(
+                        frame_data, directives, base_uri, loading, pool, warn
+                    )
 
             item = _extract_item(frame_data, warn)
             if item is not None:
-                all_items.append(item)
+                primary_items.append(item)
+
+        # Merge: constituents first (pool), then primary overwrites.
+        all_items = list(pool.values()) + primary_items
 
         categories, items, tag_to_item, alias_to_def_id, deprecated_ids = (
             _build_lookup_tables(all_items, warn)
@@ -325,14 +385,40 @@ class DictionaryLoader:
             warnings=warnings,
         )
 
+    def _load_constituent(
+        self,
+        uri: str,
+        loading: set[str],
+        warn: Callable[[str], None],
+    ) -> DdlmDictionary | None:
+        """
+        Load and return the dictionary at *uri*, or ``None`` on failure.
+
+        Checks *loading* for circular imports before proceeding.  Adds *uri*
+        to *loading* for the duration of the recursive call.
+        """
+        if uri in loading:
+            warn(f'circular import detected for {uri!r} — skipped')
+            return None
+        src = self._get_source(uri)
+        if src is None:
+            return None
+        loading.add(uri)
+        try:
+            return self._load_recursive(src, uri, loading)
+        finally:
+            loading.discard(uri)
+
     def _resolve_imports(
         self,
         frame_data: dict[str, list],
         directives: list[Any],
         base_uri: str | None,
+        loading: set[str],
+        pool: dict[str, DdlmItem],
         warn: Callable[[str], None],
     ) -> None:
-        """Apply ``_import.get`` directives to *frame_data* in place."""
+        """Apply ``_import.get`` directives to *frame_data* and/or *pool*."""
         # Sort by 'order' if present; fall back to list order.
         def _order_key(d: Any) -> int:
             if not isinstance(d, dict):
@@ -363,47 +449,117 @@ class DictionaryLoader:
                 warn("_import.get directive missing 'save' key — skipped")
                 continue
 
-            if mode != 'Contents':
+            if mode not in ('Contents', 'Full'):
                 warn(
-                    f"_import.get mode {mode!r} is not supported in Phase 1 "
+                    f"_import.get mode {mode!r} is not supported "
                     f"(file={file_uri!r}, save={save_id!r}) — skipped"
                 )
                 continue
 
             # Resolve the URI relative to base_uri if needed.
             resolved_uri = self._resolve_uri(file_uri, base_uri)
-            source_cif = self._get_parsed(resolved_uri)
 
-            if source_cif is None:
-                msg = (
-                    f"_import.get could not load {resolved_uri!r} "
-                    f"(save={save_id!r})"
+            if mode == 'Full':
+                # Look up the named save frame first to determine whether the
+                # target is a Head category (dictionary-level import) or an
+                # ordinary frame (frame-level attribute merge like Contents).
+                source_cif = self._get_parsed(resolved_uri)
+
+                if source_cif is None:
+                    msg = (
+                        f"_import.get could not load {resolved_uri!r} "
+                        f"(save={save_id!r})"
+                    )
+                    if miss == 'Ignore':
+                        warn(msg + ' — ignored')
+                        continue
+                    else:
+                        warn(msg + ' — aborting dictionary load')
+                        return
+
+                source_frame_data = self._find_frame_by_definition_id(
+                    source_cif, save_id, lambda _: None
                 )
-                if miss == 'Ignore':
-                    warn(msg + ' — ignored')
+
+                if source_frame_data is None:
+                    msg = (
+                        f"_import.get save frame {save_id!r} not found "
+                        f"in {resolved_uri!r}"
+                    )
+                    if miss == 'Ignore':
+                        warn(msg + ' — ignored')
+                        continue
+                    else:
+                        warn(msg + ' — aborting dictionary load')
+                        return
+
+                target_class = (
+                    _scalar(source_frame_data, '_definition.class') or ''
+                ).lower()
+
+                if target_class == 'head':
+                    # Dictionary-level import: load the entire constituent
+                    # dictionary and merge all its definitions into pool.
+                    constituent = self._load_constituent(resolved_uri, loading, warn)
+                    if constituent is None:
+                        msg = (
+                            f"_import.get could not load constituent "
+                            f"{resolved_uri!r} (save={save_id!r})"
+                        )
+                        if miss == 'Ignore':
+                            warn(msg + ' — ignored')
+                            continue
+                        else:
+                            warn(msg + ' — aborting dictionary load')
+                            return
+
+                    # Surface constituent warnings prefixed with their source.
+                    for w in constituent.warnings:
+                        warn(f'[{resolved_uri}] {w}')
+
+                    abort = _merge_constituent(pool, constituent, dupl, warn)
+                    if abort:
+                        return
                     continue
-                else:  # 'Exit' (default)
-                    warn(msg + ' — aborting dictionary load')
-                    return
 
-            # Locate the named save frame by _definition.id match.
-            source_frame_data = self._find_frame_by_definition_id(
-                source_cif, save_id, warn
-            )
+                # Non-Head target: frame-level attribute merge (same as Contents).
+                # Fall through to the shared frame-merge path below.
+                # source_cif and source_frame_data are already resolved above.
 
-            if source_frame_data is None:
-                msg = (
-                    f"_import.get save frame with _definition.id={save_id!r} "
-                    f"not found in {resolved_uri!r}"
+            else:
+                # mode == 'Contents': frame-level attribute merge.
+                source_cif = self._get_parsed(resolved_uri)
+
+                if source_cif is None:
+                    msg = (
+                        f"_import.get could not load {resolved_uri!r} "
+                        f"(save={save_id!r})"
+                    )
+                    if miss == 'Ignore':
+                        warn(msg + ' — ignored')
+                        continue
+                    else:
+                        warn(msg + ' — aborting dictionary load')
+                        return
+
+                source_frame_data = self._find_frame_by_definition_id(
+                    source_cif, save_id, warn
                 )
-                if miss == 'Ignore':
-                    warn(msg + ' — ignored')
-                    continue
-                else:
-                    warn(msg + ' — aborting dictionary load')
-                    return
 
-            # Merge source tags into frame_data per dupl policy.
+                if source_frame_data is None:
+                    msg = (
+                        f"_import.get save frame with _definition.id={save_id!r} "
+                        f"not found in {resolved_uri!r}"
+                    )
+                    if miss == 'Ignore':
+                        warn(msg + ' — ignored')
+                        continue
+                    else:
+                        warn(msg + ' — aborting dictionary load')
+                        return
+
+            # Shared frame-level merge path (mode="Contents" or mode="Full" non-Head).
+            # source_cif and source_frame_data are already resolved above.
             abort = self._merge_frame(
                 frame_data, source_frame_data, source_cif, dupl, warn
             )

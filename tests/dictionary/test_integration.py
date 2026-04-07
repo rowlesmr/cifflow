@@ -8,12 +8,16 @@ import sqlite3
 
 import pytest
 
+import tempfile
+
 from pycifparse.dictionary import (
     DictionaryLoader,
     apply_schema,
     directory_resolver,
     generate_schema,
+    load_dictionary,
     resolve_tag,
+    save_dictionary,
 )
 
 _DATA_DIR = pathlib.Path(__file__).parents[2] / 'data' / 'dictionaries'
@@ -203,3 +207,117 @@ class TestCifCoreDic:
                     assert (table.name, col.name) not in schema.column_to_tag, (
                         f"status column ({table.name}, {col.name}) found in column_to_tag"
                     )
+
+
+# ---------------------------------------------------------------------------
+# Stage 3C: metadictionary loading and cache round-trip
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+class TestMetadictionary:
+    @pytest.fixture(scope='class')
+    def multi_block(self):
+        resolver = directory_resolver(_DATA_DIR)
+        src = (_DATA_DIR / 'multi_block_core.dic').read_text(encoding='utf-8')
+        return DictionaryLoader(resolver=resolver).load(src)
+
+    @pytest.fixture(scope='class')
+    def cif_img(self):
+        resolver = directory_resolver(_DATA_DIR)
+        src = (_DATA_DIR / 'cif_img.dic').read_text(encoding='utf-8')
+        return DictionaryLoader(resolver=resolver).load(src)
+
+    @pytest.fixture(scope='class')
+    def cif_pow(self):
+        resolver = directory_resolver(_DATA_DIR)
+        src = (_DATA_DIR / 'cif_pow.dic').read_text(encoding='utf-8')
+        return DictionaryLoader(resolver=resolver).load(src)
+
+    def test_multi_block_contains_cif_core_definitions(self, multi_block):
+        # multi_block_core imports cif_core; _atom_site.fract_x should be present.
+        r = resolve_tag('_atom_site.fract_x', multi_block)
+        assert r is not None
+        assert r.category_id == 'atom_site'
+
+    def test_cif_img_contains_multi_block_and_core_definitions(self, cif_img):
+        assert resolve_tag('_atom_site.fract_x', cif_img) is not None
+
+    def test_cif_pow_definition_count_exceeds_cif_core(self, cif_pow):
+        resolver = directory_resolver(_DATA_DIR)
+        core_src = (_DATA_DIR / 'cif_core.dic').read_text(encoding='utf-8')
+        core = DictionaryLoader(resolver=resolver).load(core_src)
+        assert len(cif_pow.items) > len(core.items)
+
+    def test_cif_pow_contains_cif_core_definition(self, cif_pow):
+        assert resolve_tag('_atom_site.fract_x', cif_pow) is not None
+
+    def test_cif_pow_contains_cif_img_definition(self, cif_pow):
+        # _array_data.data is defined in cif_img.
+        r = resolve_tag('_array_data.data', cif_pow)
+        assert r is not None
+
+    def test_shared_transitive_dependency_no_spurious_warnings(self, cif_pow):
+        # cif_core is reachable via both cif_img and multi_block_core.
+        # With dupl=Ignore, no duplicate-conflict warnings should appear.
+        warnings = []
+        resolver = directory_resolver(_DATA_DIR)
+        src = (_DATA_DIR / 'cif_pow.dic').read_text(encoding='utf-8')
+        DictionaryLoader(resolver=resolver, on_warning=warnings.append).load(src)
+        conflict_warnings = [w for w in warnings if 'dupl=Exit' in w]
+        assert conflict_warnings == []
+
+
+@pytest.mark.slow
+class TestDictionaryCache:
+    @pytest.fixture(scope='class')
+    def cif_core_dict(self):
+        resolver = directory_resolver(_DATA_DIR)
+        src = (_DATA_DIR / 'cif_core.dic').read_text(encoding='utf-8')
+        return DictionaryLoader(resolver=resolver).load(src)
+
+    def test_round_trip_preserves_item_count(self, cif_core_dict):
+        with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+            path = pathlib.Path(f.name)
+        try:
+            save_dictionary(cif_core_dict, path)
+            loaded = load_dictionary(path)
+            assert len(loaded.items) == len(cif_core_dict.items)
+            assert len(loaded.categories) == len(cif_core_dict.categories)
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_round_trip_tag_to_item_resolves_correctly(self, cif_core_dict):
+        with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+            path = pathlib.Path(f.name)
+        try:
+            save_dictionary(cif_core_dict, path)
+            loaded = load_dictionary(path)
+            r = resolve_tag('_atom_site.fract_x', loaded)
+            assert r is not None
+            assert r.object_id == 'fract_x'
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_round_trip_alias_survives(self, cif_core_dict):
+        with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+            path = pathlib.Path(f.name)
+        try:
+            save_dictionary(cif_core_dict, path)
+            loaded = load_dictionary(path)
+            # Any alias should resolve to the same item as the canonical tag.
+            for alias, canonical in loaded.alias_to_definition_id.items():
+                assert loaded.tag_to_item[alias] is loaded.tag_to_item[canonical]
+                break  # one is enough
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_round_trip_deprecated_ids_is_set(self, cif_core_dict):
+        with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+            path = pathlib.Path(f.name)
+        try:
+            save_dictionary(cif_core_dict, path)
+            loaded = load_dictionary(path)
+            assert isinstance(loaded.deprecated_ids, set)
+            assert len(loaded.deprecated_ids) == len(cif_core_dict.deprecated_ids)
+        finally:
+            path.unlink(missing_ok=True)
