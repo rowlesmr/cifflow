@@ -256,6 +256,12 @@ class DictionaryLoader:
     on_warning:
         Optional callback for non-fatal warnings.  If ``None``, warnings are
         silently discarded.
+    ignore_head_imports:
+        When ``True``, ``_import.get`` directives in save frames with
+        ``_definition.class = Head`` are silently skipped.  Only the save
+        frames physically present in the file being loaded are parsed.
+        Applies to all files loaded by this instance, including constituents
+        loaded via ``mode="Full"`` recursion.  Defaults to ``False``.
     """
 
     def __init__(
@@ -263,9 +269,11 @@ class DictionaryLoader:
         resolver: SourceResolver | None = None,
         *,
         on_warning: Callable[[str], None] | None = None,
+        ignore_head_imports: bool = False,
     ) -> None:
         self._resolver = resolver
         self._on_warning = on_warning if on_warning is not None else lambda msg: None
+        self._ignore_head_imports = ignore_head_imports
         self._source_cache: dict[str, str] = {}
         self._parse_cache: dict[str, CifFile] = {}
 
@@ -354,7 +362,9 @@ class DictionaryLoader:
             sf = block[sf_name]
             frame_data = {tag: sf[tag] for tag in sf.tags if tag in _FRAME_TAGS}
 
-            if '_import.get' in frame_data:
+            frame_class = (_scalar(frame_data, '_definition.class') or '').lower()
+            is_head = frame_class == 'head'
+            if '_import.get' in frame_data and not (self._ignore_head_imports and is_head):
                 directives_val = frame_data['_import.get']
                 if directives_val and isinstance(directives_val[0], list):
                     directives = directives_val[0]

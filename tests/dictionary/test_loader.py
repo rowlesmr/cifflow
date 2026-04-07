@@ -1000,3 +1000,81 @@ class TestModeFull:
             resolver=_make_resolver({'leaf.dic': leaf, 'mid.dic': mid})
         ).load(primary)
         assert '_leaf.val' in d.tag_to_item
+
+
+# ---------------------------------------------------------------------------
+# ignore_head_imports
+# ---------------------------------------------------------------------------
+
+class TestIgnoreHeadImports:
+    def test_head_import_skipped_when_flag_set(self):
+        # Without the flag, _core.id is imported into PRIMARY.
+        # With the flag, it must not appear.
+        constituent = _item_cif('CORE', '_core.id', 'core', 'id', 'Key')
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [{'file':core.dic  'mode':Full  'save':CORE_HEAD  'dupl':Ignore}]\n",
+        )
+        resolver = _make_resolver({'core.dic': constituent})
+        d = DictionaryLoader(resolver=resolver, ignore_head_imports=True).load(primary)
+        assert '_core.id' not in d.tag_to_item
+
+    def test_head_import_present_without_flag(self):
+        # Baseline: flag off → import is processed as normal.
+        constituent = _item_cif('CORE', '_core.id', 'core', 'id', 'Key')
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [{'file':core.dic  'mode':Full  'save':CORE_HEAD  'dupl':Ignore}]\n",
+        )
+        resolver = _make_resolver({'core.dic': constituent})
+        d = DictionaryLoader(resolver=resolver, ignore_head_imports=False).load(primary)
+        assert '_core.id' in d.tag_to_item
+
+    def test_non_head_import_not_affected_by_flag(self):
+        # _import.get in a non-Head frame (mode=Contents) must still be processed.
+        template = (
+            "#\\#CIF_2.0\ndata_templ\n"
+            "save_ATTR\n"
+            "  _type.purpose     Describe\n"
+            "  _type.contents    Text\n"
+            "save_\n"
+        )
+        # Build a dictionary with a HEAD frame (no imports) and an item frame
+        # that uses _import.get mode=Contents to pull type info.
+        sf_label = 'core_id'
+        primary = (
+            _head_cif('CORE')
+            + f"\nsave_{sf_label}\n"
+            "  _definition.id    '_core.id'\n"
+            "  _name.category_id core\n"
+            "  _name.object_id   id\n"
+            "  _import.get\n"
+            "    [{'file':templ.cif  'save':ATTR  'mode':Contents  'dupl':Ignore}]\n"
+            "save_\n"
+        )
+        resolver = _make_resolver({'templ.cif': template})
+        d = DictionaryLoader(resolver=resolver, ignore_head_imports=True).load(primary)
+        # The item frame's import should still have run.
+        assert d.tag_to_item['_core.id'].type_contents == 'Text'
+
+    def test_flag_applies_to_constituent_head_frames(self):
+        # When loading a constituent dictionary recursively, its HEAD frame
+        # imports should also be skipped.
+        grandchild = _item_cif('LEAF', '_leaf.val', 'leaf', 'val', 'Describe')
+        child = _head_cif(
+            'CHILD',
+            "  _import.get\n"
+            "    [{'file':leaf.dic  'mode':Full  'save':LEAF_HEAD  'dupl':Ignore}]\n",
+        )
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [{'file':child.dic  'mode':Full  'save':CHILD_HEAD  'dupl':Ignore}]\n",
+        )
+        resolver = _make_resolver({'child.dic': child, 'leaf.dic': grandchild})
+        d = DictionaryLoader(resolver=resolver, ignore_head_imports=True).load(primary)
+        # Both the primary and child HEAD imports are skipped.
+        assert '_leaf.val' not in d.tag_to_item
+
