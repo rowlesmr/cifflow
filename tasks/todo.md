@@ -22,12 +22,17 @@
 **What comes next: Stage 4 — SQLite ingestion**
 - No prompt exists yet in `prompts/`; write and agree the prompt before implementing
 - Scope: parse a CIF data file → load into SQLite using the two-tier schema
-- Open questions for the prompt:
-  - How are multi-block CIF files handled? (`_block_id` column suggests one DB per
-    dictionary, many blocks per DB — confirm)
-  - SU handling: split measurand/SU at ingestion time using `ColumnDef.linked_item_id`
+- Decided:
+  - Multi-block CIF files: all blocks from one file → one database. Each block
+    identified by `_block_id`.
+  - SU handling: measurand value stored in its column; SU stored in the linked SU
+    column (via `ColumnDef.linked_item_id`). If SU column absent from schema, SU
+    is discarded with a semantic error.
   - All values stored as TEXT; numeric coercion deferred to `convert_database()` (Stage 5+)
   - Unmapped tags route to `_cif_fallback`; no-dictionary mode routes all tags there
+  - `_cif_fallback._row_id`: sequential integer scoped per block
+  - `_cif_fallback.value_type`: stores the `ValueType` enum string (e.g. `"string"`,
+    `"double_quoted"`, `"placeholder"`, etc.)
 
 **Open items (non-blocking):**
 - Malformed-input test gaps — listed under Stage 1 Step 6; resolve against spec when convenient
