@@ -164,12 +164,12 @@ class TestSyntheticColumns:
         col_names = [c.name for c in schema.tables['meas'].columns]
         assert '_block_id' in col_names
 
-    def test_row_id_absent_on_set_table(self):
+    def test_row_id_present_on_set_table(self):
         cats = [_cat('cfg', 'cfg', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         col_names = [c.name for c in schema.tables['cfg'].columns]
-        assert '_row_id' not in col_names
+        assert '_row_id' in col_names
 
     def test_row_id_present_on_loop_table(self):
         cats = [_cat('meas', 'meas', 'Loop')]
@@ -239,15 +239,19 @@ class TestPrimaryKeys:
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         table = schema.tables['series']
-        assert table.primary_keys == ['_block_id']
+        assert table.primary_keys == ['_pycifparse_id']
+        pycifparse_id_col = next(c for c in table.columns if c.name == '_pycifparse_id')
+        assert pycifparse_id_col.is_primary_key is True
+        assert pycifparse_id_col.is_synthetic is True
+        # _block_id is present but informational only
         block_col = next(c for c in table.columns if c.name == '_block_id')
-        assert block_col.is_primary_key is True
+        assert block_col.is_primary_key is False
 
     def test_set_without_category_key_emits_warning(self):
         cats = [_cat('series', 'series', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
-        assert any('series' in w and 'Set' in w for w in schema.warnings)
+        assert any('series' in w and 'Set' in w and '_pycifparse_id' in w for w in schema.warnings)
 
     def test_loop_with_single_key(self):
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
@@ -357,7 +361,7 @@ class TestTypeMapping:
 
 class TestColumnOrdering:
     def test_set_column_order(self):
-        # Set table: _block_id, PK cols, then alpha non-PK cols
+        # Set table: _block_id, _row_id, PK cols, then alpha non-PK cols
         cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
         items = [
             _item('_cfg.id', 'cfg', 'id', type_contents='Text'),
@@ -368,9 +372,10 @@ class TestColumnOrdering:
         schema = generate_schema(d)
         names = [c.name for c in schema.tables['cfg'].columns]
         assert names[0] == '_block_id'
-        assert names[1] == 'id'       # PK
-        assert names[2] == 'a_first'  # alpha first non-PK
-        assert names[3] == 'z_last'
+        assert names[1] == '_row_id'
+        assert names[2] == 'id'       # PK
+        assert names[3] == 'a_first'  # alpha first non-PK
+        assert names[4] == 'z_last'
 
     def test_loop_column_order(self):
         # Loop table: _block_id, _row_id, PK cols, then alpha non-PK cols
@@ -573,20 +578,31 @@ class TestEmitCreateStatements:
         stmt = emit_create_statements(schema)[0]
         assert '"_block_id"  TEXT  NOT NULL' in stmt
 
-    def test_row_id_unique_in_loop_stmt(self):
+    def test_row_id_composite_unique_in_keyed_loop_stmt(self):
+        # Keyed Loop: _row_id is not PK, so composite UNIQUE (_block_id, _row_id) added
+        cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
+        items = [_item('_meas.id', 'meas', 'id', type_contents='Text')]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        stmt = emit_create_statements(schema)[0]
+        assert 'UNIQUE ("_block_id", "_row_id")' in stmt
+
+    def test_row_id_no_extra_unique_in_keyless_loop_stmt(self):
+        # Keyless Loop: PK is (_block_id, _row_id) — no extra UNIQUE constraint
         cats = [_cat('meas', 'meas', 'Loop')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         stmt = emit_create_statements(schema)[0]
-        assert 'UNIQUE' in stmt
-        assert '"_row_id"  INTEGER  NOT NULL  UNIQUE' in stmt
+        assert 'PRIMARY KEY ("_block_id", "_row_id")' in stmt
+        assert 'UNIQUE' not in stmt
 
-    def test_row_id_absent_from_set_stmt(self):
+    def test_row_id_present_in_set_stmt(self):
         cats = [_cat('cfg', 'cfg', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         stmt = emit_create_statements(schema)[0]
-        assert '_row_id' not in stmt
+        assert '"_row_id"  INTEGER  NOT NULL' in stmt
+        assert 'UNIQUE ("_block_id", "_row_id")' in stmt
 
     def test_fk_clause_with_deferrable(self):
         cats = [
@@ -642,22 +658,22 @@ class TestEmitCreateStatements:
         assert 'config' in tables
         assert 'meas' in tables
 
-    def test_row_id_unique_via_pragma(self):
-        cats = [_cat('meas', 'meas', 'Loop')]
-        d = _make_dict(cats, [])
+    def test_block_id_row_id_composite_unique_via_pragma(self):
+        # Keyed Loop: composite UNIQUE (_block_id, _row_id) should exist
+        cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
+        items = [_item('_meas.id', 'meas', 'id', type_contents='Text')]
+        d = _make_dict(cats, items)
         schema = generate_schema(d)
         conn = _execute_schema(schema)
         indexes = list(conn.execute("PRAGMA index_list('meas')"))
-        unique_indexes = [row for row in indexes if row[2] == 1]  # col 2 is 'unique'
-        index_names = [row[1] for row in unique_indexes]
-        # Find indexes covering _row_id
+        unique_indexes = [row for row in indexes if row[2] == 1]
         found = False
-        for idx_name in index_names:
-            cols = [r[2] for r in conn.execute(f"PRAGMA index_info('{idx_name}')")]
-            if '_row_id' in cols:
+        for row in unique_indexes:
+            cols = [r[2] for r in conn.execute(f"PRAGMA index_info('{row[1]}')")]
+            if '_block_id' in cols and '_row_id' in cols:
                 found = True
                 break
-        assert found, "_row_id should have a UNIQUE index"
+        assert found, "composite UNIQUE (_block_id, _row_id) should exist on keyed Loop table"
 
     def test_fk_via_pragma(self):
         cats = [

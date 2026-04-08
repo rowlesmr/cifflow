@@ -93,13 +93,13 @@ class TestFallbackTableStructure:
         pragma = {row[1]: row for row in conn.execute('PRAGMA table_info("_cif_fallback")')}
         assert pragma['col_index'][3] == 0  # nullable
 
-    def test_primary_key_is_block_id_and_row_id(self, conn):
+    def test_primary_key_is_block_id_row_id_tag(self, conn):
         pk_cols = {
             row[1]
             for row in conn.execute('PRAGMA table_info("_cif_fallback")')
             if row[5] > 0  # pk flag
         }
-        assert pk_cols == {'_block_id', '_row_id'}
+        assert pk_cols == {'_block_id', '_row_id', 'tag'}
 
 
 # ---------------------------------------------------------------------------

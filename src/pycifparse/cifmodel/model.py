@@ -18,8 +18,10 @@ Duplicate block and save frame names are preserved in file order.
 from __future__ import annotations
 from typing import Union
 
-# A CIF value stored in the model: scalar string, or a nested container.
-CifValue = Union[str, list, dict]
+from pycifparse.cifmodel.scalar import CifScalar
+
+# A CIF value stored in the model: scalar (CifScalar), or a nested container.
+CifValue = Union[CifScalar, list, dict]
 
 
 class CifSaveFrame:

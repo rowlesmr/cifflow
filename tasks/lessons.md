@@ -361,3 +361,97 @@ on round-trip.
 - At output: `NULL` → omit tag. `'.'` → emit `.`. `'?'` → emit `?`.
   `'"."'` → emit `"."`. `'"?"'` → emit `"?"`. All other values → use `value_type`
   from `_cif_fallback` (or schema type) to decide quoting.
+
+---
+
+## Lesson 20 — `_row_id` uniqueness is per-block, not global (2026-04-08)
+
+**Context:** `emit_create_statements` in `schema.py`; Stage 4 schema design.
+
+**Mistake:** Emitted `_row_id ... UNIQUE` as an inline column constraint.
+`_row_id` resets to 1 at the start of each block, so a multi-block CIF
+produces duplicate `_row_id` values in the same table — one per block.
+`UNIQUE` on `_row_id` alone would fire on the second block's first row.
+
+**Correct rule:** Uniqueness is `(_block_id, _row_id)`. For tables where
+`(_block_id, _row_id)` is not already the `PRIMARY KEY` (i.e. keyed Loop tables
+and all Set tables), emit a table-level `UNIQUE ("_block_id", "_row_id")`
+constraint. For keyless Loop tables, `(_block_id, _row_id)` is already the PK
+so no extra constraint is needed.
+
+**How to apply:** Never use `_row_id UNIQUE`. Always use the composite form.
+
+---
+
+## Lesson 21 — Mixed loop cross-tier join requires shared `_row_id` per iteration (2026-04-08)
+
+**Context:** `_cif_fallback` table design; Stage 4 ingestion.
+
+**Problem:** A loop whose tags split between a structured table and `_cif_fallback`
+produces rows in both locations. If `_row_id` increments per cell in `_cif_fallback`,
+there is no join key linking a fallback cell to the structured row from the same
+loop iteration.
+
+**Correct rule:** `_row_id_counter` increments once per **logical row** (one loop
+iteration = one increment), not once per fallback cell. All `_cif_fallback` cells
+from the same loop iteration share the same `_row_id` as the corresponding
+structured table row. The join key is `(_block_id, _row_id)`.
+
+**Consequence:** `_cif_fallback` PK is `(_block_id, _row_id, tag)` — `tag` is
+needed because multiple cells (different tags) can share `(_block_id, _row_id)`.
+
+**How to apply:** When implementing ingestion, assign `_row_id = _row_id_counter`
+at the start of each loop iteration and use it for both the structured INSERT and
+all fallback INSERTs for that iteration. Increment the counter once after the
+iteration is complete.
+
+---
+
+## Lesson 22 — Set category `_row_id` must be reserved at first tag encounter (2026-04-08)
+
+**Context:** Stage 4 ingestion; scalar Set category accumulation strategy.
+
+**Problem:** Scalar Set tags are accumulated during block traversal and INSERTed
+at end of block. If `_row_id` is assigned at INSERT time, Set rows always get
+higher `_row_id` values than Loop rows in the same block, regardless of their
+position in the file. This breaks document order and the "scalar Set and
+single-row loop are equivalent" guarantee.
+
+**Correct rule:** When the **first scalar tag** of a Set category is encountered,
+immediately reserve the current `_row_id_counter` for that category's pending row
+and increment the counter. INSERT at end of block using the reserved value. This
+places the Set row in document order relative to any Loop rows.
+
+**How to apply:** Maintain a `set_row_reservations: dict[str, int]` (table_name →
+reserved `_row_id`) that is populated on first-tag-seen. Use these reserved values
+when performing the end-of-block INSERTs.
+
+---
+
+## Lesson 23 — Set categories can appear in loops; schema must accommodate both forms (2026-04-08)
+
+**Context:** Stage 4 ingestion; Set table handling.
+
+**Rule:** A DDLm Set category is *normally* represented by scalar tags (one logical
+row per block), but the CIF format allows any category's tags to appear in a loop_
+if the PK column is included. Both of these are valid and equivalent:
+
+```
+# scalar form
+_cell.length_a 12
+_cell.length_b 13
+
+# looped form (single iteration)
+loop_
+_cell.length_a _cell.length_b
+12 13
+```
+
+The ingestion layer must handle both. When a Set category appears in a loop, each
+iteration produces a separate row with its own `_row_id`. The scalar accumulation
+strategy (accumulate then INSERT at end of block) only applies to tags that arrive
+outside a loop.
+
+**How to apply:** Detect Set categories appearing inside a loop at ingestion time
+and treat them as Loop-style rows (assign `_row_id` per iteration, INSERT
+immediately). Do not defer these to end-of-block accumulation.

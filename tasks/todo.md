@@ -4,35 +4,32 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current position:** Stage 3D COMPLETE. Stage 4 prompt not yet written.
+**Current position:** Stage 4 prompt COMPLETE and agreed. Ready to implement.
 
 **Test suite state:**
-- 675 tests pass (non-slow): `pytest -m "not slow"`
+- 690 tests pass (non-slow): `pytest -m "not slow"`
 - ~27 additional slow tests: `pytest -m slow`
 
-**What was just completed (Stage 3D):**
-- `_cif_fallback` table design finalised (see `prompts/Stage3D_fallbakc_schema.md`)
-- `emit_fallback_create_statements()` added to `schema.py`
-- `apply_fallback_schema(conn, *, drop_existing=False)` added to `schema_apply.py`
-- Both exported from `dictionary/__init__.py`
-- 22 tests in `tests/dictionary/test_fallback_schema.py`
-- `CLAUDE.md` constraint 7 updated: no-dictionary ingestion now routes all tags to
-  `_cif_fallback`; SQLite layer description updated to reflect two-tier model
+**What was just completed (Stage 4 prompt + schema fixes):**
+- `prompts/Stage4_Ingestion_Prompt.md` — fully designed and agreed
+- Schema generator (`schema.py`) revised:
+  - `_row_id NOT NULL` added to **all** tables (Set and Loop)
+  - Keyless Set tables: synthetic `_pycifparse_id TEXT NOT NULL` column as PK (UUID assigned at ingestion); `_block_id` is informational only
+  - `_row_id UNIQUE` replaced with composite `UNIQUE (_block_id, _row_id)` on tables where `_row_id` is not already a PK column
+  - `_cif_fallback` PK changed from `(_block_id, _row_id)` to `(_block_id, _row_id, tag)`
+- Tests updated throughout: `test_schema.py`, `test_schema_apply.py`, `test_fallback_schema.py`
 
-**What comes next: Stage 4 — SQLite ingestion**
-- No prompt exists yet in `prompts/`; write and agree the prompt before implementing
-- Scope: parse a CIF data file → load into SQLite using the two-tier schema
-- Decided:
-  - Multi-block CIF files: all blocks from one file → one database. Each block
-    identified by `_block_id`.
-  - SU handling: measurand value stored in its column; SU stored in the linked SU
-    column (via `ColumnDef.linked_item_id`). If SU column absent from schema, SU
-    is discarded with a semantic error.
-  - All values stored as TEXT; numeric coercion deferred to `convert_database()` (Stage 5+)
-  - Unmapped tags route to `_cif_fallback`; no-dictionary mode routes all tags there
-  - `_cif_fallback._row_id`: sequential integer scoped per block
-  - `_cif_fallback.value_type`: stores the `ValueType` enum string (e.g. `"string"`,
-    `"double_quoted"`, `"placeholder"`, etc.)
+**Key Stage 4 design decisions (see prompt for full spec):**
+- Mixed loop cross-tier join: fallback cells share `_row_id` with their structured row (same iteration); `_row_id_counter` increments once per logical row, not per cell
+- Set table `_row_id` reserved at first scalar tag encounter (preserves document order)
+- Keyless Set `_pycifparse_id` is always a UUID; looped keyless Set emits a semantic error
+- Key-FK always propagated; non-key FK only with `propagate_fk=True`
+- Propagation source order: within-loop first, then block-scoped accumulator
+- UUID fallback for missing PK with no propagation source; stored in accumulator for later use
+
+**What comes next: Stage 4 — SQLite ingestion implementation**
+- Module: `src/pycifparse/ingestion/`
+- Tests: `tests/ingestion/test_ingest.py` (unit) + `tests/ingestion/test_integration.py` (slow)
 
 **Open items (non-blocking):**
 - Malformed-input test gaps — listed under Stage 1 Step 6; resolve against spec when convenient

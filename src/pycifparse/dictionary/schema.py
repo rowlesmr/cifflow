@@ -48,10 +48,11 @@ class ColumnDef:
     ----------
     name:
         SQL column name, equal to the DDLm ``_name.object_id``, lowercased.
-        For synthetic columns the name is ``_block_id`` or ``_row_id``.
+        For synthetic columns the name is ``_block_id``, ``_row_id``, or
+        ``_pycifparse_id``.
     definition_id:
         The current canonical ``_definition.id`` for this column's DDLm item.
-        Empty string for synthetic columns (``_block_id``, ``_row_id``).
+        Empty string for synthetic columns.
     sql_type:
         SQLite type affinity: ``"TEXT"``, ``"INTEGER"``, or ``"REAL"``.
     nullable:
@@ -60,8 +61,9 @@ class ColumnDef:
     is_primary_key:
         ``True`` if this column is part of the table's ``PRIMARY KEY``.
     is_synthetic:
-        ``True`` for the ``_block_id`` and ``_row_id`` infrastructure columns,
-        which have no corresponding DDLm item definition.
+        ``True`` for the ``_block_id``, ``_row_id``, and ``_pycifparse_id``
+        infrastructure columns, which have no corresponding DDLm item
+        definition.
     linked_item_id:
         For ``SU`` items only: the ``_definition.id`` of the associated
         measurand item, lowercased.  ``None`` for all other column types.
@@ -95,8 +97,9 @@ class TableDef:
         DDLm class of the source category: ``"Set"`` or ``"Loop"``.
     columns:
         Ordered list of column definitions.  Order follows the column-ordering
-        rule: ``_block_id``, ``_row_id`` (Loop only), primary-key domain
-        columns, remaining domain columns alphabetically.
+        rule: ``_block_id``, ``_pycifparse_id`` (keyless Set only),
+        ``_row_id``, primary-key domain columns, remaining domain columns
+        alphabetically.
     primary_keys:
         Column names forming the ``PRIMARY KEY``, in declaration order.
     foreign_keys:
@@ -127,7 +130,7 @@ class SchemaSpec:
     column_to_tag:
         Reverse mapping from ``(table_name, column_name)`` to the canonical
         ``_definition.id`` of the corresponding DDLm item.  Synthetic
-        columns (``_block_id``, ``_row_id``) are excluded.
+        columns (``_block_id``, ``_row_id``, ``_pycifparse_id``) are excluded.
     warnings:
         Non-fatal issues encountered during schema generation, in emission
         order.
@@ -142,7 +145,7 @@ class SchemaSpec:
 # Private helpers
 # ---------------------------------------------------------------------------
 
-_SYNTHETIC_NAMES: frozenset[str] = frozenset({'_block_id', '_row_id'})
+_SYNTHETIC_NAMES: frozenset[str] = frozenset({'_block_id', '_row_id', '_pycifparse_id'})
 
 
 def _sql_type(type_contents: str | None) -> str:
@@ -249,9 +252,9 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             if cat_class == 'Set':
                 warnings.append(
                     f"category {cat_id!r} (Set) has no _category_key.name — "
-                    f"using _block_id as primary key"
+                    f"using _pycifparse_id as primary key"
                 )
-                primary_keys = ['_block_id']
+                primary_keys = ['_pycifparse_id']
             else:  # Loop
                 warnings.append(
                     f"category {cat_id!r} (Loop) has no _category_key.name — "
@@ -264,7 +267,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         # --- Build columns in specified order ---
         columns: list[ColumnDef] = []
 
-        # 1. _block_id (always first)
+        # 1. _block_id (always first; informational only for keyed tables)
         block_id_is_pk = '_block_id' in primary_keys
         columns.append(ColumnDef(
             name='_block_id',
@@ -276,20 +279,31 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             linked_item_id=None,
         ))
 
-        # 2. _row_id (Loop tables only)
-        if cat_class == 'Loop':
-            row_id_is_pk = '_row_id' in primary_keys
+        # 2. _pycifparse_id (keyless Set tables only)
+        if use_fallback_pk and cat_class == 'Set':
             columns.append(ColumnDef(
-                name='_row_id',
+                name='_pycifparse_id',
                 definition_id='',
-                sql_type='INTEGER',
+                sql_type='TEXT',
                 nullable=False,
-                is_primary_key=row_id_is_pk,
+                is_primary_key=True,
                 is_synthetic=True,
                 linked_item_id=None,
             ))
 
-        # 3. Non-synthetic primary-key columns (in category_keys order)
+        # 3. _row_id (all Set and Loop tables)
+        row_id_is_pk = '_row_id' in primary_keys
+        columns.append(ColumnDef(
+            name='_row_id',
+            definition_id='',
+            sql_type='INTEGER',
+            nullable=False,
+            is_primary_key=row_id_is_pk,
+            is_synthetic=True,
+            linked_item_id=None,
+        ))
+
+        # 4. Non-synthetic primary-key columns (in category_keys order)
         for obj_id in non_synthetic_pks:
             item = domain_items.get(obj_id)
             if item is None:
@@ -321,7 +335,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 column_to_tag[(tbl_name, obj_id)] = item.definition_id
             columns.append(col)
 
-        # 4. Remaining domain columns (alphabetically, excluding PKs)
+        # 5. Remaining domain columns (alphabetically, excluding PKs)
         pk_set = set(non_synthetic_pks)
         for obj_id, item in sorted(domain_items.items()):
             if obj_id in pk_set:
@@ -429,7 +443,7 @@ def emit_fallback_create_statements() -> list[str]:
         f"    {_qi('value_type')}  TEXT     NOT NULL,\n"
         f"    {_qi('loop_id')}     INTEGER,\n"
         f"    {_qi('col_index')}   INTEGER,\n"
-        f"    PRIMARY KEY ({_qi('_block_id')}, {_qi('_row_id')})\n"
+        f"    PRIMARY KEY ({_qi('_block_id')}, {_qi('_row_id')}, {_qi('tag')})\n"
         f")"
     )
     index = (
@@ -468,16 +482,22 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
     for table in schema.tables.values():
         parts: list[str] = []
 
+        row_id_col = next((c for c in table.columns if c.name == '_row_id'), None)
         for col in table.columns:
             line = f"    {_qi(col.name)}  {col.sql_type}"
             if not col.nullable:
                 line += "  NOT NULL"
-            if col.is_synthetic and col.name == '_row_id':
-                line += "  UNIQUE"
             parts.append(line)
 
         pk_clause = ', '.join(_qi(k) for k in table.primary_keys)
         parts.append(f"    PRIMARY KEY ({pk_clause})")
+
+        # Composite UNIQUE on (_block_id, _row_id) when _row_id is not already
+        # part of the PRIMARY KEY — enforces per-block row uniqueness.
+        if row_id_col is not None and not row_id_col.is_primary_key:
+            parts.append(
+                f"    UNIQUE ({_qi('_block_id')}, {_qi('_row_id')})"
+            )
 
         for fk in table.foreign_keys:
             parts.append(

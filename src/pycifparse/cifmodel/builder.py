@@ -24,6 +24,7 @@ from typing import Callable, Literal, Union
 
 from pycifparse.types import ParseError, ValueType
 from pycifparse.cifmodel.model import CifBlock, CifFile, CifSaveFrame, CifValue
+from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.cifmodel.textfield import transform_multiline
 from pycifparse.parser.parser import CifParser
 
@@ -182,7 +183,7 @@ class CifBuilder:
             return
         if value_type == ValueType.MULTILINE_STRING:
             value = transform_multiline(value)
-        self._dispatch_value(value)
+        self._dispatch_value(CifScalar(value, value_type))
 
     def on_list_start(self) -> None:
         if self._stopped:
@@ -248,7 +249,7 @@ class CifBuilder:
             # Pad mode: fill incomplete final row with '?'
             for _ in range(missing):
                 tag = self._loop_tags[self._loop_value_index % n]
-                self._loop_buffers[tag].append('?')
+                self._loop_buffers[tag].append(CifScalar('?', ValueType.PLACEHOLDER))
                 self._loop_value_index += 1
 
         if ns is not None:
