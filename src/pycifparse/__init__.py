@@ -1,5 +1,6 @@
 from pycifparse.cifmodel.model import CifFile, CifBlock, CifSaveFrame
 from pycifparse.cifmodel.builder import build, CifBuilder
+from pycifparse.ingestion import ingest
 from pycifparse.dictionary import (
     DdlmItem,
     DdlmDictionary,
@@ -22,6 +23,8 @@ from pycifparse.dictionary import (
 __all__ = [
     # CIF model
     'CifFile', 'CifBlock', 'CifSaveFrame', 'CifBuilder', 'build',
+    # Ingestion
+    'ingest',
     # Dictionary
     'DdlmItem', 'DdlmDictionary',
     'DictionaryLoader', 'SourceResolver', 'directory_resolver',

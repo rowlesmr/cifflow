@@ -364,20 +364,25 @@ on round-trip.
 
 ---
 
-## Lesson 20 — `_row_id` uniqueness is per-block, not global (2026-04-08)
+## Lesson 20 — `_row_id` uniqueness requires a composite constraint (2026-04-08)
 
 **Context:** `emit_create_statements` in `schema.py`; Stage 4 schema design.
 
 **Mistake:** Emitted `_row_id ... UNIQUE` as an inline column constraint.
-`_row_id` resets to 1 at the start of each block, so a multi-block CIF
-produces duplicate `_row_id` values in the same table — one per block.
-`UNIQUE` on `_row_id` alone would fire on the second block's first row.
+At the time this was written, `_row_id` was assumed to reset to 1 at the start
+of each block, so a multi-block CIF would produce duplicate `_row_id` values in
+the same table. `UNIQUE` on `_row_id` alone would fire on the second block's
+first row.
 
-**Correct rule:** Uniqueness is `(_block_id, _row_id)`. For tables where
-`(_block_id, _row_id)` is not already the `PRIMARY KEY` (i.e. keyed Loop tables
-and all Set tables), emit a table-level `UNIQUE ("_block_id", "_row_id")`
-constraint. For keyless Loop tables, `(_block_id, _row_id)` is already the PK
-so no extra constraint is needed.
+**Later clarification (Stage 4):** `_row_id` is in fact global — it never
+resets between blocks. A composite `UNIQUE (_block_id, _row_id)` constraint
+is therefore stronger than strictly necessary, but it remains correct and is
+the prescribed form regardless.
+
+**Correct rule:** For tables where `(_block_id, _row_id)` is not already the
+`PRIMARY KEY` (i.e. keyed Loop tables and all Set tables), emit a table-level
+`UNIQUE ("_block_id", "_row_id")` constraint. For keyless Loop tables,
+`(_block_id, _row_id)` is already the PK so no extra constraint is needed.
 
 **How to apply:** Never use `_row_id UNIQUE`. Always use the composite form.
 
@@ -392,18 +397,24 @@ produces rows in both locations. If `_row_id` increments per cell in `_cif_fallb
 there is no join key linking a fallback cell to the structured row from the same
 loop iteration.
 
-**Correct rule:** `_row_id_counter` increments once per **logical row** (one loop
-iteration = one increment), not once per fallback cell. All `_cif_fallback` cells
-from the same loop iteration share the same `_row_id` as the corresponding
-structured table row. The join key is `(_block_id, _row_id)`.
+**Correct rule:** `_row_id` is scoped per table globally across the entire
+`ingest()` call — it never resets between blocks. For a mixed loop, all
+`_cif_fallback` cells from a given iteration share the same `_row_id` as the
+corresponding structured table row — both draw from the structured table's counter.
+The join key is `(_block_id, _row_id)` within that table + `_cif_fallback`.
+
+For pure-fallback loops, `_cif_fallback` uses its own global counter,
+incrementing once per iteration (not per cell).
 
 **Consequence:** `_cif_fallback` PK is `(_block_id, _row_id, tag)` — `tag` is
-needed because multiple cells (different tags) can share `(_block_id, _row_id)`.
+needed because multiple cells (different tags) share `(_block_id, _row_id)` within
+the same loop iteration.
 
-**How to apply:** When implementing ingestion, assign `_row_id = _row_id_counter`
-at the start of each loop iteration and use it for both the structured INSERT and
-all fallback INSERTs for that iteration. Increment the counter once after the
-iteration is complete.
+**How to apply:** Maintain `_row_id_counters: dict[str, int]` (table name →
+counter). For mixed loops, draw from the structured table's counter for both the
+structured row and all fallback INSERTs for that iteration. For pure-fallback
+loops, draw from `_cif_fallback`'s counter. `_row_id_counters` is initialised
+once per `ingest()` call and never resets between blocks.
 
 ---
 
@@ -422,9 +433,10 @@ immediately reserve the current `_row_id_counter` for that category's pending ro
 and increment the counter. INSERT at end of block using the reserved value. This
 places the Set row in document order relative to any Loop rows.
 
-**How to apply:** Maintain a `set_row_reservations: dict[str, int]` (table_name →
-reserved `_row_id`) that is populated on first-tag-seen. Use these reserved values
-when performing the end-of-block INSERTs.
+**How to apply:** Maintain `set_row_reservations: dict[str, int]` (table_name →
+reserved `_row_id`) populated on first-tag-seen, drawing from that table's entry
+in `_row_id_counters`. Use the reserved values when performing the end-of-block
+INSERTs.
 
 ---
 
@@ -453,5 +465,97 @@ strategy (accumulate then INSERT at end of block) only applies to tags that arri
 outside a loop.
 
 **How to apply:** Detect Set categories appearing inside a loop at ingestion time
-and treat them as Loop-style rows (assign `_row_id` per iteration, INSERT
-immediately). Do not defer these to end-of-block accumulation.
+and treat them as Loop-style rows (assign `_row_id` per iteration, pass through
+merge algorithm). Do not defer these to end-of-block accumulation.
+
+---
+
+## Lesson 24 — A single logical entity may be spread across multiple CIF blocks (2026-04-08)
+
+**Context:** Stage 4 ingestion; multi-block CIF files.
+
+**Rule:** CIF allows a single dataset to be spread across multiple data blocks.
+Tags from the same category with the same PK value across different blocks
+describe the same logical row. The ingestion layer always merges such rows.
+
+**Merge rules:**
+- Rows with the same PK value (across any blocks) are merged into one row.
+- First-seen block provides `_block_id` and `_row_id` for the merged row.
+- First non-NULL value for each column wins; conflicts (two different non-NULL
+  values for the same column) emit a semantic error and keep the first value.
+- `_cif_fallback` rows are not merged; they remain block-local.
+
+**`_row_id` implication:** `_row_id_counters` must not reset between blocks.
+`_row_id` is effectively per-table globally across the whole `ingest()` call.
+The counter increments once per new unique PK seen (across all blocks).
+
+**Implementation:** Accumulate all structured rows in a `merged_rows` dict
+(table → PK tuple → column dict) throughout the entire `ingest()` call. Perform
+all SQL INSERTs after all blocks have been processed.
+
+---
+
+## Lesson 25 — `_audit_dataset.id` introduces a namespace; absence says nothing (2026-04-07)
+
+**Context:** Stage 4 ingestion; multi-block CIF files with dataset IDs.
+
+**Rule:** The presence of `_audit_dataset.id` in a block asserts that the block
+belongs to a named dataset. The *absence* of `_audit_dataset.id` says nothing — it
+does not mean the block is unrelated to other blocks.
+
+**Two block classes:**
+- **Dataset blocks** — carry one or more `_audit_dataset.id` values. Their PKs are
+  unambiguous within the dataset because the dataset ID provides the namespace.
+- **General blocks** — carry no `_audit_dataset.id`. May use UUIDs for uniqueness
+  (high confidence) or short identifiers (assumed coherence, warn the user).
+
+**`_audit_dataset.id` is a loop category** — a block may carry multiple dataset ID
+values via a `loop_`. The set of values for each block is read from the IR before
+any rows are written.
+
+**Pre-ingestion check (fatal):** Before any database writes, `ingest()` computes
+the intersection of dataset ID sets across all dataset blocks. If the intersection
+is empty and at least one dataset block exists, a `ValueError` is raised and
+nothing is written. General blocks (no `_audit_dataset.id`) are always included.
+
+**`dataset_id` parameter:** Bypasses the intersection check. Only blocks whose
+dataset ID set contains `dataset_id` are ingested (plus all general blocks).
+Allows extracting one coherent dataset from a multi-dataset CIF file.
+
+**Merge algorithm is unconditional.** The pre-ingestion check guarantees coherence;
+there are no blocked merges. Same PK → always merge.
+
+**`id_regime`** — recorded per ingested block in `_block_dataset_membership`:
+- `'dataset'` — block carries `_audit_dataset.id`
+- `'uuid'` — no dataset ID; all PK values pass UUID format check
+- `'assumed'` — no dataset ID; PK values are not all UUIDs, **or** no structured-table rows exist (cannot determine UUID usage)
+
+**Post-ingestion validation checks** (written to `_validation_result`):
+- `uuid_regime` (Warning) — general block with non-UUID structured-table PKs.
+- `uuid_reference_check` (Info) — general-block UUID PK not referenced by any
+  dataset block as a FK value.
+
+**Both tables** (`_block_dataset_membership`, `_validation_result`) are created by
+`apply_fallback_schema()`, not `apply_schema()`.
+
+---
+
+## Lesson 26 — Single-iteration loops feed `fk_accumulator` (2026-04-09)
+
+**Context:** Stage 4 ingestion; FK propagation source 2.
+
+**Rule:** After any loop completes, if it produced exactly one iteration, write
+every column value from that iteration into `fk_accumulator`. This makes the
+values available for FK propagation in subsequent loops within the same block,
+equivalent to a scalar. Multi-iteration loops do not feed `fk_accumulator`.
+
+**Why:** A single-iteration loop is semantically equivalent to a set of scalar
+tags. Parent-category IDs occasionally appear in a one-row loop rather than as
+bare scalars; without this rule their values would be invisible to FK propagation
+in later loops, forcing unnecessary UUID fallbacks.
+
+**How to apply:** After processing each loop, check the iteration count. If
+exactly 1, iterate over all column values produced (across all tables for
+multi-category loops) and write them into `fk_accumulator` keyed by
+`definition_id`. Do not write partial iterations — only after the loop is
+confirmed to have had exactly one iteration.

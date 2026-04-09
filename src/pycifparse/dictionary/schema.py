@@ -434,7 +434,7 @@ def emit_fallback_create_statements() -> list[str]:
     list[str]
         Two SQL strings: the table DDL followed by the index DDL.
     """
-    table = (
+    fallback = (
         f"CREATE TABLE IF NOT EXISTS {_qi('_cif_fallback')} (\n"
         f"    {_qi('_block_id')}   TEXT     NOT NULL,\n"
         f"    {_qi('_row_id')}     INTEGER  NOT NULL,\n"
@@ -450,7 +450,24 @@ def emit_fallback_create_statements() -> list[str]:
         f"CREATE INDEX IF NOT EXISTS {_qi('idx_cif_fallback_tag_block')} "
         f"ON {_qi('_cif_fallback')} ({_qi('tag')}, {_qi('_block_id')})"
     )
-    return [table, index]
+    membership = (
+        f"CREATE TABLE IF NOT EXISTS {_qi('_block_dataset_membership')} (\n"
+        f"    {_qi('_block_id')}            TEXT  NOT NULL,\n"
+        f"    {_qi('_audit_dataset_id')}    TEXT  NOT NULL,\n"
+        f"    {_qi('id_regime')}            TEXT  NOT NULL,\n"
+        f"    PRIMARY KEY ({_qi('_block_id')}, {_qi('_audit_dataset_id')})\n"
+        f")"
+    )
+    validation = (
+        f"CREATE TABLE IF NOT EXISTS {_qi('_validation_result')} (\n"
+        f"    {_qi('check_name')}  TEXT  NOT NULL,\n"
+        f"    {_qi('severity')}    TEXT  NOT NULL,\n"
+        f"    {_qi('block_id')}    TEXT,\n"
+        f"    {_qi('detail')}      TEXT,\n"
+        f"    {_qi('id_regime')}   TEXT\n"
+        f")"
+    )
+    return [fallback, index, membership, validation]
 
 
 def emit_create_statements(schema: SchemaSpec) -> list[str]:
