@@ -179,8 +179,9 @@ def compactify_database(
             for col in table.columns:
                 if col.name not in col_set:
                     continue
+                sql_type = 'INTEGER' if col.name == '_row_id' else 'TEXT'
                 null_clause = '' if col.nullable else ' NOT NULL'
-                col_defs.append(f'    "{col.name}"  TEXT{null_clause}')
+                col_defs.append(f'    "{col.name}"  {sql_type}{null_clause}')
 
             # Primary key
             pk_cols = [c for c in table.primary_keys if c in col_set]
