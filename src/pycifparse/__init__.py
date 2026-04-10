@@ -1,3 +1,4 @@
+from pycifparse.database import compactify_database
 from pycifparse.cifmodel.model import CifFile, CifBlock, CifSaveFrame
 from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.cifmodel.builder import build, CifBuilder
@@ -28,6 +29,8 @@ __all__ = [
     'CifFile', 'CifBlock', 'CifSaveFrame', 'CifScalar', 'CifBuilder', 'build',
     # Ingestion
     'ingest',
+    # Database
+    'compactify_database',
     # Dictionary
     'DdlmItem', 'DdlmDictionary',
     'DictionaryLoader', 'SourceResolver', 'directory_resolver',

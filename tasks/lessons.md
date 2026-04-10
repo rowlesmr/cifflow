@@ -724,23 +724,26 @@ before the flush that writes its output table.
 
 ---
 
-## Lesson 35 — FK constraints in SQLite fire at COMMIT (DEFERRED); UUID key-FK tests must avoid FK violations (2026-04-10)
+## Lesson 35 — `_apply_fk` must create stub parent rows for all FK values, not just UUID-generated ones (2026-04-10)
 
-**Context:** `test_ingest.py` FK propagation tests.
+**Context:** `ingest.py` FK constraint satisfaction; `one_structure.cif` + `cif_core.dic` integration test.
 
-**Problem:** Tests that insert a row with a key-FK column (e.g. `cell.structure_id`) where
-the referenced row in `structure` does not exist will fail at COMMIT with
-`IntegrityError: FOREIGN KEY constraint failed`. The schema uses `DEFERRABLE INITIALLY
-DEFERRED`, so the check fires at COMMIT, not at INSERT. This makes the failure easy to miss
-during test authoring.
+**Problem (original):** When `_apply_fk` generated a UUID for a missing key-FK column, it
+populated the child row but never created the corresponding parent row. SQLite's
+`DEFERRABLE INITIALLY DEFERRED` FK constraint then fired at COMMIT with
+`IntegrityError: FOREIGN KEY constraint failed`.
 
-**Rule:** Any integration-level test that exercises key-FK UUID fallback generation
-(where a UUID is assigned to a FK column with no matching target row) cannot use a
-connection with FK enforcement enabled and expect a successful COMMIT. Two options:
-1. Also insert the referenced row — but this is impossible when the UUID is unknown in advance.
-2. Test the UUID generation at unit level via `_apply_fk(row, table, ...)` directly,
-   without involving a DB connection.
+**Problem (broader):** The same constraint violation occurs for non-key FK columns that carry
+an explicit value from CIF data (e.g. `atom_site.type_symbol = 'Se'` referencing `atom_type.symbol`)
+when the parent table has no row for that value. The original fix only covered the UUID-generation
+path; non-key FK columns with real data values were never checked.
 
-**How to apply:** For UUID key-FK generation tests, call `_apply_fk` directly and verify
-the row dict is updated and the error is emitted. Reserve DB-connection tests for cases
-where all FK targets are guaranteed to be present.
+**Fix:** In `_apply_fk`, after the value-assignment block, add an unconditional stub-creation
+step: for any FK column that ends up with a non-NULL value (explicit, propagated, or UUID-generated),
+call `_merge_into` on the parent table with a stub row containing only `_block_id` and the
+FK target column set to that value. `_merge_into` is idempotent — if the parent row already
+exists from real data, the stub is merged without overwriting any non-NULL values.
+
+**How to apply:** Always pass `block_id`, `merged_rows`, and `row_id_counters` to `_apply_fk`
+during schema-aware ingestion. These default to `None` (stub creation skipped) so unit tests
+that call `_apply_fk` directly without a DB connection are unaffected.

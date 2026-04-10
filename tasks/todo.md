@@ -4,34 +4,33 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 4 (SQLite ingestion) — COMPLETE. Ready for Stage 5.
+**Current stage:** Stage 4 (SQLite ingestion) + `compactify_database` — COMPLETE. Ready for Stage 5.
 
 **Test suite state (2026-04-10):**
-- 796 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
-- 38 slow tests pass: `.venv/Scripts/pytest -m slow`  (includes 11 new integration tests)
+- 798 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
+- 12 slow tests pass: `.venv/Scripts/pytest -m slow`
+- 18 database tests pass: `.venv/Scripts/pytest tests/database/ -q`
 
 **What was just completed:**
-- `tests/ingestion/test_integration.py` — 11 `@pytest.mark.slow` tests:
-  - Schema ingest: `single_one.cif` against `cif_core.dic`; spot-checks `cell.length_a='3.992'`,
-    `atom_site.label='Se1'`; confirms structured tags absent from `_cif_fallback`
-  - No-schema ingest: all tags in `_cif_fallback`; only fallback-tier tables created
-  - Multi-block ingest: `multi_one.cif`; ≥2 distinct `_block_id` values confirmed
-  - `_block_id` preservation verified against `'Selenium_0'`
-- FK enforcement disabled in integration tests (`enforce_fk=False`) — workaround for the
-  known key-FK UUID fallback gap (parent row never created; see open decisions below)
-- Merge-conflict warnings from real CIF cross-block data are expected; tests assert
-  `isinstance(errors, list)` rather than `errors == []`
+- `compactify_database(src, dst, schema)` implemented in `src/pycifparse/database/compact.py`:
+  - Drops zero-row tables and all-NULL columns from src when copying to dst.
+  - FK constraints omitted when target table is dropped.
+  - Fallback-tier tables always copied with full schema.
+  - Tables created in topological dependency order so FK enforcement works in dst.
+  - 18 unit tests in `tests/database/test_compact.py`.
+- `example_workflow.py` updated: Step 7 demonstrates `compactify_database`.
+- `prompts/API Reference.md` updated: `compactify_database` fully documented.
+
+**What was completed before:**
+- Fixed FK constraint gap in `_apply_fk` (Lesson 35): stub parent rows created for any non-NULL
+  FK value; `PRAGMA foreign_keys = OFF` workaround removed.
+- Integration tests use `one_structure.cif`; two tests verify stub creation explicitly.
 
 **What comes next (Stage 5):**
 - Consult `prompts/` for the Stage 5 specification before starting
-- Key open items to address in Stage 5+: uuid_reference_check stub, key-FK UUID parent-row gap
 
 **Open decisions / known limitations:**
 - `uuid_reference_check` is a stub — no rows written in Stage 4. Implement in a later stage.
-- Key-FK UUID fallback: generates a UUID and emits an error, but the referenced table row is
-  NOT created. If FK enforcement is on, COMMIT will fail if the referenced table has no matching
-  row. This is an unresolved gap — for now it only arises when a key-FK has truly no source, which
-  is unusual in well-formed CIF. Document and address in Stage 5+.
 - Looped keyless Set: error is supposed to be emitted and UUID assigned per row, but this path is
   not explicitly tested. Covered implicitly by the `_pycifparse_id` test but no error-emission test.
 - `_process_scalar` for the no-schema path uses `_row_id=1` for all scalars. In a block with

@@ -884,6 +884,49 @@ class TestFKPropagation:
         assert row['structure_id'] == 'EXPLICIT'
         assert not errors
 
+    def test_key_fk_absent_creates_stub_in_parent(self):
+        """UUID generated for key-FK also creates a stub row in the parent table."""
+        schema = _schema_a()
+        table = schema.tables['cell']
+        row = {'_block_id': 'B', 'length_a': '5.4'}
+        errors = []
+        fk_acc = {}
+        merged_rows: dict = {}
+        row_id_counters: dict = {}
+        _apply_fk(row, table, schema, None, fk_acc,
+                  propagate_fk=False, emit=errors.append,
+                  block_id='B', merged_rows=merged_rows,
+                  row_id_counters=row_id_counters)
+        sid = row.get('structure_id')
+        assert sid is not None
+        # stub row must exist in the parent (structure) table
+        assert 'structure' in merged_rows
+        stub_rows = list(merged_rows['structure'].values())
+        assert len(stub_rows) == 1
+        assert stub_rows[0]['id'] == sid
+        assert stub_rows[0]['_block_id'] == 'B'
+
+    def test_key_fk_absent_stub_does_not_overwrite_real_parent(self):
+        """If the parent table already has a real row, the stub is merged in without
+        overwriting existing non-NULL values."""
+        schema = _schema_a()
+        table = schema.tables['cell']
+        errors = []
+        fk_acc = {}
+        # Pre-populate a real structure row with id='S1'
+        real_structure_row = {'_block_id': 'B', 'id': 'S1', '_row_id': 1}
+        merged_rows: dict = {'structure': {('S1',): real_structure_row}}
+        row_id_counters: dict = {'structure': 2}
+        # Now ingest a cell row that already knows structure_id='S1'
+        row = {'_block_id': 'B', 'structure_id': 'S1', 'length_a': '5.4'}
+        _apply_fk(row, table, schema, None, fk_acc,
+                  propagate_fk=False, emit=errors.append,
+                  block_id='B', merged_rows=merged_rows,
+                  row_id_counters=row_id_counters)
+        # No UUID generated; only one structure row
+        assert not errors
+        assert len(merged_rows['structure']) == 1
+
 
 # ===========================================================================
 # TestSetTable
