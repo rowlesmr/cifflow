@@ -625,8 +625,21 @@ def debug_schema(
         if table.foreign_keys:
             print(f'  {_c("foreign keys", _DIM, file=file)}', file=file)
             for fk in table.foreign_keys:
-                src = _c(fk.source_column, _YELLOW, file=file)
-                tgt = _c(f'{fk.target_table}.{fk.target_column}', _CYAN, file=file)
+                if len(fk.source_columns) == 1:
+                    src = _c(fk.source_columns[0], _YELLOW, file=file)
+                    tgt = _c(
+                        f'{fk.target_table}.{fk.target_columns[0]}',
+                        _CYAN, file=file,
+                    )
+                else:
+                    src = _c(
+                        '(' + ', '.join(fk.source_columns) + ')',
+                        _YELLOW, file=file,
+                    )
+                    tgt = _c(
+                        f'{fk.target_table}.(' + ', '.join(fk.target_columns) + ')',
+                        _CYAN, file=file,
+                    )
                 print(f'    {src} -> {tgt}  DEFERRABLE', file=file)
 
         # Optional DDL
@@ -714,13 +727,18 @@ def debug_ingest(
                 f'PRAGMA foreign_key_list("{tbl_name}")'
             ).fetchall()
             # Each row: (id, seq, table, from, to, on_update, on_delete, match)
-            fk_by_id: dict[int, tuple[str, str, str]] = {}
+            # PRAGMA foreign_key_list returns one row per FK column:
+            # (id, seq, table, from, to, ...).  Group by fk_id to handle
+            # composite FKs (multiple rows with the same id).
+            fk_by_id: dict[int, tuple[str, list[str], list[str]]] = {}
             for fk_row in fk_list_rows:
                 fk_id, _seq, parent_tbl, from_col, to_col = (
                     fk_row[0], fk_row[1], fk_row[2], fk_row[3], fk_row[4]
                 )
                 if fk_id not in fk_by_id:
-                    fk_by_id[fk_id] = (parent_tbl, from_col, to_col)
+                    fk_by_id[fk_id] = (parent_tbl, [], [])
+                fk_by_id[fk_id][1].append(from_col)
+                fk_by_id[fk_id][2].append(to_col)
 
             for prow in pragma_rows:
                 # prow: (table, rowid, parent, fkid)
@@ -732,25 +750,41 @@ def debug_ingest(
                     violations_found = True
                     continue
 
-                _, from_col, to_col = info
+                _, from_cols, to_cols = info
                 try:
+                    col_list = ', '.join(f'"{c}"' for c in from_cols)
                     val_row = ingestor.conn.execute(
-                        f'SELECT "{from_col}" FROM "{child_tbl}" WHERE rowid = ?',
+                        f'SELECT {col_list} FROM "{child_tbl}" WHERE rowid = ?',
                         (rowid,),
                     ).fetchone()
-                    val = val_row[0] if val_row else '<unknown>'
+                    if val_row:
+                        vals = (
+                            val_row[0] if len(from_cols) == 1
+                            else dict(zip(from_cols, val_row))
+                        )
+                    else:
+                        vals = '<unknown>'
                 except sqlite3.Error:
-                    val = '<unknown>'
+                    vals = '<unknown>'
 
                 if not violations_found:
                     _p('FK violations found before COMMIT:', file)
                     violations_found = True
 
-                _p(
-                    f"  '{child_tbl}'.'{from_col}' = {val!r}"
-                    f"  ->  '{parent_tbl_name}'.'{to_col}'  (no matching parent row)",
-                    file,
-                )
+                if len(from_cols) == 1:
+                    _p(
+                        f"  '{child_tbl}'.'{from_cols[0]}' = {vals!r}"
+                        f"  ->  '{parent_tbl_name}'.'{to_cols[0]}'"
+                        f"  (no matching parent row)",
+                        file,
+                    )
+                else:
+                    _p(
+                        f"  '{child_tbl}'.{from_cols} = {vals}"
+                        f"  ->  '{parent_tbl_name}'.{to_cols}"
+                        f"  (no matching parent row)",
+                        file,
+                    )
 
         if not violations_found:
             _p('No FK violations detected.', file)

@@ -2,6 +2,7 @@
 SQLite schema generation from a loaded DDLm dictionary.
 """
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 from pycifparse.dictionary.ddlm_item import DdlmItem
@@ -13,9 +14,44 @@ from pycifparse.dictionary.ddlm_parser import DdlmDictionary
 # ---------------------------------------------------------------------------
 
 @dataclass
+class BridgeColumnDef:
+    """
+    A column whose value is derived transitively through another table.
+
+    When populating ``table_name``, the column ``column_name`` has no direct
+    CIF source.  Its value must be fetched from
+    ``bridge_table.bridge_value_column`` by looking up the row where
+    ``bridge_table.bridge_pk_column = row[via_column]``.
+
+    Attributes
+    ----------
+    table_name:
+        Table that gains the derived column (e.g. ``'geom_angle'``).
+    column_name:
+        Name of the derived column (e.g. ``'structure_id'``).
+    via_column:
+        Column in *table_name* used as the lookup key (e.g. ``'model_id'``).
+    bridge_table:
+        Intermediate table to query (e.g. ``'model'``).
+    bridge_pk_column:
+        PK column of *bridge_table* matched against *via_column*
+        (e.g. ``'id'``).
+    bridge_value_column:
+        Column in *bridge_table* whose value is copied (e.g. ``'structure_id'``).
+    """
+
+    table_name: str
+    column_name: str
+    via_column: str
+    bridge_table: str
+    bridge_pk_column: str
+    bridge_value_column: str
+
+
+@dataclass
 class ForeignKeyDef:
     """
-    A single ``FOREIGN KEY`` constraint between two tables.
+    A ``FOREIGN KEY`` constraint between two tables (single- or multi-column).
 
     Always emitted with ``DEFERRABLE INITIALLY DEFERRED`` to handle cyclic
     category graphs correctly within a transaction.
@@ -23,19 +59,20 @@ class ForeignKeyDef:
     Attributes
     ----------
     source_table:
-        Name of the table that holds the foreign key column.
-    source_column:
-        Name of the foreign key column in *source_table*.
+        Name of the table that holds the foreign key column(s).
+    source_columns:
+        Ordered list of foreign key column names in *source_table*.
     target_table:
         Name of the table being referenced.
-    target_column:
-        Name of the column being referenced in *target_table*.
+    target_columns:
+        Ordered list of column names being referenced in *target_table*,
+        corresponding positionally to *source_columns*.
     """
 
     source_table: str
-    source_column: str
+    source_columns: list[str]
     target_table: str
-    target_column: str
+    target_columns: list[str]
 
 
 @dataclass
@@ -152,6 +189,7 @@ class SchemaSpec:
     alias_to_definition_id: dict[str, str] = field(default_factory=dict)
     deprecated_ids: set[str] = field(default_factory=set)
     warnings: list[str] = field(default_factory=list)
+    bridge_columns: list[BridgeColumnDef] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +217,81 @@ def _ddl_type(col: ColumnDef) -> str:
     of ``type_contents`` (Lesson 27).
     """
     return 'INTEGER' if col.name == '_row_id' else 'TEXT'
+
+
+# ---------------------------------------------------------------------------
+# Private helpers (continued)
+# ---------------------------------------------------------------------------
+
+def _find_transitive_bridge(
+    src_tbl: str,
+    tgt_tbl: str,
+    missing_pk_col: str,
+    tables: dict,
+    dictionary: 'DdlmDictionary',
+    link_groups: dict,
+) -> 'tuple[str, str, str, str] | None':
+    """Return ``(src_bridge_col, bridge_tbl, bridge_pk_col, bridge_val_col)`` or None.
+
+    Searches for an intermediate table *bridge_tbl* such that:
+
+    - *src_tbl* has a clean single-column Link to the sole PK of *bridge_tbl*
+      via column *src_bridge_col*.
+    - *bridge_tbl* has a column *bridge_val_col* whose ``linked_item_id``
+      equals that of *tgt_tbl*.*missing_pk_col* — meaning both columns draw
+      their values from the same parent item (e.g. both link to
+      ``_structure.id``).
+
+    When such a bridge exists, the value of *missing_pk_col* in a *src_tbl*
+    row can be derived by looking up
+    ``bridge_tbl[bridge_pk_col = row[src_bridge_col]].bridge_val_col``.
+    """
+    # Find the anchor: what definition_id does tgt_tbl.missing_pk_col link to?
+    tgt_col_def = next(
+        (c for c in tables[tgt_tbl].columns if c.name == missing_pk_col), None
+    )
+    if tgt_col_def is None or not tgt_col_def.definition_id:
+        return None
+    tgt_item = dictionary.tag_to_item.get(tgt_col_def.definition_id)
+    if tgt_item is None or tgt_item.linked_item_id is None:
+        return None
+    anchor = tgt_item.linked_item_id  # e.g. '_structure.id'
+
+    # Scan all Link groups from src_tbl for a viable bridge table
+    for (s, bridge_tbl), b_pairs in sorted(link_groups.items()):
+        if s != src_tbl or bridge_tbl == tgt_tbl or bridge_tbl not in tables:
+            continue
+
+        # Bridge table must have exactly one non-synthetic PK column
+        bridge_ns_pks = [
+            pk for pk in tables[bridge_tbl].primary_keys
+            if pk not in _SYNTHETIC_NAMES
+        ]
+        if len(bridge_ns_pks) != 1:
+            continue
+        bridge_pk_col = bridge_ns_pks[0]
+
+        # The link group must cleanly map one src column → bridge_pk_col (1:1)
+        b_tgt_to_srcs: dict[str, list[str]] = defaultdict(list)
+        for sc, tc, _ in b_pairs:
+            b_tgt_to_srcs[tc].append(sc)
+        if bridge_pk_col not in b_tgt_to_srcs:
+            continue
+        if len(b_tgt_to_srcs[bridge_pk_col]) != 1:
+            continue
+        src_bridge_col = b_tgt_to_srcs[bridge_pk_col][0]
+
+        # Bridge table must have a column sharing the same linked_item_id as anchor
+        for col in tables[bridge_tbl].columns:
+            if col.is_synthetic or not col.definition_id:
+                continue
+            b_item = dictionary.tag_to_item.get(col.definition_id)
+            if (b_item is not None
+                    and b_item.type_purpose == 'Link'
+                    and b_item.linked_item_id == anchor):
+                return (src_bridge_col, bridge_tbl, bridge_pk_col, col.name)
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +489,23 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         )
 
     # --- Second pass: foreign-key detection ---
+    # Collect all Link items grouped by (src_tbl, tgt_tbl).  When multiple
+    # source columns all link to columns that together cover the target table's
+    # full composite PK, emit one composite FOREIGN KEY constraint.  Single-
+    # column FKs targeting a sole PK are handled as the degenerate case.
+    #
+    # SQLite requires the FK target to have a UNIQUE index.  For a sole-PK
+    # table SQLite creates one automatically; for a composite PK it does NOT
+    # create per-column UNIQUE indices.  Therefore a valid FK must reference
+    # EITHER the sole PK (single-column FK) OR the full composite PK (multi-
+    # column FK).  Partial or non-PK references are warned and skipped.
+
+    bridge_columns: list[BridgeColumnDef] = []
+
+    _link_groups: dict[
+        tuple[str, str], list[tuple[str, str, DdlmItem]]
+    ] = defaultdict(list)   # (src_tbl, tgt_tbl) → [(src_col, tgt_col, item)]
+
     for item in dictionary.items.values():
         if item.type_purpose != 'Link' or item.linked_item_id is None:
             continue
@@ -413,30 +543,143 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 f"key of {target_item.category_id!r} — recording FK anyway"
             )
 
-        # Skip FK if the target column is not the sole PK of the target table.
-        # SQLite raises "foreign key mismatch" at INSERT time unless the FK
-        # target column has a UNIQUE index.  The only UNIQUE index guaranteed
-        # to exist is the one SQLite creates for a single-column PRIMARY KEY.
-        # A composite PK does NOT create a unique index on any individual
-        # column, so referencing one column of a composite PK is also invalid.
-        # This situation arises when a dictionary extension overrides a
-        # category's PK (e.g. cif_pow.dic changes DIFFRN_RADIATION to a
-        # composite PK) while other items still link to the old single column.
-        if tables[tgt_tbl].primary_keys != [target_item.object_id]:
-            warnings.append(
-                f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
-                f"target column '{target_item.object_id}' is not a PK of "
-                f"'{tgt_tbl}' (PKs={tables[tgt_tbl].primary_keys}) — "
-                f"skipping FK constraint"
-            )
-            continue
+        _link_groups[(src_tbl, tgt_tbl)].append(
+            (item.object_id, target_item.object_id, item)
+        )
 
-        tables[src_tbl].foreign_keys.append(ForeignKeyDef(
-            source_table=src_tbl,
-            source_column=item.object_id,
-            target_table=tgt_tbl,
-            target_column=target_item.object_id,
-        ))
+    for (src_tbl, tgt_tbl), pairs in sorted(_link_groups.items()):
+        tgt_pks: list[str] = tables[tgt_tbl].primary_keys
+        tgt_pks_set = set(tgt_pks)
+
+        # tgt_col → [src_col, ...]: detect full coverage and duplicate targets
+        tgt_to_srcs: dict[str, list[str]] = defaultdict(list)
+        for src_col, tgt_col, _ in pairs:
+            tgt_to_srcs[tgt_col].append(src_col)
+
+        tgt_cols_covered = set(tgt_to_srcs.keys())
+        non_pk_tgt_cols  = tgt_cols_covered - tgt_pks_set
+        missing_pk_cols  = tgt_pks_set - tgt_cols_covered
+        has_conflicts    = any(len(v) > 1 for v in tgt_to_srcs.values())
+
+        if has_conflicts and not missing_pk_cols and not non_pk_tgt_cols:
+            # Multiple source columns each independently reference the full PK
+            # (e.g. bond.atom_1 and bond.atom_2 both → atom.number).
+            # Emit one separate single/composite FK per source column.
+            for tgt_col, src_list in tgt_to_srcs.items():
+                for src_col in src_list:
+                    tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                        source_table=src_tbl,
+                        source_columns=[src_col],
+                        target_table=tgt_tbl,
+                        target_columns=[tgt_col],
+                    ))
+        elif not non_pk_tgt_cols and len(missing_pk_cols) == 1:
+            # All covered columns are PKs; exactly one PK column is missing.
+            # Sub-case A: the missing column already exists in src_tbl (self-ref
+            #   or previously bridged) — use it directly.
+            # Sub-case B: try to derive it via a transitive bridge table.
+            [missing_pk_col] = missing_pk_cols
+            src_col_names = {c.name for c in tables[src_tbl].columns}
+            bridge_col_in_src: str | None = (
+                missing_pk_col if missing_pk_col in src_col_names else None
+            )
+
+            if bridge_col_in_src is None:
+                found = _find_transitive_bridge(
+                    src_tbl, tgt_tbl, missing_pk_col,
+                    tables, dictionary, _link_groups,
+                )
+                if found is not None:
+                    src_bridge_col, bridge_tbl, bridge_pk_col, bridge_val_col = found
+                    # Add derived column once per (src_tbl, col) pair
+                    tables[src_tbl].columns.append(ColumnDef(
+                        name=missing_pk_col,
+                        definition_id='',
+                        type_contents=None,
+                        nullable=True,
+                        is_primary_key=False,
+                        is_synthetic=False,
+                        linked_item_id=None,
+                    ))
+                    bridge_columns.append(BridgeColumnDef(
+                        table_name=src_tbl,
+                        column_name=missing_pk_col,
+                        via_column=src_bridge_col,
+                        bridge_table=bridge_tbl,
+                        bridge_pk_column=bridge_pk_col,
+                        bridge_value_column=bridge_val_col,
+                    ))
+                    bridge_col_in_src = missing_pk_col
+
+            if bridge_col_in_src is not None:
+                # Emit one composite FK per conflicting src column (or one if
+                # no conflicts), with tgt_pks ordering throughout.
+                if has_conflicts:
+                    for tgt_col, src_list in tgt_to_srcs.items():
+                        for src_col in src_list:
+                            src_ordered = [
+                                src_col if pk == tgt_col else bridge_col_in_src
+                                for pk in tgt_pks
+                            ]
+                            tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                                source_table=src_tbl,
+                                source_columns=src_ordered,
+                                target_table=tgt_tbl,
+                                target_columns=list(tgt_pks),
+                            ))
+                else:
+                    src_ordered = [
+                        tgt_to_srcs[pk][0] if pk in tgt_to_srcs else bridge_col_in_src
+                        for pk in tgt_pks
+                    ]
+                    tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                        source_table=src_tbl,
+                        source_columns=src_ordered,
+                        target_table=tgt_tbl,
+                        target_columns=list(tgt_pks),
+                    ))
+            else:
+                # No bridge found — warn per pair
+                for src_col, tgt_col, item in pairs:
+                    warnings.append(
+                        f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                        f"partial FK to '{tgt_tbl}' — covers "
+                        f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}, "
+                        f"no transitive bridge found — skipping FK constraint"
+                    )
+        elif non_pk_tgt_cols or missing_pk_cols or has_conflicts:
+            # Cannot form a complete, unambiguous (composite) FK.
+            # Emit one warning per failing pair so each source item is named.
+            for src_col, tgt_col, item in pairs:
+                if len(tgt_to_srcs.get(tgt_col, [])) > 1:
+                    msg = (
+                        f"ambiguous composite FK — multiple source columns "
+                        f"link to '{tgt_tbl}'.'{tgt_col}'"
+                    )
+                elif tgt_col not in tgt_pks_set:
+                    msg = (
+                        f"target column '{tgt_col}' is not a PK of "
+                        f"'{tgt_tbl}' (PKs={tgt_pks})"
+                    )
+                else:
+                    msg = (
+                        f"partial FK to '{tgt_tbl}' — covers "
+                        f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}"
+                    )
+                warnings.append(
+                    f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                    f"{msg} — skipping FK constraint"
+                )
+        else:
+            # All PKs covered, no non-PK targets, no duplicate targets.
+            # Order source columns to match the target PK column order.
+            src_ordered = [tgt_to_srcs[tc][0] for tc in tgt_pks]
+            tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                source_table=src_tbl,
+                source_columns=src_ordered,
+                target_table=tgt_tbl,
+                target_columns=list(tgt_pks),
+            ))
 
     return SchemaSpec(
         tables=tables,
@@ -444,6 +687,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         alias_to_definition_id=dict(dictionary.alias_to_definition_id),
         deprecated_ids=set(dictionary.deprecated_ids),
         warnings=warnings,
+        bridge_columns=bridge_columns,
     )
 
 
@@ -537,9 +781,11 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
             )
 
         for fk in table.foreign_keys:
+            src_cols = ', '.join(_qi(c) for c in fk.source_columns)
+            tgt_cols = ', '.join(_qi(c) for c in fk.target_columns)
             parts.append(
-                f"    FOREIGN KEY ({_qi(fk.source_column)})\n"
-                f"        REFERENCES {_qi(fk.target_table)}({_qi(fk.target_column)})\n"
+                f"    FOREIGN KEY ({src_cols})\n"
+                f"        REFERENCES {_qi(fk.target_table)}({tgt_cols})\n"
                 f"        DEFERRABLE INITIALLY DEFERRED"
             )
 

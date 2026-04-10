@@ -477,9 +477,9 @@ class TestForeignKeys:
         assert len(fks) == 1
         fk = fks[0]
         assert fk.source_table == 'meas'
-        assert fk.source_column == 'config_id'
+        assert fk.source_columns == ['config_id']
         assert fk.target_table == 'config'
-        assert fk.target_column == 'id'
+        assert fk.target_columns == ['id']
 
     def test_self_referential_link(self):
         cats = [_cat('node', 'node', 'Loop', ['_node.id'])]
@@ -495,7 +495,7 @@ class TestForeignKeys:
         fk = fks[0]
         assert fk.source_table == 'node'
         assert fk.target_table == 'node'
-        assert fk.target_column == 'id'
+        assert fk.target_columns == ['id']
 
     def test_link_with_unknown_target_skipped_with_warning(self):
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
@@ -531,6 +531,53 @@ class TestForeignKeys:
         assert schema.tables['src'].foreign_keys == []
         # Warning emitted for the non-PK target
         assert any('_src.ref' in w and 'not a PK' in w for w in schema.warnings)
+
+    def test_composite_fk_when_all_pks_covered(self):
+        # When two source columns each link to one column of a composite PK,
+        # generate_schema must emit one composite FOREIGN KEY constraint.
+        cats = [
+            _cat('parent', 'parent', 'Loop', ['_parent.a', '_parent.b']),
+            _cat('child',  'child',  'Loop', ['_child.a',  '_child.b']),
+        ]
+        items = [
+            _item('_parent.a', 'parent', 'a', type_purpose='Key', type_contents='Text'),
+            _item('_parent.b', 'parent', 'b', type_purpose='Key', type_contents='Text'),
+            _item('_child.a',  'child',  'a', type_purpose='Link',
+                  linked_item_id='_parent.a', type_contents='Text'),
+            _item('_child.b',  'child',  'b', type_purpose='Link',
+                  linked_item_id='_parent.b', type_contents='Text'),
+            _item('_child.val', 'child', 'val', type_contents='Real'),
+        ]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        fks = schema.tables['child'].foreign_keys
+        assert len(fks) == 1
+        fk = fks[0]
+        assert fk.source_table == 'child'
+        assert fk.target_table == 'parent'
+        # Columns ordered by target PK order (a, b)
+        assert fk.source_columns == ['a', 'b']
+        assert fk.target_columns == ['a', 'b']
+        # No warnings about this FK
+        assert not any('child' in w and 'skipping' in w for w in schema.warnings)
+
+    def test_partial_composite_fk_skipped_with_warning(self):
+        # Only one of two composite PK columns is linked — can't form a complete FK.
+        cats = [
+            _cat('parent', 'parent', 'Loop', ['_parent.a', '_parent.b']),
+            _cat('child',  'child',  'Loop', ['_child.x']),
+        ]
+        items = [
+            _item('_parent.a', 'parent', 'a', type_purpose='Key', type_contents='Text'),
+            _item('_parent.b', 'parent', 'b', type_purpose='Key', type_contents='Text'),
+            # Links to only _parent.a, missing _parent.b
+            _item('_child.x', 'child', 'x', type_purpose='Link',
+                  linked_item_id='_parent.a', type_contents='Text'),
+        ]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        assert schema.tables['child'].foreign_keys == []
+        assert any('_child.x' in w and 'skipping' in w for w in schema.warnings)
 
     def test_su_item_populates_linked_item_id_no_fk(self):
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]

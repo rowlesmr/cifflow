@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 from pycifparse.cifmodel.model import CifBlock, CifFile
 from pycifparse.cifmodel.scalar import CifScalar
-from pycifparse.dictionary.schema import SchemaSpec, TableDef
+from pycifparse.dictionary.schema import BridgeColumnDef, SchemaSpec, TableDef
 from pycifparse.types import ValueType
 
 
@@ -247,69 +247,147 @@ def _apply_fk(
     inserted into the parent table so that deferred FK constraints can be
     satisfied at COMMIT.
     """
-    for col in table.columns:
-        if col.is_synthetic:
-            continue
-        fk = next((f for f in table.foreign_keys if f.source_column == col.name), None)
-        if fk is None:
-            continue
+    col_by_name = {c.name: c for c in table.columns if not c.is_synthetic}
 
-        is_key_fk = col.is_primary_key
-        val: str | None = row.get(col.name)
+    for fk in table.foreign_keys:
+        is_composite = len(fk.source_columns) > 1
 
-        # ── Value assignment (propagation / UUID generation) ──────────────────
-        # Only enter this block when the column is currently absent from the row.
-        if val is None:
-            if not is_key_fk and not propagate_fk:
-                # Non-key FK, propagation off, no explicit value: leave NULL.
-                # No stub needed — the child column will be NULL, which satisfies
-                # any FK constraint (NULLs are not checked).
+        if not is_composite:
+            # ── Single-column FK ──────────────────────────────────────────────
+            src_col = fk.source_columns[0]
+            tgt_col = fk.target_columns[0]
+            col = col_by_name.get(src_col)
+            if col is None:
                 continue
 
-            target_def_id = schema.column_to_tag.get((fk.target_table, fk.target_column))
-            if target_def_id is None:
-                # FK target not in structured schema → in fallback tier
-                if is_key_fk:
-                    emit(
-                        f"FK target '{fk.target_table}'.'{fk.target_column}' "
-                        f"is not in structured schema; leaving NULL"
-                    )
-                continue
+            is_key_fk = col.is_primary_key
+            val: str | None = row.get(src_col)
 
-            # Source 1: within-loop
-            if loop_row_by_defid is not None:
-                val = loop_row_by_defid.get(target_def_id)
-            # Source 2: fk_accumulator
+            # Value assignment: fill missing FK column from loop/accumulator/UUID
             if val is None:
-                val = fk_accumulator.get(target_def_id)
-            # Source 3: UUID fallback (key-FK only)
-            if val is None and is_key_fk:
-                val = str(_uuid_module.uuid4())
-                fk_accumulator[target_def_id] = val
-                emit(
-                    f"key-FK '{col.definition_id}' propagation source not found; "
-                    f"generated UUID"
-                )
+                if not is_key_fk and not propagate_fk:
+                    continue
 
-            if val is not None:
-                row[col.name] = val
+                target_def_id = schema.column_to_tag.get((fk.target_table, tgt_col))
+                if target_def_id is None:
+                    if is_key_fk:
+                        emit(
+                            f"FK target '{fk.target_table}'.'{tgt_col}' "
+                            f"is not in structured schema; leaving NULL"
+                        )
+                    continue
 
-        # ── Stub creation ─────────────────────────────────────────────────────
-        # For any FK column that now carries a non-NULL value (whether it was
-        # already in the row from CIF data, just propagated, or UUID-generated),
-        # ensure the parent table has a row with that value as its PK so that
-        # deferred FK constraints are satisfied at COMMIT.
-        # _merge_into is idempotent: if the parent row already exists the stub
-        # is merged in without overwriting any real values.
-        if (val is not None
-                and merged_rows is not None
-                and row_id_counters is not None
-                and block_id is not None):
-            parent_table = schema.tables.get(fk.target_table)
-            if parent_table is not None:
-                stub: dict = {'_block_id': block_id, fk.target_column: val}
-                _merge_into(merged_rows, fk.target_table, stub,
-                            parent_table, row_id_counters, emit)
+                # Source 1: within-loop
+                if loop_row_by_defid is not None:
+                    val = loop_row_by_defid.get(target_def_id)
+                # Source 2: fk_accumulator
+                if val is None:
+                    val = fk_accumulator.get(target_def_id)
+                # Source 3: UUID fallback (key-FK only)
+                if val is None and is_key_fk:
+                    val = str(_uuid_module.uuid4())
+                    fk_accumulator[target_def_id] = val
+                    emit(
+                        f"key-FK '{col.definition_id}' propagation source "
+                        f"not found; generated UUID"
+                    )
+
+                if val is not None:
+                    row[src_col] = val
+
+            # Stub creation: ensure parent row exists for deferred FK check
+            if (val is not None
+                    and merged_rows is not None
+                    and row_id_counters is not None
+                    and block_id is not None):
+                parent_table = schema.tables.get(fk.target_table)
+                if parent_table is not None:
+                    stub: dict = {'_block_id': block_id, tgt_col: val}
+                    _merge_into(merged_rows, fk.target_table, stub,
+                                parent_table, row_id_counters, emit)
+
+        else:
+            # ── Composite FK ──────────────────────────────────────────────────
+            # All source columns must be non-NULL for the stub to be created.
+            # Values come from: CIF data already in the row, loop iter_by_defid,
+            # or the fk_accumulator.  UUID generation is not applied to composite
+            # FKs — their values must always originate from data.
+            is_key_fk = all(
+                col_by_name.get(sc) is not None
+                and col_by_name[sc].is_primary_key
+                for sc in fk.source_columns
+            )
+
+            # Fill any missing source columns from loop values or accumulator
+            for src_col, tgt_col in zip(fk.source_columns, fk.target_columns):
+                if row.get(src_col) is not None:
+                    continue
+                if not is_key_fk and not propagate_fk:
+                    continue
+                target_def_id = schema.column_to_tag.get((fk.target_table, tgt_col))
+                if target_def_id is None:
+                    continue
+                val = None
+                if loop_row_by_defid is not None:
+                    val = loop_row_by_defid.get(target_def_id)
+                if val is None:
+                    val = fk_accumulator.get(target_def_id)
+                if val is not None:
+                    row[src_col] = val
+
+            # Stub creation: only when all FK columns are present
+            if (merged_rows is not None
+                    and row_id_counters is not None
+                    and block_id is not None):
+                col_vals = [
+                    (sc, tc, row.get(sc))
+                    for sc, tc in zip(fk.source_columns, fk.target_columns)
+                ]
+                if all(v is not None for _, _, v in col_vals):
+                    parent_table = schema.tables.get(fk.target_table)
+                    if parent_table is not None:
+                        stub = {'_block_id': block_id}
+                        for _, tc, v in col_vals:
+                            stub[tc] = v
+                        _merge_into(merged_rows, fk.target_table, stub,
+                                    parent_table, row_id_counters, emit)
+
+
+# ---------------------------------------------------------------------------
+# Bridge column fill
+# ---------------------------------------------------------------------------
+
+def _fill_bridge_columns(
+    merged_rows: dict[str, dict[tuple, dict]],
+    bridge_columns: list[BridgeColumnDef],
+) -> None:
+    """Populate bridge-derived columns in *merged_rows* in place.
+
+    For each :class:`BridgeColumnDef`, builds a lookup from the bridge table
+    and fills any NULL values in the target table.  Must be called after all
+    blocks have been processed and before :py:meth:`_Ingester._flush`.
+    """
+    for bd in bridge_columns:
+        if bd.table_name not in merged_rows:
+            continue
+        bridge_rows = merged_rows.get(bd.bridge_table, {})
+        # Build (block_id, bridge_pk_val) → bridge_val lookup
+        lookup: dict[tuple[str | None, str], str] = {}
+        for row in bridge_rows.values():
+            pk_val = row.get(bd.bridge_pk_column)
+            val = row.get(bd.bridge_value_column)
+            if pk_val is not None and val is not None:
+                lookup[(row.get('_block_id'), pk_val)] = val
+
+        for row in merged_rows[bd.table_name].values():
+            if row.get(bd.column_name) is not None:
+                continue
+            via_val = row.get(bd.via_column)
+            if via_val is None:
+                continue
+            derived = lookup.get((row.get('_block_id'), via_val))
+            if derived is not None:
+                row[bd.column_name] = derived
 
 
 # ---------------------------------------------------------------------------
@@ -386,6 +464,8 @@ class _Ingester:
         try:
             for block in blocks:
                 self._process_block(block)
+            if self.schema and self.schema.bridge_columns:
+                _fill_bridge_columns(self.merged_rows, self.schema.bridge_columns)
             self._post_validate()
             self._flush()
             if _pre_commit_hook is not None:

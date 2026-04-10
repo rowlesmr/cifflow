@@ -191,17 +191,20 @@ def compactify_database(
                     + ')'
                 )
 
-            # FK constraints — only when target table and column are kept
+            # FK constraints — only when all FK columns and target table are kept
             for fk in table.foreign_keys:
-                if fk.source_column not in col_set:
+                if not all(c in col_set for c in fk.source_columns):
                     continue
                 if fk.target_table not in tables_with_rows:
                     continue
-                if fk.target_column not in kept_columns.get(fk.target_table, ()):
+                tgt_kept = kept_columns.get(fk.target_table, ())
+                if not all(c in tgt_kept for c in fk.target_columns):
                     continue
+                src_cols = ', '.join(f'"{c}"' for c in fk.source_columns)
+                tgt_cols = ', '.join(f'"{c}"' for c in fk.target_columns)
                 col_defs.append(
-                    f'    FOREIGN KEY ("{fk.source_column}") '
-                    f'REFERENCES "{fk.target_table}" ("{fk.target_column}") '
+                    f'    FOREIGN KEY ({src_cols}) '
+                    f'REFERENCES "{fk.target_table}" ({tgt_cols}) '
                     f'DEFERRABLE INITIALLY DEFERRED'
                 )
 
