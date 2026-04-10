@@ -23,7 +23,6 @@ _IMPORT_IDENTITY_TAGS = frozenset({
     '_definition.class',
     '_name.category_id',
     '_name.object_id',
-    '_name.linked_item_id',
     '_import.get',
 })
 

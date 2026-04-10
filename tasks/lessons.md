@@ -747,3 +747,63 @@ exists from real data, the stub is merged without overwriting any non-NULL value
 **How to apply:** Always pass `block_id`, `merged_rows`, and `row_id_counters` to `_apply_fk`
 during schema-aware ingestion. These default to `None` (stub creation skipped) so unit tests
 that call `_apply_fk` directly without a DB connection are unaffected.
+
+---
+
+## Lesson 36 — `_name.linked_item_id` must not be an import-identity tag (2026-04-10)
+
+**Context:** `DictionaryLoader._resolve_imports` / `_merge_frame` in `loader.py`.
+
+**Bug:** `_name.linked_item_id` was listed in `_IMPORT_IDENTITY_TAGS`, causing it to be
+unconditionally skipped whenever a save frame merged attributes from a template via
+`_import.get` (mode="Contents"). This is correct for true identity tags (`_definition.id`,
+`_name.category_id`, `_name.object_id`) — you never want an import to change the frame's
+own identity — but wrong for `_name.linked_item_id`, which is a *data attribute* that
+templates are specifically designed to provide.
+
+**Observed symptom:** `_geom_angle.atom_site_label_1` and `_geom_angle.atom_site_label_3`
+(and similar FK-via-template items) had `type_purpose='Link'` but `linked_item_id=None`.
+`generate_schema` skips items with `linked_item_id is None` during FK detection, so no FK
+constraint was generated and no FK column was recognised in the schema.
+
+**Root cause:** Both items import `[{'file':templ_attr.cif 'save':atom_site_id}]`, and the
+`atom_site_id` template frame provides `_name.linked_item_id = '_atom_site.label'`. Because
+`_name.linked_item_id` was in `_IMPORT_IDENTITY_TAGS`, `_merge_frame` skipped it regardless
+of whether the importing frame had its own value.
+
+**Fix:** Remove `_name.linked_item_id` from `_IMPORT_IDENTITY_TAGS`. The `dupl` policy in
+`_merge_frame` already handles conflicts: if the importing frame already defines
+`_name.linked_item_id`, the default `dupl='Exit'` would warn rather than silently overwrite.
+
+**How to apply:** `_IMPORT_IDENTITY_TAGS` should only contain tags that define a frame's CIF
+structural identity (definition id, scope, class, category, object). Tags that are data
+attributes of the definition — even when they affect its semantic role (linked item, type
+purpose, type contents) — must not be blocked from template inheritance.
+
+---
+
+## Lesson 37 — CIF 2.0 structural delimiters must not split tags or save frame names (2026-04-10)
+
+**Context:** `Lexer._read_bare_word` in `lexer/lexer.py`.
+
+**Bug:** `_read_bare_word` unconditionally broke on `[`, `]`, `{`, `}` for ALL bare words in
+CIF 2.0 mode. This split tokens like `_axis.vector[1]` (tag) into `_axis.vector` + `[` + `1`
++ `]`, and `save_axis.vector[1]` (save frame name) into `save_axis.vector` + `[` + `1` + `]`.
+
+**CIF 2.0 EBNF rule:**
+- `restrict-char = non-blank-char - ( '[' | ']' | '{' | '}' )` — used by `wsdelim-string`
+  (plain unquoted values). `[` terminates a plain value.
+- `data-name = '_', non-blank-char, { non-blank-char }` — tags use `non-blank-char`, which
+  includes `[`, `]`, `{`, `}`.
+- `container-code = non-blank-char, { non-blank-char }` — save/data frame names also use
+  `non-blank-char`.
+
+So `[` terminates plain values but must NOT terminate tags or prefix keywords.
+
+**Fix:** In the `_CIF2_DELIMITERS` break check, only break when the accumulator is empty
+(delimiter starts its own standalone token) OR the accumulated word is a plain value — i.e.
+it does NOT start with `_` (tag) and does NOT start with a prefix keyword (`save_`, `data_`).
+
+**How to apply:** Whenever the CIF 2.0 EBNF distinguishes between `restrict-char` and
+`non-blank-char` contexts, lexer logic must check what kind of token is being accumulated
+before applying delimiter break rules.

@@ -235,9 +235,20 @@ class Lexer:
             # Quote characters terminate (start their own token)
             if ch in ("'", '"'):
                 break
-            # CIF 2.0 structural delimiters terminate
+            # CIF 2.0 structural delimiters terminate plain values.
+            # Per the CIF 2.0 EBNF, '[', ']', '{', '}' are excluded from
+            # restrict-char (used in wsdelim-string) but ARE allowed in
+            # data-name and container-code (save/data frame names).  Only
+            # break when the accumulator is empty (the delimiter starts its
+            # own standalone token) or the word is a plain value — i.e. it
+            # does not start with '_' (tag) or a prefix keyword (save_/data_).
             if self._is_cif2 and ch in _CIF2_DELIMITERS:
-                break
+                if not buf:
+                    break
+                ws = ''.join(buf).lower()
+                if ws[0] != '_' and not any(
+                        ws.startswith(kw) for kw in _PREFIX_KEYWORDS):
+                    break
             buf.append(self._advance())
 
         word = ''.join(buf)
