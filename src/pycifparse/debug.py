@@ -584,13 +584,18 @@ def debug_schema(
         print(f'  PK  {pk_str}', file=file)
 
         # Columns — compute widths for alignment
+        def _col_display_type(col) -> str:
+            if col.name == '_row_id':
+                return 'INTEGER'
+            return col.type_contents or 'TEXT'
+
         col_name_w = max((len(c.name) for c in table.columns), default=8)
-        type_w     = max((len(c.sql_type) for c in table.columns), default=4)
+        type_w     = max((len(_col_display_type(c)) for c in table.columns), default=4)
 
         print(f'  {_c("columns", _DIM, file=file)}', file=file)
         for col in table.columns:
             name_part = _c(col.name.ljust(col_name_w), _YELLOW, file=file)
-            type_part = _c(col.sql_type.ljust(type_w), _GREEN, file=file)
+            type_part = _c(_col_display_type(col).ljust(type_w), _GREEN, file=file)
 
             flags: list[str] = []
             if not col.nullable:

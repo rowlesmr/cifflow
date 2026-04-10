@@ -331,28 +331,29 @@ class TestCategorySkipping:
 # ---------------------------------------------------------------------------
 
 class TestTypeMapping:
-    @pytest.mark.parametrize('type_contents,expected', [
-        ('Integer', 'INTEGER'),
-        ('integer', 'INTEGER'),    # case-insensitive
-        ('Real', 'REAL'),
-        ('real', 'REAL'),
-        ('Text', 'TEXT'),
-        ('Word', 'TEXT'),
-        ('Code', 'TEXT'),
-        ('Imag', 'TEXT'),
-        ('Complex', 'TEXT'),
-        ('Implied', 'TEXT'),
-        ('ByReference', 'TEXT'),
-        ('Inherited', 'TEXT'),
-        (None, 'TEXT'),
+    @pytest.mark.parametrize('type_contents', [
+        'Integer', 'Real', 'Text', 'Word', 'Code', 'List', 'Table', None,
     ])
-    def test_sql_type(self, type_contents, expected):
+    def test_type_contents_stored_as_is(self, type_contents):
+        """type_contents is stored verbatim from the DDLm dictionary."""
         cats = [_cat('t', 't', 'Set')]
         items = [_item('_t.col', 't', 'col', type_contents=type_contents)]
         d = _make_dict(cats, items)
         schema = generate_schema(d)
         col = next(c for c in schema.tables['t'].columns if c.name == 'col')
-        assert col.sql_type == expected
+        assert col.type_contents == type_contents
+
+    @pytest.mark.parametrize('type_contents', [
+        'Integer', 'Real', 'Text', 'Word', None,
+    ])
+    def test_ddl_always_emits_text_for_domain_columns(self, type_contents):
+        """DDL always emits TEXT for domain columns regardless of type_contents."""
+        cats = [_cat('t', 't', 'Set')]
+        items = [_item('_t.col', 't', 'col', type_contents=type_contents)]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        stmt = emit_create_statements(schema)[0]
+        assert '"col"  TEXT' in stmt
 
 
 # ---------------------------------------------------------------------------

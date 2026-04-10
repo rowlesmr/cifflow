@@ -336,8 +336,8 @@ in the value column using the following convention:
 | `NULL` | tag absent from this data block |
 | `'.'` | inapplicable (unquoted `.` — `ValueType.PLACEHOLDER`) |
 | `'?'` | unknown (unquoted `?` — `ValueType.PLACEHOLDER`) |
-| `'"."'` | literal string `"."` (quoted dot — any quoted `ValueType`) |
-| `'"?"'` | literal string `"?"` (quoted question mark — any quoted `ValueType`) |
+| `'"."'` | literal `.` stored with delimiters — source `ValueType` was any of `DOUBLE_QUOTED`, `SINGLE_QUOTED`, `TRIPLE_DOUBLE_QUOTED`, `TRIPLE_SINGLE_QUOTED`, `MULTILINE_STRING` |
+| `'"?"'` | literal `?` stored with delimiters — same set of source `ValueType`s |
 | anything else | real value, stored as raw string |
 
 **Why:** Status companion columns (`{col}_status`) doubled the column count and
@@ -354,7 +354,10 @@ on round-trip.
 
 **How to apply:**
 - At ingestion: inspect `ValueType`. `PLACEHOLDER` → store `'.'` or `'?'`.
-  Quoted `.` or `?` → store `'"."'` or `'"?"'`. All other values → store raw string.
+  Any non-PLACEHOLDER ValueType whose raw string value is `.` or `?`
+  (`DOUBLE_QUOTED`, `SINGLE_QUOTED`, `TRIPLE_DOUBLE_QUOTED`, `TRIPLE_SINGLE_QUOTED`,
+  `MULTILINE_STRING`) → store `'"."'` or `'"?"'`.
+  All other values → store raw string.
   Tag absent → do not insert row / leave column NULL.
 - At query time: `WHERE col IS NOT NULL AND col NOT IN ('.', '?')` selects rows
   with real values.
@@ -559,3 +562,185 @@ exactly 1, iterate over all column values produced (across all tables for
 multi-category loops) and write them into `fk_accumulator` keyed by
 `definition_id`. Do not write partial iterations — only after the loop is
 confirmed to have had exactly one iteration.
+
+## Lesson 27 — `ColumnDef.type_contents` is informational only; DDL always emits TEXT (2026-04-09)
+
+**Context:** Stage 4 design review; `ColumnDef` field rename.
+
+**Mistake:** `ColumnDef` originally had `sql_type: str` storing SQL type strings
+(`"TEXT"`, `"INTEGER"`, `"REAL"`) for use in generated DDL. This conflicted with
+the Lesson 19 decision that all value columns store TEXT for round-trip fidelity.
+
+**Correct rule:** `ColumnDef.type_contents` stores the DDLm `_type.contents` value
+(e.g. `"Text"`, `"Integer"`, `"Real"`, `"List"`) for future validation and
+type-coercion use. It does not affect DDL generation. `emit_create_statements`
+always emits `TEXT` for all value columns regardless of `type_contents`.
+
+**How to apply:** Never use `type_contents` to determine the SQL column type in DDL.
+Use it only in validation logic and in `convert_database` to guide coercion.
+
+---
+
+## Lesson 28 — `fk_accumulator` stores encoded database values, not raw `CifScalar` (2026-04-09)
+
+**Context:** Stage 4 ingestion; FK propagation implementation.
+
+**Rule:** Values written to `fk_accumulator` must be pre-encoded via `encode_value`
+— i.e., in the exact form they will appear in the database column. FK propagation
+then copies the value directly into the target column without re-encoding.
+
+**Why:** Encoding at write-time (into the accumulator) rather than at read-time
+(when propagating) keeps the propagation path simple: a straight dict lookup and
+column assignment, with no type inspection at use time.
+
+**How to apply:** Whenever a value is written to `fk_accumulator` — whether from
+a scalar Set tag, a single-iteration loop, or a UUID fallback — always call
+`encode_value` first. The accumulator type is `dict[str, str]`.
+
+---
+
+## Lesson 29 — Value encoding for quoted `.` and `?` covers all non-PLACEHOLDER ValueTypes (2026-04-09)
+
+**Context:** Stage 4 value encoding table; extension of Lesson 19.
+
+**Mistake:** The initial encoding table only listed `DOUBLE_QUOTED` for the
+`'"."'` / `'"?"'` cases. `SINGLE_QUOTED`, `TRIPLE_DOUBLE_QUOTED`,
+`TRIPLE_SINGLE_QUOTED`, and `MULTILINE_STRING` values whose content is `.` or
+`?` were not covered, causing them to fall through to "raw string" and be stored
+as `'.'` or `'?'` — indistinguishable from bare PLACEHOLDER values.
+
+**Correct rule:** Any value whose raw content is `.` or `?` AND whose `ValueType`
+is not `PLACEHOLDER` must be stored as `'"."'` or `'"?"'` respectively. This
+applies to all five non-PLACEHOLDER ValueTypes:
+`DOUBLE_QUOTED`, `SINGLE_QUOTED`, `TRIPLE_DOUBLE_QUOTED`, `TRIPLE_SINGLE_QUOTED`,
+`MULTILINE_STRING`.
+
+The detection logic at ingestion: `if raw in ('.', '?') and value_type != PLACEHOLDER`.
+
+**How to apply:** The encoding table in Stage 4 prompt §Value encoding is the
+authoritative reference. The `encode_value` function must check `value_type !=
+PLACEHOLDER` (not `value_type == DOUBLE_QUOTED`) to catch all cases.
+
+---
+
+## Lesson 30 — Container `value_type` exists only in `_cif_fallback`; use `json_valid()` for structured tables (2026-04-09)
+
+**Context:** Stage 4 container value handling; querying encoded container values.
+
+**Rule:** The `value_type` column (`'list'` or `'table'`) exists only in
+`_cif_fallback`. Structured tables have no `value_type` column. To detect a
+container value in a structured table column at query time, use SQLite's
+`json_valid(column)` function.
+
+**Why:** Structured table columns are defined by the dictionary schema with no
+metadata column. Adding a companion `{col}_type` column was rejected as it doubles
+column count and was the same problem as the discarded status-column approach.
+
+**How to apply:**
+- In `_cif_fallback` queries: `WHERE value_type IN ('list', 'table')` — precise.
+- In structured table queries: `WHERE json_valid(column)` — safe guard before
+  calling any other JSON function. Never call `json_extract`, `json_each`, or
+  `json_type` on a column without this guard (they raise on non-JSON input).
+
+---
+
+## Lesson 31 — `SchemaSpec` embeds alias resolution and deprecation; `ingest()` needs no dictionary reference (2026-04-10)
+
+**Context:** Stage 4 design review; `ingest()` `dictionary` parameter.
+
+**Mistake/Gap:** `ingest()` had a `dictionary: DdlmDictionary | None = None` parameter
+used solely for alias resolution via `resolve_tag`. This forced the caller to pass
+both `schema` (derived from the dictionary) and `dictionary` as separate arguments —
+redundant and error-prone. It also meant `ingest()` retained an unnecessary dependency
+on `pycifparse.dictionary.ddlm_parser`.
+
+**Correct rule:** `SchemaSpec` is self-contained for routing:
+- `alias_to_definition_id: dict[str, str]` — copied from `DdlmDictionary.alias_to_definition_id` by `generate_schema`; used in the tag routing loop to canonicalise aliases.
+- `deprecated_ids: set[str]` — copied from `DdlmDictionary.deprecated_ids`; used to emit a non-fatal semantic warning when a deprecated tag name is encountered in a CIF file.
+
+`ingest()` has no `dictionary` parameter. The `SchemaSpec` carries everything needed.
+
+Deprecation warnings are non-fatal: ingestion proceeds normally, the warning is
+appended to the return list, and (if provided) `on_error` is called.
+
+**Why:** `SchemaSpec` is already the single authoritative artefact the caller
+passes to `ingest()`. Embedding routing metadata there eliminates an implicit
+dependency and makes the ingestion function's contract explicit.
+
+**How to apply:**
+- `generate_schema(dictionary)` must populate `alias_to_definition_id` and `deprecated_ids` from the `DdlmDictionary`.
+- Tag routing (step 2): `canonical = schema.alias_to_definition_id.get(tag, tag)`.
+- Deprecation check (step 3): `if canonical in schema.deprecated_ids and tag not in deprecated_warned: emit warning; deprecated_warned.add(tag)`. Use two message forms: alias case `"tag '{tag}' is deprecated (canonical: '{canonical}')"`, direct case `"tag '{tag}' is deprecated"`.
+- `deprecated_warned` is a `set[str]` in per-block state; reset at the start of each block.
+- Never pass `dictionary` to `ingest()` — it does not accept one.
+
+---
+
+## Lesson 32 — pytest must be run from the `.venv` (2026-04-10)
+
+**Context:** Project uses a local virtual environment at `.venv/`.
+
+**Rule:** Always run pytest as `.venv/Scripts/pytest` (Windows) — not a globally installed
+`pytest`. The global interpreter will not have the project's dependencies.
+
+**How to apply:** `.venv/Scripts/pytest -m "not slow" --tb=short -q` for the fast suite;
+`.venv/Scripts/pytest -m slow` for integration tests.
+
+---
+
+## Lesson 33 — All public types returned by public functions must be top-level re-exports (2026-04-10)
+
+**Context:** `CifScalar` was missing from `pycifparse/__init__.py`.
+
+**Gap:** `CifScalar` was exported from `pycifparse.cifmodel` but not re-exported at the
+top level. Any caller receiving a `CifScalar` from `block["_tag"]` could not write
+type annotations, `isinstance` checks, or access `value_type` without importing from
+the internal submodule path `pycifparse.cifmodel.scalar`.
+
+**Correct rule:** Any type that appears in the return value of a public function, or
+that a caller must inspect to use the API correctly, must be re-exported from the
+top-level `pycifparse/__init__.py` and listed in the API Reference module layout.
+
+**How to apply:** When adding a new public type at any stage, immediately add it to
+`pycifparse/__init__.py` (import + `__all__`) and to the module layout comment in
+`prompts/API Reference.md`. Do not leave public types stranded in submodule paths.
+
+---
+
+## Lesson 34 — `_post_validate` must run before `_flush`; validation rows are inserted in `_flush` (2026-04-10)
+
+**Context:** `ingest.py` run order; `_validation_result` rows.
+
+**Bug:** `_post_validate()` was called after `_flush()`. Since `_flush()` inserts
+`self.validation_rows` into `_validation_result`, any rows appended by `_post_validate`
+were never written to the database.
+
+**Correct order:** `_post_validate()` → `_flush()` → `COMMIT`. Post-validation populates
+`self.validation_rows`; the flush writes them.
+
+**How to apply:** In any `run()` method that separates a validate step from a flush step,
+validate first, then flush. If post-validation needs to write to the database, it must run
+before the flush that writes its output table.
+
+---
+
+## Lesson 35 — FK constraints in SQLite fire at COMMIT (DEFERRED); UUID key-FK tests must avoid FK violations (2026-04-10)
+
+**Context:** `test_ingest.py` FK propagation tests.
+
+**Problem:** Tests that insert a row with a key-FK column (e.g. `cell.structure_id`) where
+the referenced row in `structure` does not exist will fail at COMMIT with
+`IntegrityError: FOREIGN KEY constraint failed`. The schema uses `DEFERRABLE INITIALLY
+DEFERRED`, so the check fires at COMMIT, not at INSERT. This makes the failure easy to miss
+during test authoring.
+
+**Rule:** Any integration-level test that exercises key-FK UUID fallback generation
+(where a UUID is assigned to a FK column with no matching target row) cannot use a
+connection with FK enforcement enabled and expect a successful COMMIT. Two options:
+1. Also insert the referenced row — but this is impossible when the UUID is unknown in advance.
+2. Test the UUID generation at unit level via `_apply_fk(row, table, ...)` directly,
+   without involving a DB connection.
+
+**How to apply:** For UUID key-FK generation tests, call `_apply_fk` directly and verify
+the row dict is updated and the error is emitted. Reserve DB-connection tests for cases
+where all FK targets are guaranteed to be present.

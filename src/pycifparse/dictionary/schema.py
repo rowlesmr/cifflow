@@ -3,7 +3,6 @@ SQLite schema generation from a loaded DDLm dictionary.
 """
 
 from dataclasses import dataclass, field
-from collections.abc import Callable
 
 from pycifparse.dictionary.ddlm_item import DdlmItem
 from pycifparse.dictionary.ddlm_parser import DdlmDictionary
@@ -53,8 +52,11 @@ class ColumnDef:
     definition_id:
         The current canonical ``_definition.id`` for this column's DDLm item.
         Empty string for synthetic columns.
-    sql_type:
-        SQLite type affinity: ``"TEXT"``, ``"INTEGER"``, or ``"REAL"``.
+    type_contents:
+        DDLm ``_type.contents`` value (e.g. ``"Text"``, ``"Integer"``,
+        ``"Real"``, ``"List"``); ``None`` if absent from the dictionary or for
+        synthetic columns.  Informational only — DDL always emits ``TEXT`` for
+        all value columns; ``_row_id`` always emits ``INTEGER``.
     nullable:
         ``False`` for synthetic and primary-key columns; ``True`` for all
         other domain columns.
@@ -67,13 +69,13 @@ class ColumnDef:
     linked_item_id:
         For ``SU`` items only: the ``_definition.id`` of the associated
         measurand item, lowercased.  ``None`` for all other column types.
-        Does not produce a ``FOREIGN KEY`` constraint; used by the output
-        layer.
+        Does not produce a ``FOREIGN KEY`` constraint; used by the ingestion
+        and output layers.
     """
 
     name: str
     definition_id: str
-    sql_type: str
+    type_contents: str | None
     nullable: bool
     is_primary_key: bool
     is_synthetic: bool
@@ -88,7 +90,7 @@ class TableDef:
     Attributes
     ----------
     name:
-        SQL table name, derived from the category's ``_name.category_id``
+        SQL table name, derived from the category's ``_definition.id``
         (lowercased, leading ``_`` stripped, ``.`` replaced with ``_``).
     definition_id:
         The ``_definition.id`` of the category save frame that produced
@@ -131,6 +133,15 @@ class SchemaSpec:
         Reverse mapping from ``(table_name, column_name)`` to the canonical
         ``_definition.id`` of the corresponding DDLm item.  Synthetic
         columns (``_block_id``, ``_row_id``, ``_pycifparse_id``) are excluded.
+    alias_to_definition_id:
+        Old tag name → canonical ``_definition.id``.  Copied from
+        ``DdlmDictionary.alias_to_definition_id`` by ``generate_schema``.
+        Used by ``ingest()`` for alias resolution without retaining a
+        dictionary reference.
+    deprecated_ids:
+        Set of ``_definition.id`` values marked as deprecated.  Copied from
+        ``DdlmDictionary.deprecated_ids`` by ``generate_schema``.  Used by
+        ``ingest()`` to emit deprecation warnings.
     warnings:
         Non-fatal issues encountered during schema generation, in emission
         order.
@@ -138,6 +149,8 @@ class SchemaSpec:
 
     tables: dict[str, TableDef]
     column_to_tag: dict[tuple[str, str], str]
+    alias_to_definition_id: dict[str, str] = field(default_factory=dict)
+    deprecated_ids: set[str] = field(default_factory=set)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -148,18 +161,6 @@ class SchemaSpec:
 _SYNTHETIC_NAMES: frozenset[str] = frozenset({'_block_id', '_row_id', '_pycifparse_id'})
 
 
-def _sql_type(type_contents: str | None) -> str:
-    """Map a DDLm ``_type.contents`` value to a SQLite type affinity string."""
-    if type_contents is None:
-        return 'TEXT'
-    tc = type_contents.lower()
-    if tc == 'integer':
-        return 'INTEGER'
-    if tc == 'real':
-        return 'REAL'
-    return 'TEXT'
-
-
 def _table_name(category_id: str) -> str:
     """Derive a SQL table name from a lowercased ``_name.category_id`` value."""
     return category_id.lstrip('_').replace('.', '_')
@@ -168,6 +169,16 @@ def _table_name(category_id: str) -> str:
 def _qi(name: str) -> str:
     """Quote a SQL identifier with double quotes, escaping embedded quotes."""
     return '"' + name.replace('"', '""') + '"'
+
+
+def _ddl_type(col: ColumnDef) -> str:
+    """Return the SQL type to emit in DDL for *col*.
+
+    ``_row_id`` is always ``INTEGER``; every other column (synthetic or domain)
+    is ``TEXT``.  Domain columns store all CIF values as raw strings regardless
+    of ``type_contents`` (Lesson 27).
+    """
+    return 'INTEGER' if col.name == '_row_id' else 'TEXT'
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +200,10 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
     :attr:`ColumnDef.linked_item_id` but do not produce
     :class:`ForeignKeyDef` entries.
 
+    ``alias_to_definition_id`` and ``deprecated_ids`` are copied directly from
+    *dictionary* so that ``ingest()`` can perform alias resolution and
+    deprecation checking without retaining a reference to the dictionary.
+
     Parameters
     ----------
     dictionary:
@@ -199,8 +214,8 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
     -------
     SchemaSpec
         The complete schema specification including all tables, column
-        definitions, primary keys, foreign keys, and the reverse
-        ``column_to_tag`` mapping.
+        definitions, primary keys, foreign keys, the reverse
+        ``column_to_tag`` mapping, and alias/deprecation metadata.
     """
     warnings: list[str] = []
     tables: dict[str, TableDef] = {}
@@ -216,9 +231,6 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             continue
 
         # Table name is derived from the category's own definition_id.
-        # cat_item.category_id is the PARENT category in the DDLm hierarchy —
-        # not the table name.  Items belonging to this category carry
-        # _name.category_id == cat_item.definition_id.
         tbl_name = _table_name(cat_item.definition_id)
 
         # Domain items: those whose _name.category_id points to this category.
@@ -272,7 +284,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         columns.append(ColumnDef(
             name='_block_id',
             definition_id='',
-            sql_type='TEXT',
+            type_contents=None,
             nullable=False,
             is_primary_key=block_id_is_pk,
             is_synthetic=True,
@@ -284,7 +296,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             columns.append(ColumnDef(
                 name='_pycifparse_id',
                 definition_id='',
-                sql_type='TEXT',
+                type_contents=None,
                 nullable=False,
                 is_primary_key=True,
                 is_synthetic=True,
@@ -296,7 +308,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         columns.append(ColumnDef(
             name='_row_id',
             definition_id='',
-            sql_type='INTEGER',
+            type_contents=None,
             nullable=False,
             is_primary_key=row_id_is_pk,
             is_synthetic=True,
@@ -314,7 +326,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 col = ColumnDef(
                     name=obj_id,
                     definition_id='',
-                    sql_type='TEXT',
+                    type_contents=None,
                     nullable=False,
                     is_primary_key=True,
                     is_synthetic=False,
@@ -324,7 +336,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 col = ColumnDef(
                     name=obj_id,
                     definition_id=item.definition_id,
-                    sql_type=_sql_type(item.type_contents),
+                    type_contents=item.type_contents,
                     nullable=False,
                     is_primary_key=True,
                     is_synthetic=False,
@@ -343,7 +355,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             col = ColumnDef(
                 name=obj_id,
                 definition_id=item.definition_id,
-                sql_type=_sql_type(item.type_contents),
+                type_contents=item.type_contents,
                 nullable=True,
                 is_primary_key=False,
                 is_synthetic=False,
@@ -411,28 +423,20 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
     return SchemaSpec(
         tables=tables,
         column_to_tag=column_to_tag,
+        alias_to_definition_id=dict(dictionary.alias_to_definition_id),
+        deprecated_ids=set(dictionary.deprecated_ids),
         warnings=warnings,
     )
 
 
 def emit_fallback_create_statements() -> list[str]:
     """
-    Return the fixed DDL statements for the ``_cif_fallback`` table and its index.
+    Return the fixed DDL statements for the schema-less fallback tier.
 
-    The fallback tier stores values for tags that are not mapped to any
-    structured table — either because no dictionary was loaded, the tag is
-    unknown to the loaded dictionary, or the tag's dictionary was not
-    available at ingestion time.
-
-    The returned list contains two statements: the ``CREATE TABLE IF NOT
-    EXISTS`` for ``_cif_fallback`` and the ``CREATE INDEX IF NOT EXISTS`` for
-    the ``(tag, _block_id)`` lookup index.  Both are valid SQLite DDL and can
-    be executed directly against a ``sqlite3.Connection``.
-
-    Returns
-    -------
-    list[str]
-        Two SQL strings: the table DDL followed by the index DDL.
+    Returns four SQL strings: ``CREATE TABLE IF NOT EXISTS`` for
+    ``_cif_fallback``, its lookup index, ``CREATE TABLE IF NOT EXISTS`` for
+    ``_block_dataset_membership``, and ``CREATE TABLE IF NOT EXISTS`` for
+    ``_validation_result``.
     """
     fallback = (
         f"CREATE TABLE IF NOT EXISTS {_qi('_cif_fallback')} (\n"
@@ -476,12 +480,11 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
 
     Returns one SQL string per table.  The statements use
     ``CREATE TABLE IF NOT EXISTS`` and include inline ``PRIMARY KEY`` and
-    ``FOREIGN KEY`` clauses.  All foreign-key constraints carry
-    ``DEFERRABLE INITIALLY DEFERRED``.  The ``_row_id`` column on Loop tables
-    includes an additional ``UNIQUE`` constraint.
+    ``FOREIGN KEY`` clauses.  All FK constraints carry
+    ``DEFERRABLE INITIALLY DEFERRED``.
 
-    The returned strings are valid SQLite DDL and can be executed directly
-    against a ``sqlite3.Connection``.
+    All value columns are declared ``TEXT`` regardless of
+    ``ColumnDef.type_contents``; ``_row_id`` is always ``INTEGER``.
 
     Parameters
     ----------
@@ -491,8 +494,7 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
     Returns
     -------
     list[str]
-        One ``CREATE TABLE IF NOT EXISTS ...`` statement per table, in
-        iteration order of ``schema.tables``.
+        One ``CREATE TABLE IF NOT EXISTS ...`` statement per table.
     """
     stmts: list[str] = []
 
@@ -501,7 +503,7 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
 
         row_id_col = next((c for c in table.columns if c.name == '_row_id'), None)
         for col in table.columns:
-            line = f"    {_qi(col.name)}  {col.sql_type}"
+            line = f"    {_qi(col.name)}  {_ddl_type(col)}"
             if not col.nullable:
                 line += "  NOT NULL"
             parts.append(line)
@@ -510,7 +512,7 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
         parts.append(f"    PRIMARY KEY ({pk_clause})")
 
         # Composite UNIQUE on (_block_id, _row_id) when _row_id is not already
-        # part of the PRIMARY KEY — enforces per-block row uniqueness.
+        # part of the PRIMARY KEY.
         if row_id_col is not None and not row_id_col.is_primary_key:
             parts.append(
                 f"    UNIQUE ({_qi('_block_id')}, {_qi('_row_id')})"
