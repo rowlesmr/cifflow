@@ -33,9 +33,14 @@ Usage — schema from a dictionary file::
     from pycifparse.debug import debug_schema
     debug_schema(pathlib.Path('data/dictionaries/cif_core.dic'))
     debug_schema(pathlib.Path('data/dictionaries/cif_core.dic'), show_ddl=True)
+Usage — FK violations during ingestion::
+
+    from pycifparse.debug import debug_ingest
+    debug_ingest(cif, conn, schema)
 """
 
 import pathlib
+import sqlite3
 import sys
 from typing import IO, List, Optional, TextIO, Union
 
@@ -638,6 +643,129 @@ def debug_schema(
         for w in schema.warnings:
             print(f'  {_c("!", _YELLOW, file=file)}  {w}', file=file)
         print(file=file)
+
+
+# ---------------------------------------------------------------------------
+# Ingestion diagnostics
+# ---------------------------------------------------------------------------
+
+def debug_ingest(
+    cif,
+    conn: sqlite3.Connection,
+    schema,
+    *,
+    propagate_fk: bool = False,
+    dataset_id=None,
+    on_error=None,
+    file: TextIO | None = None,
+) -> list[str]:
+    """Run :func:`~pycifparse.ingest` with FK-violation diagnostics.
+
+    Identical to ``ingest()`` in behaviour but, if any ``FOREIGN KEY``
+    constraint would fail at ``COMMIT``, prints a human-readable report of
+    every violation to *file* (default ``sys.stdout``) before the rollback.
+
+    Parameters
+    ----------
+    cif:
+        Parsed ``CifFile`` from ``build()``.
+    conn:
+        Open ``sqlite3.Connection`` with schema applied.
+    schema:
+        ``SchemaSpec`` used to route tags.
+    propagate_fk, dataset_id, on_error:
+        Forwarded to ``ingest()``.
+    file:
+        Where to print the diagnostic report.  Defaults to ``sys.stdout``.
+
+    Returns
+    -------
+    list[str]
+        Semantic error/warning strings from the ingestor (same as
+        ``ingest()``), or a list of FK-violation strings when a
+        ``sqlite3.IntegrityError`` is caught.
+
+    Raises
+    ------
+    sqlite3.IntegrityError
+        Re-raised after the diagnostic report if FK constraints fail.
+    """
+    if file is None:
+        file = sys.stdout
+
+    from pycifparse.ingestion.ingest import _Ingester  # type: ignore[attr-defined]
+
+    def _pre_commit(ingestor: _Ingester) -> None:
+        """Run PRAGMA foreign_key_check for all schema tables; print violations."""
+        violations_found = False
+        for tbl_name in schema.tables:
+            try:
+                pragma_rows = ingestor.conn.execute(
+                    f'PRAGMA foreign_key_check("{tbl_name}")'
+                ).fetchall()
+            except sqlite3.Error:
+                continue
+
+            if not pragma_rows:
+                continue
+
+            # Build FK-id → (from_col, to_col) map from PRAGMA foreign_key_list
+            fk_list_rows = ingestor.conn.execute(
+                f'PRAGMA foreign_key_list("{tbl_name}")'
+            ).fetchall()
+            # Each row: (id, seq, table, from, to, on_update, on_delete, match)
+            fk_by_id: dict[int, tuple[str, str, str]] = {}
+            for fk_row in fk_list_rows:
+                fk_id, _seq, parent_tbl, from_col, to_col = (
+                    fk_row[0], fk_row[1], fk_row[2], fk_row[3], fk_row[4]
+                )
+                if fk_id not in fk_by_id:
+                    fk_by_id[fk_id] = (parent_tbl, from_col, to_col)
+
+            for prow in pragma_rows:
+                # prow: (table, rowid, parent, fkid)
+                child_tbl, rowid, parent_tbl_name, fkid = prow
+                info = fk_by_id.get(fkid)
+                if info is None:
+                    _p(f"  FK violation in '{child_tbl}' rowid={rowid} "
+                       f"-> '{parent_tbl_name}' (fkid={fkid})", file)
+                    violations_found = True
+                    continue
+
+                _, from_col, to_col = info
+                try:
+                    val_row = ingestor.conn.execute(
+                        f'SELECT "{from_col}" FROM "{child_tbl}" WHERE rowid = ?',
+                        (rowid,),
+                    ).fetchone()
+                    val = val_row[0] if val_row else '<unknown>'
+                except sqlite3.Error:
+                    val = '<unknown>'
+
+                if not violations_found:
+                    _p('FK violations found before COMMIT:', file)
+                    violations_found = True
+
+                _p(
+                    f"  '{child_tbl}'.'{from_col}' = {val!r}"
+                    f"  ->  '{parent_tbl_name}'.'{to_col}'  (no matching parent row)",
+                    file,
+                )
+
+        if not violations_found:
+            _p('No FK violations detected.', file)
+
+    def _p(msg: str, f: TextIO) -> None:
+        print(msg, file=f)
+
+    ingestor = _Ingester(
+        cif, conn, schema,
+        propagate_fk=propagate_fk,
+        dataset_id=dataset_id,
+        on_error=on_error,
+    )
+    ingestor.run(_pre_commit_hook=_pre_commit)
+    return ingestor.errors
 
 
 if __name__ == "__main__":

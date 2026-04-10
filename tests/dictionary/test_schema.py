@@ -509,7 +509,10 @@ class TestForeignKeys:
         assert schema.tables['meas'].foreign_keys == []
         assert any('_unknown.id' in w for w in schema.warnings)
 
-    def test_link_where_target_not_in_category_keys_warns_but_still_records(self):
+    def test_link_where_target_not_pk_skipped_with_warning(self):
+        # If the target column is not a PK of its table, SQLite raises
+        # "foreign key mismatch" at INSERT time.  generate_schema must skip
+        # such FKs and emit a warning instead.
         cats = [
             _cat('src', 'src', 'Loop', ['_src.id']),
             _cat('tgt', 'tgt', 'Loop', ['_tgt.id']),
@@ -518,17 +521,16 @@ class TestForeignKeys:
             _item('_src.id', 'src', 'id', type_purpose='Key', type_contents='Text'),
             _item('_tgt.id', 'tgt', 'id', type_purpose='Key', type_contents='Text'),
             _item('_tgt.extra', 'tgt', 'extra', type_contents='Text'),
-            # Links to _tgt.extra which is NOT a category key
+            # Links to _tgt.extra which is NOT a category key and NOT a PK
             _item('_src.ref', 'src', 'ref', type_purpose='Link',
                   linked_item_id='_tgt.extra', type_contents='Text'),
         ]
         d = _make_dict(cats, items)
         schema = generate_schema(d)
-        # FK is still recorded
-        assert len(schema.tables['src'].foreign_keys) == 1
-        assert schema.tables['src'].foreign_keys[0].target_column == 'extra'
-        # Warning emitted
-        assert any('_tgt.extra' in w and 'category key' in w for w in schema.warnings)
+        # FK must be skipped — target column is not a PK
+        assert schema.tables['src'].foreign_keys == []
+        # Warning emitted for the non-PK target
+        assert any('_src.ref' in w and 'not a PK' in w for w in schema.warnings)
 
     def test_su_item_populates_linked_item_id_no_fk(self):
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]

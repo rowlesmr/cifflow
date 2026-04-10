@@ -413,6 +413,24 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 f"key of {target_item.category_id!r} — recording FK anyway"
             )
 
+        # Skip FK if the target column is not the sole PK of the target table.
+        # SQLite raises "foreign key mismatch" at INSERT time unless the FK
+        # target column has a UNIQUE index.  The only UNIQUE index guaranteed
+        # to exist is the one SQLite creates for a single-column PRIMARY KEY.
+        # A composite PK does NOT create a unique index on any individual
+        # column, so referencing one column of a composite PK is also invalid.
+        # This situation arises when a dictionary extension overrides a
+        # category's PK (e.g. cif_pow.dic changes DIFFRN_RADIATION to a
+        # composite PK) while other items still link to the old single column.
+        if tables[tgt_tbl].primary_keys != [target_item.object_id]:
+            warnings.append(
+                f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                f"target column '{target_item.object_id}' is not a PK of "
+                f"'{tgt_tbl}' (PKs={tables[tgt_tbl].primary_keys}) — "
+                f"skipping FK constraint"
+            )
+            continue
+
         tables[src_tbl].foreign_keys.append(ForeignKeyDef(
             source_table=src_tbl,
             source_column=item.object_id,

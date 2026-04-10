@@ -316,25 +316,26 @@ def _apply_fk(
 # Compatibility check for multi-category loops
 # ---------------------------------------------------------------------------
 
-def _loop_target_set(table: TableDef, schema: SchemaSpec) -> frozenset[tuple[str, str]]:
-    """Compute the resolved FK-target set for a table's PK columns."""
-    targets: set[tuple[str, str]] = set()
-    for col in table.columns:
-        if not col.is_primary_key or col.is_synthetic:
-            continue
-        fk = next((f for f in table.foreign_keys if f.source_column == col.name), None)
-        if fk:
-            targets.add((fk.target_table, fk.target_column))
-        else:
-            targets.add((table.name, col.name))
-    return frozenset(targets)
-
-
 def _loops_compatible(table_names: list[str], schema: SchemaSpec) -> bool:
+    """Return True if all tables may appear together in the same CIF loop.
+
+    Tables are compatible when they share the same set of non-synthetic PK
+    column names.  DDLm multi-category loops (e.g. pd_data / pd_meas /
+    pd_proc / pd_calc) always share their key structure; the column names are
+    the authoritative signal rather than FK-resolved targets, because FK
+    constraints may be intentionally omitted for composite-PK targets that
+    SQLite cannot reference individually.
+    """
     if len(table_names) <= 1:
         return True
-    target_sets = [_loop_target_set(schema.tables[t], schema) for t in table_names]
-    return all(ts == target_sets[0] for ts in target_sets[1:])
+    pk_name_sets = [
+        frozenset(
+            col.name for col in schema.tables[t].columns
+            if col.is_primary_key and not col.is_synthetic
+        )
+        for t in table_names
+    ]
+    return all(pks == pk_name_sets[0] for pks in pk_name_sets[1:])
 
 
 # ---------------------------------------------------------------------------
@@ -376,7 +377,7 @@ class _Ingester:
 
     # ── Public entry point ────────────────────────────────────────────────────
 
-    def run(self) -> list[str]:
+    def run(self, _pre_commit_hook=None) -> list[str]:
         blocks = _select_blocks(self.cif, self.dataset_id)
 
         old_isolation = self.conn.isolation_level
@@ -387,6 +388,8 @@ class _Ingester:
                 self._process_block(block)
             self._post_validate()
             self._flush()
+            if _pre_commit_hook is not None:
+                _pre_commit_hook(self)
             self.conn.execute('COMMIT')
         except ValueError:
             self.conn.execute('ROLLBACK')
@@ -685,6 +688,29 @@ class _Ingester:
                           fk_accumulator, self.propagate_fk, self._emit,
                           block_id, self.merged_rows, self.row_id_counters)
                 iter_rows[tbl_name] = row
+
+            # Cross-table PK propagation for multi-category loops.
+            # All compatible tables share the same PK column names.  After
+            # _apply_fk has run for every table, propagate non-NULL PK values
+            # across sibling rows so that tables whose PK columns have no
+            # direct FK (because the link targets a column of a composite PK,
+            # which cannot be a SQL FK target) still receive the correct key.
+            if len(table_names) > 1:
+                shared_pk: dict[str, Any] = {}
+                for tbl_name in table_names:
+                    tbl = self.schema.tables[tbl_name]
+                    row = iter_rows[tbl_name]
+                    for col in tbl.columns:
+                        if col.is_primary_key and not col.is_synthetic:
+                            if row.get(col.name) is not None:
+                                shared_pk[col.name] = row[col.name]
+                for tbl_name in table_names:
+                    tbl = self.schema.tables[tbl_name]
+                    row = iter_rows[tbl_name]
+                    for col in tbl.columns:
+                        if col.is_primary_key and not col.is_synthetic:
+                            if row.get(col.name) is None and col.name in shared_pk:
+                                row[col.name] = shared_pk[col.name]
 
             all_iter_rows.append(iter_rows)
 

@@ -807,3 +807,51 @@ it does NOT start with `_` (tag) and does NOT start with a prefix keyword (`save
 **How to apply:** Whenever the CIF 2.0 EBNF distinguishes between `restrict-char` and
 `non-blank-char` contexts, lexer logic must check what kind of token is being accumulated
 before applying delimiter break rules.
+
+## Lesson 38 — FK target must be the sole PK, not just any PK column (2026-04-10)
+
+**Context:** `generate_schema` building `ForeignKeyDef` entries; `cif_pow.dic` ingestion.
+
+**Mistake:** Initial fix checked `target_column not in primary_keys` to detect invalid FK targets.
+This correctly caught columns that aren't PKs at all, but missed the case where the target column
+IS listed in `primary_keys` but the PK is composite (e.g. `['id', 'variant']`). SQLite only creates
+a UNIQUE index for a single-column PRIMARY KEY — a composite PK does NOT uniquely index any
+individual column. So `FOREIGN KEY (x) REFERENCES t(id)` is also "foreign key mismatch" when
+`t` has `PRIMARY KEY (id, variant)`.
+
+**Correct check:** `tables[tgt_tbl].primary_keys != [target_item.object_id]` — the FK target
+column must be the sole (and only) PK of the target table.
+
+**How to apply:** Any time a FK constraint is being generated and the target table has a composite
+PK, the FK is invalid unless it references ALL columns of the PK (i.e., the FK itself is composite).
+Single-column FKs targeting individual columns of a composite PK must be skipped with a warning.
+
+## Lesson 39 — Multi-category loop compatibility and PK propagation (2026-04-10)
+
+**Context:** `_loops_compatible` and `_process_loop` in `ingest.py`; `cif_pow.dic` loops.
+
+**Problem:** DDLm multi-category loops (e.g. `pd_data/pd_meas/pd_proc/pd_calc` sharing the
+same `(point_id, diffractogram_id)` PK) were being routed to `_cif_fallback` with
+"incompatible multi-category loop" because:
+
+1. `_loops_compatible` compared FK-resolved target sets. After the composite-PK FK fix (Lesson 38),
+   FKs like `pd_meas.point_id → pd_data.point_id` were correctly skipped (individual columns of
+   a composite PK are not valid SQL FK targets). Without those FKs, each table's `_loop_target_set`
+   resolved to a different self-reference, so the sets never matched.
+
+2. Even if compatibility had passed, `_apply_fk` only fills columns that have an FK. Without FKs
+   for `pd_meas/proc/calc.point_id` and `.diffractogram_id`, those PK columns would remain NULL.
+
+**Fix (two parts):**
+1. Changed `_loops_compatible` to compare non-synthetic PK column name sets instead of FK-resolved
+   target sets. Tables with the same PK column names (e.g. all having `{point_id, diffractogram_id}`)
+   are compatible. This is the authoritative DDLm signal: if categories appear in the same loop,
+   they share the same key structure.
+2. Added cross-table PK propagation in `_process_loop` after `_apply_fk` for all tables. For each
+   iteration, collect all non-NULL PK values from all sibling rows (by column name), then fill NULL
+   PK columns in sibling rows from the pool. This ensures `pd_meas.diffractogram_id` gets the same
+   value as `pd_data.diffractogram_id` (which was filled by the FK-accumulator path).
+
+**How to apply:** The two-part pattern (compatibility check + cross-propagation) is needed whenever
+sibling-category tables link to each other through composite-PK columns. Never rely solely on SQL FK
+constraints being present for PK fill logic.
