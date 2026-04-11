@@ -24,6 +24,15 @@ from pycifparse.dictionary import (
     save_dictionary,
     load_dictionary,
 )
+from pycifparse.inspect import (
+    inspect_lexer,
+    inspect_parse,
+    ParseHandler,
+    inspect_model,
+    inspect_schema,
+    inspect_ingest,
+    TraceEvent,
+)
 
 __all__ = [
     # CIF model
@@ -40,4 +49,7 @@ __all__ = [
     'apply_schema', 'apply_fallback_schema',
     'ResolvedTag', 'resolve_tag',
     'save_dictionary', 'load_dictionary',
+    # Inspect
+    'inspect_lexer', 'inspect_parse', 'ParseHandler',
+    'inspect_model', 'inspect_schema', 'inspect_ingest', 'TraceEvent',
 ]

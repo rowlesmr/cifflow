@@ -4,7 +4,7 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 5 complete. Ready for Stage 6 (output layer).
+**Current stage:** Stage 5 complete. 969 tests passing. Ready for Stage 6 (output layer).
 
 **Test suite state (2026-04-11):**
 - 920 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
