@@ -1,5 +1,26 @@
 # pycifparse — Lessons Learned
 
+## Lesson 48 — JediTerm/PyCharm has a column-tracking bug with ANSI codes and line wrapping (2026-04-11)
+
+**Context:** `inspect/` package output in PyCharm Community with terminal emulation enabled.
+
+**Symptom:** Any line that contains ANSI SGR escape codes and is long enough to wrap displays the
+continuation text at a large column offset instead of column 1. Removing ANSI codes from the
+specific wrapping line does not fix it — the bug corrupts the terminal's column counter for all
+subsequent lines once any ANSI codes have been processed.
+
+**Root cause:** JediTerm (PyCharm's terminal emulator) miscounts ANSI escape byte sequences as
+visible characters when computing column positions for line wrapping. This is a known JediTerm bug,
+not a problem in our output.
+
+**Non-fix:** Splitting the coloured prefix and the long text into separate `print()` calls did not
+help. Removing ANSI codes entirely from the output did not help either (the terminal state was
+already corrupted by earlier lines). Widening the terminal panel past the longest line avoids the
+wrap and therefore avoids the symptom.
+
+**Rule:** Do not attempt to work around JediTerm line-wrap rendering bugs in library code. Accept
+that output may look odd in narrow PyCharm terminals; document it as a known limitation.
+
 ## Lesson 47 — Composite FK column fill requires transitive single-column FK lookup (2026-04-11)
 
 **Context:** `_apply_fk` composite FK branch in `ingestion/ingest.py`.
