@@ -4,7 +4,34 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 4 (SQLite ingestion) — complete. Stage 5 spec written. Ready to begin Stage 5.
+**Current stage:** Stage 5 complete. 969 tests passing. Ready for Stage 6 (output layer).
+
+## Stage 5: Inspect Package — COMPLETE ✓
+
+### Steps
+- [x] Write plan to todo.md
+- [x] Create `src/pycifparse/inspect/` package
+  - [x] `_common.py` — shared ANSI/colour utilities, `resolve_source`, `fmt_value`
+  - [x] `_lexer.py` — `inspect_lexer` (rename of `debug_lex`)
+  - [x] `_parser.py` — `inspect_parse` + `ParseHandler` (rename of `debug_parse`/`DebugHandler`)
+  - [x] `_model.py` — `inspect_model` (rename of `debug_build`)
+  - [x] `_schema.py` — `inspect_schema` (rename of `debug_schema`; now also accepts `DdlmDictionary`)
+  - [x] `_ingest.py` — `inspect_ingest` + `TraceEvent` (new)
+  - [x] `__init__.py` — exports all public symbols
+- [x] Delete `src/pycifparse/debug.py`
+- [x] Rename `tests/test_debug.py` → `tests/test_inspect.py`, update all imports/references
+- [x] Update `src/pycifparse/__init__.py` to export inspect symbols
+- [x] Verify test suite still passes: **969 tests** (all passing)
+
+**Open decisions carried forward:**
+- `inspect_ingest` currently traces warnings/errors and FK violations. Routing events (tag → table)
+  require hooks into `_Ingester` internals; deferred to when a `filter=` parameter is added.
+- `filter=` parameter on `inspect_ingest` — unfiltered trace first; leave open for later.
+- SQLite trace output for `inspect_ingest` — out of scope; leave open.
+
+---
+
+**Previous stage:** Stage 4 (SQLite ingestion) — complete.
 
 **Test suite state (2026-04-11):**
 - 936 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
