@@ -1,0 +1,18 @@
+#\#CIF_2.0
+# Tests: mixed known and unknown tags with a schema active. Known tags
+# (_cell.*) are routed to structured tables. Unknown tags (_my_custom.*,
+# _another_unknown, _quoted_number) are not in cif_core, so they must fall through
+# to _cif_fallback even when a schema is present. Neither routing must lose data.
+# Dictionary: cif_core
+
+data_test_unknown_tag
+_cell.length_a    4.500
+_cell.length_b    4.500
+_cell.length_c    9.000
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+_my_custom.property   hello
+_my_custom.number     42
+_another_unknown      world
+_quoted_number        "37.4(2)"

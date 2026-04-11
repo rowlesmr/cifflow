@@ -4,35 +4,103 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current position:** Stage 3D COMPLETE. Stage 4 prompt not yet written.
+**Current stage:** Stage 4 (SQLite ingestion) — complete. Stage 5 spec written. Ready to begin Stage 5.
 
-**Test suite state:**
-- 675 tests pass (non-slow): `pytest -m "not slow"`
-- ~27 additional slow tests: `pytest -m slow`
+**Test suite state (2026-04-11):**
+- 936 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
+- 27 slow tests pass: `.venv/Scripts/pytest -m slow`
+- Total: 963 passing
 
-**What was just completed (Stage 3D):**
-- `_cif_fallback` table design finalised (see `prompts/Stage3D_fallbakc_schema.md`)
-- `emit_fallback_create_statements()` added to `schema.py`
-- `apply_fallback_schema(conn, *, drop_existing=False)` added to `schema_apply.py`
-- Both exported from `dictionary/__init__.py`
-- 22 tests in `tests/dictionary/test_fallback_schema.py`
-- `CLAUDE.md` constraint 7 updated: no-dictionary ingestion now routes all tags to
-  `_cif_fallback`; SQLite layer description updated to reflect two-tier model
+**What was just completed (this session):**
+- **UUID-per-row for keyless loops** (`_process_loop`): added a post-`_apply_fk` UUID fill pass
+  that handles all three keyless-PK scenarios uniformly — single-column key-FK, pure-key (no FK),
+  and composite-key-FK components. Uses `pk_uuid_pool` to share UUIDs across sibling tables in a
+  multi-category loop iteration. Topological stub ordering ensures grandparent rows exist before
+  parent stubs are inserted (required for `DEFERRABLE INITIALLY DEFERRED` FK checks). Lessons 44–45.
+- **`IngestionError`** (`ingestion/ingest.py`, `ingestion/__init__.py`, `__init__.py`): new exception
+  class with `.errors: list[str]`. All blocks are processed first to collect all conflicts, then
+  `IngestionError` is raised after the block loop. The existing `except Exception` handler in
+  `run()` triggers `ROLLBACK`. Cross-block value conflicts are semantic errors (not warnings) —
+  feeding multiple blocks implies they belong together; a value conflict means the blocks are
+  incompatible.
+- **Loop-class scalar buffering** (`_process_scalar`): Loop-class scalar tags are now accumulated
+  into `loop_scalar_buffers` (parallel to `set_buffers`) and flushed as a complete row at end of
+  block. Previously they were merged one tag at a time, so the PK column was absent from non-PK
+  rows, causing all blocks to collide on PK = `(None,)`. Fixed false merge conflicts in
+  `multi_one.cif` `pd_instr_detector` rows. Lesson 46.
+- **`TestCoreRepeatedLoopKey`**: new test class covering the `core_repeated_loop_key.cif` fixture —
+  exact duplicate silently dropped, value conflicts raise `IngestionError`, transaction rolled back.
+- **`TestCoreMultipleBlocks`** updated: Block C's F1/Na1 conflicts with earlier blocks now raise
+  `IngestionError` (6 errors); 0 rows after rollback.
+- **`TestIngestMultiBlock`** corrected: was using `core_schema` for a powder diffraction file;
+  switched to `pow_schema`. Assertion updated to check `pd_instr` and `pd_instr_detector` row
+  counts instead of `_cif_fallback` (which is 0 when a schema is present).
 
-**What comes next: Stage 4 — SQLite ingestion**
-- No prompt exists yet in `prompts/`; write and agree the prompt before implementing
-- Scope: parse a CIF data file → load into SQLite using the two-tier schema
-- Decided:
-  - Multi-block CIF files: all blocks from one file → one database. Each block
-    identified by `_block_id`.
-  - SU handling: measurand value stored in its column; SU stored in the linked SU
-    column (via `ColumnDef.linked_item_id`). If SU column absent from schema, SU
-    is discarded with a semantic error.
-  - All values stored as TEXT; numeric coercion deferred to `convert_database()` (Stage 5+)
-  - Unmapped tags route to `_cif_fallback`; no-dictionary mode routes all tags there
-  - `_cif_fallback._row_id`: sequential integer scoped per block
-  - `_cif_fallback.value_type`: stores the `ValueType` enum string (e.g. `"string"`,
-    `"double_quoted"`, `"placeholder"`, etc.)
+**What comes next (Stage 5):**
+- Consult `prompts/Stage5_Ingest_Debug_Prompt.md` before starting
+- Implement `inspect_*` family in a new `inspect` module (exact module layout TBD — see open decisions)
+- `inspect_lexer` and `inspect_parse` will wrap / replace `debug.py` functionality
+
+**Open decisions / known limitations:**
+- **Synthetic Set key scope — block-scoped vs block-category-scoped `_pycifparse_id`:**
+  Cross-block UUIDs are always distinct (agreed). The question is within a single block: should all
+  keyless Set tables share one UUID (block-scoped), or should each keyless Set table get its own
+  UUID (block-category-scoped, current behaviour)?
+
+  *Block-scoped:* one UUID `X` per block; every keyless Set table in that block gets `_pycifparse_id = X`.
+  *Block-category-scoped (current):* each keyless Set table in a block independently generates its
+  own UUID4, so `cell._pycifparse_id ≠ diffrn._pycifparse_id` even within the same block.
+
+  *Arguments for block-scoped:*
+  - A block describes one experiment/structure. All its keyless Set entities are facets of the same
+    thing; a shared identifier reflects that unity.
+  - FK chains between keyless Set tables would resolve trivially — if `cell.diffrn_id` is an FK to
+    `diffrn._pycifparse_id` and both use the same UUID, no propagation is needed.
+  - Simpler to generate: one `uuid4()` call per block rather than one per keyless Set table.
+
+  *Arguments for block-category-scoped (current):*
+  - Each Set category is a distinct entity; sharing a UUID across unrelated categories is
+    semantically misleading and would cause spurious JOIN matches on `_pycifparse_id`.
+  - FK propagation already handles cross-table wiring correctly via `fk_accumulator` keyed on
+    named CIF tags (e.g. `_diffrn.id`), not on `_pycifparse_id` directly. The UUID values do
+    not need to match across tables for FK resolution to work.
+  - Block-scoped only helps FK resolution when the FK column IS `_pycifparse_id` in the target —
+    which cannot happen for real dictionaries (they link via named items like `_diffrn.id`).
+
+  *Current position:* block-category-scoped. The FK propagation machinery makes the block-scoped
+  shortcut unnecessary, and distinct UUIDs per category are semantically cleaner.
+
+- **Stage 5 module layout**: single `inspect.py` vs `inspect/` package with one module per layer.
+- **`inspect_ingest` API shape**: context-manager collector vs flag gating a `TraceEvent` list.
+- **`inspect_ingest` granularity**: pre-flush vs post-FK-resolution row snapshots.
+- **`inspect_schema` input**: accept raw dictionary source string (parse internally) or require a
+  pre-loaded `DdlmDictionary`?
+- `uuid_reference_check` is a stub — no rows written in Stage 4. Implement in a later stage.
+- Looped keyless Set: error is supposed to be emitted and UUID assigned per row, but this path is
+  not explicitly tested. Covered implicitly by the `_pycifparse_id` test but no error-emission test.
+- `_process_scalar` for the no-schema path uses `_row_id=1` for all scalars. In a block with
+  duplicate scalar tags, the fallback PK (`_block_id, _row_id, tag`) will cause a DB-level error
+  on the second occurrence. The spec says duplicate tags are undefined behaviour — caller must
+  consolidate before `ingest()`. Documented in the Assumptions section of Stage4 prompt.
+
+---
+
+## Stage 4: SQLite Ingestion — Implementation Plan
+
+### Step 1 — Module scaffolding ✓
+- [x] Create `src/pycifparse/ingestion/__init__.py` (exports `ingest`)
+- [x] Create `src/pycifparse/ingestion/ingest.py` (stub raising `NotImplementedError`)
+- [x] Export `ingest` from `pycifparse/__init__.py`
+- [x] Create `tests/ingestion/__init__.py`, `test_ingest.py`, `test_integration.py`
+- [x] Confirm import works: `from pycifparse import ingest`
+
+### Steps 2–10 ✓ COMPLETE
+All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `tests/ingestion/test_ingest.py` (92 tests).
+
+### Step 11 — Integration tests (`@pytest.mark.slow`) ✓
+- [x] Ingest a real CIF file against `cif_core.dic` schema; spot-check known tag values in structured tables
+- [x] No-schema ingest of the same file; verify all tags appear in `_cif_fallback`
+- [x] Multi-block real CIF; verify cross-block merge produces correct row counts
 
 **Open items (non-blocking):**
 - Malformed-input test gaps — listed under Stage 1 Step 6; resolve against spec when convenient
@@ -197,15 +265,24 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 
 ### Planned features
 
+- **Duplicate tag deduplication in `CifBlock`** — if a duplicate tag value is byte-for-byte
+  identical to the already-stored value, discard the duplicate silently rather than appending it.
+  Only true duplicates (same raw string, same `ValueType`) are discarded; differing values are
+  still preserved per the non-negotiable constraint (no silent data loss). Emit a semantic error
+  either way. Affects `CifBuilder` (Stage 2 layer). Decide whether deduplication applies to loop
+  columns as well, or only to scalar tags.
+
 - **`convert_database(src, dst, schema, *, on_coercion_failure='null') -> list[str]`** —
-  copies a TEXT-storage database to a new connection with numeric columns cast to their
-  schema-declared types (INTEGER/REAL). Round-trip fidelity is explicitly sacrificed.
-  Rules:
+  copies a TEXT-storage database to a new connection with value columns cast to the
+  type indicated by `ColumnDef.type_contents`. Round-trip fidelity is explicitly
+  sacrificed. Rules:
   - Always a copy; original is never modified.
   - SU values are already split at ingestion (measurand column holds bare numeric).
-  - PLACEHOLDERs already handled via status columns; no special treatment needed.
-  - `_cif_fallback`: best-effort CAST on `value`; populate `numeric_value REAL` column
-    (NULL on failure).
+  - CIF sentinels `'.'` and `'?'` → `NULL` silently (not a coercion failure).
+  - `'"."'` and `'"?"'` (quoted strings) → subject to `on_coercion_failure` if the
+    column is numeric.
+  - `_cif_fallback`: best-effort CAST on `value` guided by `value_type`; `NULL` on
+    failure per `on_coercion_failure`.
   - `on_coercion_failure`: `'null'` (default) — failed cast → NULL; `'keep'` — leave
     TEXT value; `'error'` — raise.
   - Returns list of warnings (one per coercion failure in `'null'`/`'keep'` modes).
@@ -214,6 +291,22 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 - **Programmatic `CifFile` construction** — user-facing builder API accepting native Python
   types (str, int, float), converting to strings with correct `ValueType` assignment.
   Stage 5+, tightly coupled to CIF emission.
+
+- **`CifFile` editing API** — mutation methods on `CifBlock` and `CifSaveFrame` allowing
+  the user to modify a parsed `CifFile` in place rather than re-parsing an edited source
+  string. Avoids a full parse/re-emit round-trip for small programmatic edits. Proposed
+  operations:
+  - `block.set(tag, value)` — set or replace a scalar tag value; accepts `str | CifScalar`;
+    assigns appropriate `ValueType` if given a plain `str`.
+  - `block.set_loop_value(loop_index, tag, row_index, value)` — replace one cell in a loop.
+  - `block.delete(tag)` — remove a scalar tag or all values for a loop column.
+  - `block.add_loop(tags, rows)` — append a new loop.
+  - `block.rename_tag(old, new)` — rename a tag in scalars or loops (for alias resolution
+    or deprecation fixes before ingestion).
+  - Save-frame equivalents for the above.
+  - All mutations must preserve the non-negotiable constraints (no silent data loss, file
+    order of untouched tags preserved, `ValueType` provenance maintained).
+  - Stage 5+, design in detail before implementing.
 
 ### Documentation
 

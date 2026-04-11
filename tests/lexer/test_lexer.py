@@ -370,6 +370,31 @@ def test_colon_is_standalone_token_cif2():
     colon_tokens = [t for t in tokens if t.value == ':']
     assert len(colon_tokens) == 1
 
+def test_tag_with_subscript_brackets_cif2():
+    # Tags (data-name) may contain '[' and ']' per CIF 2.0 EBNF (non-blank-char).
+    # The lexer must not split '_axis.vector[1]' at '['.
+    tokens = lex('_axis.vector[1]')
+    assert len(tokens) == 1
+    assert tokens[0].token_type == TokenType.TAG
+    assert tokens[0].value == '_axis.vector[1]'
+
+def test_save_keyword_with_subscript_brackets_cif2():
+    # Save frame names (container-code) also use non-blank-char, so they may
+    # contain '[' and ']'.  'save_axis.vector[1]' must be one KEYWORD token.
+    tokens = lex('save_axis.vector[1]')
+    assert len(tokens) == 1
+    assert tokens[0].token_type == TokenType.KEYWORD
+    assert tokens[0].value == 'save_axis.vector[1]'
+
+def test_plain_value_still_split_at_bracket_cif2():
+    # Plain unquoted values use restrict-char (no '['/']'), so 'foo[1]' must
+    # be split into 'foo', '[', '1', ']'.
+    tokens = lex('foo[1]')
+    assert tokens[0].value == 'foo'
+    assert tokens[1].value == '['
+    assert tokens[2].value == '1'
+    assert tokens[3].value == ']'
+
 def test_delimiters_not_special_in_cif11():
     # In CIF 1.1 mode, '[', ']', '{', '}' are part of bare words
     tokens = lex('[value]', version=CIF1)

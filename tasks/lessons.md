@@ -1,5 +1,67 @@
 # pycifparse — Lessons Learned
 
+## Lesson 47 — Composite FK column fill requires transitive single-column FK lookup (2026-04-11)
+
+**Context:** `_apply_fk` composite FK branch in `ingestion/ingest.py`.
+
+**Mistake:** When filling a missing source column of a composite FK, the lookup searched `fk_accumulator` using `column_to_tag(target_table, target_col)`. This is correct when the target column is a natural PK given directly in the CIF data. But if the target column is itself a single-column FK (e.g. `pd_data.diffractogram_id → pd_diffractogram.id`), the fk_accumulator holds the value under the *ultimate* tag (`_pd_diffractogram.id`), not under the intermediate one (`_pd_data.diffractogram_id`). The one-level lookup found nothing, leaving the column NULL.
+
+**Consequence:** The UUID fill pass then assigned a UUID to the NULL PK column. The composite FK stub section created parent stubs with that UUID. Later, when the real loop produced rows with the correct value (e.g. `'degaussa_raw_01'`), they got a different PK and were inserted as separate rows — doubling the row count.
+
+**Fix:** After the direct `fk_accumulator` lookup fails, walk the single-column FK chain from the target column up to 15 levels. At each step, look up the current `(table, col)` in `column_to_tag` and try `fk_accumulator`. Stop as soon as a value is found. Emit a warning if the depth limit is reached (possible FK cycle).
+
+**Rule:** Composite FK column fill must be transitively FK-aware. A column whose value originates two or more FK hops away is still resolvable — follow the chain rather than assuming one hop is sufficient.
+
+## Lesson 46 — Loop-class scalar tags must be buffered per-block, not merged immediately (2026-04-11)
+
+**Context:** `_process_scalar` in `ingestion/ingest.py`.
+
+**Mistake:** Loop-class tags given as scalars (outside any `loop_`) were processed one at a time: each tag created a row containing only that column and was immediately passed to `_merge_into`. Because the PK column (`_pd_instr_detector.id = CD-detc`) and non-PK columns (`_pd_instr_detector.instr_id`, `_pd_instr.soller_ax_spec_detc`) were processed in separate calls, the non-PK rows had PK = `(None,)`. All `(None,)` rows from different blocks then merged together and produced false value conflicts (e.g. `keeping 'chrome_dome', ignoring 'copper_top'`).
+
+**Why it matters:** A CIF block may give a single Loop-class entity entirely as scalars — this is a real pattern in multi-block powder diffraction files. The intent is one logical row; all column values from that block describe the same row.
+
+**Fix:** Accumulate Loop-class scalar tags in a `loop_scalar_buffers` dict (parallel to `set_buffers`) and write to `fk_accumulator` immediately. Flush the complete, fully-populated row through `_apply_fk` + `_merge_into` at the end of the block, after all tags have been seen.
+
+**Rule:** Whether a table's `category_class` is `Set` or `Loop`, scalar tags within a single block always describe one row. Merge only when the full row is assembled.
+
+**Symptom to watch for:** False merge conflicts on non-PK columns where PK = `(None,)` for rows that should have distinct natural keys.
+
+## Lesson 45 — UUID-per-row for keyless loops requires a post-_apply_fk fill pass (2026-04-11)
+
+**Context:** `_process_loop` and `_apply_fk` in `ingestion/ingest.py`.
+
+**Mistake:** UUID generation for missing PK columns was only wired inside `_apply_fk` Source 3, which fires for *single-column key-FKs* only. Two categories were silently skipped:
+1. **Pure-key PKs** (no FK at all, e.g. `atom_site.label`) — `_apply_fk` never visits them.
+2. **Composite-key-FK components** (e.g. `pd_meas.point_id` in the `(point_id, diffractogram_id)` composite PK) — the composite path explicitly excluded UUID generation.
+Both produced `NULL` for the key column on every iteration, so all rows collapsed to one via `_merge_into`.
+
+Additionally, for single-column key-FKs, the generated UUID was written to `fk_accumulator`, so iteration 1 found it via Source 2 and reused the same UUID — same result.
+
+**Correct rule:**
+- Source 3 (`_apply_fk`): only persist the UUID to `fk_accumulator` when `loop_row_by_defid is None` (scalar context). In loop context leave the accumulator untouched so each iteration regenerates.
+- After all `_apply_fk` calls for the iteration, run a **UUID fill pass** over sibling rows: for each NULL non-synthetic PK column, generate one UUID per column name and apply it to every sibling table that shares that column name. This handles pure-key and composite-key cases uniformly.
+- For composite FKs now fully specified after the fill, call `_apply_fk` on the created parent stub *before* `_merge_into`, so that grandparent stubs are also inserted first — preserving the topological order that SQLite deferred FK constraints require.
+
+**How to apply:** Any time a loop may lack its key column, the fill pass in `_process_loop` handles it automatically. `_apply_fk` alone is not sufficient for composite or pure-key scenarios.
+
+**Note on deferred FKs:** `DEFERRABLE INITIALLY DEFERRED` constraints are still enforced at the end of each `executemany` in autocommit mode. Parents must precede children in `merged_rows` insertion order, or the constraint fires before the parent row exists.
+
+---
+
+## Lesson 44 — SU values must be scaled, not stored raw (2026-04-11)
+
+**Context:** `split_su` in `ingestion/ingest.py`.
+
+**Mistake:** `split_su('3.992(4)')` returned `('3.992', '4')` — storing the raw parenthetical digits rather than the actual uncertainty. The `_su` column would hold `'4'` while an explicitly supplied `_cell.length_a_su 0.004` would hold `'0.004'`, making the two representations inconsistent.
+
+**Correct rule:** The SU digit(s) represent units in the last decimal place of the measurand. Scale by `10^(exponent - decimal_places)`:
+- `'3.992(4)'` → `('3.992', '0.004')` (4 × 10⁻³)
+- `'1234(5)'`  → `('1234',  '5')`      (5 × 10⁰)
+- `'12.34(56)'` → `('12.34', '0.56')` (56 × 10⁻²)
+- `'1.23e-4(5)'` → `('1.23e-4', '0.000005')` (5 × 10⁻⁶)
+
+**Fix:** Replaced the one-liner `split_su` with scaling logic that counts decimal places in the mantissa and the exponent separately. Updated `TestSplitSu` and `TestSUIngestion` to assert scaled values.
+
 ## Lesson 1 — Multiline text field closing delimiter (2026-04-04)
 
 **Context:** Lexer `_read_multiline` implementation.
@@ -336,8 +398,8 @@ in the value column using the following convention:
 | `NULL` | tag absent from this data block |
 | `'.'` | inapplicable (unquoted `.` — `ValueType.PLACEHOLDER`) |
 | `'?'` | unknown (unquoted `?` — `ValueType.PLACEHOLDER`) |
-| `'"."'` | literal string `"."` (quoted dot — any quoted `ValueType`) |
-| `'"?"'` | literal string `"?"` (quoted question mark — any quoted `ValueType`) |
+| `'"."'` | literal `.` stored with delimiters — source `ValueType` was any of `DOUBLE_QUOTED`, `SINGLE_QUOTED`, `TRIPLE_DOUBLE_QUOTED`, `TRIPLE_SINGLE_QUOTED`, `MULTILINE_STRING` |
+| `'"?"'` | literal `?` stored with delimiters — same set of source `ValueType`s |
 | anything else | real value, stored as raw string |
 
 **Why:** Status companion columns (`{col}_status`) doubled the column count and
@@ -354,10 +416,590 @@ on round-trip.
 
 **How to apply:**
 - At ingestion: inspect `ValueType`. `PLACEHOLDER` → store `'.'` or `'?'`.
-  Quoted `.` or `?` → store `'"."'` or `'"?"'`. All other values → store raw string.
+  Any non-PLACEHOLDER ValueType whose raw string value is `.` or `?`
+  (`DOUBLE_QUOTED`, `SINGLE_QUOTED`, `TRIPLE_DOUBLE_QUOTED`, `TRIPLE_SINGLE_QUOTED`,
+  `MULTILINE_STRING`) → store `'"."'` or `'"?"'`.
+  All other values → store raw string.
   Tag absent → do not insert row / leave column NULL.
 - At query time: `WHERE col IS NOT NULL AND col NOT IN ('.', '?')` selects rows
   with real values.
 - At output: `NULL` → omit tag. `'.'` → emit `.`. `'?'` → emit `?`.
   `'"."'` → emit `"."`. `'"?"'` → emit `"?"`. All other values → use `value_type`
   from `_cif_fallback` (or schema type) to decide quoting.
+
+---
+
+## Lesson 20 — `_row_id` uniqueness requires a composite constraint (2026-04-08)
+
+**Context:** `emit_create_statements` in `schema.py`; Stage 4 schema design.
+
+**Mistake:** Emitted `_row_id ... UNIQUE` as an inline column constraint.
+At the time this was written, `_row_id` was assumed to reset to 1 at the start
+of each block, so a multi-block CIF would produce duplicate `_row_id` values in
+the same table. `UNIQUE` on `_row_id` alone would fire on the second block's
+first row.
+
+**Later clarification (Stage 4):** `_row_id` is in fact global — it never
+resets between blocks. A composite `UNIQUE (_block_id, _row_id)` constraint
+is therefore stronger than strictly necessary, but it remains correct and is
+the prescribed form regardless.
+
+**Correct rule:** For tables where `(_block_id, _row_id)` is not already the
+`PRIMARY KEY` (i.e. keyed Loop tables and all Set tables), emit a table-level
+`UNIQUE ("_block_id", "_row_id")` constraint. For keyless Loop tables,
+`(_block_id, _row_id)` is already the PK so no extra constraint is needed.
+
+**How to apply:** Never use `_row_id UNIQUE`. Always use the composite form.
+
+---
+
+## Lesson 21 — Mixed loop cross-tier join requires shared `_row_id` per iteration (2026-04-08)
+
+**Context:** `_cif_fallback` table design; Stage 4 ingestion.
+
+**Problem:** A loop whose tags split between a structured table and `_cif_fallback`
+produces rows in both locations. If `_row_id` increments per cell in `_cif_fallback`,
+there is no join key linking a fallback cell to the structured row from the same
+loop iteration.
+
+**Correct rule:** `_row_id` is scoped per table globally across the entire
+`ingest()` call — it never resets between blocks. For a mixed loop, all
+`_cif_fallback` cells from a given iteration share the same `_row_id` as the
+corresponding structured table row — both draw from the structured table's counter.
+The join key is `(_block_id, _row_id)` within that table + `_cif_fallback`.
+
+For pure-fallback loops, `_cif_fallback` uses its own global counter,
+incrementing once per iteration (not per cell).
+
+**Consequence:** `_cif_fallback` PK is `(_block_id, _row_id, tag)` — `tag` is
+needed because multiple cells (different tags) share `(_block_id, _row_id)` within
+the same loop iteration.
+
+**How to apply:** Maintain `_row_id_counters: dict[str, int]` (table name →
+counter). For mixed loops, draw from the structured table's counter for both the
+structured row and all fallback INSERTs for that iteration. For pure-fallback
+loops, draw from `_cif_fallback`'s counter. `_row_id_counters` is initialised
+once per `ingest()` call and never resets between blocks.
+
+---
+
+## Lesson 22 — Set category `_row_id` must be reserved at first tag encounter (2026-04-08)
+
+**Context:** Stage 4 ingestion; scalar Set category accumulation strategy.
+
+**Problem:** Scalar Set tags are accumulated during block traversal and INSERTed
+at end of block. If `_row_id` is assigned at INSERT time, Set rows always get
+higher `_row_id` values than Loop rows in the same block, regardless of their
+position in the file. This breaks document order and the "scalar Set and
+single-row loop are equivalent" guarantee.
+
+**Correct rule:** When the **first scalar tag** of a Set category is encountered,
+immediately reserve the current `_row_id_counter` for that category's pending row
+and increment the counter. INSERT at end of block using the reserved value. This
+places the Set row in document order relative to any Loop rows.
+
+**How to apply:** Maintain `set_row_reservations: dict[str, int]` (table_name →
+reserved `_row_id`) populated on first-tag-seen, drawing from that table's entry
+in `_row_id_counters`. Use the reserved values when performing the end-of-block
+INSERTs.
+
+---
+
+## Lesson 23 — Set categories can appear in loops; schema must accommodate both forms (2026-04-08)
+
+**Context:** Stage 4 ingestion; Set table handling.
+
+**Rule:** A DDLm Set category is *normally* represented by scalar tags (one logical
+row per block), but the CIF format allows any category's tags to appear in a loop_
+if the PK column is included. Both of these are valid and equivalent:
+
+```
+# scalar form
+_cell.length_a 12
+_cell.length_b 13
+
+# looped form (single iteration)
+loop_
+_cell.length_a _cell.length_b
+12 13
+```
+
+The ingestion layer must handle both. When a Set category appears in a loop, each
+iteration produces a separate row with its own `_row_id`. The scalar accumulation
+strategy (accumulate then INSERT at end of block) only applies to tags that arrive
+outside a loop.
+
+**How to apply:** Detect Set categories appearing inside a loop at ingestion time
+and treat them as Loop-style rows (assign `_row_id` per iteration, pass through
+merge algorithm). Do not defer these to end-of-block accumulation.
+
+---
+
+## Lesson 24 — A single logical entity may be spread across multiple CIF blocks (2026-04-08)
+
+**Context:** Stage 4 ingestion; multi-block CIF files.
+
+**Rule:** CIF allows a single dataset to be spread across multiple data blocks.
+Tags from the same category with the same PK value across different blocks
+describe the same logical row. The ingestion layer always merges such rows.
+
+**Merge rules:**
+- Rows with the same PK value (across any blocks) are merged into one row.
+- First-seen block provides `_block_id` and `_row_id` for the merged row.
+- First non-NULL value for each column wins; conflicts (two different non-NULL
+  values for the same column) emit a semantic error and keep the first value.
+- `_cif_fallback` rows are not merged; they remain block-local.
+
+**`_row_id` implication:** `_row_id_counters` must not reset between blocks.
+`_row_id` is effectively per-table globally across the whole `ingest()` call.
+The counter increments once per new unique PK seen (across all blocks).
+
+**Implementation:** Accumulate all structured rows in a `merged_rows` dict
+(table → PK tuple → column dict) throughout the entire `ingest()` call. Perform
+all SQL INSERTs after all blocks have been processed.
+
+---
+
+## Lesson 25 — `_audit_dataset.id` introduces a namespace; absence says nothing (2026-04-07)
+
+**Context:** Stage 4 ingestion; multi-block CIF files with dataset IDs.
+
+**Rule:** The presence of `_audit_dataset.id` in a block asserts that the block
+belongs to a named dataset. The *absence* of `_audit_dataset.id` says nothing — it
+does not mean the block is unrelated to other blocks.
+
+**Two block classes:**
+- **Dataset blocks** — carry one or more `_audit_dataset.id` values. Their PKs are
+  unambiguous within the dataset because the dataset ID provides the namespace.
+- **General blocks** — carry no `_audit_dataset.id`. May use UUIDs for uniqueness
+  (high confidence) or short identifiers (assumed coherence, warn the user).
+
+**`_audit_dataset.id` is a loop category** — a block may carry multiple dataset ID
+values via a `loop_`. The set of values for each block is read from the IR before
+any rows are written.
+
+**Pre-ingestion check (fatal):** Before any database writes, `ingest()` computes
+the intersection of dataset ID sets across all dataset blocks. If the intersection
+is empty and at least one dataset block exists, a `ValueError` is raised and
+nothing is written. General blocks (no `_audit_dataset.id`) are always included.
+
+**`dataset_id` parameter:** Bypasses the intersection check. Only blocks whose
+dataset ID set contains `dataset_id` are ingested (plus all general blocks).
+Allows extracting one coherent dataset from a multi-dataset CIF file.
+
+**Merge algorithm is unconditional.** The pre-ingestion check guarantees coherence;
+there are no blocked merges. Same PK → always merge.
+
+**`id_regime`** — recorded per ingested block in `_block_dataset_membership`:
+- `'dataset'` — block carries `_audit_dataset.id`
+- `'uuid'` — no dataset ID; all PK values pass UUID format check
+- `'assumed'` — no dataset ID; PK values are not all UUIDs, **or** no structured-table rows exist (cannot determine UUID usage)
+
+**Post-ingestion validation checks** (written to `_validation_result`):
+- `uuid_regime` (Warning) — general block with non-UUID structured-table PKs.
+- `uuid_reference_check` (Info) — general-block UUID PK not referenced by any
+  dataset block as a FK value.
+
+**Both tables** (`_block_dataset_membership`, `_validation_result`) are created by
+`apply_fallback_schema()`, not `apply_schema()`.
+
+---
+
+## Lesson 26 — Single-iteration loops feed `fk_accumulator` (2026-04-09)
+
+**Context:** Stage 4 ingestion; FK propagation source 2.
+
+**Rule:** After any loop completes, if it produced exactly one iteration, write
+every column value from that iteration into `fk_accumulator`. This makes the
+values available for FK propagation in subsequent loops within the same block,
+equivalent to a scalar. Multi-iteration loops do not feed `fk_accumulator`.
+
+**Why:** A single-iteration loop is semantically equivalent to a set of scalar
+tags. Parent-category IDs occasionally appear in a one-row loop rather than as
+bare scalars; without this rule their values would be invisible to FK propagation
+in later loops, forcing unnecessary UUID fallbacks.
+
+**How to apply:** After processing each loop, check the iteration count. If
+exactly 1, iterate over all column values produced (across all tables for
+multi-category loops) and write them into `fk_accumulator` keyed by
+`definition_id`. Do not write partial iterations — only after the loop is
+confirmed to have had exactly one iteration.
+
+## Lesson 27 — `ColumnDef.type_contents` is informational only; DDL always emits TEXT (2026-04-09)
+
+**Context:** Stage 4 design review; `ColumnDef` field rename.
+
+**Mistake:** `ColumnDef` originally had `sql_type: str` storing SQL type strings
+(`"TEXT"`, `"INTEGER"`, `"REAL"`) for use in generated DDL. This conflicted with
+the Lesson 19 decision that all value columns store TEXT for round-trip fidelity.
+
+**Correct rule:** `ColumnDef.type_contents` stores the DDLm `_type.contents` value
+(e.g. `"Text"`, `"Integer"`, `"Real"`, `"List"`) for future validation and
+type-coercion use. It does not affect DDL generation. `emit_create_statements`
+always emits `TEXT` for all value columns regardless of `type_contents`.
+
+**How to apply:** Never use `type_contents` to determine the SQL column type in DDL.
+Use it only in validation logic and in `convert_database` to guide coercion.
+
+---
+
+## Lesson 28 — `fk_accumulator` stores encoded database values, not raw `CifScalar` (2026-04-09)
+
+**Context:** Stage 4 ingestion; FK propagation implementation.
+
+**Rule:** Values written to `fk_accumulator` must be pre-encoded via `encode_value`
+— i.e., in the exact form they will appear in the database column. FK propagation
+then copies the value directly into the target column without re-encoding.
+
+**Why:** Encoding at write-time (into the accumulator) rather than at read-time
+(when propagating) keeps the propagation path simple: a straight dict lookup and
+column assignment, with no type inspection at use time.
+
+**How to apply:** Whenever a value is written to `fk_accumulator` — whether from
+a scalar Set tag, a single-iteration loop, or a UUID fallback — always call
+`encode_value` first. The accumulator type is `dict[str, str]`.
+
+---
+
+## Lesson 29 — Value encoding for quoted `.` and `?` covers all non-PLACEHOLDER ValueTypes (2026-04-09)
+
+**Context:** Stage 4 value encoding table; extension of Lesson 19.
+
+**Mistake:** The initial encoding table only listed `DOUBLE_QUOTED` for the
+`'"."'` / `'"?"'` cases. `SINGLE_QUOTED`, `TRIPLE_DOUBLE_QUOTED`,
+`TRIPLE_SINGLE_QUOTED`, and `MULTILINE_STRING` values whose content is `.` or
+`?` were not covered, causing them to fall through to "raw string" and be stored
+as `'.'` or `'?'` — indistinguishable from bare PLACEHOLDER values.
+
+**Correct rule:** Any value whose raw content is `.` or `?` AND whose `ValueType`
+is not `PLACEHOLDER` must be stored as `'"."'` or `'"?"'` respectively. This
+applies to all five non-PLACEHOLDER ValueTypes:
+`DOUBLE_QUOTED`, `SINGLE_QUOTED`, `TRIPLE_DOUBLE_QUOTED`, `TRIPLE_SINGLE_QUOTED`,
+`MULTILINE_STRING`.
+
+The detection logic at ingestion: `if raw in ('.', '?') and value_type != PLACEHOLDER`.
+
+**How to apply:** The encoding table in Stage 4 prompt §Value encoding is the
+authoritative reference. The `encode_value` function must check `value_type !=
+PLACEHOLDER` (not `value_type == DOUBLE_QUOTED`) to catch all cases.
+
+---
+
+## Lesson 30 — Container `value_type` exists only in `_cif_fallback`; use `json_valid()` for structured tables (2026-04-09)
+
+**Context:** Stage 4 container value handling; querying encoded container values.
+
+**Rule:** The `value_type` column (`'list'` or `'table'`) exists only in
+`_cif_fallback`. Structured tables have no `value_type` column. To detect a
+container value in a structured table column at query time, use SQLite's
+`json_valid(column)` function.
+
+**Why:** Structured table columns are defined by the dictionary schema with no
+metadata column. Adding a companion `{col}_type` column was rejected as it doubles
+column count and was the same problem as the discarded status-column approach.
+
+**How to apply:**
+- In `_cif_fallback` queries: `WHERE value_type IN ('list', 'table')` — precise.
+- In structured table queries: `WHERE json_valid(column)` — safe guard before
+  calling any other JSON function. Never call `json_extract`, `json_each`, or
+  `json_type` on a column without this guard (they raise on non-JSON input).
+
+---
+
+## Lesson 31 — `SchemaSpec` embeds alias resolution and deprecation; `ingest()` needs no dictionary reference (2026-04-10)
+
+**Context:** Stage 4 design review; `ingest()` `dictionary` parameter.
+
+**Mistake/Gap:** `ingest()` had a `dictionary: DdlmDictionary | None = None` parameter
+used solely for alias resolution via `resolve_tag`. This forced the caller to pass
+both `schema` (derived from the dictionary) and `dictionary` as separate arguments —
+redundant and error-prone. It also meant `ingest()` retained an unnecessary dependency
+on `pycifparse.dictionary.ddlm_parser`.
+
+**Correct rule:** `SchemaSpec` is self-contained for routing:
+- `alias_to_definition_id: dict[str, str]` — copied from `DdlmDictionary.alias_to_definition_id` by `generate_schema`; used in the tag routing loop to canonicalise aliases.
+- `deprecated_ids: set[str]` — copied from `DdlmDictionary.deprecated_ids`; used to emit a non-fatal semantic warning when a deprecated tag name is encountered in a CIF file.
+
+`ingest()` has no `dictionary` parameter. The `SchemaSpec` carries everything needed.
+
+Deprecation warnings are non-fatal: ingestion proceeds normally, the warning is
+appended to the return list, and (if provided) `on_error` is called.
+
+**Why:** `SchemaSpec` is already the single authoritative artefact the caller
+passes to `ingest()`. Embedding routing metadata there eliminates an implicit
+dependency and makes the ingestion function's contract explicit.
+
+**How to apply:**
+- `generate_schema(dictionary)` must populate `alias_to_definition_id` and `deprecated_ids` from the `DdlmDictionary`.
+- Tag routing (step 2): `canonical = schema.alias_to_definition_id.get(tag, tag)`.
+- Deprecation check (step 3): `if canonical in schema.deprecated_ids and tag not in deprecated_warned: emit warning; deprecated_warned.add(tag)`. Use two message forms: alias case `"tag '{tag}' is deprecated (canonical: '{canonical}')"`, direct case `"tag '{tag}' is deprecated"`.
+- `deprecated_warned` is a `set[str]` in per-block state; reset at the start of each block.
+- Never pass `dictionary` to `ingest()` — it does not accept one.
+
+---
+
+## Lesson 32 — pytest must be run from the `.venv` (2026-04-10)
+
+**Context:** Project uses a local virtual environment at `.venv/`.
+
+**Rule:** Always run pytest as `.venv/Scripts/pytest` (Windows) — not a globally installed
+`pytest`. The global interpreter will not have the project's dependencies.
+
+**How to apply:** `.venv/Scripts/pytest -m "not slow" --tb=short -q` for the fast suite;
+`.venv/Scripts/pytest -m slow` for integration tests.
+
+---
+
+## Lesson 33 — All public types returned by public functions must be top-level re-exports (2026-04-10)
+
+**Context:** `CifScalar` was missing from `pycifparse/__init__.py`.
+
+**Gap:** `CifScalar` was exported from `pycifparse.cifmodel` but not re-exported at the
+top level. Any caller receiving a `CifScalar` from `block["_tag"]` could not write
+type annotations, `isinstance` checks, or access `value_type` without importing from
+the internal submodule path `pycifparse.cifmodel.scalar`.
+
+**Correct rule:** Any type that appears in the return value of a public function, or
+that a caller must inspect to use the API correctly, must be re-exported from the
+top-level `pycifparse/__init__.py` and listed in the API Reference module layout.
+
+**How to apply:** When adding a new public type at any stage, immediately add it to
+`pycifparse/__init__.py` (import + `__all__`) and to the module layout comment in
+`prompts/API Reference.md`. Do not leave public types stranded in submodule paths.
+
+---
+
+## Lesson 34 — `_post_validate` must run before `_flush`; validation rows are inserted in `_flush` (2026-04-10)
+
+**Context:** `ingest.py` run order; `_validation_result` rows.
+
+**Bug:** `_post_validate()` was called after `_flush()`. Since `_flush()` inserts
+`self.validation_rows` into `_validation_result`, any rows appended by `_post_validate`
+were never written to the database.
+
+**Correct order:** `_post_validate()` → `_flush()` → `COMMIT`. Post-validation populates
+`self.validation_rows`; the flush writes them.
+
+**How to apply:** In any `run()` method that separates a validate step from a flush step,
+validate first, then flush. If post-validation needs to write to the database, it must run
+before the flush that writes its output table.
+
+---
+
+## Lesson 35 — `_apply_fk` must create stub parent rows for all FK values, not just UUID-generated ones (2026-04-10)
+
+**Context:** `ingest.py` FK constraint satisfaction; `one_structure.cif` + `cif_core.dic` integration test.
+
+**Problem (original):** When `_apply_fk` generated a UUID for a missing key-FK column, it
+populated the child row but never created the corresponding parent row. SQLite's
+`DEFERRABLE INITIALLY DEFERRED` FK constraint then fired at COMMIT with
+`IntegrityError: FOREIGN KEY constraint failed`.
+
+**Problem (broader):** The same constraint violation occurs for non-key FK columns that carry
+an explicit value from CIF data (e.g. `atom_site.type_symbol = 'Se'` referencing `atom_type.symbol`)
+when the parent table has no row for that value. The original fix only covered the UUID-generation
+path; non-key FK columns with real data values were never checked.
+
+**Fix:** In `_apply_fk`, after the value-assignment block, add an unconditional stub-creation
+step: for any FK column that ends up with a non-NULL value (explicit, propagated, or UUID-generated),
+call `_merge_into` on the parent table with a stub row containing only `_block_id` and the
+FK target column set to that value. `_merge_into` is idempotent — if the parent row already
+exists from real data, the stub is merged without overwriting any non-NULL values.
+
+**How to apply:** Always pass `block_id`, `merged_rows`, and `row_id_counters` to `_apply_fk`
+during schema-aware ingestion. These default to `None` (stub creation skipped) so unit tests
+that call `_apply_fk` directly without a DB connection are unaffected.
+
+---
+
+## Lesson 36 — `_name.linked_item_id` must not be an import-identity tag (2026-04-10)
+
+**Context:** `DictionaryLoader._resolve_imports` / `_merge_frame` in `loader.py`.
+
+**Bug:** `_name.linked_item_id` was listed in `_IMPORT_IDENTITY_TAGS`, causing it to be
+unconditionally skipped whenever a save frame merged attributes from a template via
+`_import.get` (mode="Contents"). This is correct for true identity tags (`_definition.id`,
+`_name.category_id`, `_name.object_id`) — you never want an import to change the frame's
+own identity — but wrong for `_name.linked_item_id`, which is a *data attribute* that
+templates are specifically designed to provide.
+
+**Observed symptom:** `_geom_angle.atom_site_label_1` and `_geom_angle.atom_site_label_3`
+(and similar FK-via-template items) had `type_purpose='Link'` but `linked_item_id=None`.
+`generate_schema` skips items with `linked_item_id is None` during FK detection, so no FK
+constraint was generated and no FK column was recognised in the schema.
+
+**Root cause:** Both items import `[{'file':templ_attr.cif 'save':atom_site_id}]`, and the
+`atom_site_id` template frame provides `_name.linked_item_id = '_atom_site.label'`. Because
+`_name.linked_item_id` was in `_IMPORT_IDENTITY_TAGS`, `_merge_frame` skipped it regardless
+of whether the importing frame had its own value.
+
+**Fix:** Remove `_name.linked_item_id` from `_IMPORT_IDENTITY_TAGS`. The `dupl` policy in
+`_merge_frame` already handles conflicts: if the importing frame already defines
+`_name.linked_item_id`, the default `dupl='Exit'` would warn rather than silently overwrite.
+
+**How to apply:** `_IMPORT_IDENTITY_TAGS` should only contain tags that define a frame's CIF
+structural identity (definition id, scope, class, category, object). Tags that are data
+attributes of the definition — even when they affect its semantic role (linked item, type
+purpose, type contents) — must not be blocked from template inheritance.
+
+---
+
+## Lesson 37 — CIF 2.0 structural delimiters must not split tags or save frame names (2026-04-10)
+
+**Context:** `Lexer._read_bare_word` in `lexer/lexer.py`.
+
+**Bug:** `_read_bare_word` unconditionally broke on `[`, `]`, `{`, `}` for ALL bare words in
+CIF 2.0 mode. This split tokens like `_axis.vector[1]` (tag) into `_axis.vector` + `[` + `1`
++ `]`, and `save_axis.vector[1]` (save frame name) into `save_axis.vector` + `[` + `1` + `]`.
+
+**CIF 2.0 EBNF rule:**
+- `restrict-char = non-blank-char - ( '[' | ']' | '{' | '}' )` — used by `wsdelim-string`
+  (plain unquoted values). `[` terminates a plain value.
+- `data-name = '_', non-blank-char, { non-blank-char }` — tags use `non-blank-char`, which
+  includes `[`, `]`, `{`, `}`.
+- `container-code = non-blank-char, { non-blank-char }` — save/data frame names also use
+  `non-blank-char`.
+
+So `[` terminates plain values but must NOT terminate tags or prefix keywords.
+
+**Fix:** In the `_CIF2_DELIMITERS` break check, only break when the accumulator is empty
+(delimiter starts its own standalone token) OR the accumulated word is a plain value — i.e.
+it does NOT start with `_` (tag) and does NOT start with a prefix keyword (`save_`, `data_`).
+
+**How to apply:** Whenever the CIF 2.0 EBNF distinguishes between `restrict-char` and
+`non-blank-char` contexts, lexer logic must check what kind of token is being accumulated
+before applying delimiter break rules.
+
+## Lesson 38 — FK target must be the sole PK, not just any PK column (2026-04-10)
+
+**Context:** `generate_schema` building `ForeignKeyDef` entries; `cif_pow.dic` ingestion.
+
+**Mistake:** Initial fix checked `target_column not in primary_keys` to detect invalid FK targets.
+This correctly caught columns that aren't PKs at all, but missed the case where the target column
+IS listed in `primary_keys` but the PK is composite (e.g. `['id', 'variant']`). SQLite only creates
+a UNIQUE index for a single-column PRIMARY KEY — a composite PK does NOT uniquely index any
+individual column. So `FOREIGN KEY (x) REFERENCES t(id)` is also "foreign key mismatch" when
+`t` has `PRIMARY KEY (id, variant)`.
+
+**Correct check:** `tables[tgt_tbl].primary_keys != [target_item.object_id]` — the FK target
+column must be the sole (and only) PK of the target table.
+
+**How to apply:** Any time a FK constraint is being generated and the target table has a composite
+PK, the FK is invalid unless it references ALL columns of the PK (i.e., the FK itself is composite).
+Single-column FKs targeting individual columns of a composite PK must be skipped with a warning.
+
+## Lesson 39 — Multi-category loop compatibility and PK propagation (2026-04-10)
+
+**Context:** `_loops_compatible` and `_process_loop` in `ingest.py`; `cif_pow.dic` loops.
+
+**Problem:** DDLm multi-category loops (e.g. `pd_data/pd_meas/pd_proc/pd_calc` sharing the
+same `(point_id, diffractogram_id)` PK) were being routed to `_cif_fallback` with
+"incompatible multi-category loop" because:
+
+1. `_loops_compatible` compared FK-resolved target sets. After the composite-PK FK fix (Lesson 38),
+   FKs like `pd_meas.point_id → pd_data.point_id` were correctly skipped (individual columns of
+   a composite PK are not valid SQL FK targets). Without those FKs, each table's `_loop_target_set`
+   resolved to a different self-reference, so the sets never matched.
+
+2. Even if compatibility had passed, `_apply_fk` only fills columns that have an FK. Without FKs
+   for `pd_meas/proc/calc.point_id` and `.diffractogram_id`, those PK columns would remain NULL.
+
+**Fix (two parts):**
+1. Changed `_loops_compatible` to compare non-synthetic PK column name sets instead of FK-resolved
+   target sets. Tables with the same PK column names (e.g. all having `{point_id, diffractogram_id}`)
+   are compatible. This is the authoritative DDLm signal: if categories appear in the same loop,
+   they share the same key structure.
+2. Added cross-table PK propagation in `_process_loop` after `_apply_fk` for all tables. For each
+   iteration, collect all non-NULL PK values from all sibling rows (by column name), then fill NULL
+   PK columns in sibling rows from the pool. This ensures `pd_meas.diffractogram_id` gets the same
+   value as `pd_data.diffractogram_id` (which was filled by the FK-accumulator path).
+
+**How to apply:** The two-part pattern (compatibility check + cross-propagation) is needed whenever
+sibling-category tables link to each other through composite-PK columns. Never rely solely on SQL FK
+constraints being present for PK fill logic.
+
+---
+
+## Lesson 40 — Composite FK groups with conflicting source columns (bond endpoints) (2026-04-11)
+
+**Context:** `generate_schema` FK group loop; `_chemical_conn_bond` in `cif_core.dic`.
+
+**Problem:** `_chemical_conn_bond.atom_1` and `.atom_2` both carry `type_purpose='Link'`
+targeting `_chemical_conn_atom.number`. The FK-group loop detected `has_conflicts=True`
+(multiple source columns pointing to the same target column) and skipped all FKs.
+
+**Correct rule:** `has_conflicts=True` means multiple source columns independently reference
+the same target — each reference is valid on its own. When all PK columns of the target table
+are covered by the group AND there are no non-PK target columns, emit one `ForeignKeyDef` per
+source column individually, rather than skipping the group.
+
+**How to apply:** In the FK group loop, add a branch:
+`if has_conflicts and not missing_pk_cols and not non_pk_tgt_cols:` — iterate over all
+`(src_col, tgt_col)` pairs and emit a separate FK for each. Only skip when there is a genuine
+ambiguity (missing PKs or conflicting non-PK targets).
+
+---
+
+## Lesson 41 — `_scalar` must not filter `.` when reading `_enumeration.default` (2026-04-11)
+
+**Context:** `DictionaryLoader` `_scalar` helper; `_enumeration.default` in DDLm dictionaries.
+
+**Problem:** `_scalar` filtered both `'.'` (inapplicable) and `'?'` (unknown) as CIF placeholders,
+returning `default` (usually `None`) for both. `_enumeration.default = '.'` is a legitimate
+dictionary value meaning "the enumeration default is the CIF inapplicable sentinel", but it was
+being silently dropped, leaving `DdlmItem.enumeration_default = None`.
+
+**Fix:** Added `keep_dot: bool = False` parameter to `_scalar`. When `True`, `'.'` is returned
+as a real value. Call `_scalar(data, '_enumeration.default', keep_dot=True)`.
+
+**How to apply:** Any `_scalar` call reading a tag where `'.'` is a semantically meaningful value
+(not a missing-data placeholder) must pass `keep_dot=True`. The `'?'` filter (unknown/missing) is
+always applied regardless.
+
+---
+
+## Lesson 42 — Propagation links use `enumeration_default` as fallback; not UUID generation (2026-04-11)
+
+**Context:** `generate_schema` propagation links; `_diffrn_radiation.variant` and
+`_diffrn_radiation_wavelength.radiation_id` in `cif_pow.dic`.
+
+**Problem (original attempt):** PK Link columns whose FK was skipped (because the FK target had a
+composite PK) were left NULL, causing NOT NULL constraint violations. A first fix attempted to
+generate UUIDs as a last resort, but UUID stubs for columns like `variant` (no parent table to stub
+into) were semantically wrong and caused FK violations in the parent stub.
+
+**Correct rule:**
+1. PK Link columns with skipped FKs are recorded in `propagation_links`. At ingest time, their value
+   is filled from (in priority order): the current loop row's matching `definition_id`, then
+   `fk_accumulator`, then `enumeration_default` from `DdlmItem`. No UUID generation.
+2. These columns are marked `nullable=True` in the schema — NULL is valid when no value is available
+   from any source.
+3. `DdlmItem.enumeration_default` must be populated (see Lesson 41) for this to work when the CIF
+   omits the tag entirely.
+
+**How to apply:** The propagation link tuple is `(col_name, target_def_id, enumeration_default)`.
+Unpack all three in `_apply_fk`. If no value is found from loop or accumulator, use `enumeration_default`
+as the final fallback. If that is also `None`, leave the column NULL (which is now permitted).
+
+---
+
+## Lesson 43 — Use class-scoped fixtures for shared ingestion state in tests (2026-04-11)
+
+**Context:** `tests/ingestion/test_integration.py`; `TestIngestWithSchema`, `TestIngestNoSchema`,
+`TestIngestSecondShort`.
+
+**Problem:** Each test method called `_conn_with_schema(...)` and `ingest(...)` independently.
+For a class of 7 tests against `cif_core.dic`, this ran 7 full ingestions of the same CIF/schema
+pair. Each ingestion is expensive (~0.5s); total wall time was proportionally wasteful.
+
+**Correct rule:** When multiple tests in a class all query the same ingested database and none of
+them mutate state (all queries are SELECT-only), use a `@pytest.fixture(scope='class')` that runs
+ingestion once and shares the connection. All test methods take the fixture as a parameter.
+
+**Caution:** Only safe when tests are read-only. If any test inserts, updates, or deletes rows,
+shared connections cause cross-test pollution. Check all tests in the class before converting.
+
+**How to apply:** Name the fixture `{descriptive}_conn` (e.g. `one_structure_conn`,
+`second_short_conn`). Declare it at module level with `scope='class'`. Tests that verified the
+ingest return value (e.g. `assert errors == []`) must be rewritten — the return value is discarded
+by the fixture. Replace with an equivalent read assertion.

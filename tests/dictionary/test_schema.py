@@ -164,12 +164,12 @@ class TestSyntheticColumns:
         col_names = [c.name for c in schema.tables['meas'].columns]
         assert '_block_id' in col_names
 
-    def test_row_id_absent_on_set_table(self):
+    def test_row_id_present_on_set_table(self):
         cats = [_cat('cfg', 'cfg', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         col_names = [c.name for c in schema.tables['cfg'].columns]
-        assert '_row_id' not in col_names
+        assert '_row_id' in col_names
 
     def test_row_id_present_on_loop_table(self):
         cats = [_cat('meas', 'meas', 'Loop')]
@@ -239,15 +239,19 @@ class TestPrimaryKeys:
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         table = schema.tables['series']
-        assert table.primary_keys == ['_block_id']
+        assert table.primary_keys == ['_pycifparse_id']
+        pycifparse_id_col = next(c for c in table.columns if c.name == '_pycifparse_id')
+        assert pycifparse_id_col.is_primary_key is True
+        assert pycifparse_id_col.is_synthetic is True
+        # _block_id is present but informational only
         block_col = next(c for c in table.columns if c.name == '_block_id')
-        assert block_col.is_primary_key is True
+        assert block_col.is_primary_key is False
 
     def test_set_without_category_key_emits_warning(self):
         cats = [_cat('series', 'series', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
-        assert any('series' in w and 'Set' in w for w in schema.warnings)
+        assert any('series' in w and 'Set' in w and '_pycifparse_id' in w for w in schema.warnings)
 
     def test_loop_with_single_key(self):
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
@@ -327,28 +331,29 @@ class TestCategorySkipping:
 # ---------------------------------------------------------------------------
 
 class TestTypeMapping:
-    @pytest.mark.parametrize('type_contents,expected', [
-        ('Integer', 'INTEGER'),
-        ('integer', 'INTEGER'),    # case-insensitive
-        ('Real', 'REAL'),
-        ('real', 'REAL'),
-        ('Text', 'TEXT'),
-        ('Word', 'TEXT'),
-        ('Code', 'TEXT'),
-        ('Imag', 'TEXT'),
-        ('Complex', 'TEXT'),
-        ('Implied', 'TEXT'),
-        ('ByReference', 'TEXT'),
-        ('Inherited', 'TEXT'),
-        (None, 'TEXT'),
+    @pytest.mark.parametrize('type_contents', [
+        'Integer', 'Real', 'Text', 'Word', 'Code', 'List', 'Table', None,
     ])
-    def test_sql_type(self, type_contents, expected):
+    def test_type_contents_stored_as_is(self, type_contents):
+        """type_contents is stored verbatim from the DDLm dictionary."""
         cats = [_cat('t', 't', 'Set')]
         items = [_item('_t.col', 't', 'col', type_contents=type_contents)]
         d = _make_dict(cats, items)
         schema = generate_schema(d)
         col = next(c for c in schema.tables['t'].columns if c.name == 'col')
-        assert col.sql_type == expected
+        assert col.type_contents == type_contents
+
+    @pytest.mark.parametrize('type_contents', [
+        'Integer', 'Real', 'Text', 'Word', None,
+    ])
+    def test_ddl_always_emits_text_for_domain_columns(self, type_contents):
+        """DDL always emits TEXT for domain columns regardless of type_contents."""
+        cats = [_cat('t', 't', 'Set')]
+        items = [_item('_t.col', 't', 'col', type_contents=type_contents)]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        stmt = emit_create_statements(schema)[0]
+        assert '"col"  TEXT' in stmt
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +362,7 @@ class TestTypeMapping:
 
 class TestColumnOrdering:
     def test_set_column_order(self):
-        # Set table: _block_id, PK cols, then alpha non-PK cols
+        # Set table: _block_id, _row_id, PK cols, then alpha non-PK cols
         cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
         items = [
             _item('_cfg.id', 'cfg', 'id', type_contents='Text'),
@@ -368,9 +373,10 @@ class TestColumnOrdering:
         schema = generate_schema(d)
         names = [c.name for c in schema.tables['cfg'].columns]
         assert names[0] == '_block_id'
-        assert names[1] == 'id'       # PK
-        assert names[2] == 'a_first'  # alpha first non-PK
-        assert names[3] == 'z_last'
+        assert names[1] == '_row_id'
+        assert names[2] == 'id'       # PK
+        assert names[3] == 'a_first'  # alpha first non-PK
+        assert names[4] == 'z_last'
 
     def test_loop_column_order(self):
         # Loop table: _block_id, _row_id, PK cols, then alpha non-PK cols
@@ -471,9 +477,9 @@ class TestForeignKeys:
         assert len(fks) == 1
         fk = fks[0]
         assert fk.source_table == 'meas'
-        assert fk.source_column == 'config_id'
+        assert fk.source_columns == ['config_id']
         assert fk.target_table == 'config'
-        assert fk.target_column == 'id'
+        assert fk.target_columns == ['id']
 
     def test_self_referential_link(self):
         cats = [_cat('node', 'node', 'Loop', ['_node.id'])]
@@ -489,7 +495,7 @@ class TestForeignKeys:
         fk = fks[0]
         assert fk.source_table == 'node'
         assert fk.target_table == 'node'
-        assert fk.target_column == 'id'
+        assert fk.target_columns == ['id']
 
     def test_link_with_unknown_target_skipped_with_warning(self):
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
@@ -503,7 +509,10 @@ class TestForeignKeys:
         assert schema.tables['meas'].foreign_keys == []
         assert any('_unknown.id' in w for w in schema.warnings)
 
-    def test_link_where_target_not_in_category_keys_warns_but_still_records(self):
+    def test_link_where_target_not_pk_skipped_with_warning(self):
+        # If the target column is not a PK of its table, SQLite raises
+        # "foreign key mismatch" at INSERT time.  generate_schema must skip
+        # such FKs and emit a warning instead.
         cats = [
             _cat('src', 'src', 'Loop', ['_src.id']),
             _cat('tgt', 'tgt', 'Loop', ['_tgt.id']),
@@ -512,17 +521,63 @@ class TestForeignKeys:
             _item('_src.id', 'src', 'id', type_purpose='Key', type_contents='Text'),
             _item('_tgt.id', 'tgt', 'id', type_purpose='Key', type_contents='Text'),
             _item('_tgt.extra', 'tgt', 'extra', type_contents='Text'),
-            # Links to _tgt.extra which is NOT a category key
+            # Links to _tgt.extra which is NOT a category key and NOT a PK
             _item('_src.ref', 'src', 'ref', type_purpose='Link',
                   linked_item_id='_tgt.extra', type_contents='Text'),
         ]
         d = _make_dict(cats, items)
         schema = generate_schema(d)
-        # FK is still recorded
-        assert len(schema.tables['src'].foreign_keys) == 1
-        assert schema.tables['src'].foreign_keys[0].target_column == 'extra'
-        # Warning emitted
-        assert any('_tgt.extra' in w and 'category key' in w for w in schema.warnings)
+        # FK must be skipped — target column is not a PK
+        assert schema.tables['src'].foreign_keys == []
+        # Warning emitted for the non-PK target
+        assert any('_src.ref' in w and 'not a PK' in w for w in schema.warnings)
+
+    def test_composite_fk_when_all_pks_covered(self):
+        # When two source columns each link to one column of a composite PK,
+        # generate_schema must emit one composite FOREIGN KEY constraint.
+        cats = [
+            _cat('parent', 'parent', 'Loop', ['_parent.a', '_parent.b']),
+            _cat('child',  'child',  'Loop', ['_child.a',  '_child.b']),
+        ]
+        items = [
+            _item('_parent.a', 'parent', 'a', type_purpose='Key', type_contents='Text'),
+            _item('_parent.b', 'parent', 'b', type_purpose='Key', type_contents='Text'),
+            _item('_child.a',  'child',  'a', type_purpose='Link',
+                  linked_item_id='_parent.a', type_contents='Text'),
+            _item('_child.b',  'child',  'b', type_purpose='Link',
+                  linked_item_id='_parent.b', type_contents='Text'),
+            _item('_child.val', 'child', 'val', type_contents='Real'),
+        ]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        fks = schema.tables['child'].foreign_keys
+        assert len(fks) == 1
+        fk = fks[0]
+        assert fk.source_table == 'child'
+        assert fk.target_table == 'parent'
+        # Columns ordered by target PK order (a, b)
+        assert fk.source_columns == ['a', 'b']
+        assert fk.target_columns == ['a', 'b']
+        # No warnings about this FK
+        assert not any('child' in w and 'skipping' in w for w in schema.warnings)
+
+    def test_partial_composite_fk_skipped_with_warning(self):
+        # Only one of two composite PK columns is linked — can't form a complete FK.
+        cats = [
+            _cat('parent', 'parent', 'Loop', ['_parent.a', '_parent.b']),
+            _cat('child',  'child',  'Loop', ['_child.x']),
+        ]
+        items = [
+            _item('_parent.a', 'parent', 'a', type_purpose='Key', type_contents='Text'),
+            _item('_parent.b', 'parent', 'b', type_purpose='Key', type_contents='Text'),
+            # Links to only _parent.a, missing _parent.b
+            _item('_child.x', 'child', 'x', type_purpose='Link',
+                  linked_item_id='_parent.a', type_contents='Text'),
+        ]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        assert schema.tables['child'].foreign_keys == []
+        assert any('_child.x' in w and 'skipping' in w for w in schema.warnings)
 
     def test_su_item_populates_linked_item_id_no_fk(self):
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
@@ -573,20 +628,31 @@ class TestEmitCreateStatements:
         stmt = emit_create_statements(schema)[0]
         assert '"_block_id"  TEXT  NOT NULL' in stmt
 
-    def test_row_id_unique_in_loop_stmt(self):
+    def test_row_id_composite_unique_in_keyed_loop_stmt(self):
+        # Keyed Loop: _row_id is not PK, so composite UNIQUE (_block_id, _row_id) added
+        cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
+        items = [_item('_meas.id', 'meas', 'id', type_contents='Text')]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        stmt = emit_create_statements(schema)[0]
+        assert 'UNIQUE ("_block_id", "_row_id")' in stmt
+
+    def test_row_id_no_extra_unique_in_keyless_loop_stmt(self):
+        # Keyless Loop: PK is (_block_id, _row_id) — no extra UNIQUE constraint
         cats = [_cat('meas', 'meas', 'Loop')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         stmt = emit_create_statements(schema)[0]
-        assert 'UNIQUE' in stmt
-        assert '"_row_id"  INTEGER  NOT NULL  UNIQUE' in stmt
+        assert 'PRIMARY KEY ("_block_id", "_row_id")' in stmt
+        assert 'UNIQUE' not in stmt
 
-    def test_row_id_absent_from_set_stmt(self):
+    def test_row_id_present_in_set_stmt(self):
         cats = [_cat('cfg', 'cfg', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         stmt = emit_create_statements(schema)[0]
-        assert '_row_id' not in stmt
+        assert '"_row_id"  INTEGER  NOT NULL' in stmt
+        assert 'UNIQUE ("_block_id", "_row_id")' in stmt
 
     def test_fk_clause_with_deferrable(self):
         cats = [
@@ -642,22 +708,22 @@ class TestEmitCreateStatements:
         assert 'config' in tables
         assert 'meas' in tables
 
-    def test_row_id_unique_via_pragma(self):
-        cats = [_cat('meas', 'meas', 'Loop')]
-        d = _make_dict(cats, [])
+    def test_block_id_row_id_composite_unique_via_pragma(self):
+        # Keyed Loop: composite UNIQUE (_block_id, _row_id) should exist
+        cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
+        items = [_item('_meas.id', 'meas', 'id', type_contents='Text')]
+        d = _make_dict(cats, items)
         schema = generate_schema(d)
         conn = _execute_schema(schema)
         indexes = list(conn.execute("PRAGMA index_list('meas')"))
-        unique_indexes = [row for row in indexes if row[2] == 1]  # col 2 is 'unique'
-        index_names = [row[1] for row in unique_indexes]
-        # Find indexes covering _row_id
+        unique_indexes = [row for row in indexes if row[2] == 1]
         found = False
-        for idx_name in index_names:
-            cols = [r[2] for r in conn.execute(f"PRAGMA index_info('{idx_name}')")]
-            if '_row_id' in cols:
+        for row in unique_indexes:
+            cols = [r[2] for r in conn.execute(f"PRAGMA index_info('{row[1]}')")]
+            if '_block_id' in cols and '_row_id' in cols:
                 found = True
                 break
-        assert found, "_row_id should have a UNIQUE index"
+        assert found, "composite UNIQUE (_block_id, _row_id) should exist on keyed Loop table"
 
     def test_fk_via_pragma(self):
         cats = [

@@ -1,0 +1,13 @@
+#\#CIF_2.0
+# Tests: schema-less ingestion of scalar tags. All tags go to _cif_fallback
+# regardless of content. _block_id must be 'test_fallback_scalars'. No structured
+# tables should contain any rows. value_type for bare-word strings is 'string'.
+# Dictionary: none (schema-less)
+
+data_test_fallback_scalars
+_sample.name          iron_oxide
+_sample.description   'a reddish powder'
+_measurement.temp     298
+_measurement.pressure 1.0
+_result.quality       high
+_result.number        "11"

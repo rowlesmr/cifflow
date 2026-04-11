@@ -1,0 +1,207 @@
+#\#CIF_2.0
+
+
+#######  Begin powder crystal structure  #######
+data_Selenium_0
+# _audit_dataset.id	c90a4a1d-fde3-43f4-9c71-bf71048649b5
+
+#_pd_phase.id	Selenium_0
+#_pd_phase.name	Selenium
+#_model.id	Selenium_0
+#_structure.id	Selenium_0
+#_space_group.id	Selenium_0
+#_model.structure_id	Selenium_0
+#_structure.diffrn_id	STP
+#_structure.space_group_id	Selenium_0
+#_structure.phase_id	Selenium_0
+
+#_diffrn.id	STP
+
+_cell.length_a    3.992
+_cell.length_b    3.992
+_cell.length_c    3.119
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 120
+_cell.volume      43.0454321
+_cell.formula_units_Z	  3
+_chemical_formula.weight	78.96
+_chemical_formula.sum
+;Se
+;
+_cell_measurement.theta_min	5
+_cell_measurement.theta_max	35
+_space_group.crystal_system	hexagonal
+_space_group.name_H-M_alt
+;R-3m
+;
+loop_
+	_space_group_symop.id
+	_space_group_symop.operation_xyz
+	  1 'x, y, z '
+	  2 '-x, -y, -z '
+	  3 '-x+y, -x, z '
+	  4 '-x+y, y, z '
+	  5 '-y, -x, z '
+	  6 '-y, x-y, z '
+	  7 'y, -x+y, -z '
+	  8 'y, x, -z '
+	  9 'x-y, -y, -z '
+	 10 'x-y, x, -z '
+	 11 '-x, -x+y, -z '
+	 12 'x, x-y, z '
+	 13 'x-1/3, y+1/3, z+1/3 '
+	 14 '-x-1/3, -y+1/3, -z+1/3 '
+	 15 '-x+y-1/3, -x+1/3, z+1/3 '
+	 16 '-x+y-1/3, y+1/3, z+1/3 '
+	 17 '-y-1/3, -x+1/3, z+1/3 '
+	 18 '-y-1/3, x-y+1/3, z+1/3 '
+	 19 'y-1/3, -x+y+1/3, -z+1/3 '
+	 20 'y-1/3, x+1/3, -z+1/3 '
+	 21 'x-y-1/3, -y+1/3, -z+1/3 '
+	 22 'x-y-1/3, x+1/3, -z+1/3 '
+	 23 '-x-1/3, -x+y+1/3, -z+1/3 '
+	 24 'x-1/3, x-y+1/3, z+1/3 '
+	 25 'x+1/3, y-1/3, z-1/3 '
+	 26 '-x+1/3, -y-1/3, -z-1/3 '
+	 27 '-x+y+1/3, -x-1/3, z-1/3 '
+	 28 '-x+y+1/3, y-1/3, z-1/3 '
+	 29 '-y+1/3, -x-1/3, z-1/3 '
+	 30 '-y+1/3, x-y-1/3, z-1/3 '
+	 31 'y+1/3, -x+y-1/3, -z-1/3 '
+	 32 'y+1/3, x-1/3, -z-1/3 '
+	 33 'x-y+1/3, -y-1/3, -z-1/3 '
+	 34 'x-y+1/3, x-1/3, -z-1/3 '
+	 35 '-x+1/3, -x+y-1/3, -z-1/3 '
+	 36 'x+1/3, x-y-1/3, z-1/3 '
+loop_
+	_atom_site.label
+	_atom_site.type_symbol
+	_atom_site.site_symmetry_multiplicity
+	_atom_site.fract_x
+	_atom_site.fract_y
+	_atom_site.fract_z
+	_atom_site.occupancy
+	_atom_site.B_iso_or_equiv
+	Se1 Se   3 0 0 0 1 1
+loop_
+	_geom_bond_atom_site_label_1
+	_geom_bond_atom_site_label_2
+	_geom_bond_distance
+	_geom_bond_site_symmetry_1
+	_geom_bond_site_symmetry_2
+	Se1       Se1       2.52842 1_555  25_555
+	Se1       Se1       2.52842 1_555  13_545
+	Se1       Se1       2.52842 1_555  13_555
+	Se1       Se1       2.52842 1_555  25_565
+	Se1       Se1       2.52842 1_555  25_455
+	Se1       Se1       2.52842 1_555  13_655
+	Se1       Se1       3.10413 1_555  25_456
+	Se1       Se1       3.10413 1_555  13_654
+	Se1       Se1       3.10413 1_555  25_556
+	Se1       Se1       3.10413 1_555  13_554
+	Se1       Se1       3.10413 1_555  13_544
+	Se1       Se1       3.10413 1_555  25_566
+	Se1       Se1       3.11900 1_555   1_554
+	Se1       Se1       3.11900 1_555   1_556
+	loop_
+		_geom_angle_atom_site_label_1
+		_geom_angle_atom_site_label_2
+		_geom_angle_atom_site_label_3
+		_geom_angle
+		_geom_angle_site_symmetry_1
+		_geom_angle_site_symmetry_2
+		_geom_angle_site_symmetry_3
+	Se1       Se1       Se1        75.736    13_545 1_555  25_555
+	Se1       Se1       Se1        104.264   13_555 1_555  13_545
+	Se1       Se1       Se1        180.000   13_555 1_555  25_555
+	Se1       Se1       Se1        75.736    25_565 1_555  13_555
+	Se1       Se1       Se1        180.000   25_565 1_555  13_545
+	Se1       Se1       Se1        104.264   25_565 1_555  25_555
+	Se1       Se1       Se1        104.264   25_455 1_555  25_565
+	Se1       Se1       Se1        75.736    25_455 1_555  13_555
+	Se1       Se1       Se1        75.736    25_455 1_555  13_545
+	Se1       Se1       Se1        104.264   25_455 1_555  25_555
+	Se1       Se1       Se1        180.000   13_655 1_555  25_455
+	Se1       Se1       Se1        75.736    13_655 1_555  25_565
+	Se1       Se1       Se1        104.264   13_655 1_555  13_555
+	Se1       Se1       Se1        104.264   13_655 1_555  13_545
+	Se1       Se1       Se1        75.736    13_655 1_555  25_555
+	Se1       Se1       Se1        113.664   25_456 1_555  13_655
+	Se1       Se1       Se1        66.336    25_456 1_555  25_455
+	Se1       Se1       Se1        127.868   25_456 1_555  25_565
+	Se1       Se1       Se1        52.132    25_456 1_555  13_555
+	Se1       Se1       Se1        52.132    25_456 1_555  13_545
+	Se1       Se1       Se1        127.868   25_456 1_555  25_555
+	Se1       Se1       Se1        180.000   13_654 1_555  25_456
+	Se1       Se1       Se1        66.336    13_654 1_555  13_655
+	Se1       Se1       Se1        113.664   13_654 1_555  25_455
+	Se1       Se1       Se1        52.132    13_654 1_555  25_565
+	Se1       Se1       Se1        127.868   13_654 1_555  13_555
+	Se1       Se1       Se1        127.868   13_654 1_555  13_545
+	Se1       Se1       Se1        52.132    13_654 1_555  25_555
+	Se1       Se1       Se1        99.966    25_556 1_555  13_654
+	Se1       Se1       Se1        80.034    25_556 1_555  25_456
+	Se1       Se1       Se1        52.132    25_556 1_555  13_655
+	Se1       Se1       Se1        127.868   25_556 1_555  25_455
+	Se1       Se1       Se1        127.868   25_556 1_555  25_565
+	Se1       Se1       Se1        113.664   25_556 1_555  13_555
+	Se1       Se1       Se1        52.132    25_556 1_555  13_545
+	Se1       Se1       Se1        66.336    25_556 1_555  25_555
+	Se1       Se1       Se1        180.000   13_554 1_555  25_556
+	Se1       Se1       Se1        80.034    13_554 1_555  13_654
+	Se1       Se1       Se1        99.966    13_554 1_555  25_456
+	Se1       Se1       Se1        127.868   13_554 1_555  13_655
+	Se1       Se1       Se1        52.132    13_554 1_555  25_455
+	Se1       Se1       Se1        52.132    13_554 1_555  25_565
+	Se1       Se1       Se1        66.336    13_554 1_555  13_555
+	Se1       Se1       Se1        127.868   13_554 1_555  13_545
+	Se1       Se1       Se1        113.664   13_554 1_555  25_555
+	Se1       Se1       Se1        80.034    13_544 1_555  13_554
+	Se1       Se1       Se1        99.966    13_544 1_555  25_556
+	Se1       Se1       Se1        80.034    13_544 1_555  13_654
+	Se1       Se1       Se1        99.966    13_544 1_555  25_456
+	Se1       Se1       Se1        127.868   13_544 1_555  13_655
+	Se1       Se1       Se1        52.132    13_544 1_555  25_455
+	Se1       Se1       Se1        113.664   13_544 1_555  25_565
+	Se1       Se1       Se1        127.868   13_544 1_555  13_555
+	Se1       Se1       Se1        66.336    13_544 1_555  13_545
+	Se1       Se1       Se1        52.132    13_544 1_555  25_555
+	Se1       Se1       Se1        180.000   25_566 1_555  13_544
+	Se1       Se1       Se1        99.966    25_566 1_555  13_554
+	Se1       Se1       Se1        80.034    25_566 1_555  25_556
+	Se1       Se1       Se1        99.966    25_566 1_555  13_654
+	Se1       Se1       Se1        80.034    25_566 1_555  25_456
+	Se1       Se1       Se1        52.132    25_566 1_555  13_655
+	Se1       Se1       Se1        127.868   25_566 1_555  25_455
+	Se1       Se1       Se1        66.336    25_566 1_555  25_565
+	Se1       Se1       Se1        52.132    25_566 1_555  13_555
+	Se1       Se1       Se1        113.664   25_566 1_555  13_545
+	Se1       Se1       Se1        127.868   25_566 1_555  25_555
+	Se1       Se1       Se1        132.056    1_554 1_555  25_566
+	Se1       Se1       Se1        47.944     1_554 1_555  13_544
+	Se1       Se1       Se1        47.944     1_554 1_555  13_554
+	Se1       Se1       Se1        132.056    1_554 1_555  25_556
+	Se1       Se1       Se1        47.944     1_554 1_555  13_654
+	Se1       Se1       Se1        132.056    1_554 1_555  25_456
+	Se1       Se1       Se1        114.280    1_554 1_555  13_655
+	Se1       Se1       Se1        65.720     1_554 1_555  25_455
+	Se1       Se1       Se1        65.720     1_554 1_555  25_565
+	Se1       Se1       Se1        114.280    1_554 1_555  13_555
+	Se1       Se1       Se1        114.280    1_554 1_555  13_545
+	Se1       Se1       Se1        65.720     1_554 1_555  25_555
+	Se1       Se1       Se1        180.000    1_556 1_555   1_554
+	Se1       Se1       Se1        47.944     1_556 1_555  25_566
+	Se1       Se1       Se1        132.056    1_556 1_555  13_544
+	Se1       Se1       Se1        132.056    1_556 1_555  13_554
+	Se1       Se1       Se1        47.944     1_556 1_555  25_556
+	Se1       Se1       Se1        132.056    1_556 1_555  13_654
+	Se1       Se1       Se1        47.944     1_556 1_555  25_456
+	Se1       Se1       Se1        65.720     1_556 1_555  13_655
+	Se1       Se1       Se1        114.280    1_556 1_555  25_455
+	Se1       Se1       Se1        114.280    1_556 1_555  25_565
+	Se1       Se1       Se1        65.720     1_556 1_555  13_555
+	Se1       Se1       Se1        65.720     1_556 1_555  13_545
+	Se1       Se1       Se1        114.280    1_556 1_555  25_555
+#######  End powder crystal structure  #######
+

@@ -1,0 +1,42 @@
+#\#CIF_2.0
+# Tests: quoted sentinel encoding. Single-quoted '.' and '?' are QUOTED strings,
+# not PLACEHOLDERs. They must be stored as '"."' and '"?"' in structured columns
+# so they can be distinguished from the unquoted PLACEHOLDER forms on round-trip.
+# ValueType must survive ingestion unchanged.
+#
+# Note that the values of _diffrn_source.make as a quote-string of a quoted question mark
+# is lost
+#
+# Dictionary: cif_core
+
+data_test_quoted_sentinel
+_cell.length_a    5.000
+_cell.length_b    5.000
+_cell.length_c    5.000
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+
+_diffrn_source.beamline     "."
+_diffrn_source.description  "?"
+_diffrn_source.details  """?"""
+_diffrn_source.device   '''?'''
+_diffrn_source.facility
+;?
+;
+_diffrn_source.make '"?"'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

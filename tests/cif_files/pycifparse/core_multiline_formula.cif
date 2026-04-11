@@ -1,0 +1,27 @@
+#\#CIF_2.0
+# Tests: multiline text field through ingestion. _chemical_formula.sum is stored
+# as a semicolon-delimited multiline string. The text-field transformation
+# pipeline (prefix removal, line unfolding) runs in the IR layer; the ingestion
+# layer receives the already-transformed string and must store it as-is.
+#
+# The CHEMICAL_FORMULA table columns, sum, iupac, analytical, and moiety have the same value.
+#
+# Dictionary: cif_core
+
+data_test_multiline_formula
+_cell.length_a    5.000
+_cell.length_b    5.000
+_cell.length_c    5.000
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+_chemical_formula.sum
+;Fe2 O3
+;
+_chemical_formula.iupac
+;prefix>\
+prefix>Fe2 O3
+;
+_chemical_formula.analytical "Fe2 O3"
+_chemical_formula.moiety     '''Fe2 O3'''
+_chemical_formula.weight 159.69

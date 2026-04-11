@@ -142,7 +142,7 @@ class TestDropExisting:
         apply_schema(conn, schema)
         # Insert a row so we can confirm the table is dropped and recreated.
         conn.execute(
-            "INSERT INTO config (_block_id, id) VALUES ('b1', 'x1')"
+            "INSERT INTO config (_block_id, _row_id, id) VALUES ('b1', 1, 'x1')"
         )
         conn.commit()
         apply_schema(conn, schema, drop_existing=True)
@@ -154,7 +154,7 @@ class TestDropExisting:
         schema = _simple_schema()
         apply_schema(conn, schema)
         conn.execute(
-            "INSERT INTO config (_block_id, id) VALUES ('b1', 'x1')"
+            "INSERT INTO config (_block_id, _row_id, id) VALUES ('b1', 1, 'x1')"
         )
         conn.commit()
         apply_schema(conn, schema, drop_existing=False)

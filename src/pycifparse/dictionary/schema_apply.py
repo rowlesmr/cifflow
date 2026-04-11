@@ -96,14 +96,20 @@ def apply_fallback_schema(
     not a dictionary-defined schema has also been applied.  When both tiers
     are used, call :func:`apply_schema` first and then this function.
 
+    In addition to ``_cif_fallback``, this function creates
+    ``_block_dataset_membership`` and ``_validation_result`` — the metadata
+    tables used by the ingestion layer for namespace tracking.
+
     Parameters
     ----------
     conn:
         An open ``sqlite3.Connection``.  Must not have an active transaction
         when called.
     drop_existing:
-        When ``True``, drop ``_cif_fallback`` and its index before
-        (re-)creating them.  Defaults to ``False``.
+        When ``True``, drop all fallback-tier tables (``_cif_fallback``,
+        ``_block_dataset_membership``, ``_validation_result``) and the
+        ``_cif_fallback`` index before (re-)creating them.  Defaults to
+        ``False``.
 
     Raises
     ------
@@ -125,6 +131,8 @@ def apply_fallback_schema(
             if drop_existing:
                 conn.execute('DROP INDEX IF EXISTS "idx_cif_fallback_tag_block"')
                 conn.execute('DROP TABLE IF EXISTS "_cif_fallback"')
+                conn.execute('DROP TABLE IF EXISTS "_block_dataset_membership"')
+                conn.execute('DROP TABLE IF EXISTS "_validation_result"')
             for stmt in stmts:
                 conn.execute(stmt)
         except sqlite3.Error:

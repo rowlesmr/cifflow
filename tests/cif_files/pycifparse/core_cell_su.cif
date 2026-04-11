@@ -1,0 +1,37 @@
+#\#CIF_2.0
+# Tests: standard uncertainty (SU) splitting. Values of the form 3.992(4) are
+# split at ingestion: the measurand is stored in the main column (e.g. length_a)
+# and the SU in the linked _su column (e.g. length_a_su). The raw string in
+# _cif_fallback is the original unsplit token.
+#
+# The contents of the two blocks are semantically identical. They should produce
+# the same values in the two rows of the CELL table.
+#
+# Dictionary: cif_core
+
+data_test_cell_inline_su
+_diffrn.id        inline
+_cell.length_a    3.992(4)
+_cell.length_b    3.992(4)
+_cell.length_c    3.119(2)
+_cell.angle_alpha 90(5)
+_cell.angle_beta  90
+_cell.angle_gamma 0.1200e3(1)
+_cell.volume      43.04(5)
+
+data_test_cell_explicit_su
+_diffrn.id        explicit
+_cell.length_a    3.992
+_cell.length_b    3.992
+_cell.length_c    3.119
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 120
+_cell.volume      43.04
+
+_cell.length_a_su   0.004
+_cell.length_b_su   0.004
+_cell.length_c_su   0.002
+_cell.angle_alpha_su   5
+_cell.angle_gamma_su   0.1
+_cell.volume_su     0.05

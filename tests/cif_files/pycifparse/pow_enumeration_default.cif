@@ -1,0 +1,15 @@
+#\#CIF_2.0
+# Tests: enumeration_default filling for absent columns. _diffrn_radiation.probe
+# is present; _diffrn_radiation.variant is absent. The cif_img.dic definition of
+# _diffrn_radiation.variant carries _enumeration.default = '.', so the ingestion
+# engine must fill variant = '.' rather than leaving it NULL.
+# Dictionary: cif_pow (imports cif_img.dic which defines diffrn_radiation.variant)
+
+data_test_enumeration_default
+_diffrn_radiation.id    test_source
+_diffrn_radiation.probe x-ray
+loop_
+  _diffrn_radiation_wavelength.id
+  _diffrn_radiation_wavelength.value
+  _diffrn_radiation_wavelength.wt
+  1  1.54056  1.0

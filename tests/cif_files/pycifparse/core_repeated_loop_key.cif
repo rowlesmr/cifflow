@@ -1,0 +1,23 @@
+#\#CIF_2.0
+# Tests: repeated loop key.
+# The ATOM_SITE loop has five rows indexed by the explicitly
+# given _atom_site.label value
+#
+# row 3 should be siliently dropped, as all values are identical to row 1
+# row 4 should cause a collision, as the values associated with the key are different
+# row 5 should cause a collision, as the values associated with the key are different
+#
+# Dictionary: cif_core
+
+data_block_A
+loop_
+  _atom_site.label
+  _atom_site.type_symbol
+  _atom_site.fract_x
+  _atom_site.fract_y
+  _atom_site.fract_z
+  Na1  Na 0.0 0.0 0.0
+  Cl1  Cl 0.5 0.5 0.5
+  Na1  Na 0.0 0.0 0.0    # all values equal, silently drop
+  Na1  O  0.25 0.25 0.25 # collision; not all values equal
+  Na1  Na 0.0 0.0 0.00   # collision; not all values equal

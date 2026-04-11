@@ -1,0 +1,15 @@
+#\#CIF_2.0
+# Tests: deprecated alias tag resolution. CIF 1.1-style names (_cell_length_a,
+# _cell_length_b, etc.) are registered aliases for the dotted canonical forms
+# (_cell.length_a, _cell.length_b, etc.) in cif_core. Ingestion must resolve
+# these aliases and route values to the same structured columns as canonical tags.
+# Dictionary: cif_core
+
+data_test_alias_tag
+_cell_length_a    4.123
+_cell_length_b    4.123
+_cell_length_c    6.789
+_cell_angle_alpha 90
+_cell_angle_beta  90
+_cell_angle_gamma 90
+_cell_volume      115.22

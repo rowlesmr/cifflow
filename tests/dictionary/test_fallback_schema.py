@@ -15,9 +15,9 @@ from pycifparse.dictionary.schema_apply import apply_fallback_schema
 # ---------------------------------------------------------------------------
 
 class TestEmitFallbackCreateStatements:
-    def test_returns_two_statements(self):
+    def test_returns_four_statements(self):
         stmts = emit_fallback_create_statements()
-        assert len(stmts) == 2
+        assert len(stmts) == 4
 
     def test_first_is_create_table(self):
         stmts = emit_fallback_create_statements()
@@ -33,6 +33,16 @@ class TestEmitFallbackCreateStatements:
         stmts = emit_fallback_create_statements()
         assert '"tag"' in stmts[1]
         assert '"_block_id"' in stmts[1]
+
+    def test_third_is_membership_table(self):
+        stmts = emit_fallback_create_statements()
+        assert 'CREATE TABLE IF NOT EXISTS' in stmts[2]
+        assert '_block_dataset_membership' in stmts[2]
+
+    def test_fourth_is_validation_result_table(self):
+        stmts = emit_fallback_create_statements()
+        assert 'CREATE TABLE IF NOT EXISTS' in stmts[3]
+        assert '_validation_result' in stmts[3]
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +62,8 @@ class TestFallbackTableStructure:
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert '_cif_fallback' in names
+        assert '_block_dataset_membership' in names
+        assert '_validation_result' in names
 
     def test_index_created(self, conn):
         names = {
@@ -93,13 +105,119 @@ class TestFallbackTableStructure:
         pragma = {row[1]: row for row in conn.execute('PRAGMA table_info("_cif_fallback")')}
         assert pragma['col_index'][3] == 0  # nullable
 
-    def test_primary_key_is_block_id_and_row_id(self, conn):
+    def test_primary_key_is_block_id_row_id_tag(self, conn):
         pk_cols = {
             row[1]
             for row in conn.execute('PRAGMA table_info("_cif_fallback")')
             if row[5] > 0  # pk flag
         }
-        assert pk_cols == {'_block_id', '_row_id'}
+        assert pk_cols == {'_block_id', '_row_id', 'tag'}
+
+
+class TestBlockDatasetMembershipTableStructure:
+    @pytest.fixture
+    def conn(self):
+        c = sqlite3.connect(':memory:')
+        apply_fallback_schema(c)
+        return c
+
+    def test_table_created(self, conn):
+        names = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert '_block_dataset_membership' in names
+
+    def test_expected_columns_present(self, conn):
+        pragma = {
+            row[1]: row
+            for row in conn.execute('PRAGMA table_info("_block_dataset_membership")')
+        }
+        for col in ('_block_id', '_audit_dataset_id', 'id_regime'):
+            assert col in pragma, f"column {col!r} missing from _block_dataset_membership"
+
+    def test_all_columns_not_null(self, conn):
+        pragma = {
+            row[1]: row
+            for row in conn.execute('PRAGMA table_info("_block_dataset_membership")')
+        }
+        for col in ('_block_id', '_audit_dataset_id', 'id_regime'):
+            assert pragma[col][3] == 1, f"column {col!r} should be NOT NULL"
+
+    def test_primary_key_is_block_id_and_dataset_id(self, conn):
+        pk_cols = {
+            row[1]
+            for row in conn.execute('PRAGMA table_info("_block_dataset_membership")')
+            if row[5] > 0
+        }
+        assert pk_cols == {'_block_id', '_audit_dataset_id'}
+
+
+class TestValidationResultTableStructure:
+    @pytest.fixture
+    def conn(self):
+        c = sqlite3.connect(':memory:')
+        apply_fallback_schema(c)
+        return c
+
+    def test_table_created(self, conn):
+        names = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert '_validation_result' in names
+
+    def test_expected_columns_present(self, conn):
+        pragma = {
+            row[1]: row
+            for row in conn.execute('PRAGMA table_info("_validation_result")')
+        }
+        for col in ('check_name', 'severity', 'block_id', 'detail', 'id_regime'):
+            assert col in pragma, f"column {col!r} missing from _validation_result"
+
+    def test_check_name_not_null(self, conn):
+        pragma = {
+            row[1]: row
+            for row in conn.execute('PRAGMA table_info("_validation_result")')
+        }
+        assert pragma['check_name'][3] == 1
+
+    def test_severity_not_null(self, conn):
+        pragma = {
+            row[1]: row
+            for row in conn.execute('PRAGMA table_info("_validation_result")')
+        }
+        assert pragma['severity'][3] == 1
+
+    def test_block_id_nullable(self, conn):
+        pragma = {
+            row[1]: row
+            for row in conn.execute('PRAGMA table_info("_validation_result")')
+        }
+        assert pragma['block_id'][3] == 0
+
+    def test_detail_nullable(self, conn):
+        pragma = {
+            row[1]: row
+            for row in conn.execute('PRAGMA table_info("_validation_result")')
+        }
+        assert pragma['detail'][3] == 0
+
+    def test_id_regime_nullable(self, conn):
+        pragma = {
+            row[1]: row
+            for row in conn.execute('PRAGMA table_info("_validation_result")')
+        }
+        assert pragma['id_regime'][3] == 0
+
+    def test_no_domain_primary_key(self, conn):
+        # _validation_result is a rowid table — no column-level PK
+        pk_cols = {
+            row[1]
+            for row in conn.execute('PRAGMA table_info("_validation_result")')
+            if row[5] > 0
+        }
+        assert pk_cols == set()
 
 
 # ---------------------------------------------------------------------------
@@ -157,10 +275,14 @@ class TestApplyFallbackSchemaBehaviour:
             'INSERT INTO "_cif_fallback" (_block_id, _row_id, tag, value, value_type) '
             "VALUES ('blk1', 1, '_some.tag', 'hello', 'string')"
         )
+        conn.execute(
+            'INSERT INTO "_block_dataset_membership" (_block_id, _audit_dataset_id, id_regime) '
+            "VALUES ('blk1', 'ds1', 'dataset')"
+        )
         conn.commit()
         apply_fallback_schema(conn, drop_existing=True)
-        rows = list(conn.execute('SELECT * FROM "_cif_fallback"'))
-        assert rows == []
+        assert list(conn.execute('SELECT * FROM "_cif_fallback"')) == []
+        assert list(conn.execute('SELECT * FROM "_block_dataset_membership"')) == []
 
     def test_drop_existing_false_preserves_data(self):
         conn = sqlite3.connect(':memory:')
@@ -211,3 +333,5 @@ class TestApplyFallbackSchemaBehaviour:
         }
         assert 'atom_site' in table_names
         assert '_cif_fallback' in table_names
+        assert '_block_dataset_membership' in table_names
+        assert '_validation_result' in table_names

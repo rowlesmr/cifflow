@@ -2,8 +2,8 @@
 SQLite schema generation from a loaded DDLm dictionary.
 """
 
+from collections import defaultdict
 from dataclasses import dataclass, field
-from collections.abc import Callable
 
 from pycifparse.dictionary.ddlm_item import DdlmItem
 from pycifparse.dictionary.ddlm_parser import DdlmDictionary
@@ -14,9 +14,44 @@ from pycifparse.dictionary.ddlm_parser import DdlmDictionary
 # ---------------------------------------------------------------------------
 
 @dataclass
+class BridgeColumnDef:
+    """
+    A column whose value is derived transitively through another table.
+
+    When populating ``table_name``, the column ``column_name`` has no direct
+    CIF source.  Its value must be fetched from
+    ``bridge_table.bridge_value_column`` by looking up the row where
+    ``bridge_table.bridge_pk_column = row[via_column]``.
+
+    Attributes
+    ----------
+    table_name:
+        Table that gains the derived column (e.g. ``'geom_angle'``).
+    column_name:
+        Name of the derived column (e.g. ``'structure_id'``).
+    via_column:
+        Column in *table_name* used as the lookup key (e.g. ``'model_id'``).
+    bridge_table:
+        Intermediate table to query (e.g. ``'model'``).
+    bridge_pk_column:
+        PK column of *bridge_table* matched against *via_column*
+        (e.g. ``'id'``).
+    bridge_value_column:
+        Column in *bridge_table* whose value is copied (e.g. ``'structure_id'``).
+    """
+
+    table_name: str
+    column_name: str
+    via_column: str
+    bridge_table: str
+    bridge_pk_column: str
+    bridge_value_column: str
+
+
+@dataclass
 class ForeignKeyDef:
     """
-    A single ``FOREIGN KEY`` constraint between two tables.
+    A ``FOREIGN KEY`` constraint between two tables (single- or multi-column).
 
     Always emitted with ``DEFERRABLE INITIALLY DEFERRED`` to handle cyclic
     category graphs correctly within a transaction.
@@ -24,19 +59,20 @@ class ForeignKeyDef:
     Attributes
     ----------
     source_table:
-        Name of the table that holds the foreign key column.
-    source_column:
-        Name of the foreign key column in *source_table*.
+        Name of the table that holds the foreign key column(s).
+    source_columns:
+        Ordered list of foreign key column names in *source_table*.
     target_table:
         Name of the table being referenced.
-    target_column:
-        Name of the column being referenced in *target_table*.
+    target_columns:
+        Ordered list of column names being referenced in *target_table*,
+        corresponding positionally to *source_columns*.
     """
 
     source_table: str
-    source_column: str
+    source_columns: list[str]
     target_table: str
-    target_column: str
+    target_columns: list[str]
 
 
 @dataclass
@@ -48,30 +84,35 @@ class ColumnDef:
     ----------
     name:
         SQL column name, equal to the DDLm ``_name.object_id``, lowercased.
-        For synthetic columns the name is ``_block_id`` or ``_row_id``.
+        For synthetic columns the name is ``_block_id``, ``_row_id``, or
+        ``_pycifparse_id``.
     definition_id:
         The current canonical ``_definition.id`` for this column's DDLm item.
-        Empty string for synthetic columns (``_block_id``, ``_row_id``).
-    sql_type:
-        SQLite type affinity: ``"TEXT"``, ``"INTEGER"``, or ``"REAL"``.
+        Empty string for synthetic columns.
+    type_contents:
+        DDLm ``_type.contents`` value (e.g. ``"Text"``, ``"Integer"``,
+        ``"Real"``, ``"List"``); ``None`` if absent from the dictionary or for
+        synthetic columns.  Informational only — DDL always emits ``TEXT`` for
+        all value columns; ``_row_id`` always emits ``INTEGER``.
     nullable:
         ``False`` for synthetic and primary-key columns; ``True`` for all
         other domain columns.
     is_primary_key:
         ``True`` if this column is part of the table's ``PRIMARY KEY``.
     is_synthetic:
-        ``True`` for the ``_block_id`` and ``_row_id`` infrastructure columns,
-        which have no corresponding DDLm item definition.
+        ``True`` for the ``_block_id``, ``_row_id``, and ``_pycifparse_id``
+        infrastructure columns, which have no corresponding DDLm item
+        definition.
     linked_item_id:
         For ``SU`` items only: the ``_definition.id`` of the associated
         measurand item, lowercased.  ``None`` for all other column types.
-        Does not produce a ``FOREIGN KEY`` constraint; used by the output
-        layer.
+        Does not produce a ``FOREIGN KEY`` constraint; used by the ingestion
+        and output layers.
     """
 
     name: str
     definition_id: str
-    sql_type: str
+    type_contents: str | None
     nullable: bool
     is_primary_key: bool
     is_synthetic: bool
@@ -86,7 +127,7 @@ class TableDef:
     Attributes
     ----------
     name:
-        SQL table name, derived from the category's ``_name.category_id``
+        SQL table name, derived from the category's ``_definition.id``
         (lowercased, leading ``_`` stripped, ``.`` replaced with ``_``).
     definition_id:
         The ``_definition.id`` of the category save frame that produced
@@ -95,8 +136,9 @@ class TableDef:
         DDLm class of the source category: ``"Set"`` or ``"Loop"``.
     columns:
         Ordered list of column definitions.  Order follows the column-ordering
-        rule: ``_block_id``, ``_row_id`` (Loop only), primary-key domain
-        columns, remaining domain columns alphabetically.
+        rule: ``_block_id``, ``_pycifparse_id`` (keyless Set only),
+        ``_row_id``, primary-key domain columns, remaining domain columns
+        alphabetically.
     primary_keys:
         Column names forming the ``PRIMARY KEY``, in declaration order.
     foreign_keys:
@@ -127,7 +169,16 @@ class SchemaSpec:
     column_to_tag:
         Reverse mapping from ``(table_name, column_name)`` to the canonical
         ``_definition.id`` of the corresponding DDLm item.  Synthetic
-        columns (``_block_id``, ``_row_id``) are excluded.
+        columns (``_block_id``, ``_row_id``, ``_pycifparse_id``) are excluded.
+    alias_to_definition_id:
+        Old tag name → canonical ``_definition.id``.  Copied from
+        ``DdlmDictionary.alias_to_definition_id`` by ``generate_schema``.
+        Used by ``ingest()`` for alias resolution without retaining a
+        dictionary reference.
+    deprecated_ids:
+        Set of ``_definition.id`` values marked as deprecated.  Copied from
+        ``DdlmDictionary.deprecated_ids`` by ``generate_schema``.  Used by
+        ``ingest()`` to emit deprecation warnings.
     warnings:
         Non-fatal issues encountered during schema generation, in emission
         order.
@@ -135,26 +186,26 @@ class SchemaSpec:
 
     tables: dict[str, TableDef]
     column_to_tag: dict[tuple[str, str], str]
+    alias_to_definition_id: dict[str, str] = field(default_factory=dict)
+    deprecated_ids: set[str] = field(default_factory=set)
     warnings: list[str] = field(default_factory=list)
+    bridge_columns: list[BridgeColumnDef] = field(default_factory=list)
+    propagation_links: dict[str, list[tuple[str, str, str | None]]] = field(default_factory=dict)
+    """Mapping from table name to ``[(column_name, target_def_id, default), ...]``.
+
+    For PK columns that are DDLm ``Link`` items but whose ``FOREIGN KEY``
+    constraint was skipped at schema generation time (e.g. because the FK
+    target is not a PK of the target table), the ingest layer still needs to
+    propagate the value from the ``fk_accumulator`` or the current loop row.
+    Each entry records the target ``_definition.id`` to look up.
+    """
 
 
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
 
-_SYNTHETIC_NAMES: frozenset[str] = frozenset({'_block_id', '_row_id'})
-
-
-def _sql_type(type_contents: str | None) -> str:
-    """Map a DDLm ``_type.contents`` value to a SQLite type affinity string."""
-    if type_contents is None:
-        return 'TEXT'
-    tc = type_contents.lower()
-    if tc == 'integer':
-        return 'INTEGER'
-    if tc == 'real':
-        return 'REAL'
-    return 'TEXT'
+_SYNTHETIC_NAMES: frozenset[str] = frozenset({'_block_id', '_row_id', '_pycifparse_id'})
 
 
 def _table_name(category_id: str) -> str:
@@ -165,6 +216,91 @@ def _table_name(category_id: str) -> str:
 def _qi(name: str) -> str:
     """Quote a SQL identifier with double quotes, escaping embedded quotes."""
     return '"' + name.replace('"', '""') + '"'
+
+
+def _ddl_type(col: ColumnDef) -> str:
+    """Return the SQL type to emit in DDL for *col*.
+
+    ``_row_id`` is always ``INTEGER``; every other column (synthetic or domain)
+    is ``TEXT``.  Domain columns store all CIF values as raw strings regardless
+    of ``type_contents`` (Lesson 27).
+    """
+    return 'INTEGER' if col.name == '_row_id' else 'TEXT'
+
+
+# ---------------------------------------------------------------------------
+# Private helpers (continued)
+# ---------------------------------------------------------------------------
+
+def _find_transitive_bridge(
+    src_tbl: str,
+    tgt_tbl: str,
+    missing_pk_col: str,
+    tables: dict,
+    dictionary: 'DdlmDictionary',
+    link_groups: dict,
+) -> 'tuple[str, str, str, str] | None':
+    """Return ``(src_bridge_col, bridge_tbl, bridge_pk_col, bridge_val_col)`` or None.
+
+    Searches for an intermediate table *bridge_tbl* such that:
+
+    - *src_tbl* has a clean single-column Link to the sole PK of *bridge_tbl*
+      via column *src_bridge_col*.
+    - *bridge_tbl* has a column *bridge_val_col* whose ``linked_item_id``
+      equals that of *tgt_tbl*.*missing_pk_col* — meaning both columns draw
+      their values from the same parent item (e.g. both link to
+      ``_structure.id``).
+
+    When such a bridge exists, the value of *missing_pk_col* in a *src_tbl*
+    row can be derived by looking up
+    ``bridge_tbl[bridge_pk_col = row[src_bridge_col]].bridge_val_col``.
+    """
+    # Find the anchor: what definition_id does tgt_tbl.missing_pk_col link to?
+    tgt_col_def = next(
+        (c for c in tables[tgt_tbl].columns if c.name == missing_pk_col), None
+    )
+    if tgt_col_def is None or not tgt_col_def.definition_id:
+        return None
+    tgt_item = dictionary.tag_to_item.get(tgt_col_def.definition_id)
+    if tgt_item is None or tgt_item.linked_item_id is None:
+        return None
+    anchor = tgt_item.linked_item_id  # e.g. '_structure.id'
+
+    # Scan all Link groups from src_tbl for a viable bridge table
+    for (s, bridge_tbl), b_pairs in sorted(link_groups.items()):
+        if s != src_tbl or bridge_tbl == tgt_tbl or bridge_tbl not in tables:
+            continue
+
+        # Bridge table must have exactly one non-synthetic PK column
+        bridge_ns_pks = [
+            pk for pk in tables[bridge_tbl].primary_keys
+            if pk not in _SYNTHETIC_NAMES
+        ]
+        if len(bridge_ns_pks) != 1:
+            continue
+        bridge_pk_col = bridge_ns_pks[0]
+
+        # The link group must cleanly map one src column → bridge_pk_col (1:1)
+        b_tgt_to_srcs: dict[str, list[str]] = defaultdict(list)
+        for sc, tc, _ in b_pairs:
+            b_tgt_to_srcs[tc].append(sc)
+        if bridge_pk_col not in b_tgt_to_srcs:
+            continue
+        if len(b_tgt_to_srcs[bridge_pk_col]) != 1:
+            continue
+        src_bridge_col = b_tgt_to_srcs[bridge_pk_col][0]
+
+        # Bridge table must have a column sharing the same linked_item_id as anchor
+        for col in tables[bridge_tbl].columns:
+            if col.is_synthetic or not col.definition_id:
+                continue
+            b_item = dictionary.tag_to_item.get(col.definition_id)
+            if (b_item is not None
+                    and b_item.type_purpose == 'Link'
+                    and b_item.linked_item_id == anchor):
+                return (src_bridge_col, bridge_tbl, bridge_pk_col, col.name)
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +322,10 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
     :attr:`ColumnDef.linked_item_id` but do not produce
     :class:`ForeignKeyDef` entries.
 
+    ``alias_to_definition_id`` and ``deprecated_ids`` are copied directly from
+    *dictionary* so that ``ingest()`` can perform alias resolution and
+    deprecation checking without retaining a reference to the dictionary.
+
     Parameters
     ----------
     dictionary:
@@ -196,8 +336,8 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
     -------
     SchemaSpec
         The complete schema specification including all tables, column
-        definitions, primary keys, foreign keys, and the reverse
-        ``column_to_tag`` mapping.
+        definitions, primary keys, foreign keys, the reverse
+        ``column_to_tag`` mapping, and alias/deprecation metadata.
     """
     warnings: list[str] = []
     tables: dict[str, TableDef] = {}
@@ -213,9 +353,6 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             continue
 
         # Table name is derived from the category's own definition_id.
-        # cat_item.category_id is the PARENT category in the DDLm hierarchy —
-        # not the table name.  Items belonging to this category carry
-        # _name.category_id == cat_item.definition_id.
         tbl_name = _table_name(cat_item.definition_id)
 
         # Domain items: those whose _name.category_id points to this category.
@@ -249,9 +386,9 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             if cat_class == 'Set':
                 warnings.append(
                     f"category {cat_id!r} (Set) has no _category_key.name — "
-                    f"using _block_id as primary key"
+                    f"using _pycifparse_id as primary key"
                 )
-                primary_keys = ['_block_id']
+                primary_keys = ['_pycifparse_id']
             else:  # Loop
                 warnings.append(
                     f"category {cat_id!r} (Loop) has no _category_key.name — "
@@ -264,32 +401,43 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         # --- Build columns in specified order ---
         columns: list[ColumnDef] = []
 
-        # 1. _block_id (always first)
+        # 1. _block_id (always first; informational only for keyed tables)
         block_id_is_pk = '_block_id' in primary_keys
         columns.append(ColumnDef(
             name='_block_id',
             definition_id='',
-            sql_type='TEXT',
+            type_contents=None,
             nullable=False,
             is_primary_key=block_id_is_pk,
             is_synthetic=True,
             linked_item_id=None,
         ))
 
-        # 2. _row_id (Loop tables only)
-        if cat_class == 'Loop':
-            row_id_is_pk = '_row_id' in primary_keys
+        # 2. _pycifparse_id (keyless Set tables only)
+        if use_fallback_pk and cat_class == 'Set':
             columns.append(ColumnDef(
-                name='_row_id',
+                name='_pycifparse_id',
                 definition_id='',
-                sql_type='INTEGER',
+                type_contents=None,
                 nullable=False,
-                is_primary_key=row_id_is_pk,
+                is_primary_key=True,
                 is_synthetic=True,
                 linked_item_id=None,
             ))
 
-        # 3. Non-synthetic primary-key columns (in category_keys order)
+        # 3. _row_id (all Set and Loop tables)
+        row_id_is_pk = '_row_id' in primary_keys
+        columns.append(ColumnDef(
+            name='_row_id',
+            definition_id='',
+            type_contents=None,
+            nullable=False,
+            is_primary_key=row_id_is_pk,
+            is_synthetic=True,
+            linked_item_id=None,
+        ))
+
+        # 4. Non-synthetic primary-key columns (in category_keys order)
         for obj_id in non_synthetic_pks:
             item = domain_items.get(obj_id)
             if item is None:
@@ -300,7 +448,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 col = ColumnDef(
                     name=obj_id,
                     definition_id='',
-                    sql_type='TEXT',
+                    type_contents=None,
                     nullable=False,
                     is_primary_key=True,
                     is_synthetic=False,
@@ -310,7 +458,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 col = ColumnDef(
                     name=obj_id,
                     definition_id=item.definition_id,
-                    sql_type=_sql_type(item.type_contents),
+                    type_contents=item.type_contents,
                     nullable=False,
                     is_primary_key=True,
                     is_synthetic=False,
@@ -321,7 +469,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 column_to_tag[(tbl_name, obj_id)] = item.definition_id
             columns.append(col)
 
-        # 4. Remaining domain columns (alphabetically, excluding PKs)
+        # 5. Remaining domain columns (alphabetically, excluding PKs)
         pk_set = set(non_synthetic_pks)
         for obj_id, item in sorted(domain_items.items()):
             if obj_id in pk_set:
@@ -329,7 +477,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             col = ColumnDef(
                 name=obj_id,
                 definition_id=item.definition_id,
-                sql_type=_sql_type(item.type_contents),
+                type_contents=item.type_contents,
                 nullable=True,
                 is_primary_key=False,
                 is_synthetic=False,
@@ -350,6 +498,23 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         )
 
     # --- Second pass: foreign-key detection ---
+    # Collect all Link items grouped by (src_tbl, tgt_tbl).  When multiple
+    # source columns all link to columns that together cover the target table's
+    # full composite PK, emit one composite FOREIGN KEY constraint.  Single-
+    # column FKs targeting a sole PK are handled as the degenerate case.
+    #
+    # SQLite requires the FK target to have a UNIQUE index.  For a sole-PK
+    # table SQLite creates one automatically; for a composite PK it does NOT
+    # create per-column UNIQUE indices.  Therefore a valid FK must reference
+    # EITHER the sole PK (single-column FK) OR the full composite PK (multi-
+    # column FK).  Partial or non-PK references are warned and skipped.
+
+    bridge_columns: list[BridgeColumnDef] = []
+
+    _link_groups: dict[
+        tuple[str, str], list[tuple[str, str, DdlmItem]]
+    ] = defaultdict(list)   # (src_tbl, tgt_tbl) → [(src_col, tgt_col, item)]
+
     for item in dictionary.items.values():
         if item.type_purpose != 'Link' or item.linked_item_id is None:
             continue
@@ -387,40 +552,199 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 f"key of {target_item.category_id!r} — recording FK anyway"
             )
 
-        tables[src_tbl].foreign_keys.append(ForeignKeyDef(
-            source_table=src_tbl,
-            source_column=item.object_id,
-            target_table=tgt_tbl,
-            target_column=target_item.object_id,
-        ))
+        _link_groups[(src_tbl, tgt_tbl)].append(
+            (item.object_id, target_item.object_id, item)
+        )
+
+    for (src_tbl, tgt_tbl), pairs in sorted(_link_groups.items()):
+        tgt_pks: list[str] = tables[tgt_tbl].primary_keys
+        tgt_pks_set = set(tgt_pks)
+
+        # tgt_col → [src_col, ...]: detect full coverage and duplicate targets
+        tgt_to_srcs: dict[str, list[str]] = defaultdict(list)
+        for src_col, tgt_col, _ in pairs:
+            tgt_to_srcs[tgt_col].append(src_col)
+
+        tgt_cols_covered = set(tgt_to_srcs.keys())
+        non_pk_tgt_cols  = tgt_cols_covered - tgt_pks_set
+        missing_pk_cols  = tgt_pks_set - tgt_cols_covered
+        has_conflicts    = any(len(v) > 1 for v in tgt_to_srcs.values())
+
+        if has_conflicts and not missing_pk_cols and not non_pk_tgt_cols:
+            # Multiple source columns each independently reference the full PK
+            # (e.g. bond.atom_1 and bond.atom_2 both → atom.number).
+            # Emit one separate single/composite FK per source column.
+            for tgt_col, src_list in tgt_to_srcs.items():
+                for src_col in src_list:
+                    tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                        source_table=src_tbl,
+                        source_columns=[src_col],
+                        target_table=tgt_tbl,
+                        target_columns=[tgt_col],
+                    ))
+        elif not non_pk_tgt_cols and len(missing_pk_cols) == 1:
+            # All covered columns are PKs; exactly one PK column is missing.
+            # Sub-case A: the missing column already exists in src_tbl (self-ref
+            #   or previously bridged) — use it directly.
+            # Sub-case B: try to derive it via a transitive bridge table.
+            [missing_pk_col] = missing_pk_cols
+            src_col_names = {c.name for c in tables[src_tbl].columns}
+            bridge_col_in_src: str | None = (
+                missing_pk_col if missing_pk_col in src_col_names else None
+            )
+
+            if bridge_col_in_src is None:
+                found = _find_transitive_bridge(
+                    src_tbl, tgt_tbl, missing_pk_col,
+                    tables, dictionary, _link_groups,
+                )
+                if found is not None:
+                    src_bridge_col, bridge_tbl, bridge_pk_col, bridge_val_col = found
+                    # Add derived column once per (src_tbl, col) pair
+                    tables[src_tbl].columns.append(ColumnDef(
+                        name=missing_pk_col,
+                        definition_id='',
+                        type_contents=None,
+                        nullable=True,
+                        is_primary_key=False,
+                        is_synthetic=False,
+                        linked_item_id=None,
+                    ))
+                    bridge_columns.append(BridgeColumnDef(
+                        table_name=src_tbl,
+                        column_name=missing_pk_col,
+                        via_column=src_bridge_col,
+                        bridge_table=bridge_tbl,
+                        bridge_pk_column=bridge_pk_col,
+                        bridge_value_column=bridge_val_col,
+                    ))
+                    bridge_col_in_src = missing_pk_col
+
+            if bridge_col_in_src is not None:
+                # Emit one composite FK per conflicting src column (or one if
+                # no conflicts), with tgt_pks ordering throughout.
+                if has_conflicts:
+                    for tgt_col, src_list in tgt_to_srcs.items():
+                        for src_col in src_list:
+                            src_ordered = [
+                                src_col if pk == tgt_col else bridge_col_in_src
+                                for pk in tgt_pks
+                            ]
+                            tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                                source_table=src_tbl,
+                                source_columns=src_ordered,
+                                target_table=tgt_tbl,
+                                target_columns=list(tgt_pks),
+                            ))
+                else:
+                    src_ordered = [
+                        tgt_to_srcs[pk][0] if pk in tgt_to_srcs else bridge_col_in_src
+                        for pk in tgt_pks
+                    ]
+                    tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                        source_table=src_tbl,
+                        source_columns=src_ordered,
+                        target_table=tgt_tbl,
+                        target_columns=list(tgt_pks),
+                    ))
+            else:
+                # No bridge found — warn per pair
+                for src_col, tgt_col, item in pairs:
+                    warnings.append(
+                        f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                        f"partial FK to '{tgt_tbl}' — covers "
+                        f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}, "
+                        f"no transitive bridge found — skipping FK constraint"
+                    )
+        elif non_pk_tgt_cols or missing_pk_cols or has_conflicts:
+            # Cannot form a complete, unambiguous (composite) FK.
+            # Emit one warning per failing pair so each source item is named.
+            for src_col, tgt_col, item in pairs:
+                if len(tgt_to_srcs.get(tgt_col, [])) > 1:
+                    msg = (
+                        f"ambiguous composite FK — multiple source columns "
+                        f"link to '{tgt_tbl}'.'{tgt_col}'"
+                    )
+                elif tgt_col not in tgt_pks_set:
+                    msg = (
+                        f"target column '{tgt_col}' is not a PK of "
+                        f"'{tgt_tbl}' (PKs={tgt_pks})"
+                    )
+                else:
+                    msg = (
+                        f"partial FK to '{tgt_tbl}' — covers "
+                        f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}"
+                    )
+                warnings.append(
+                    f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                    f"{msg} — skipping FK constraint"
+                )
+        else:
+            # All PKs covered, no non-PK targets, no duplicate targets.
+            # Order source columns to match the target PK column order.
+            src_ordered = [tgt_to_srcs[tc][0] for tc in tgt_pks]
+            tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                source_table=src_tbl,
+                source_columns=src_ordered,
+                target_table=tgt_tbl,
+                target_columns=list(tgt_pks),
+            ))
+
+    # --- Third pass: propagation links ---
+    # For every PK column that is a Link item, record the target definition_id
+    # so that _apply_fk can still fill the column from the fk_accumulator or
+    # loop values even when no formal FK constraint was emitted.
+    #
+    # Additionally, PK Link columns with skipped FKs are made nullable: the
+    # database cannot enforce referential integrity for them, and NULL is the
+    # correct representation of an absent/default value.
+    propagation_links: dict[str, list[tuple[str, str, str | None]]] = {}
+    _seen_prop: set[tuple[str, str]] = set()
+    for item in dictionary.items.values():
+        if item.type_purpose != 'Link' or item.linked_item_id is None:
+            continue
+        if item.category_id is None or item.object_id is None:
+            continue
+        src_tbl = _table_name(item.category_id)
+        if src_tbl not in tables:
+            continue
+        src_col_def = next(
+            (c for c in tables[src_tbl].columns if c.name == item.object_id),
+            None,
+        )
+        if src_col_def is None or not src_col_def.is_primary_key:
+            continue
+        key = (src_tbl, item.object_id)
+        if key in _seen_prop:
+            continue
+        _seen_prop.add(key)
+        propagation_links.setdefault(src_tbl, []).append(
+            (item.object_id, item.linked_item_id, item.enumeration_default)
+        )
+        # Make the column nullable: FK was skipped, so NULL is valid here.
+        src_col_def.nullable = True
 
     return SchemaSpec(
         tables=tables,
         column_to_tag=column_to_tag,
+        alias_to_definition_id=dict(dictionary.alias_to_definition_id),
+        deprecated_ids=set(dictionary.deprecated_ids),
         warnings=warnings,
+        bridge_columns=bridge_columns,
+        propagation_links=propagation_links,
     )
 
 
 def emit_fallback_create_statements() -> list[str]:
     """
-    Return the fixed DDL statements for the ``_cif_fallback`` table and its index.
+    Return the fixed DDL statements for the schema-less fallback tier.
 
-    The fallback tier stores values for tags that are not mapped to any
-    structured table — either because no dictionary was loaded, the tag is
-    unknown to the loaded dictionary, or the tag's dictionary was not
-    available at ingestion time.
-
-    The returned list contains two statements: the ``CREATE TABLE IF NOT
-    EXISTS`` for ``_cif_fallback`` and the ``CREATE INDEX IF NOT EXISTS`` for
-    the ``(tag, _block_id)`` lookup index.  Both are valid SQLite DDL and can
-    be executed directly against a ``sqlite3.Connection``.
-
-    Returns
-    -------
-    list[str]
-        Two SQL strings: the table DDL followed by the index DDL.
+    Returns four SQL strings: ``CREATE TABLE IF NOT EXISTS`` for
+    ``_cif_fallback``, its lookup index, ``CREATE TABLE IF NOT EXISTS`` for
+    ``_block_dataset_membership``, and ``CREATE TABLE IF NOT EXISTS`` for
+    ``_validation_result``.
     """
-    table = (
+    fallback = (
         f"CREATE TABLE IF NOT EXISTS {_qi('_cif_fallback')} (\n"
         f"    {_qi('_block_id')}   TEXT     NOT NULL,\n"
         f"    {_qi('_row_id')}     INTEGER  NOT NULL,\n"
@@ -429,14 +753,31 @@ def emit_fallback_create_statements() -> list[str]:
         f"    {_qi('value_type')}  TEXT     NOT NULL,\n"
         f"    {_qi('loop_id')}     INTEGER,\n"
         f"    {_qi('col_index')}   INTEGER,\n"
-        f"    PRIMARY KEY ({_qi('_block_id')}, {_qi('_row_id')})\n"
+        f"    PRIMARY KEY ({_qi('_block_id')}, {_qi('_row_id')}, {_qi('tag')})\n"
         f")"
     )
     index = (
         f"CREATE INDEX IF NOT EXISTS {_qi('idx_cif_fallback_tag_block')} "
         f"ON {_qi('_cif_fallback')} ({_qi('tag')}, {_qi('_block_id')})"
     )
-    return [table, index]
+    membership = (
+        f"CREATE TABLE IF NOT EXISTS {_qi('_block_dataset_membership')} (\n"
+        f"    {_qi('_block_id')}            TEXT  NOT NULL,\n"
+        f"    {_qi('_audit_dataset_id')}    TEXT  NOT NULL,\n"
+        f"    {_qi('id_regime')}            TEXT  NOT NULL,\n"
+        f"    PRIMARY KEY ({_qi('_block_id')}, {_qi('_audit_dataset_id')})\n"
+        f")"
+    )
+    validation = (
+        f"CREATE TABLE IF NOT EXISTS {_qi('_validation_result')} (\n"
+        f"    {_qi('check_name')}  TEXT  NOT NULL,\n"
+        f"    {_qi('severity')}    TEXT  NOT NULL,\n"
+        f"    {_qi('block_id')}    TEXT,\n"
+        f"    {_qi('detail')}      TEXT,\n"
+        f"    {_qi('id_regime')}   TEXT\n"
+        f")"
+    )
+    return [fallback, index, membership, validation]
 
 
 def emit_create_statements(schema: SchemaSpec) -> list[str]:
@@ -445,12 +786,11 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
 
     Returns one SQL string per table.  The statements use
     ``CREATE TABLE IF NOT EXISTS`` and include inline ``PRIMARY KEY`` and
-    ``FOREIGN KEY`` clauses.  All foreign-key constraints carry
-    ``DEFERRABLE INITIALLY DEFERRED``.  The ``_row_id`` column on Loop tables
-    includes an additional ``UNIQUE`` constraint.
+    ``FOREIGN KEY`` clauses.  All FK constraints carry
+    ``DEFERRABLE INITIALLY DEFERRED``.
 
-    The returned strings are valid SQLite DDL and can be executed directly
-    against a ``sqlite3.Connection``.
+    All value columns are declared ``TEXT`` regardless of
+    ``ColumnDef.type_contents``; ``_row_id`` is always ``INTEGER``.
 
     Parameters
     ----------
@@ -460,29 +800,36 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
     Returns
     -------
     list[str]
-        One ``CREATE TABLE IF NOT EXISTS ...`` statement per table, in
-        iteration order of ``schema.tables``.
+        One ``CREATE TABLE IF NOT EXISTS ...`` statement per table.
     """
     stmts: list[str] = []
 
     for table in schema.tables.values():
         parts: list[str] = []
 
+        row_id_col = next((c for c in table.columns if c.name == '_row_id'), None)
         for col in table.columns:
-            line = f"    {_qi(col.name)}  {col.sql_type}"
+            line = f"    {_qi(col.name)}  {_ddl_type(col)}"
             if not col.nullable:
                 line += "  NOT NULL"
-            if col.is_synthetic and col.name == '_row_id':
-                line += "  UNIQUE"
             parts.append(line)
 
         pk_clause = ', '.join(_qi(k) for k in table.primary_keys)
         parts.append(f"    PRIMARY KEY ({pk_clause})")
 
-        for fk in table.foreign_keys:
+        # Composite UNIQUE on (_block_id, _row_id) when _row_id is not already
+        # part of the PRIMARY KEY.
+        if row_id_col is not None and not row_id_col.is_primary_key:
             parts.append(
-                f"    FOREIGN KEY ({_qi(fk.source_column)})\n"
-                f"        REFERENCES {_qi(fk.target_table)}({_qi(fk.target_column)})\n"
+                f"    UNIQUE ({_qi('_block_id')}, {_qi('_row_id')})"
+            )
+
+        for fk in table.foreign_keys:
+            src_cols = ', '.join(_qi(c) for c in fk.source_columns)
+            tgt_cols = ', '.join(_qi(c) for c in fk.target_columns)
+            parts.append(
+                f"    FOREIGN KEY ({src_cols})\n"
+                f"        REFERENCES {_qi(fk.target_table)}({tgt_cols})\n"
                 f"        DEFERRABLE INITIALLY DEFERRED"
             )
 

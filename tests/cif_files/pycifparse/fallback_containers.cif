@@ -1,0 +1,12 @@
+#\#CIF_2.0
+# Tests: CIF 2.0 list and table container values in schema-less ingestion.
+# Lists are stored as JSON arrays in _cif_fallback.value with value_type='list'.
+# Tables are stored as JSON objects with value_type='table'.
+# Nested containers (list-of-lists, table-of-tables) are also tested.
+# Dictionary: none (schema-less)
+
+data_test_fallback_containers
+_vector.coords        [1.0 2.0 3.0]
+_matrix.row           [[1 0 0] [0 1 0] [0 0 1]]
+_site.properties      {"element": Fe  "charge": "3+"  "spin": high}
+_mixed.nested         [{"a": 1} {"a": 2} {"a": 3}]
