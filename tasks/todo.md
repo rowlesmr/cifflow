@@ -4,77 +4,37 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 4 (SQLite ingestion) — complete. Stage 5 spec written. Ready to begin Stage 5.
+**Current stage:** Stage 5 complete. Ready for Stage 6 (output layer).
 
 **Test suite state (2026-04-11):**
-- 936 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
-- 27 slow tests pass: `.venv/Scripts/pytest -m slow`
-- Total: 963 passing
+- 920 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
+- 49 slow tests pass: `.venv/Scripts/pytest -m slow`
+- Total: 969 passing
 
 **What was just completed (this session):**
-- **UUID-per-row for keyless loops** (`_process_loop`): added a post-`_apply_fk` UUID fill pass
-  that handles all three keyless-PK scenarios uniformly — single-column key-FK, pure-key (no FK),
-  and composite-key-FK components. Uses `pk_uuid_pool` to share UUIDs across sibling tables in a
-  multi-category loop iteration. Topological stub ordering ensures grandparent rows exist before
-  parent stubs are inserted (required for `DEFERRABLE INITIALLY DEFERRED` FK checks). Lessons 44–45.
-- **`IngestionError`** (`ingestion/ingest.py`, `ingestion/__init__.py`, `__init__.py`): new exception
-  class with `.errors: list[str]`. All blocks are processed first to collect all conflicts, then
-  `IngestionError` is raised after the block loop. The existing `except Exception` handler in
-  `run()` triggers `ROLLBACK`. Cross-block value conflicts are semantic errors (not warnings) —
-  feeding multiple blocks implies they belong together; a value conflict means the blocks are
-  incompatible.
-- **Loop-class scalar buffering** (`_process_scalar`): Loop-class scalar tags are now accumulated
-  into `loop_scalar_buffers` (parallel to `set_buffers`) and flushed as a complete row at end of
-  block. Previously they were merged one tag at a time, so the PK column was absent from non-PK
-  rows, causing all blocks to collide on PK = `(None,)`. Fixed false merge conflicts in
-  `multi_one.cif` `pd_instr_detector` rows. Lesson 46.
-- **`TestCoreRepeatedLoopKey`**: new test class covering the `core_repeated_loop_key.cif` fixture —
-  exact duplicate silently dropped, value conflicts raise `IngestionError`, transaction rolled back.
-- **`TestCoreMultipleBlocks`** updated: Block C's F1/Na1 conflicts with earlier blocks now raise
-  `IngestionError` (6 errors); 0 rows after rollback.
-- **`TestIngestMultiBlock`** corrected: was using `core_schema` for a powder diffraction file;
-  switched to `pow_schema`. Assertion updated to check `pd_instr` and `pd_instr_detector` row
-  counts instead of `_cif_fallback` (which is 0 when a schema is present).
-
-**What comes next (Stage 5):**
-- Consult `prompts/Stage5_Ingest_Debug_Prompt.md` before starting
-- Implement `inspect_*` family in a new `inspect` module (exact module layout TBD — see open decisions)
-- `inspect_lexer` and `inspect_parse` will wrap / replace `debug.py` functionality
+- **Stage 5 — `inspect/` package** (`src/pycifparse/inspect/`):
+  - Replaced `src/pycifparse/debug.py` with a proper `inspect/` package.
+  - `_common.py`: shared ANSI colour helpers, `resolve_source`, `fmt_value`.
+  - `_lexer.py`: `inspect_lexer` (renamed from `debug_lex`).
+  - `_parser.py`: `inspect_parse` + `ParseHandler` (renamed from `debug_parse` / `DebugHandler`).
+  - `_model.py`: `inspect_model` (renamed from `debug_build`).
+  - `_schema.py`: `inspect_schema` (renamed from `debug_schema`; now also accepts `DdlmDictionary`).
+  - `_ingest.py`: `inspect_ingest` + `TraceEvent` dataclass (new). Captures semantic warnings,
+    errors, and FK violations at point-of-occurrence; returns `list[TraceEvent]`.
+  - All symbols exported from `pycifparse.inspect.__init__` and `pycifparse.__init__`.
+  - `tests/test_debug.py` deleted; replaced with `tests/test_inspect.py` (46 tests).
+  - `example_inspect.py` added: demonstrates all six entry points.
+- **ANSI colours**: `inspect/` output is coloured on ttys (via `supports_colour`). JediTerm/PyCharm
+  Community has a known column-tracking bug when lines containing ANSI codes wrap — nothing we can
+  do; widening the terminal panel avoids it. Lesson 48.
 
 **Open decisions / known limitations:**
-- **Synthetic Set key scope — block-scoped vs block-category-scoped `_pycifparse_id`:**
-  Cross-block UUIDs are always distinct (agreed). The question is within a single block: should all
-  keyless Set tables share one UUID (block-scoped), or should each keyless Set table get its own
-  UUID (block-category-scoped, current behaviour)?
-
-  *Block-scoped:* one UUID `X` per block; every keyless Set table in that block gets `_pycifparse_id = X`.
-  *Block-category-scoped (current):* each keyless Set table in a block independently generates its
-  own UUID4, so `cell._pycifparse_id ≠ diffrn._pycifparse_id` even within the same block.
-
-  *Arguments for block-scoped:*
-  - A block describes one experiment/structure. All its keyless Set entities are facets of the same
-    thing; a shared identifier reflects that unity.
-  - FK chains between keyless Set tables would resolve trivially — if `cell.diffrn_id` is an FK to
-    `diffrn._pycifparse_id` and both use the same UUID, no propagation is needed.
-  - Simpler to generate: one `uuid4()` call per block rather than one per keyless Set table.
-
-  *Arguments for block-category-scoped (current):*
-  - Each Set category is a distinct entity; sharing a UUID across unrelated categories is
-    semantically misleading and would cause spurious JOIN matches on `_pycifparse_id`.
-  - FK propagation already handles cross-table wiring correctly via `fk_accumulator` keyed on
-    named CIF tags (e.g. `_diffrn.id`), not on `_pycifparse_id` directly. The UUID values do
-    not need to match across tables for FK resolution to work.
-  - Block-scoped only helps FK resolution when the FK column IS `_pycifparse_id` in the target —
-    which cannot happen for real dictionaries (they link via named items like `_diffrn.id`).
-
-  *Current position:* block-category-scoped. The FK propagation machinery makes the block-scoped
-  shortcut unnecessary, and distinct UUIDs per category are semantically cleaner.
-
-- **Stage 5 module layout**: single `inspect.py` vs `inspect/` package with one module per layer.
-- **`inspect_ingest` API shape**: context-manager collector vs flag gating a `TraceEvent` list.
-- **`inspect_ingest` granularity**: pre-flush vs post-FK-resolution row snapshots.
-- **`inspect_schema` input**: accept raw dictionary source string (parse internally) or require a
-  pre-loaded `DdlmDictionary`?
+- **`inspect_ingest` routing trace**: currently captures warnings, errors, FK violations only.
+  Full per-tag routing events (tag → table.column) would require hooks into `_Ingester` internals;
+  deferred until a `filter=` parameter is added.
+- **`inspect_ingest` filter parameter**: unfiltered trace first; leave open for later.
+- **SQLite trace output for `inspect_ingest`**: out of scope; leave open.
+- **`_pycifparse_id` scoping**: block-category-scoped (current). Revisit with real-world evidence.
 - `uuid_reference_check` is a stub — no rows written in Stage 4. Implement in a later stage.
 - Looped keyless Set: error is supposed to be emitted and UUID assigned per row, but this path is
   not explicitly tested. Covered implicitly by the `_pycifparse_id` test but no error-emission test.
