@@ -1,0 +1,23 @@
+#\#CIF_2.0
+# Tests: value_type column in _cif_fallback reflects the lexer-assigned ValueType
+# for each stored value. One example of each relevant ValueType is present:
+#   STRING         -> bare word
+#   PLACEHOLDER    -> unquoted . or ?
+#   SINGLE_QUOTED  -> 'text'
+#   DOUBLE_QUOTED  -> "text"
+#   MULTILINE_STRING -> ;...;
+# Triple-quoted types (CIF 2.0 only) are tested in the triple entry below.
+# Dictionary: none (schema-less)
+
+data_test_fallback_value_types
+_t.string          bare_word
+_t.placeholder_dot .
+_t.placeholder_q   ?
+_t.single_quoted   'hello world'
+_t.double_quoted   "hello world"
+_t.multiline
+;line one
+line two
+;
+_t.triple_single   '''triple single'''
+_t.triple_double   """triple double"""

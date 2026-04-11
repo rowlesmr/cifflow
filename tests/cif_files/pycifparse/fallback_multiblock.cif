@@ -1,0 +1,24 @@
+#\#CIF_2.0
+# Tests: schema-less ingestion of multiple data blocks. Each block's tags must
+# appear in _cif_fallback with the correct _block_id. Tags in block_alpha must
+# not bleed into block_beta rows and vice versa. All block IDs must be present
+# in the distinct _block_id values of _cif_fallback.
+# Identical content in different blocks must not collide.
+# Dictionary: none (schema-less)
+
+data_block_alpha
+_sample.name  alpha_sample
+_sample.color red
+_value.a      1.0
+
+data_block_beta
+_sample.name  beta_sample
+_sample.color blue
+_value.b      2.0
+_value.c      3.0
+
+data_block_gamma
+_sample.name  beta_sample
+_sample.color blue
+_value.b      2.0
+_value.c      3.0

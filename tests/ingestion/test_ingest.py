@@ -364,13 +364,13 @@ class TestSplitSu:
         assert split_su('1234(5)') == ('1234', '5')
 
     def test_decimal_with_su(self):
-        assert split_su('1.234(5)') == ('1.234', '5')
+        assert split_su('1.234(5)') == ('1.234', '0.005')
 
     def test_negative_with_su(self):
-        assert split_su('-1.234(5)') == ('-1.234', '5')
+        assert split_su('-1.234(5)') == ('-1.234', '0.005')
 
     def test_scientific_with_su(self):
-        assert split_su('1.23e-4(5)') == ('1.23e-4', '5')
+        assert split_su('1.23e-4(5)') == ('1.23e-4', '0.000005')
 
     def test_no_su(self):
         assert split_su('1.234') is None
@@ -379,7 +379,18 @@ class TestSplitSu:
         assert split_su('hello') is None
 
     def test_multi_digit_su(self):
-        assert split_su('12.34(56)') == ('12.34', '56')
+        assert split_su('12.34(56)') == ('12.34', '0.56')
+
+    def test_su_larger_than_last_digit(self):
+        # 456 units in the first decimal place: 45.6
+        assert split_su('12.3(456)') == ('12.3', '45.6')
+
+    def test_integer_multi_digit_su(self):
+        # No decimal places: scale factor is 1
+        assert split_su('100(12)') == ('100', '12')
+
+    def test_scientific_positive_exp(self):
+        assert split_su('1.5e2(3)') == ('1.5e2', '30')
 
 
 # ===========================================================================
@@ -672,7 +683,7 @@ class TestSUIngestion:
         conn = _conn(schema)
         ingest(f, conn, schema)
         rows = _rows(conn, 'atom_site', ['label', 'x_fract', 'x_fract_su'])
-        assert rows[0] == ('C1', '0.123', '4')
+        assert rows[0] == ('C1', '0.123', '0.004')
 
     def test_su_absent_leaves_su_column_null(self):
         schema = _schema_a()

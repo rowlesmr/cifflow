@@ -1,0 +1,18 @@
+#\#CIF_2.0
+# Tests: FK accumulator / propagation link. _diffrn_radiation.id establishes
+# the parent radiation source. _diffrn_radiation_wavelength.radiation_id is not
+# explicitly present in the loop; instead, the ingestion engine propagates
+# the value 'Cu_tube' from the diffrn_radiation row to fill the FK column in
+# every diffrn_radiation_wavelength row.
+# Dictionary: cif_pow
+
+data_test_wavelength_propagation
+_diffrn_radiation.id    Cu_tube
+_diffrn_radiation.probe x-ray
+loop_
+  _diffrn_radiation_wavelength.id
+  _diffrn_radiation_wavelength.value
+  _diffrn_radiation_wavelength.wt
+  Ka1  1.54056  0.670
+  Ka2  1.54439  0.330
+  Kb   1.39217  0.001

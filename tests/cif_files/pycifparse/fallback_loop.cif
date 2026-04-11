@@ -1,0 +1,17 @@
+#\#CIF_2.0
+# Tests: schema-less ingestion of a loop. Each value lands in _cif_fallback
+# with the correct tag and _loop_ordinal (0-based row index within the loop).
+# Three columns, four rows: 12 rows total in _cif_fallback for this loop.
+# Non-loop scalars are also present to confirm they get _loop_ordinal = NULL.
+# Dictionary: none (schema-less)
+
+data_test_fallback_loop
+_experiment.id  exp_001
+loop_
+  _peak.id
+  _peak.position
+  _peak.intensity
+  1  12.34  1000
+  2  24.68   500
+  3  37.02   250
+  4  49.36   125

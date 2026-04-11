@@ -1,0 +1,23 @@
+#\#CIF_2.0
+# Tests: non-key FK stub parent creation. atom_site.type_symbol is a FK to
+# atom_type.symbol. No _atom_type.* tags are present in this file.
+# A stub row must be created in atom_type for each unique symbol (Fe, O)
+# so that the FK constraint from atom_site is satisfiable.
+# Dictionary: cif_core
+
+data_test_atom_site_no_atom_type
+_cell.length_a    4.000
+_cell.length_b    4.000
+_cell.length_c    4.000
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+loop_
+  _atom_site.label
+  _atom_site.type_symbol
+  _atom_site.fract_x
+  _atom_site.fract_y
+  _atom_site.fract_z
+  Fe1 Fe 0.0 0.0 0.0
+  O1  O  0.5 0.5 0.0
+  O2  O  0.5 0.0 0.5

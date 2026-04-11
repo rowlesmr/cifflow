@@ -1,0 +1,15 @@
+#\#CIF_2.0
+# Tests: scalar routing for a Set category. All _cell.* tags must land in the
+# 'cell' structured table. No loops are present so no loop rows are produced.
+# A UUID stub parent row is created in 'diffrn' to satisfy the key FK
+# cell.diffrn_id -> diffrn.id (diffrn is absent from this file).
+# Dictionary: cif_core
+
+data_test_cell_only
+_cell.length_a    5.000
+_cell.length_b    5.000
+_cell.length_c    8.660
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 120
+_cell.volume      187.06

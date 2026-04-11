@@ -1,0 +1,21 @@
+#\#CIF_2.0
+# Tests: powder diffractogram structured table routing with a small dataset.
+# _pd_data.point_id is the PD_DATA parent-category key; _pd_meas.2theta_scan and
+# _pd_meas.intensity_total are routed to the pd_meas table. _pd_diffractogram.id
+# provides the diffractogram_id context for the FK. _pd_data.point_id provides the
+# value for _pd_meas.point_id
+# Dictionary: cif_pow
+
+data_test_small_pd_meas
+_diffrn_radiation.id    lab_tube
+_diffrn_radiation.probe x-ray
+_pd_diffractogram.id    test_scan
+loop_
+  _pd_data.point_id
+  _pd_meas.2theta_scan
+  _pd_meas.intensity_total
+  0  10.000  100.0
+  1  10.100  120.0
+  2  10.200  110.0
+  3  10.300   95.0
+  4  10.400  105.0

@@ -81,9 +81,43 @@ _SU_RE = re.compile(
 
 
 def split_su(raw: str) -> tuple[str, str] | None:
-    """Split ``'numeric(su)'`` → ``(numeric_part, su_digits)``, or ``None``."""
+    """Split ``'numeric(su)'`` → ``(measurand, scaled_su)`` or ``None``.
+
+    The SU is scaled to the precision of the measurand so that the stored
+    value represents the actual uncertainty:
+      '3.992(4)'   → ('3.992',   '0.004')
+      '1234(5)'    → ('1234',    '5')
+      '12.34(56)'  → ('12.34',   '0.56')
+      '1.23e-4(5)' → ('1.23e-4', '0.000005')
+    """
     m = _SU_RE.match(raw)
-    return (m.group(1), m.group(2)) if m else None
+    if not m:
+        return None
+    measurand, su_digits = m.group(1), m.group(2)
+
+    # Strip any exponent from the measurand
+    e_match = re.search(r'[eE]([+-]?\d+)$', measurand)
+    exponent = int(e_match.group(1)) if e_match else 0
+    mantissa = measurand[:e_match.start()] if e_match else measurand
+
+    dot_idx = mantissa.find('.')
+    decimal_places = (len(mantissa) - dot_idx - 1) if dot_idx >= 0 else 0
+
+    total_power = exponent - decimal_places
+    su_int = int(su_digits)
+
+    if total_power >= 0:
+        scaled = str(su_int * (10 ** total_power))
+    else:
+        abs_power = -total_power
+        s = str(su_int)
+        if abs_power >= len(s):
+            scaled = '0.' + '0' * (abs_power - len(s)) + s
+        else:
+            pos = len(s) - abs_power
+            scaled = s[:pos] + '.' + s[pos:]
+
+    return measurand, scaled
 
 
 # ---------------------------------------------------------------------------

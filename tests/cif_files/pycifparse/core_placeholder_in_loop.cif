@@ -1,0 +1,25 @@
+#\#CIF_2.0
+# Tests: PLACEHOLDER values in a loop. Unquoted '.' and '?' must be stored as
+# the literal strings '.' and '?' in structured table columns (not as NULL),
+# following the presence-state encoding (Lesson 19). NULL means absent; '.'
+# means inapplicable; '?' means unknown.
+# Dictionary: cif_core
+
+data_test_placeholder_in_loop
+_cell.length_a    4.000
+_cell.length_b    4.000
+_cell.length_c    4.000
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+loop_
+  _atom_site.label
+  _atom_site.type_symbol
+  _atom_site.fract_x
+  _atom_site.fract_y
+  _atom_site.fract_z
+  _atom_site.occupancy
+  _atom_site.B_iso_or_equiv
+  Fe1 Fe 0.0  0.0  0.0  1.0 .
+  Mn1 Mn 0.5  0.5  0.5  .   ?
+  O1  O  0.25 0.25 0.0  1.0 0.8

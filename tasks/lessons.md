@@ -1,5 +1,19 @@
 # pycifparse — Lessons Learned
 
+## Lesson 44 — SU values must be scaled, not stored raw (2026-04-11)
+
+**Context:** `split_su` in `ingestion/ingest.py`.
+
+**Mistake:** `split_su('3.992(4)')` returned `('3.992', '4')` — storing the raw parenthetical digits rather than the actual uncertainty. The `_su` column would hold `'4'` while an explicitly supplied `_cell.length_a_su 0.004` would hold `'0.004'`, making the two representations inconsistent.
+
+**Correct rule:** The SU digit(s) represent units in the last decimal place of the measurand. Scale by `10^(exponent - decimal_places)`:
+- `'3.992(4)'` → `('3.992', '0.004')` (4 × 10⁻³)
+- `'1234(5)'`  → `('1234',  '5')`      (5 × 10⁰)
+- `'12.34(56)'` → `('12.34', '0.56')` (56 × 10⁻²)
+- `'1.23e-4(5)'` → `('1.23e-4', '0.000005')` (5 × 10⁻⁶)
+
+**Fix:** Replaced the one-liner `split_su` with scaling logic that counts decimal places in the mantissa and the exponent separately. Updated `TestSplitSu` and `TestSUIngestion` to assert scaled values.
+
 ## Lesson 1 — Multiline text field closing delimiter (2026-04-04)
 
 **Context:** Lexer `_read_multiline` implementation.
