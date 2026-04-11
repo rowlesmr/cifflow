@@ -607,7 +607,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                         type_contents=None,
                         nullable=True,
                         is_primary_key=False,
-                        is_synthetic=False,
+                        is_synthetic=True,  # transitive bridge — no CIF tag
                         linked_item_id=None,
                     ))
                     bridge_columns.append(BridgeColumnDef(

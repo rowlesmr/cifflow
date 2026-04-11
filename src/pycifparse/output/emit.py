@@ -111,7 +111,7 @@ def _collect_original(
                 table_rows[table_name] = rows
         fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
         spec = plan.spec_for(i) if plan else None
-        result.append(_render_block(bid, table_rows, fallback, schema, version, spec, reconstruct_su))
+        result.append(_render_block(bid, table_rows, fallback, schema, version, spec, reconstruct_su, suppress_fk_pk=True))
     return result
 
 
@@ -155,16 +155,51 @@ def _collect_grouped(
                 continue
         block_id_tables.append(t)
 
+    # Exclusive-target anchors: anchor tables that are FK-referenced from
+    # exactly one other anchor group AND have no FK going out to any other
+    # keyed anchor.  For example, space_group is referenced by structure (in
+    # pd_phase group) with no FK back.  Such anchors carry no independent
+    # grouping value — their rows co-occur in the same original blocks as the
+    # referencing tables — so they fall back to _block_id grouping and are
+    # absorbed by whichever keyed block covers those block IDs.
+    keyed_anchor_set = set(keyed_anchor_to_tables.keys())
+    for anchor in list(keyed_anchor_to_tables.keys()):
+        referencing_groups: set[str] = {
+            other_anchor
+            for other_anchor, other_tables in keyed_anchor_to_tables.items()
+            if other_anchor != anchor
+            for t in other_tables
+            for fk in schema.tables[t].foreign_keys
+            if fk.target_table == anchor
+        }
+        anchor_fks_out = [
+            fk.target_table
+            for fk in schema.tables[anchor].foreign_keys
+            if fk.target_table in keyed_anchor_set and fk.target_table != anchor
+        ]
+        if len(referencing_groups) == 1 and not anchor_fks_out:
+            block_id_tables.extend(keyed_anchor_to_tables.pop(anchor))
+
     result: list[str] = []
     block_idx = 0
-    # Track which _block_ids have been absorbed into a keyed-anchor output block,
-    # so that block_id_tables from those same block IDs are not duplicated.
-    absorbed_block_ids: set[str] = set()
+    # absorbed_primary: anchor-row block_ids claimed by a keyed anchor — used
+    #   to skip duplicate pk groups in later anchor iterations.
+    # absorbed_all: all block_ids swept (anchor rows + FK-chained rows +
+    #   block_id_tables) — used to suppress remaining-block emission.
+    absorbed_primary: set[str] = set()
+    absorbed_all: set[str] = set()
 
     for anchor_name in sorted(keyed_anchor_to_tables):
         anchor_def = schema.tables[anchor_name]
         domain_pks = [pk for pk in anchor_def.primary_keys if pk not in _SYNTHETIC]
         anchor_rows = _fetch_rows(conn, anchor_name)
+
+        # If the anchor table itself has no rows its FK group cannot be keyed
+        # (no PK values to pivot on).  Fall back all tables in the group to
+        # _block_id grouping so they are not silently dropped.
+        if not anchor_rows:
+            block_id_tables.extend(keyed_anchor_to_tables[anchor_name])
+            continue
 
         # Group anchor rows by domain PK values (merging across _block_ids).
         pk_groups: dict[tuple, list[dict]] = {}
@@ -177,9 +212,16 @@ def _collect_grouped(
             # Seed covered_block_ids from anchor rows; extended below as
             # FK-chained table rows are fetched (they may carry additional
             # _block_id values when the anchor's PK prevented duplicate rows).
-            covered_block_ids: set[str] = {
+            primary_block_ids: set[str] = {
                 r.get('_block_id') for r in grouped_anchor_rows if r.get('_block_id')
             }
+            covered_block_ids: set[str] = set(primary_block_ids)
+
+            # Skip if this anchor's primary block_ids are already claimed by a
+            # prior keyed-anchor group.  (Using primary only avoids false skips
+            # caused by FK-extended block_ids from unrelated anchor domains.)
+            if primary_block_ids and primary_block_ids <= absorbed_primary:
+                continue
 
             table_rows: dict[str, list[dict]] = {anchor_name: grouped_anchor_rows}
 
@@ -213,10 +255,16 @@ def _collect_grouped(
                 if rows:
                     table_rows[table_name] = rows
 
-            absorbed_block_ids |= covered_block_ids
+            # Claim primary block_ids for this anchor group.
+            absorbed_primary |= primary_block_ids
+            # Record all swept block_ids (primary + FK-extended) so that
+            # block_id_tables rows from the same original blocks are not
+            # re-emitted in the remaining-blocks section below.
+            absorbed_all |= covered_block_ids
 
-            # Include block_id_tables from all covered block IDs so they are
-            # not emitted as separate standalone blocks later.
+            # Include block_id_tables (pure-cluster Sets, keyless Sets,
+            # Loop-only tables) from all covered block IDs.  This absorbs
+            # e.g. space_group rows that share the FK-extended block_ids.
             for t in block_id_tables:
                 rows = []
                 for bid in sorted(covered_block_ids):
@@ -229,7 +277,7 @@ def _collect_grouped(
                 fallback.extend(_fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,)))
 
             spec = plan.spec_for(block_idx) if plan else None
-            result.append(_render_block(block_name, table_rows, fallback, schema, version, spec, reconstruct_su))
+            result.append(_render_block(block_name, table_rows, fallback, schema, version, spec, reconstruct_su, suppress_fk_pk=True))
             block_idx += 1
 
     # Keyless Set categories, Loop-only tables, and any fallback data whose
@@ -237,12 +285,12 @@ def _collect_grouped(
     # distinct _block_id.
     remaining_block_ids = [
         bid for bid in _all_block_ids_for_tables(conn, block_id_tables)
-        if bid not in absorbed_block_ids
+        if bid not in absorbed_all
     ]
     # Also pick up any _cif_fallback block_ids not yet covered
     for bid_row in _fetch_rows(conn, '_cif_fallback'):
         bid = bid_row.get('_block_id')
-        if bid and bid not in absorbed_block_ids and bid not in remaining_block_ids:
+        if bid and bid not in absorbed_all and bid not in remaining_block_ids:
             remaining_block_ids.append(bid)
     remaining_block_ids = sorted(set(remaining_block_ids))
 
@@ -255,7 +303,7 @@ def _collect_grouped(
         fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
         if table_rows or fallback:
             spec = plan.spec_for(block_idx) if plan else None
-            result.append(_render_block(bid, table_rows, fallback, schema, version, spec, reconstruct_su))
+            result.append(_render_block(bid, table_rows, fallback, schema, version, spec, reconstruct_su, suppress_fk_pk=True))
             block_idx += 1
 
     return result
@@ -342,6 +390,8 @@ def _render_block(
     version: CifVersion,
     spec: BlockSpec | None,
     reconstruct_su: bool,
+    *,
+    suppress_fk_pk: bool = False,
 ) -> str:
     """Render a single CIF block to a string."""
     lines: list[str] = [f'data_{block_name}']
@@ -356,11 +406,17 @@ def _render_block(
         if not cols:
             continue
 
+        if suppress_fk_pk:
+            suppressed = _suppressed_fk_pk_cols(table_def, rows, table_rows, schema)
+            cols = [c for c in cols if c not in suppressed]
+        if not cols:
+            continue
+
         if not first_category:
             lines.append('')
         first_category = False
 
-        if table_def.category_class == 'Set':
+        if table_def.category_class == 'Set' and len(rows) == 1:
             lines.extend(_render_set_category(rows[0], cols, table_name, schema, version, table_def, reconstruct_su))
         else:
             lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su))
@@ -580,6 +636,52 @@ def _active_cols(
     return pk_non_syn + other
 
 
+def _suppressed_fk_pk_cols(
+    table_def: TableDef,
+    rows: list[dict],
+    table_rows: dict[str, list[dict]],
+    schema: SchemaSpec,
+) -> set[str]:
+    """Return FK-PK columns that are implicit from a co-emitted Set category.
+
+    A column can be suppressed when ALL of the following hold:
+
+    1. It is part of the table's domain primary key.
+    2. It is part of a FK that targets a Set-class table.
+    3. That Set table is present in *table_rows* (being emitted in the same
+       block) with exactly one row.
+    4. Every row in *rows* carries the same FK value, and that value equals
+       the target Set's PK value.
+
+    In CIF, the block scope makes such FK-PK values implicit: a reader can
+    derive ``_cell.diffrn_id`` from ``_diffrn.id`` in the same block.
+    """
+    pk_cols: set[str] = set(table_def.primary_keys) - _SYNTHETIC
+    suppressed: set[str] = set()
+
+    for fk in table_def.foreign_keys:
+        target_name = fk.target_table
+        target_def = schema.tables.get(target_name)
+        if target_def is None or target_def.category_class != 'Set':
+            continue
+        target_table_rows = table_rows.get(target_name)
+        if not target_table_rows or len(target_table_rows) != 1:
+            continue
+
+        # FK source columns must all be domain PK columns of this table.
+        if not all(c in pk_cols for c in fk.source_columns):
+            continue
+
+        target_row = target_table_rows[0]
+        expected = tuple(target_row.get(c) for c in fk.target_columns)
+
+        # All rows must carry the same FK value matching the target's PK.
+        if all(tuple(row.get(c) for c in fk.source_columns) == expected for row in rows):
+            suppressed.update(fk.source_columns)
+
+    return suppressed
+
+
 def _col_tag(table_name: str, col_name: str, schema: SchemaSpec) -> str:
     """Return the CIF tag name (``_definition.id``) for a column."""
     return schema.column_to_tag.get((table_name, col_name), f'_{table_name}.{col_name}')
@@ -659,23 +761,33 @@ def _fetch_rows(
 
 
 def _find_set_anchor(table_name: str, schema: SchemaSpec) -> str | None:
-    """Walk the FK graph from *table_name* to find the nearest Set-class table.
+    """Find the root Set-class ancestor reachable from *table_name* via FK links.
 
-    Uses BFS over all FK targets so that a Set ancestor is found even when the
-    table has composite keys — some FKs leading to Loop tables and others to
-    Set tables (e.g. ATOM_SITE with one FK to the ATOM_SITE loop itself and
-    another to a STRUCTURE Set).  The closest Set by FK hops is returned.
+    Traverses the full FK graph (BFS) and collects every reachable Set-class
+    table.  The *root* Set is the one that has no FK pointing to another
+    reachable Set — i.e. the topmost node in the Set-level hierarchy.
 
-    Returns ``None`` if no Set-class table is reachable at all.
+    This ensures that intermediate Set categories (e.g. a ``CELL`` Set that
+    FKs to a ``STRUCTURE`` Set) are not returned as the anchor; the shared
+    root (``STRUCTURE``) is returned instead, so all tables that ultimately
+    reduce to the same root are placed in the same output block.
+
+    Tables with composite FK keys where only some paths lead to a Set are
+    handled correctly: BFS explores all FK targets at each level.
+
+    Returns ``None`` if no Set-class table is reachable (pure Loop chains).
     """
+    # BFS over all FK-reachable tables; collect every reachable Set.
+    visited: set[str] = {table_name}
+    queue: deque[str] = deque([table_name])
+    reachable_sets: list[str] = []
+
     td0 = schema.tables.get(table_name)
     if td0 is None:
         return None
     if td0.category_class == 'Set':
-        return table_name
+        reachable_sets.append(table_name)
 
-    visited: set[str] = {table_name}
-    queue: deque[str] = deque([table_name])
     while queue:
         current = queue.popleft()
         td = schema.tables.get(current)
@@ -684,12 +796,28 @@ def _find_set_anchor(table_name: str, schema: SchemaSpec) -> str | None:
         for fk in td.foreign_keys:
             target = fk.target_table
             if target not in visited and target in schema.tables:
+                visited.add(target)
                 target_td = schema.tables[target]
                 if target_td.category_class == 'Set':
-                    return target
-                visited.add(target)
+                    reachable_sets.append(target)
                 queue.append(target)
-    return None
+
+    if not reachable_sets:
+        return None
+
+    # Root Set: a reachable Set with no FK to another reachable Set.
+    reachable_set_names = set(reachable_sets)
+    for s in reachable_sets:
+        td = schema.tables[s]
+        has_set_parent = any(
+            fk.target_table in reachable_set_names and fk.target_table != s
+            for fk in td.foreign_keys
+        )
+        if not has_set_parent:
+            return s
+
+    # Fallback (e.g. circular FK graph): return the last Set found.
+    return reachable_sets[-1]
 
 
 def _fk_chain(from_table: str, to_table: str, schema: SchemaSpec) -> list[ForeignKeyDef] | None:

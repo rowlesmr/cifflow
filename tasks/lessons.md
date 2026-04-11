@@ -1,5 +1,105 @@
 # pycifparse — Lessons Learned
 
+## Lesson 56 — GROUPED mode: empty root-anchor table silently drops its entire FK group (2026-04-11)
+
+**Context:** `_collect_grouped` in `output/emit.py`.
+
+**Problem:** The GROUPED emitter finds the root Set anchor for each table by BFS along FK chains.  For `cif_core.dic`, tables like `cell` and `diffrn` chain through `diffrn.crystal_id → exptl_crystal.id`, making `exptl_crystal` the root anchor.  When a CIF file does not contain any `_exptl_crystal.*` data (and no stub was created because `diffrn.crystal_id` is NULL in the database), `exptl_crystal` has zero rows.  With no anchor rows there are no PK groups to iterate over, so the entire group — `diffrn`, `cell`, `cell_measurement` — is silently dropped from the output.
+
+**Fix:** After fetching `anchor_rows`, check for empty:
+
+```python
+if not anchor_rows:
+    block_id_tables.extend(keyed_anchor_to_tables[anchor_name])
+    continue
+```
+
+Tables whose root anchor is unpopulated are promoted to `block_id_tables`, which uses `_block_id` as the grouping key.  They are then emitted in the remaining-blocks sweep, preserving all data.
+
+**Rule:** A keyed anchor with no rows is indistinguishable from a keyless Set for emission purposes — fall back to `_block_id` grouping.  Never silently discard tables because their anchor is empty.
+
+## Lesson 55 — Emit round-trip tests: NULL vs '.' normalisation and the Set-PK stub conflict (2026-04-11)
+
+**Context:** `tests/output/test_emit.py` — `_assert_same_data`, `TestDatabaseRoundTrip`, `TestEmitRoundTripIntegration`.
+
+**Design:** Round-trip tests work by emitting a populated database, re-parsing the emitted CIF, re-ingesting into a fresh database, then comparing the two databases column-by-column.  `_block_id` and `_row_id` are excluded from comparison (they are administrative, not CIF data).  Synthetic columns (`is_synthetic=True`) are also excluded.
+
+**Problem 1 — NULL → '.' transformation:** Loop emission cannot omit columns mid-row; it emits SQL NULL as the CIF placeholder `'.'`.  After re-ingestion `'.'` is stored as the string `'.'`, not NULL.  Naively comparing tuples then fails for every loop column that was absent in the original.
+
+**Fix 1:** Normalise both sides before comparison: `None → None` and `'.' → None` (both mean "absent/not applicable" at the loop level).  `'?'` is kept distinct (it means "unknown", not "not applicable").
+
+**Problem 2 — domain-key PK conflict:** Every structured SQLite table (Set and Loop alike) has `PRIMARY KEY (domain_key_cols)` — `_block_id` is NOT included.  The `_block_id` column appears only in a secondary `UNIQUE (_block_id, _row_id)` constraint.  This means only one row per domain-key value can exist across all blocks.  When the emitted CIF is re-ingested and a dependent block (e.g. a `preferred_orientation` block that FKs into `pd_instr`) is processed before the source block (e.g. `some_characters_instrument`), the ingester creates a stub row for `pd_instr.id = 'chrome_dome'`.  The subsequent insert of real data from the instrument block then fails silently on the PK constraint and the real values are lost.
+
+**Root cause:** Block emission order is alphabetical, which can differ from the original ingestion order.  The ingest layer's merge logic keeps the first occurrence and ignores later arrivals for the same PK.  Stubs created by FK scaffolding therefore block real data.
+
+**Disposition:** Three integration tests are marked `xfail(strict=True)` documenting the failure.  The fix belongs in the ingest layer: when real data arrives for a row that already exists as an all-NULL stub, non-NULL values should be merged in rather than ignored.
+
+**Rule:** Any time a new emit mode or block-ordering strategy is added, check whether its output can be faithfully re-ingested regardless of block order.  If not, the ingest merge logic needs to handle stub → real-data promotion.
+
+## Lesson 54 — Emit round-trip tests: which modes can safely collapse multiple Set rows (2026-04-11)
+
+**Context:** `tests/output/test_emit.py` — `TestDatabaseRoundTrip`.
+
+**Problem:** A test (`test_multiblock_set_one_block`) tried to round-trip a CIF with two blocks each carrying a Set-category row (keyless `cell`) through ONE_BLOCK mode.  Every structured table has `PRIMARY KEY (domain_key_cols)` without `_block_id`, so only one row per domain-key value can exist.  `cell`'s domain key is keyless (no explicit `_category_key`), making rows from different blocks indistinguishable — merging them into one block raises `IngestionError: merge conflict`.
+
+**Rule:** ONE_BLOCK mode is only round-trip-safe when every row across all source blocks has a distinct domain key.  Categories where rows are only distinguished by `_block_id` (keyless Sets) cannot be merged into a single block without conflict.  Do not write round-trip tests that attempt to collapse such rows into ONE_BLOCK.
+
+## Lesson 53 — ONE_BLOCK: Set categories with multiple rows must render as loops; transitive bridge columns must not be emitted (2026-04-11)
+
+**Context:** `_render_block` in `output/emit.py`; `generate_schema` in `dictionary/schema.py`.
+
+**Problem 1 — data loss:** `_render_block` always called `_render_set_category(rows[0], ...)` for
+Set-class categories, emitting only the first row as scalar tag-value pairs and silently dropping
+all subsequent rows.  In ORIGINAL and GROUPED modes each block only ever contains one row per Set
+category (one original CIF block → one Set row), so this went unnoticed.  In ONE_BLOCK mode every
+Set category accumulates N rows (one per original block) and only row 0 was emitted.
+
+**Fix 1:** Change the dispatch condition to `category_class == 'Set' and len(rows) == 1`.  When a
+Set category has more than one row, fall back to `_render_loop_category`.
+
+**Problem 2 — spurious columns:** Transitive bridge columns added by `generate_schema` to enable
+composite FK joins (e.g. `geom_angle.structure_id`, populated from a bridge table at ingest time)
+had `definition_id=''` and `is_synthetic=False`.  They had no real CIF tag, but `_active_cols`
+passed them through (only `is_synthetic=True` columns are suppressed), causing `_col_tag` to
+synthesise a fake tag name and emit the column.
+
+**Fix 2:** Mark bridge columns `is_synthetic=True` at the point they are appended to the table in
+`generate_schema`.  `_active_cols` then filters them automatically.
+
+**Rule:** Any column that exists only for internal FK machinery and has no DDLm `definition_id`
+must be `is_synthetic=True`.  Whenever a new infrastructure column is added to the schema, confirm
+it carries the synthetic flag if it has no corresponding CIF tag.
+
+## Lesson 52 — GROUPED mode: anchor groups that are FK-targets of other groups need block_id fallback (2026-04-11)
+
+**Context:** `_collect_grouped` in `output/emit.py`.
+
+**Problem:** Sets like `space_group` are "exclusive-target" anchors: they have no FK of their own
+to any other keyed anchor, and are directly FK-referenced from exactly one other anchor group (e.g.
+`structure` in the `pd_phase` group references `space_group`). With a naive independent anchor loop,
+each exclusive-target anchor generates its own output blocks (one per domain PK value), duplicating
+block names already produced by the referencing anchor group.
+
+**Compounding issue:** The primary anchor row's `_block_id` may differ from the FK-chained rows'
+`_block_id` (e.g. `pd_phase._block_id = Selenium_0_some_chars` vs `structure._block_id = Selenium_0`
+vs `space_group._block_id = Selenium_0`). A simple "skip if block_id already absorbed" check using
+the primary block_id is correct here — using the extended covered_block_ids for the skip check
+would falsely skip legitimate anchor groups (e.g. `pd_phase` would be skipped because pd_instr's
+FK chain covers its primary block_id).
+
+**Fix (three-part):**
+1. **Identify exclusive-target anchors** (referenced from exactly one other anchor group AND anchor
+   table itself has no FK to any other keyed anchor) and move them to `block_id_tables`.
+2. **Split absorbed tracking:** `absorbed_primary` (anchor-row block_ids, used for the skip check)
+   vs `absorbed_all` (all swept block_ids including FK-extended, used to suppress remaining blocks).
+3. **block_id_tables sweep uses extended covered_block_ids**, so exclusive-target anchor rows (e.g.
+   `space_group`) are picked up via the block_ids discovered through FK-chain joins (e.g. structure
+   rows bring in `Selenium_0`, and `space_group._block_id=Selenium_0` is then absorbed).
+
+**Rule:** When an anchor Set is exclusively referenced from one other anchor group and has no FK
+out, treat it as a `block_id_table`. Use separate "primary claimed" and "all swept" tracking to
+prevent both false skips and duplicate emission.
+
 ## Lesson 51 — GROUPED mode: covered_block_ids must be expanded from FK-chained rows, not just the anchor table (2026-04-11)
 
 **Context:** `_collect_grouped` in `output/emit.py`.

@@ -12,6 +12,7 @@ All tests use in-memory SQLite databases.
 
 from __future__ import annotations
 
+import pathlib
 import sqlite3
 
 import pytest
@@ -24,11 +25,15 @@ from pycifparse import (
     apply_schema,
     apply_fallback_schema,
     generate_schema,
+    directory_resolver,
 )
 from pycifparse.dictionary import DictionaryLoader
 from pycifparse.dictionary.schema import SchemaSpec
 from pycifparse.output import BlockSpec, OutputPlan
 from pycifparse.types import CifVersion
+
+_DATA_DIR = pathlib.Path(__file__).parents[2] / 'data' / 'dictionaries'
+_CIF_DIR  = pathlib.Path(__file__).parents[2] / 'tests' / 'cif_files'
 
 CIF20 = CifVersion.CIF_2_0
 CIF11 = CifVersion.CIF_1_1
@@ -175,7 +180,6 @@ class TestSetCategory:
 
     def test_tags_emitted_as_scalars(self, conn, schema):
         result = emit(conn, schema)
-        print(f"\n|{result}|")
         assert '_cell.length_a  5.4' in result
         assert '_cell.length_b  5.4' in result
         assert '_cell.length_c  13.2' in result
@@ -828,3 +832,288 @@ class TestNullHandling:
         cif2, errors = build(result)
         # fract_x column should not appear (all NULL)
         assert '_atom_site.fract_x' not in result
+
+
+# ---------------------------------------------------------------------------
+# Database round-trip comparison helpers
+# ---------------------------------------------------------------------------
+
+_ADMIN_COLS = {'_block_id', '_row_id', '_pycifparse_id'}
+
+
+def _data_cols(conn: sqlite3.Connection, table_name: str, schema: SchemaSpec) -> list[str]:
+    """Return column names in *table_name* that carry real CIF data.
+
+    Excludes administrative columns (_block_id, _row_id, _pycifparse_id) and
+    columns marked synthetic in the schema (transitive bridge helpers, etc.).
+    """
+    synthetic: set[str] = set()
+    if table_name in schema.tables:
+        synthetic = {c.name for c in schema.tables[table_name].columns if c.is_synthetic}
+    pragma = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
+    all_cols = [row[1] for row in pragma]
+    return [c for c in all_cols if c not in _ADMIN_COLS and c not in synthetic]
+
+
+def _norm(v: object) -> object:
+    """Normalise absent-value sentinels for round-trip comparison.
+
+    A NULL loop column is emitted as '.' (CIF placeholder — can't skip loop
+    columns), then re-ingested as the string '.'.  Treat NULL and '.' as
+    equivalent so the comparison is not sensitive to this transformation.
+    '?' (unknown) is kept distinct.
+    """
+    return None if v is None or v == '.' else v
+
+
+def _sorted_rows(
+    conn: sqlite3.Connection,
+    table_name: str,
+    cols: list[str],
+) -> list[tuple]:
+    """Fetch all rows for the given columns, normalised and sorted."""
+    if not cols:
+        return []
+    col_expr = ', '.join(f'"{c}"' for c in cols)
+    rows = conn.execute(f'SELECT {col_expr} FROM "{table_name}"').fetchall()
+    return sorted(tuple(_norm(v) for v in row) for row in rows)
+
+
+def _assert_same_data(
+    conn_orig: sqlite3.Connection,
+    conn_emit: sqlite3.Connection,
+    schema: SchemaSpec,
+) -> None:
+    """Assert that two databases hold the same CIF data modulo _block_id / _row_id.
+
+    For every structured table: the set of data rows (all non-admin, non-synthetic
+    columns) must be identical.  For the fallback tier: the (tag, value) multiset
+    must be identical.
+
+    Block names and insertion order may differ; they are not compared.
+    """
+    for table_name in schema.tables:
+        try:
+            cols = _data_cols(conn_orig, table_name, schema)
+        except Exception:
+            continue  # table absent in one connection — skip
+        orig_rows = _sorted_rows(conn_orig, table_name, cols)
+        emit_rows = _sorted_rows(conn_emit, table_name, cols)
+        assert orig_rows == emit_rows, (
+            f'Table {table_name!r} data mismatch after emit → re-ingest\n'
+            f'  original : {orig_rows}\n'
+            f'  re-ingest: {emit_rows}'
+        )
+
+    # Fallback tier: compare (tag, value) multisets; ignore block_id
+    def _fb_rows(conn):
+        rows = conn.execute('SELECT tag, value FROM _cif_fallback').fetchall()
+        return sorted((_norm(tag), _norm(val)) for tag, val in rows)
+
+    fb_orig = _fb_rows(conn_orig)
+    fb_emit = _fb_rows(conn_emit)
+    assert fb_orig == fb_emit, (
+        f'_cif_fallback mismatch after emit → re-ingest\n'
+        f'  original : {fb_orig}\n'
+        f'  re-ingest: {fb_emit}'
+    )
+
+
+def _emit_and_reingest(
+    conn: sqlite3.Connection,
+    schema: SchemaSpec,
+    mode: EmitMode,
+    **emit_kwargs,
+) -> sqlite3.Connection:
+    """Emit *conn* in *mode*, parse the result, and ingest into a fresh connection."""
+    cif_text = emit(conn, schema, mode=mode, **emit_kwargs)
+    cif_rt, errors = build(cif_text)
+    assert not errors, f'Re-parse produced errors: {errors}'
+    conn2 = sqlite3.connect(':memory:')
+    conn2.isolation_level = None
+    apply_schema(conn2, schema)
+    apply_fallback_schema(conn2)
+    ingest(cif_rt, conn2, schema=schema)
+    return conn2
+
+
+# ---------------------------------------------------------------------------
+# Database round-trip tests — synthetic CIFs
+# ---------------------------------------------------------------------------
+
+class TestDatabaseRoundTrip:
+    """Emit → parse → re-ingest → compare: all data must survive each EmitMode."""
+
+    # --- Set category ---
+
+    def test_set_original(self):
+        schema = _make_schema(_MINI_DIC)
+        src = '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n_cell.length_b  3.2\n_cell.length_c  10.0\n'
+        conn = _ingest_src(src, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.ORIGINAL), schema)
+
+    def test_set_one_block(self):
+        schema = _make_schema(_MINI_DIC)
+        src = '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n_cell.length_b  3.2\n_cell.length_c  10.0\n'
+        conn = _ingest_src(src, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.ONE_BLOCK), schema)
+
+    def test_set_grouped(self):
+        schema = _make_schema(_MINI_DIC)
+        src = '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n_cell.length_b  3.2\n_cell.length_c  10.0\n'
+        conn = _ingest_src(src, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.GROUPED), schema)
+
+    # --- Loop category ---
+
+    def test_loop_original(self):
+        schema = _make_schema(_LOOP_DIC)
+        conn = _ingest_src(_LOOP_CIF, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.ORIGINAL), schema)
+
+    def test_loop_one_block(self):
+        schema = _make_schema(_LOOP_DIC)
+        conn = _ingest_src(_LOOP_CIF, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.ONE_BLOCK), schema)
+
+    def test_loop_grouped(self):
+        schema = _make_schema(_LOOP_DIC)
+        conn = _ingest_src(_LOOP_CIF, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.GROUPED), schema)
+
+    # --- Multi-block Set ---
+
+    def test_multiblock_set_original(self):
+        schema = _make_schema(_MINI_DIC)
+        src = (
+            '#\\#CIF_2.0\n'
+            'data_block_a\n_cell.length_a  5.4\n_cell.length_b  5.4\n'
+            '\n\n'
+            'data_block_b\n_cell.length_a  3.2\n_cell.length_b  3.2\n'
+        )
+        conn = _ingest_src(src, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.ORIGINAL), schema)
+
+    # --- GROUPED mode: merge and separate ---
+
+    def test_grouped_merge(self):
+        """Two blocks with same Set key merge; data must survive."""
+        schema = _make_schema(_GROUPED_DIC)
+        conn = _ingest_src(_GROUPED_MERGE_CIF, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.GROUPED), schema)
+
+    def test_grouped_separate(self):
+        """Two blocks with different Set keys stay separate; data must survive."""
+        schema = _make_schema(_GROUPED_DIC)
+        conn = _ingest_src(_GROUPED_SEPARATE_CIF, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.GROUPED), schema)
+
+    def test_grouped_merge_one_block(self):
+        schema = _make_schema(_GROUPED_DIC)
+        conn = _ingest_src(_GROUPED_MERGE_CIF, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.ONE_BLOCK), schema)
+
+    # --- Composite FK anchor ---
+
+    def test_composite_grouped(self):
+        """RESULT table with FK to both a Loop (SCAN) and Set (EXPT) must survive GROUPED."""
+        schema = _make_schema(_COMPOSITE_DIC)
+        conn = _ingest_src(_COMPOSITE_MERGE_CIF, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.GROUPED), schema)
+
+    # --- Fallback-only (no schema) ---
+
+    def test_fallback_only_original(self):
+        schema = _empty_schema()
+        src = '#\\#CIF_2.0\ndata_x\n_cell.length_a  5.4\n_custom.tag  hello\n'
+        conn = _ingest_src(src, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.ORIGINAL), schema)
+
+    def test_fallback_only_one_block(self):
+        schema = _empty_schema()
+        src = '#\\#CIF_2.0\ndata_x\n_cell.length_a  5.4\n_custom.tag  hello\n'
+        conn = _ingest_src(src, schema)
+        _assert_same_data(conn, _emit_and_reingest(conn, schema, EmitMode.ONE_BLOCK), schema)
+
+
+# ---------------------------------------------------------------------------
+# Database round-trip integration tests — real dictionaries and CIF files
+# ---------------------------------------------------------------------------
+
+def _load_schema(dic_file: pathlib.Path) -> SchemaSpec:
+    resolver = directory_resolver(_DATA_DIR)
+    source = dic_file.read_text(encoding='utf-8')
+    d = DictionaryLoader(resolver=resolver).load(source, base_uri=dic_file.name)
+    return generate_schema(d)
+
+
+def _ingest_file(cif_path: pathlib.Path, schema: SchemaSpec) -> sqlite3.Connection:
+    cif, errors = build(cif_path.read_text(encoding='utf-8'))
+    assert not errors, f'Parse errors in {cif_path.name}: {errors}'
+    conn = sqlite3.connect(':memory:')
+    conn.isolation_level = None
+    apply_schema(conn, schema)
+    apply_fallback_schema(conn)
+    ingest(cif, conn, schema=schema)
+    return conn
+
+
+@pytest.fixture(scope='module')
+def core_schema():
+    return _load_schema(_DATA_DIR / 'cif_core.dic')
+
+
+@pytest.fixture(scope='module')
+def pow_schema():
+    return _load_schema(_DATA_DIR / 'cif_pow.dic')
+
+
+@pytest.fixture(scope='module')
+def one_structure_conn(core_schema):
+    return _ingest_file(_CIF_DIR / 'one_structure.cif', core_schema)
+
+
+@pytest.fixture(scope='module')
+def multi_one_conn(pow_schema):
+    return _ingest_file(_CIF_DIR / 'multi_one.cif', pow_schema)
+
+
+@pytest.mark.slow
+class TestEmitRoundTripIntegration:
+    """Full pipeline: real CIF → ingest → emit → re-ingest → compare databases."""
+
+    def test_one_structure_original(self, one_structure_conn, core_schema):
+        conn2 = _emit_and_reingest(one_structure_conn, core_schema, EmitMode.ORIGINAL)
+        _assert_same_data(one_structure_conn, conn2, core_schema)
+
+    def test_one_structure_one_block(self, one_structure_conn, core_schema):
+        conn2 = _emit_and_reingest(one_structure_conn, core_schema, EmitMode.ONE_BLOCK)
+        _assert_same_data(one_structure_conn, conn2, core_schema)
+
+    def test_one_structure_grouped(self, one_structure_conn, core_schema):
+        conn2 = _emit_and_reingest(one_structure_conn, core_schema, EmitMode.GROUPED)
+        _assert_same_data(one_structure_conn, conn2, core_schema)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            'Domain-key PK conflict: blocks are emitted alphabetically so '
+            'preferred_orientation blocks precede instrument blocks, creating '
+            'pd_instr stubs that block real data inserts on re-ingest.'
+        ),
+    )
+    def test_multi_one_original(self, multi_one_conn, pow_schema):
+        conn2 = _emit_and_reingest(multi_one_conn, pow_schema, EmitMode.ORIGINAL)
+        _assert_same_data(multi_one_conn, conn2, pow_schema)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason='Domain-key PK conflict (same root cause as test_multi_one_original).',
+    )
+    def test_multi_one_grouped(self, multi_one_conn, pow_schema):
+        conn2 = _emit_and_reingest(multi_one_conn, pow_schema, EmitMode.GROUPED)
+        _assert_same_data(multi_one_conn, conn2, pow_schema)
+
+    def test_multi_one_one_block(self, multi_one_conn, pow_schema):
+        conn2 = _emit_and_reingest(multi_one_conn, pow_schema, EmitMode.ONE_BLOCK)
+        _assert_same_data(multi_one_conn, conn2, pow_schema)

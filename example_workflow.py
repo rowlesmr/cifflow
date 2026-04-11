@@ -34,7 +34,7 @@ DIC_FILE  = DIC_DIR / 'cif_core.dic'
 DIC_CACHE = ROOT / 'cif_core_cache.json'   # JSON cache; delete to force re-parse
 
 # CIF file to ingest
-CIF_FILE = ROOT / 'tests' / 'cif_files' / 'pycifparse' / 'core_keyless_sets.cif'
+CIF_FILE = ROOT / 'tests' / 'cif_files' / 'one_structure.cif'
 
 # # Dictionary
 # DIC_DIR   = ROOT / 'data' / 'dictionaries'
@@ -42,7 +42,7 @@ CIF_FILE = ROOT / 'tests' / 'cif_files' / 'pycifparse' / 'core_keyless_sets.cif'
 # DIC_CACHE = ROOT / 'cif_pow_cache.json'   # JSON cache; delete to force re-parse
 #
 # # CIF file to ingest
-# CIF_FILE = ROOT / 'tests' / 'cif_files' / 'second_short.cif'
+# CIF_FILE = ROOT / 'tests' / 'cif_files' / 'multi_one.cif'
 #
 
 
@@ -405,13 +405,19 @@ print('\n=== Step 10: Emit CIF (ONE_BLOCK mode with OutputPlan) ===')
 
 ONE_BLOCK_CIF_FILE = ROOT / 'output_one_block.cif'
 
-# Example: emit cell parameters first, then atom sites, then everything else.
+# Example: emit cell parameters first (unit cell defines the coordinate system),
+# then atom sites, then everything else in default order (Set-class alphabetical,
+# then Loop-class alphabetical).
+# Within each category: PK column(s) first, then remaining columns alphabetically.
 spec = BlockSpec(
-    categories=['cell', 'atom_site'],   # preferred category order
+    categories=['audit_dataset', 'structure', 'cell', 'atom_site'],
     column_order={
-        'cell': ['length_a', 'length_b', 'length_c',
-                 'angle_alpha', 'angle_beta', 'angle_gamma'],
-        'atom_site': ['id', 'type_symbol', 'fract_x', 'fract_y', 'fract_z'],
+        'cell': ['structure_id',
+                 'angle_alpha', 'angle_beta', 'angle_gamma',
+                 'length_a', 'length_b', 'length_c'],
+        'atom_site': ['label', 'structure_id',
+                      'fract_x', 'fract_y', 'fract_z',
+                      'type_symbol'],
     },
 )
 plan = OutputPlan(

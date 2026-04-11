@@ -4,7 +4,7 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 6 (output layer) — `emit()` complete. 1064 tests passing (non-slow).
+**Current stage:** Stage 6 (output layer) — `emit()` complete. 1113 tests passing.
 
 **Test suite state (2026-04-11):**
 - 1064 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
@@ -20,11 +20,11 @@
   - `emit.py`: `emit(conn, schema, *, mode, version, plan, reconstruct_su, emit_defaults)`.
     Four mode collectors: `_collect_original`, `_collect_one_block`, `_collect_all_blocks`,
     `_collect_grouped`. Set/Loop category renderers, fallback renderer, SU reconstruction.
-  - `GROUPED` mode: BFS anchor search (`_find_set_anchor`) across all FK targets so composite-key
-    tables are correctly anchored to a Set even when Loop FKs appear first. `covered_block_ids`
-    is expanded after fetching FK-chained rows so blocks from Set PK conflicts are not orphaned.
-    No-anchor tables (Loop-only FK chains) are absorbed into co-located Set-anchored blocks; any
-    truly uncovered `_block_id`s produce standalone blocks.
+  - `GROUPED` mode: BFS anchor search (`_find_set_anchor`) finds the ROOT Set (topmost in FK
+    hierarchy, no FK to another reachable Set). Exclusive-target anchor groups (referenced by
+    exactly one other anchor group, no FK out) are reclassified as block_id_tables so their rows
+    are absorbed via covered_block_ids sweeps. `absorbed_primary` (anchor-row block_ids) used for
+    skip checks; `absorbed_all` (all swept) used for remaining-block suppression.
   - All symbols exported from `pycifparse.output.__init__` and `pycifparse.__init__`.
   - 43 tests in `tests/output/test_emit.py` covering all four modes, `OutputPlan`, quoting in
     output, CIF 1.1 emission, NULL handling, GROUPED merging, and composite-key anchoring.
