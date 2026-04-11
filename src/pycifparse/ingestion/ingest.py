@@ -19,6 +19,30 @@ from pycifparse.types import ValueType
 
 
 # ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
+
+class IngestionError(Exception):
+    """Raised when one or more semantic errors prevent successful ingestion.
+
+    All errors are collected before raising so that the full set is reported
+    in a single pass.  The database may contain partial data from rows that
+    preceded the first conflict.
+
+    Attributes
+    ----------
+    errors:
+        Ordered list of error message strings, one per conflict.
+    """
+
+    def __init__(self, errors: list[str]) -> None:
+        self.errors = errors
+        summary = errors[0] if errors else '(no details)'
+        extra = f' (and {len(errors) - 1} more)' if len(errors) > 1 else ''
+        super().__init__(f'{len(errors)} semantic error(s): {summary}{extra}')
+
+
+# ---------------------------------------------------------------------------
 # Value encoding
 # ---------------------------------------------------------------------------
 
@@ -230,8 +254,17 @@ def _merge_into(
     table: TableDef,
     row_id_counters: dict[str, int],
     emit: Callable[[str], None],
+    emit_error: Callable[[str], None] | None = None,
 ) -> int:
-    """Merge *row* into *merged_rows[table_name]*.  Returns the row's ``_row_id``."""
+    """Merge *row* into *merged_rows[table_name]*.  Returns the row's ``_row_id``.
+
+    When two rows share the same primary key:
+    - If all non-PK column values are identical the duplicate is silently dropped.
+    - If any value differs AND the rows originate from the same data block,
+      *emit_error* is called (a semantic error — ingestion will fail).
+    - If the values differ across different data blocks, *emit* is called
+      (a warning — cross-block merging is a known limitation).
+    """
     if table_name not in merged_rows:
         merged_rows[table_name] = {}
     tbl_rows = merged_rows[table_name]
@@ -251,10 +284,14 @@ def _merge_into(
             if existing.get(col) is None:
                 existing[col] = val
             elif existing[col] != val:
-                emit(
+                msg = (
                     f"merge conflict on '{table_name}'.'{col}': "
                     f"keeping '{existing[col]}', ignoring '{val}'"
                 )
+                if emit_error is not None:
+                    emit_error(msg)
+                else:
+                    emit(msg)
         return existing['_row_id']
 
 
@@ -320,7 +357,11 @@ def _apply_fk(
                 # Source 3: UUID fallback (key-FK only)
                 if val is None and is_key_fk:
                     val = str(_uuid_module.uuid4())
-                    fk_accumulator[target_def_id] = val
+                    # Persist in accumulator only in scalar context.  In loop
+                    # context each iteration must get a fresh UUID so that
+                    # rows do not collapse into one via the merge key.
+                    if loop_row_by_defid is None:
+                        fk_accumulator[target_def_id] = val
                     emit(
                         f"key-FK '{col.definition_id}' propagation source "
                         f"not found; generated UUID"
@@ -494,6 +535,7 @@ class _Ingester:
         self.dataset_id = dataset_id
         self._on_error = on_error
         self.errors: list[str] = []
+        self._semantic_errors: list[str] = []
 
         # Build routing infrastructure once
         self.tag_to_column: dict[str, tuple[str, str]] = (
@@ -521,6 +563,8 @@ class _Ingester:
         try:
             for block in blocks:
                 self._process_block(block)
+            if self._semantic_errors:
+                raise IngestionError(self._semantic_errors)
             if self.schema and self.schema.bridge_columns:
                 _fill_bridge_columns(self.merged_rows, self.schema.bridge_columns)
             self._post_validate()
@@ -544,6 +588,15 @@ class _Ingester:
         if self._on_error:
             self._on_error(msg)
 
+    def _emit_error(self, msg: str) -> None:
+        """Record a semantic error. After all blocks are processed, any
+        semantic errors will cause :exc:`IngestionError` to be raised and
+        the transaction to be rolled back."""
+        self._semantic_errors.append(msg)
+        self.errors.append(msg)
+        if self._on_error:
+            self._on_error(msg)
+
     # ── Block processing ──────────────────────────────────────────────────────
 
     def _process_block(self, block: CifBlock) -> None:
@@ -553,6 +606,8 @@ class _Ingester:
         loop_id_counter = 1
         set_buffers: dict[str, dict[str, Any]] = {}
         set_row_reservations: dict[str, int] = {}
+        loop_scalar_buffers: dict[str, dict[str, Any]] = {}
+        loop_scalar_row_reservations: dict[str, int] = {}
         fk_accumulator: dict[str, str] = {}
         deprecated_warned: set[str] = set()
 
@@ -586,6 +641,7 @@ class _Ingester:
                 self._process_scalar(
                     block, block_id, tag,
                     set_buffers, set_row_reservations,
+                    loop_scalar_buffers, loop_scalar_row_reservations,
                     fk_accumulator, deprecated_warned,
                 )
 
@@ -614,10 +670,27 @@ class _Ingester:
                     if existing.get(col) is None:
                         existing[col] = val
                     elif existing[col] != val:
-                        self._emit(
+                        msg = (
                             f"merge conflict on '{tbl_name}'.'{col}': "
                             f"keeping '{existing[col]}', ignoring '{val}'"
                         )
+                        self._emit_error(msg)
+
+        # Flush Loop-class scalar buffers accumulated during this block
+        for tbl_name, col_dict in loop_scalar_buffers.items():
+            row = dict(col_dict)
+            row['_block_id'] = block_id
+            row['_row_id'] = loop_scalar_row_reservations[tbl_name]
+            table = self.schema.tables[tbl_name]
+            if table.primary_keys == ['_pycifparse_id']:
+                row['_pycifparse_id'] = str(_uuid_module.uuid4())
+            _apply_fk(row, table, self.schema, None,
+                      fk_accumulator, self.propagate_fk, self._emit,
+                      block_id, self.merged_rows, self.row_id_counters)
+            _merge_into(
+                self.merged_rows, tbl_name, row, table,
+                self.row_id_counters, self._emit, self._emit_error,
+            )
 
         self._record_membership(block, block_id, self._id_regime(block_id))
 
@@ -684,6 +757,8 @@ class _Ingester:
         tag: str,
         set_buffers: dict,
         set_row_reservations: dict,
+        loop_scalar_buffers: dict,
+        loop_scalar_row_reservations: dict,
         fk_accumulator: dict,
         deprecated_warned: set,
     ) -> None:
@@ -726,26 +801,19 @@ class _Ingester:
             # Write to fk_accumulator immediately (Lesson 28)
             fk_accumulator[canonical] = stored
         else:
-            # Loop-class tag as scalar: treat as single-row loop
-            row: dict[str, Any] = {
-                '_block_id': block_id,
-                col_name: stored,
-            }
+            # Loop-class tag as scalar: accumulate into per-block buffer so that
+            # all sibling scalars (including the PK column) are flushed together.
+            if tbl_name not in loop_scalar_row_reservations:
+                loop_scalar_row_reservations[tbl_name] = _next_row_id(
+                    self.row_id_counters, tbl_name
+                )
+            if tbl_name not in loop_scalar_buffers:
+                loop_scalar_buffers[tbl_name] = {}
+            loop_scalar_buffers[tbl_name][col_name] = stored
             if su_val is not None:
-                row[self.su_map[canonical]] = su_val
-            _apply_fk(row, table, self.schema, None,
-                      fk_accumulator, self.propagate_fk, self._emit,
-                      block_id, self.merged_rows, self.row_id_counters)
-            _merge_into(
-                self.merged_rows, tbl_name, row, table,
-                self.row_id_counters, self._emit,
-            )
-            # Single-iteration fk_accumulator rule: write non-NULL column values
-            for k, v in row.items():
-                if v is not None and k not in ('_block_id', '_row_id'):
-                    col_def_id = self.schema.column_to_tag.get((tbl_name, k))
-                    if col_def_id:
-                        fk_accumulator[col_def_id] = v
+                loop_scalar_buffers[tbl_name][self.su_map[canonical]] = su_val
+            # Write to fk_accumulator immediately
+            fk_accumulator[canonical] = stored
 
     # ── Loop processing ───────────────────────────────────────────────────────
 
@@ -826,6 +894,54 @@ class _Ingester:
                           block_id, self.merged_rows, self.row_id_counters)
                 iter_rows[tbl_name] = row
 
+            # ── Per-iteration UUID fill for missing PKs ───────────────────────
+            # _apply_fk handles single-column key-FKs; it does not cover pure-key
+            # PKs (no FK at all) or composite-key-FK components.  Fill any
+            # remaining NULL non-synthetic PK columns with fresh UUIDs, sharing
+            # one UUID per column name across all sibling tables in this iteration
+            # so that multi-category loop rows remain joinable.
+            if table_names:
+                pk_uuid_pool: dict[str, str] = {}
+                for tbl_name in table_names:
+                    tbl = self.schema.tables[tbl_name]
+                    row = iter_rows[tbl_name]
+                    for col in tbl.columns:
+                        if (col.is_primary_key and not col.is_synthetic
+                                and row.get(col.name) is None):
+                            if col.name not in pk_uuid_pool:
+                                pk_uuid_pool[col.name] = str(_uuid_module.uuid4())
+                            row[col.name] = pk_uuid_pool[col.name]
+                # For composite FKs that are now fully specified after UUID fill,
+                # create parent stubs and call _apply_fk on them so that
+                # grandparent stubs are also created, preserving topological
+                # insertion order in _flush.
+                if pk_uuid_pool:
+                    for tbl_name in table_names:
+                        tbl = self.schema.tables[tbl_name]
+                        row = iter_rows[tbl_name]
+                        for fk in tbl.foreign_keys:
+                            if len(fk.source_columns) <= 1:
+                                continue  # Single-column stubs handled by _apply_fk.
+                            col_vals = [
+                                (sc, tc, row.get(sc))
+                                for sc, tc in zip(fk.source_columns, fk.target_columns)
+                            ]
+                            if all(v is not None for _, _, v in col_vals):
+                                parent_table = self.schema.tables.get(fk.target_table)
+                                if parent_table is not None:
+                                    stub: dict[str, Any] = {'_block_id': block_id}
+                                    for _, tc, v in col_vals:
+                                        stub[tc] = v
+                                    # _apply_fk on the stub creates grandparent stubs,
+                                    # ensuring parents precede children in merged_rows.
+                                    _apply_fk(stub, parent_table, self.schema, None,
+                                              fk_accumulator, self.propagate_fk,
+                                              self._emit, block_id,
+                                              self.merged_rows, self.row_id_counters)
+                                    _merge_into(self.merged_rows, fk.target_table,
+                                                stub, parent_table,
+                                                self.row_id_counters, self._emit)
+
             # Cross-table PK propagation for multi-category loops.
             # All compatible tables share the same PK column names.  After
             # _apply_fk has run for every table, propagate non-NULL PK values
@@ -859,7 +975,7 @@ class _Ingester:
                 table = self.schema.tables[tbl_name]
                 rid = _merge_into(
                     self.merged_rows, tbl_name, row, table,
-                    self.row_id_counters, self._emit,
+                    self.row_id_counters, self._emit, self._emit_error,
                 )
                 ids[tbl_name] = rid
             iter_row_ids.append(ids)

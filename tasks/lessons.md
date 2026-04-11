@@ -1,5 +1,41 @@
 # pycifparse — Lessons Learned
 
+## Lesson 46 — Loop-class scalar tags must be buffered per-block, not merged immediately (2026-04-11)
+
+**Context:** `_process_scalar` in `ingestion/ingest.py`.
+
+**Mistake:** Loop-class tags given as scalars (outside any `loop_`) were processed one at a time: each tag created a row containing only that column and was immediately passed to `_merge_into`. Because the PK column (`_pd_instr_detector.id = CD-detc`) and non-PK columns (`_pd_instr_detector.instr_id`, `_pd_instr.soller_ax_spec_detc`) were processed in separate calls, the non-PK rows had PK = `(None,)`. All `(None,)` rows from different blocks then merged together and produced false value conflicts (e.g. `keeping 'chrome_dome', ignoring 'copper_top'`).
+
+**Why it matters:** A CIF block may give a single Loop-class entity entirely as scalars — this is a real pattern in multi-block powder diffraction files. The intent is one logical row; all column values from that block describe the same row.
+
+**Fix:** Accumulate Loop-class scalar tags in a `loop_scalar_buffers` dict (parallel to `set_buffers`) and write to `fk_accumulator` immediately. Flush the complete, fully-populated row through `_apply_fk` + `_merge_into` at the end of the block, after all tags have been seen.
+
+**Rule:** Whether a table's `category_class` is `Set` or `Loop`, scalar tags within a single block always describe one row. Merge only when the full row is assembled.
+
+**Symptom to watch for:** False merge conflicts on non-PK columns where PK = `(None,)` for rows that should have distinct natural keys.
+
+## Lesson 45 — UUID-per-row for keyless loops requires a post-_apply_fk fill pass (2026-04-11)
+
+**Context:** `_process_loop` and `_apply_fk` in `ingestion/ingest.py`.
+
+**Mistake:** UUID generation for missing PK columns was only wired inside `_apply_fk` Source 3, which fires for *single-column key-FKs* only. Two categories were silently skipped:
+1. **Pure-key PKs** (no FK at all, e.g. `atom_site.label`) — `_apply_fk` never visits them.
+2. **Composite-key-FK components** (e.g. `pd_meas.point_id` in the `(point_id, diffractogram_id)` composite PK) — the composite path explicitly excluded UUID generation.
+Both produced `NULL` for the key column on every iteration, so all rows collapsed to one via `_merge_into`.
+
+Additionally, for single-column key-FKs, the generated UUID was written to `fk_accumulator`, so iteration 1 found it via Source 2 and reused the same UUID — same result.
+
+**Correct rule:**
+- Source 3 (`_apply_fk`): only persist the UUID to `fk_accumulator` when `loop_row_by_defid is None` (scalar context). In loop context leave the accumulator untouched so each iteration regenerates.
+- After all `_apply_fk` calls for the iteration, run a **UUID fill pass** over sibling rows: for each NULL non-synthetic PK column, generate one UUID per column name and apply it to every sibling table that shares that column name. This handles pure-key and composite-key cases uniformly.
+- For composite FKs now fully specified after the fill, call `_apply_fk` on the created parent stub *before* `_merge_into`, so that grandparent stubs are also inserted first — preserving the topological order that SQLite deferred FK constraints require.
+
+**How to apply:** Any time a loop may lack its key column, the fill pass in `_process_loop` handles it automatically. `_apply_fk` alone is not sufficient for composite or pure-key scenarios.
+
+**Note on deferred FKs:** `DEFERRABLE INITIALLY DEFERRED` constraints are still enforced at the end of each `executemany` in autocommit mode. Parents must precede children in `merged_rows` insertion order, or the constraint fires before the parent row exists.
+
+---
+
 ## Lesson 44 — SU values must be scaled, not stored raw (2026-04-11)
 
 **Context:** `split_su` in `ingestion/ingest.py`.

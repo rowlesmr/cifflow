@@ -1,3 +1,3 @@
-from pycifparse.ingestion.ingest import ingest
+from pycifparse.ingestion.ingest import ingest, IngestionError
 
-__all__ = ['ingest']
+__all__ = ['ingest', 'IngestionError']

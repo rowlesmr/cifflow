@@ -8,10 +8,11 @@ runs once per class regardless of how many test methods are present.
 import json
 import pathlib
 import sqlite3
+import types
 
 import pytest
 
-from pycifparse import build, ingest
+from pycifparse import build, ingest, IngestionError
 from pycifparse.dictionary import (
     DictionaryLoader,
     apply_schema,
@@ -400,44 +401,98 @@ class TestCoreMultilineFormula:
 
 
 # ---------------------------------------------------------------------------
-# core_multiple_blocks.cif  — known limitation file
+# core_multiple_blocks.cif  — cross-block key collision → IngestionError
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope='class')
-def multiple_blocks_conn(core_schema):
-    return _ingest('core_multiple_blocks.cif', core_schema)
+def multiple_blocks_result(core_schema):
+    cif, _ = build((_CIF_DIR / 'core_multiple_blocks.cif').read_text(encoding='utf-8'))
+    conn = _conn(core_schema)
+    exc = None
+    try:
+        ingest(cif, conn, core_schema)
+    except IngestionError as e:
+        exc = e
+    return types.SimpleNamespace(conn=conn, exc=exc)
 
 
 class TestCoreMultipleBlocks:
-    def test_ingestion_completes(self, multiple_blocks_conn):
-        """File ingests without raising an exception."""
-        assert multiple_blocks_conn is not None
+    def test_ingestion_fails(self, multiple_blocks_result):
+        """Block C's F1 and Na1 conflict with earlier blocks — IngestionError raised."""
+        assert multiple_blocks_result.exc is not None
 
-    def test_three_cell_rows(self, multiple_blocks_conn):
-        """Each block produces one cell row with an auto-generated diffrn UUID."""
-        assert multiple_blocks_conn.execute(
-            'SELECT COUNT(*) FROM cell'
-        ).fetchone()[0] == 3
-
-    def test_atom_site_label_collision(self, multiple_blocks_conn):
-        """Block C reuses labels Na1 (from A) and F1 (from B).
-        Due to label-based merging without _block_id isolation, these collide.
-        Only 4 distinct labels exist instead of 6."""
-        count = multiple_blocks_conn.execute(
+    def test_transaction_rolled_back(self, multiple_blocks_result):
+        """On failure the transaction is rolled back — no rows are committed."""
+        assert multiple_blocks_result.conn.execute(
             'SELECT COUNT(*) FROM atom_site'
-        ).fetchone()[0]
-        assert count == 4
+        ).fetchone()[0] == 0
 
-    def test_unique_labels_present(self, multiple_blocks_conn):
-        """Cl1 (block A only) and K1 (block B only) are unambiguous."""
-        labels = {
-            r[0]
-            for r in multiple_blocks_conn.execute(
-                'SELECT label FROM atom_site'
-            ).fetchall()
-        }
-        assert 'Cl1' in labels
-        assert 'K1'  in labels
+    def test_six_semantic_errors(self, multiple_blocks_result):
+        """F1 conflicts on fract_x/y/z (3) and Na1 conflicts on fract_x/y/z (3)."""
+        assert len(multiple_blocks_result.exc.errors) == 6
+
+    def test_f1_fract_x_conflict(self, multiple_blocks_result):
+        """Block C F1 fract_x=0.0 conflicts with Block B F1 fract_x=0.5."""
+        assert any(
+            'fract_x' in e and "keeping '0.5'" in e and "ignoring '0.0'" in e
+            for e in multiple_blocks_result.exc.errors
+        )
+
+    def test_na1_fract_x_conflict(self, multiple_blocks_result):
+        """Block C Na1 fract_x=0.5 conflicts with Block A Na1 fract_x=0.0."""
+        assert any(
+            'fract_x' in e and "keeping '0.0'" in e and "ignoring '0.5'" in e
+            for e in multiple_blocks_result.exc.errors
+        )
+
+
+# ---------------------------------------------------------------------------
+# core_repeated_loop_key.cif
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope='class')
+def repeated_key_result(core_schema):
+    cif, _ = build((_CIF_DIR / 'core_repeated_loop_key.cif').read_text(encoding='utf-8'))
+    conn = _conn(core_schema)
+    exc = None
+    try:
+        ingest(cif, conn, core_schema)
+    except IngestionError as e:
+        exc = e
+    return types.SimpleNamespace(conn=conn, exc=exc)
+
+
+class TestCoreRepeatedLoopKey:
+    def test_ingestion_fails(self, repeated_key_result):
+        """A within-block duplicate key with different values raises IngestionError."""
+        assert repeated_key_result.exc is not None
+
+    def test_transaction_rolled_back(self, repeated_key_result):
+        """On failure the transaction is rolled back — no rows are committed."""
+        count = repeated_key_result.conn.execute(
+            "SELECT COUNT(*) FROM atom_site"
+        ).fetchone()[0]
+        assert count == 0
+
+    def test_row3_silent_no_error(self, repeated_key_result):
+        """Exact duplicate (row 3) is silently dropped; only rows 4 and 5
+        produce errors, giving exactly 5 semantic errors in total."""
+        assert len(repeated_key_result.exc.errors) == 5
+
+    def test_row4_type_symbol_conflict(self, repeated_key_result):
+        """Row 4 conflicts on type_symbol (Na vs O)."""
+        assert any(
+            'type_symbol' in e and "keeping 'Na'" in e and "ignoring 'O'" in e
+            for e in repeated_key_result.exc.errors
+        )
+
+    def test_row5_fract_z_conflict(self, repeated_key_result):
+        """Row 5 differs only in fract_z ('0.0' vs '0.00'): numerically equal
+        but string-different — a conflict is correctly reported."""
+        assert any(
+            'fract_z' in e and "keeping '0.0'" in e and "ignoring '0.00'" in e
+            for e in repeated_key_result.exc.errors
+        )
 
 
 # ===========================================================================
@@ -554,21 +609,12 @@ def pd_meas_proc_conn(pow_schema):
 
 
 class TestPowSmallPdMeasProc:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="UUID-per-row for key-less loops not yet implemented: "
-               "one UUID is assigned for the whole loop, not per iteration.",
-    )
     def test_five_pd_meas_rows(self, pd_meas_proc_conn):
         assert pd_meas_proc_conn.execute(
             "SELECT COUNT(*) FROM pd_meas"
             " WHERE _block_id='test_small_pd_meas_calc'"
         ).fetchone()[0] == 5
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="UUID-per-row for key-less loops not yet implemented.",
-    )
     def test_five_pd_calc_rows(self, pd_meas_proc_conn):
         assert pd_meas_proc_conn.execute(
             "SELECT COUNT(*) FROM pd_calc"

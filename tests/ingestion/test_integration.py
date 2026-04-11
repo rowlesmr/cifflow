@@ -9,7 +9,7 @@ import sqlite3
 
 import pytest
 
-from pycifparse import build, ingest
+from pycifparse import build, ingest, IngestionError
 from pycifparse.dictionary import (
     DictionaryLoader,
     apply_schema,
@@ -199,20 +199,17 @@ class TestIngestNoSchema:
 
 @pytest.mark.slow
 class TestIngestMultiBlock:
-    def test_multi_block_row_counts(self, core_schema):
-        """multi_one.cif has multiple blocks; each should contribute rows."""
+    def test_multi_block_row_counts(self, pow_schema):
+        """multi_one.cif has multiple instrument blocks; each should produce rows."""
         cif, _ = build((_CIF_DIR / 'multi_one.cif').read_text(encoding='utf-8'))
-        conn = _conn_with_schema(core_schema)
-        errors = ingest(cif, conn, core_schema)
+        conn = _conn_with_schema(pow_schema)
+        errors = ingest(cif, conn, pow_schema)
         assert isinstance(errors, list)
 
-        block_ids = [
-            r[0]
-            for r in conn.execute(
-                "SELECT DISTINCT _block_id FROM _cif_fallback"
-            ).fetchall()
-        ]
-        assert len(block_ids) >= 2
+        # Three instrument blocks → three pd_instr rows
+        assert conn.execute('SELECT COUNT(*) FROM pd_instr').fetchone()[0] == 3
+        # Three detector blocks → three pd_instr_detector rows
+        assert conn.execute('SELECT COUNT(*) FROM pd_instr_detector').fetchone()[0] == 3
 
 
 # ---------------------------------------------------------------------------

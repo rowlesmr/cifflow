@@ -3,6 +3,7 @@ from pycifparse.cifmodel.model import CifFile, CifBlock, CifSaveFrame
 from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.cifmodel.builder import build, CifBuilder
 from pycifparse.ingestion import ingest
+from pycifparse.ingestion.ingest import IngestionError
 from pycifparse.dictionary import (
     DdlmItem,
     DdlmDictionary,
@@ -28,7 +29,7 @@ __all__ = [
     # CIF model
     'CifFile', 'CifBlock', 'CifSaveFrame', 'CifScalar', 'CifBuilder', 'build',
     # Ingestion
-    'ingest',
+    'ingest', 'IngestionError',
     # Database
     'compactify_database',
     # Dictionary

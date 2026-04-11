@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from pycifparse import ingest
+from pycifparse import ingest, IngestionError
 from pycifparse.cifmodel.model import CifBlock, CifFile
 from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.dictionary.ddlm_item import DdlmItem
@@ -722,6 +722,51 @@ class TestSUIngestion:
 # TestMerge
 # ===========================================================================
 
+class TestKeylessLoop:
+    def test_uuid_generated_per_iteration(self):
+        """Each loop iteration must receive a distinct UUID when the key column
+        is absent from the loop.  Before the fix, Source-3 UUIDs were stored in
+        fk_accumulator and reused by subsequent iterations, collapsing N rows
+        into 1."""
+        schema = _schema_a()
+        f = _file(_block('B', loops=[
+            (['_atom_site.x_fract'],
+             [[_s('0.1')], [_s('0.2')], [_s('0.3')]]),
+        ]))
+        conn = _conn(schema)
+        ingest(f, conn, schema)
+        rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
+        assert len(rows) == 3
+        labels = [r[0] for r in rows]
+        assert len(set(labels)) == 3, "each row must have a distinct UUID label"
+        assert sorted(r[1] for r in rows) == ['0.1', '0.2', '0.3']
+
+    def test_shared_parent_fk_not_affected(self):
+        """A real value in fk_accumulator (e.g. from a scalar) must still
+        propagate to every loop iteration — only *generated* UUIDs are
+        excluded from persistence."""
+        schema = _schema_a()
+        # _structure.id given as scalar → lands in fk_accumulator
+        f = _file(_block('B',
+            scalars={'_structure.id': _s('S1')},
+            loops=[
+                (['_atom_site.x_fract'],
+                 [[_s('0.1')], [_s('0.2')]]),
+            ],
+        ))
+        conn = _conn(schema)
+        # propagate_fk=True so the non-key FK column structure_id is filled from
+        # the accumulator — this verifies that real accumulator values propagate
+        # to every iteration (unlike generated UUIDs which must not persist).
+        ingest(f, conn, schema, propagate_fk=True)
+        # Both rows must reference the same structure id 'S1'
+        rows = conn.execute(
+            "SELECT x_fract, structure_id FROM atom_site ORDER BY x_fract"
+        ).fetchall()
+        assert len(rows) == 2
+        assert rows[0][1] == rows[1][1] == 'S1'
+
+
 class TestMerge:
     def test_distinct_pks_from_two_blocks(self):
         schema = _schema_a()
@@ -765,7 +810,7 @@ class TestMerge:
         rows = _rows(conn, 'atom_site', ['_block_id', 'label', 'x_fract'])
         assert rows == [('B1', 'C1', '0.5')]
 
-    def test_cross_block_merge_conflict_keeps_first(self):
+    def test_cross_block_merge_conflict_raises(self):
         schema = _schema_a()
         b1 = _block('B1', loops=[
             (['_atom_site.label', '_atom_site.x_fract'],
@@ -776,10 +821,12 @@ class TestMerge:
              [[_s('C1'), _s('0.9')]]),  # conflicting value
         ])
         conn = _conn(schema)
-        errors = ingest(_file(b1, b2), conn, schema)
-        assert any('merge conflict' in e for e in errors)
+        with pytest.raises(IngestionError) as exc_info:
+            ingest(_file(b1, b2), conn, schema)
+        assert any('merge conflict' in e for e in exc_info.value.errors)
+        # transaction rolled back — no rows committed
         rows = _rows(conn, 'atom_site', ['x_fract'])
-        assert rows == [('0.1',)]  # first value kept
+        assert rows == []
 
     def test_row_id_does_not_reset_between_blocks(self):
         schema = _schema_a()
