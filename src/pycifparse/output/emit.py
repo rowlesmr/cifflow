@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import uuid
 from collections import deque
 
 from pycifparse.dictionary.schema import ForeignKeyDef, SchemaSpec, TableDef
@@ -334,7 +335,38 @@ def _collect_all_blocks(
     plan: OutputPlan | None,
     reconstruct_su: bool,
 ) -> list[str]:
-    """ALL_BLOCKS: one block per category, plus one per fallback ``_block_id``."""
+    """ALL_BLOCKS: one block per category, plus one per fallback ``_block_id``.
+
+    .. todo::
+        Block granularity is currently one block per non-empty table, which is
+        wrong when a table has rows from multiple original blocks.  The correct
+        behaviour is:
+
+        * **Set categories** — one output block *per row* (each row is a
+          distinct Set instance that originated from a different ``_block_id``).
+        * **Loop categories** — group rows by their Set-anchor key (domain PK
+          of the nearest Set ancestor via FK chain).  Rows sharing the same
+          anchor key values belong to the same output block.  Tables with no
+          Set ancestor remain one block per table.
+
+        When this is fixed, re-examine the ``_audit_dataset.id`` injection
+        logic so the UUID is derived from the contributing ``_block_id``\\s
+        rather than a single global session UUID.
+    """
+    # CIF 2.0: inject a shared _audit_dataset.id into every block so that a
+    # reader can recognise that all blocks belong to the same dataset.
+    # Reuse the existing dataset UUID when the source file declared one;
+    # otherwise generate a fresh one for this emit session.
+    dataset_id: str | None = None
+    if version == CifVersion.CIF_2_0:
+        mem_rows = _fetch_rows(conn, '_block_dataset_membership')
+        real_ids = {
+            r['_audit_dataset_id']
+            for r in mem_rows
+            if r.get('id_regime') == 'dataset' and r.get('_audit_dataset_id')
+        }
+        dataset_id = real_ids.pop() if len(real_ids) == 1 else str(uuid.uuid4())
+
     result = []
     i = 0
     for table_name, table_def in schema.tables.items():
@@ -351,6 +383,7 @@ def _collect_all_blocks(
             version,
             spec,
             reconstruct_su,
+            dataset_id=dataset_id,
         )
         result.append(rendered)
         i += 1
@@ -371,6 +404,7 @@ def _collect_all_blocks(
             version,
             spec,
             reconstruct_su,
+            dataset_id=dataset_id,
         )
         result.append(rendered)
         i += 1
@@ -392,10 +426,24 @@ def _render_block(
     reconstruct_su: bool,
     *,
     suppress_fk_pk: bool = False,
+    dataset_id: str | None = None,
 ) -> str:
     """Render a single CIF block to a string."""
     lines: list[str] = [f'data_{block_name}']
     first_category = True
+
+    # Inject _audit_dataset.id when requested, unless this block already carries
+    # it via the audit_dataset structured table or _cif_fallback rows.
+    if dataset_id is not None:
+        audit_in_table = 'audit_dataset' in table_rows
+        audit_in_fallback = any(
+            (r.get('tag') or '').lower() == '_audit_dataset.id'
+            for r in fallback_rows
+        )
+        if not audit_in_table and not audit_in_fallback:
+            audit_tag = schema.column_to_tag.get(('audit_dataset', 'id'), '_audit_dataset.id')
+            lines.append(f'{audit_tag}  {quote(dataset_id, version)}')
+            first_category = False
 
     for table_name in _ordered_categories(schema, spec):
         rows = table_rows.get(table_name)

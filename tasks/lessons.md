@@ -1,5 +1,33 @@
 # pycifparse — Lessons Learned
 
+## Lesson 57 — Emit: FK-PK columns pointing to a co-emitted Set are implicit from block scope (2026-04-11)
+
+**Context:** `_suppressed_fk_pk_cols()` and `_render_block()` in `output/emit.py`.
+
+**Problem:** In ORIGINAL and GROUPED modes, a table's domain PK column is often also a FK to a
+Set-class category in the same block (e.g. `_cell.diffrn_id` FK → `_diffrn.id`).  Emitting both
+the Set's own PK tag (`_diffrn.id`) and the referencing table's FK-PK column (`_cell.diffrn_id`)
+is redundant: CIF block scope already implies the relationship.  Emitting the FK-PK also causes
+problems on re-ingestion if the values differ (e.g. after UUID rotation).
+
+**Fix:** Before rendering each table in `_render_block`, compute a set of suppressible columns
+via `_suppressed_fk_pk_cols(table_def, rows, table_rows, schema)`:
+1. The column must be in the table's domain PK (non-synthetic).
+2. It must be part of a FK that targets a Set-class table.
+3. That Set table must appear in `table_rows` for the same block with exactly one row.
+4. Every row in the current table must carry the same FK value, equal to the target Set's PK value.
+
+If all four conditions hold, the column is removed from the active column list before rendering.
+
+**Scope:** ORIGINAL and GROUPED modes only (where related categories share a block).  ALL_BLOCKS
+emits one block per table — categories are in separate blocks, so their FK values are not implicit
+and must be preserved.  ONE_BLOCK is a special case where this could also apply, but is currently
+excluded for simplicity.
+
+**Rule:** If a category's PK FK target is a Set category in the same block with a consistent
+value, the FK-PK column is redundant in the output.  Suppress it to keep the CIF clean; the
+reader derives the value from the target Set's own PK tag.
+
 ## Lesson 56 — GROUPED mode: empty root-anchor table silently drops its entire FK group (2026-04-11)
 
 **Context:** `_collect_grouped` in `output/emit.py`.

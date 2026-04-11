@@ -4,30 +4,108 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 6 (output layer) — `emit()` complete. 1113 tests passing.
+**Current stage:** Stage 6 (output layer) — complete and stable.
 
 **Test suite state (2026-04-11):**
-- 1064 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
-- 49 slow tests pass: `.venv/Scripts/pytest -m slow`
-- Total: 1113 passing
+- 1064 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+- 49 slow tests pass: `pytest -m slow`
+- Total: 1113 passing, 2 xfail (known stub-conflict limitation — see Lesson 55)
 
-**What was just completed (this session):**
-- **Stage 6 — output layer** (`src/pycifparse/output/`):
-  - `quote.py`: CIF 2.0 and 1.1 quoting decision trees; `_make_semicolon` fix (content on same
-    line as opening `;`); 95 tests in `tests/output/test_quote.py`.
-  - `plan.py`: `EmitMode` enum (`ONE_BLOCK`, `ALL_BLOCKS`, `ORIGINAL`, `GROUPED`),
-    `BlockSpec`, `OutputPlan`. Default mode is `ORIGINAL`.
-  - `emit.py`: `emit(conn, schema, *, mode, version, plan, reconstruct_su, emit_defaults)`.
-    Four mode collectors: `_collect_original`, `_collect_one_block`, `_collect_all_blocks`,
-    `_collect_grouped`. Set/Loop category renderers, fallback renderer, SU reconstruction.
-  - `GROUPED` mode: BFS anchor search (`_find_set_anchor`) finds the ROOT Set (topmost in FK
-    hierarchy, no FK to another reachable Set). Exclusive-target anchor groups (referenced by
-    exactly one other anchor group, no FK out) are reclassified as block_id_tables so their rows
-    are absorbed via covered_block_ids sweeps. `absorbed_primary` (anchor-row block_ids) used for
-    skip checks; `absorbed_all` (all swept) used for remaining-block suppression.
-  - All symbols exported from `pycifparse.output.__init__` and `pycifparse.__init__`.
-  - 43 tests in `tests/output/test_emit.py` covering all four modes, `OutputPlan`, quoting in
-    output, CIF 1.1 emission, NULL handling, GROUPED merging, and composite-key anchoring.
+**What was completed in the previous session (Stage 6 baseline):**
+- `quote.py`: CIF 2.0 and 1.1 quoting decision trees; 95 tests in `tests/output/test_quote.py`.
+- `plan.py`: `EmitMode` (`ONE_BLOCK`, `ALL_BLOCKS`, `ORIGINAL`, `GROUPED`), `BlockSpec`, `OutputPlan`.
+- `emit.py`: `emit(conn, schema, *, mode, version, plan, reconstruct_su, emit_defaults)`.
+  Four mode collectors. Set/Loop/fallback renderers. SU reconstruction. GROUPED BFS anchor search.
+- All symbols exported from `pycifparse.output.__init__` and `pycifparse.__init__`.
+- 60 tests in `tests/output/test_emit.py` (all four modes, round-trip integration, OutputPlan,
+  quoting, NULL handling, GROUPED merging, composite-key anchoring). 2 marked xfail.
+
+**What was completed this session (2026-04-11):**
+- **FK-PK suppression** (ORIGINAL and GROUPED): when a table's domain PK column is a FK to a
+  Set category emitted in the same block with a consistent matching value, that column is omitted.
+  CIF block scope makes the value implicit.  Helper: `_suppressed_fk_pk_cols()` in `emit.py`.
+- **`_audit_dataset.id` injection** (ALL_BLOCKS, CIF 2.0 only): every block receives
+  `_audit_dataset.id` as its first tag, linking all blocks to the same dataset.  Reuses the
+  existing UUID from `_block_dataset_membership` (id_regime='dataset') if present; otherwise
+  generates a fresh UUID for the emit session.  Skipped if the block already carries the tag.
+- **`example_workflow.py` Step 11**: ALL_BLOCKS emit added with round-trip parse check.
+- **API Reference** (`prompts/API Reference.md`): FK-PK suppression and ALL_BLOCKS dataset
+  injection documented under `emit()`.
+- **`BlockSpec` merge-group design** and **ALL_BLOCKS granularity fix** documented in this file.
+
+**Next targets (in priority order):**
+1. **Fix ALL_BLOCKS block granularity** — Set categories: one block per row; Loop categories:
+   group by Set-anchor key.  Requires reworking `_collect_all_blocks` to mirror GROUPED logic.
+   Revisit `_audit_dataset.id` injection once granularity is correct.
+2. **`BlockSpec` merge-group syntax** — `list[str | list[str]]` inner lists emit categories as
+   a single `loop_` via FULL OUTER JOIN on shared keys (see design notes below).
+3. **Line ending option** — `line_ending: Literal['\n', '\r\n', '\r'] = '\n'` parameter on
+   `emit()`.  Applied as a final substitution over the assembled output string before return.
+   The 2048-character line-length check must operate on the content before line endings are
+   applied (i.e. measure raw content length, not including the terminator).
+4. **Pretty-print output** — `pretty: bool = True` flag on `emit()`.  When `True`:
+   - Tag–value pairs: tag and value column-aligned across all scalar pairs in the category.
+   - Loop columns: each value column width determined by the widest value in that column
+     (requires a full pass over all rows before writing any output).
+   - `False` skips alignment; use for large files where the per-column scan is too slow.
+   - Profile on a large powder-diffraction file (tens of thousands of loop rows) to quantify
+     the cost before finalising the default.
+5. **Line length checks for output** — both CIF 1.1 and CIF 2.0 impose a 2048-character line
+   length limit, excluding the OS line-termination character(s).  CIF 1.1 additionally limits
+   data names, block codes, and frame codes to 75 characters; CIF 2.0 has no such identifier
+   limit.  The emitter must:
+   - Detect lines exceeding 2048 characters and either wrap them (loop data rows can be split
+     across lines) or escalate to a semicolon-delimited text field where inline wrapping is not
+     possible (e.g. a very long unquoted value).
+   - For CIF 1.1 output, validate that all data names, block codes, and frame codes are at most
+     75 characters; raise on violation.
+   - Implement as a post-render validation pass, version-aware, that warns or raises on
+     violations before the final string is returned from `emit()`.
+6. **`convert_database(src, dst, schema)`** — copy a TEXT-storage database to a new file,
+   casting each column to the SQLite type indicated by `ColumnDef.type_contents`:
+   `"Integer"` → `INTEGER`, `"Real"` / `"Float"` → `REAL`, everything else stays `TEXT`.
+   CIF sentinels `'.'` and `'?'` convert to `NULL`.  Failed casts produce `NULL`, a kept
+   TEXT value, or raise — controlled by an `on_coercion_failure` parameter (`'null'` /
+   `'keep'` / `'error'`).  Stub is already shown in `example_workflow.py` Step 12.
+7. **Ingest stub promotion** — when real data arrives for an all-NULL stub row, merge non-NULL
+   values in rather than ignoring them.  Unblocks the two xfail round-trip integration tests.
+
+**Required future work:**
+- **`BlockSpec.categories` — merge groups**: allow inner lists to specify categories that should
+  be emitted as a single `loop_` construct via a FULL OUTER JOIN on shared key columns.
+  Proposed syntax: `categories=['audit_dataset', 'cell', ['pd_data', 'pd_meas', 'pd_proc']]`.
+  Design:
+  - All members of a merge group must be Loop-class categories.
+  - Members are joined on their shared key columns (identical or subset PK relationship);
+    if no common key can be identified, fall back to separate loops with a warning.
+  - Key columns appear once in the loop header; each member's non-key columns follow in
+    list order.
+  - Missing rows in any member produce `NULL` in the merged result, rendered as `.`.
+  - The join is performed in SQLite.  SQLite has no native FULL OUTER JOIN, so
+    use a two-phase strategy:
+    (1) Primary LEFT JOIN chain — `pd_meas LEFT JOIN pd_proc LEFT JOIN pd_calc`
+        on shared key.  Handles the common case (identical key sets) in one pass.
+    (2) Stragglers query — collect keys present in later members but absent from
+        the first table and append those rows.  Avoids a full UNION ALL in the
+        typical case where key sets are identical.
+    **Profile before committing to this approach** — with tens of thousands of
+    rows, verify that the two-phase query outperforms a Python-side merge dict
+    on realistic powder-diffraction data.
+  - `BlockSpec.categories` type changes from `list[str]` to `list[str | list[str]]`;
+    all downstream helpers (`_ordered_categories`, `_render_block`, column ordering,
+    FK-PK suppression) need to handle both element types.
+
+
+- **`ALL_BLOCKS` mode — correct block granularity**: the current implementation emits one block
+  per non-empty SQLite table, which is wrong for multi-row tables.  The correct behaviour is:
+  - **Set categories**: one output block per row (each row is a distinct instance; rows arrive
+    from different original `_block_id`s).
+  - **Loop categories**: group rows by the Set-anchor key (the domain PK of the nearest Set
+    ancestor in the FK chain).  Rows that share the same Set-anchor key values belong to the
+    same output block.  Tables with no Set ancestor remain one block per table.
+  - **Consequence for `_audit_dataset.id` injection**: the dataset UUID should be derived from
+    whichever `_block_id`s contributed to the block, not just the global session UUID.  Revisit
+    this logic once block granularity is correct.
 
 **Open decisions / known limitations:**
 - **`inspect_ingest` routing trace**: currently captures warnings, errors, FK violations only.

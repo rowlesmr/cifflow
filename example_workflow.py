@@ -16,6 +16,7 @@ Output files are written to the current directory:
     output_original.cif     — CIF re-emitted in ORIGINAL mode (one block per source block)
     output_grouped.cif      — CIF re-emitted in GROUPED mode (grouped by Set anchor keys)
     output_one_block.cif    — CIF re-emitted in ONE_BLOCK mode (everything in one block)
+    output_all_blocks.cif   — CIF re-emitted in ALL_BLOCKS mode (one block per category)
 """
 
 import pathlib
@@ -36,14 +37,14 @@ DIC_CACHE = ROOT / 'cif_core_cache.json'   # JSON cache; delete to force re-pars
 # CIF file to ingest
 CIF_FILE = ROOT / 'tests' / 'cif_files' / 'one_structure.cif'
 
-# # Dictionary
-# DIC_DIR   = ROOT / 'data' / 'dictionaries'
-# DIC_FILE  = DIC_DIR / 'cif_pow.dic'
-# DIC_CACHE = ROOT / 'cif_pow_cache.json'   # JSON cache; delete to force re-parse
-#
-# # CIF file to ingest
-# CIF_FILE = ROOT / 'tests' / 'cif_files' / 'multi_one.cif'
-#
+# Dictionary
+DIC_DIR   = ROOT / 'data' / 'dictionaries'
+DIC_FILE  = DIC_DIR / 'cif_pow.dic'
+DIC_CACHE = ROOT / 'cif_pow_cache.json'   # JSON cache; delete to force re-parse
+
+# CIF file to ingest
+CIF_FILE = ROOT / 'tests' / 'cif_files' / 'multi_one.cif'
+
 
 
 
@@ -442,7 +443,7 @@ print(f'  {len(one_block_lines)} block(s) emitted -> {ONE_BLOCK_CIF_FILE.name}')
 # Round-trip check: re-parse the emitted CIF and verify no errors.
 cif_rt, rt_errors = build(
     cif_one_block,
-    mode='pad',
+    mode='strict',
 )
 if rt_errors:
     print(f'  WARNING: round-trip produced {len(rt_errors)} parse error(s):')
@@ -453,7 +454,48 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# Step 11 — convert_database (not yet available; shown for future reference)
+# Step 11 — Emit CIF: ALL_BLOCKS mode (one block per non-empty category)
+# ---------------------------------------------------------------------------
+# ALL_BLOCKS emits one data_ block per structured table (plus one block per
+# original _block_id for any tags that ended up in _cif_fallback).
+# In CIF 2.0, _audit_dataset.id is injected into every block so that a reader
+# can identify all blocks as belonging to the same dataset.  The dataset UUID
+# is reused from the ingestion record when available, otherwise a fresh one
+# is generated for this emit session.
+
+print('\n=== Step 11: Emit CIF (ALL_BLOCKS mode) ===')
+
+ALL_BLOCKS_CIF_FILE = ROOT / 'output_all_blocks.cif'
+
+cif_all_blocks = emit(
+    conn,
+    schema,
+    mode=EmitMode.ALL_BLOCKS,
+    version=CifVersion.CIF_2_0,
+    plan=None,
+    reconstruct_su=False,
+    emit_defaults=True,
+)
+
+ALL_BLOCKS_CIF_FILE.write_text(cif_all_blocks, encoding='utf-8')
+
+all_blocks_headers = [l for l in cif_all_blocks.splitlines() if l.startswith('data_')]
+print(f'  {len(all_blocks_headers)} block(s) emitted -> {ALL_BLOCKS_CIF_FILE.name}')
+for header in all_blocks_headers:
+    print(f'    {header}')
+
+# Round-trip check: re-parse the emitted CIF and verify no errors.
+cif_rt_ab, rt_ab_errors = build(cif_all_blocks, mode='strict')
+if rt_ab_errors:
+    print(f'  WARNING: round-trip produced {len(rt_ab_errors)} parse error(s):')
+    for e in rt_ab_errors:
+        print(f'    [{e.error_type}] line {e.line}: {e.message}')
+else:
+    print(f'  Round-trip parse: OK  ({len(cif_rt_ab.blocks)} block(s), no errors)')
+
+
+# ---------------------------------------------------------------------------
+# Step 12 — convert_database (not yet available; shown for future reference)
 # ---------------------------------------------------------------------------
 # convert_database() copies a TEXT-storage database to a new file and casts
 # each column to the type indicated by ColumnDef.type_contents.
@@ -496,3 +538,4 @@ print(f'  {COMPACT_DB_FILE.name}      — compacted copy')
 print(f'  {ORIGINAL_CIF_FILE.name}   — CIF (ORIGINAL mode)')
 print(f'  {GROUPED_CIF_FILE.name}    — CIF (GROUPED mode)')
 print(f'  {ONE_BLOCK_CIF_FILE.name}  — CIF (ONE_BLOCK mode)')
+print(f'  {ALL_BLOCKS_CIF_FILE.name} — CIF (ALL_BLOCKS mode)')
