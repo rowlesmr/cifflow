@@ -200,7 +200,7 @@ def inspect_ingest(
             )
         for err in exc.errors:
             events.append(TraceEvent(kind='error', detail=err))
-            print(f'  {c("!", RED, file=file)} {err}', file=file)
+            print(f'  {c("!", RED, file=file)}  {err}', file=file)
         _print_trace_summary(events, file)
         raise
 
@@ -215,12 +215,12 @@ def inspect_ingest(
     if warnings:
         print(c(f'  {len(warnings)} semantic warning(s):', YELLOW, file=file), file=file)
         for ev in warnings:
-            print(f'    {c("~", YELLOW, file=file)} {ev.detail}', file=file)
+            print(f'    {c("~", YELLOW, file=file)}  {ev.detail}', file=file)
 
     if fk_violations:
         print(c('FK violations found before COMMIT:', RED, BOLD, file=file), file=file)
         for ev in fk_violations:
-            print(f'  {c("!", RED, file=file)} {ev.detail}', file=file)
+            print(f'  {c("!", RED, file=file)}  {ev.detail}', file=file)
 
     if not warnings and not fk_violations:
         print(c('  Ingestion completed with no warnings.', GREEN, file=file), file=file)

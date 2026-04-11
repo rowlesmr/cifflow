@@ -1,7 +1,6 @@
 """Shared utilities for the inspect package."""
 
 import pathlib
-import sys
 from typing import IO, TextIO, Union
 
 _Source = Union[str, pathlib.Path, IO[str]]
