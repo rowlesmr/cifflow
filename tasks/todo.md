@@ -6,32 +6,30 @@
 
 **Current stage:** Stage 6 (output layer) — complete and stable.
 
-**Test suite state (2026-04-11):**
-- 1064 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+**Test suite state (2026-04-12):**
+- ~1083 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
 - 49 slow tests pass: `pytest -m slow`
-- Total: 1113 passing, 2 xfail (known stub-conflict limitation — see Lesson 55)
+- Total: 1132 passing, 0 xfail
 
-**What was completed in the previous session (Stage 6 baseline):**
+**What was completed in recent sessions:**
 - `quote.py`: CIF 2.0 and 1.1 quoting decision trees; 95 tests in `tests/output/test_quote.py`.
 - `plan.py`: `EmitMode` (`ONE_BLOCK`, `ALL_BLOCKS`, `ORIGINAL`, `GROUPED`), `BlockSpec`, `OutputPlan`.
 - `emit.py`: `emit(conn, schema, *, mode, version, plan, reconstruct_su, emit_defaults)`.
   Four mode collectors. Set/Loop/fallback renderers. SU reconstruction. GROUPED BFS anchor search.
 - All symbols exported from `pycifparse.output.__init__` and `pycifparse.__init__`.
-- 60 tests in `tests/output/test_emit.py` (all four modes, round-trip integration, OutputPlan,
-  quoting, NULL handling, GROUPED merging, composite-key anchoring). 2 marked xfail.
-
-**What was completed this session (2026-04-11):**
-- **FK-PK suppression** (ORIGINAL and GROUPED): when a table's domain PK column is a FK to a
-  Set category emitted in the same block with a consistent matching value, that column is omitted.
-  CIF block scope makes the value implicit.  Helper: `_suppressed_fk_pk_cols()` in `emit.py`.
-- **`_audit_dataset.id` injection** (ALL_BLOCKS, CIF 2.0 only): every block receives
-  `_audit_dataset.id` as its first tag, linking all blocks to the same dataset.  Reuses the
-  existing UUID from `_block_dataset_membership` (id_regime='dataset') if present; otherwise
-  generates a fresh UUID for the emit session.  Skipped if the block already carries the tag.
+- 62 tests in `tests/output/test_emit.py` (all four modes, round-trip integration, OutputPlan,
+  quoting, NULL handling, GROUPED merging, composite-key anchoring). 0 xfail.
+- **FK-PK suppression** (ORIGINAL and GROUPED): Set-category FK-PK columns redundant from block
+  scope are suppressed.  `_suppressed_fk_pk_cols()` in `emit.py`.
+- **`_audit_dataset.id` injection** (ALL_BLOCKS, CIF 2.0 only): links blocks to one dataset UUID.
 - **`example_workflow.py` Step 11**: ALL_BLOCKS emit added with round-trip parse check.
-- **API Reference** (`prompts/API Reference.md`): FK-PK suppression and ALL_BLOCKS dataset
-  injection documented under `emit()`.
-- **`BlockSpec` merge-group design** and **ALL_BLOCKS granularity fix** documented in this file.
+- **API Reference** updated: FK-PK suppression and ALL_BLOCKS dataset injection documented.
+- **Bug fix — `_flush` slim-row column loss** (`ingest.py`): INSERT column list now uses union of
+  all row keys, not just `rows[0].keys()`.  Fixes NULL columns after re-ingest of emitted CIF.
+- **Bug fix — GROUPED remaining-blocks scope** (`emit.py`): remaining-blocks pass now sweeps all
+  schema tables, not just `block_id_tables`.  Fixes keyed-anchor tables with NULL FK values being
+  silently dropped (e.g. `diffrn_radiation_wavelength`).
+- Both `test_multi_one_original` and `test_multi_one_grouped` xfail decorators removed.
 
 **Next targets (in priority order):**
 1. **Fix ALL_BLOCKS block granularity** — Set categories: one block per row; Loop categories:
@@ -67,8 +65,7 @@
    CIF sentinels `'.'` and `'?'` convert to `NULL`.  Failed casts produce `NULL`, a kept
    TEXT value, or raise — controlled by an `on_coercion_failure` parameter (`'null'` /
    `'keep'` / `'error'`).  Stub is already shown in `example_workflow.py` Step 12.
-7. **Ingest stub promotion** — when real data arrives for an all-NULL stub row, merge non-NULL
-   values in rather than ignoring them.  Unblocks the two xfail round-trip integration tests.
+7. ~~**Ingest stub promotion / emit round-trip bugs**~~ — **DONE** (2026-04-12).  See Lesson 58.
 
 **Required future work:**
 - **`BlockSpec.categories` — merge groups**: allow inner lists to specify categories that should

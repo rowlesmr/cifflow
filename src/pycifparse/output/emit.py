@@ -284,8 +284,17 @@ def _collect_grouped(
     # Keyless Set categories, Loop-only tables, and any fallback data whose
     # block IDs were not absorbed by a keyed-anchor group: one block per
     # distinct _block_id.
+    #
+    # Also sweep all keyed-anchor-group tables: a table whose rows have NULL
+    # FK values for the anchor chain (e.g. diffrn_radiation_wavelength with
+    # phase_id=NULL) is not reachable via _fetch_rows_via_fk_path and is also
+    # not picked up by the covered_block_ids second-pass, so its rows would
+    # otherwise be silently dropped.  Including all schema tables here is safe
+    # because remaining_block_ids is already filtered to block_ids that were
+    # never absorbed by any keyed-anchor group.
+    all_table_names = list(schema.tables.keys())
     remaining_block_ids = [
-        bid for bid in _all_block_ids_for_tables(conn, block_id_tables)
+        bid for bid in _all_block_ids_for_tables(conn, all_table_names)
         if bid not in absorbed_all
     ]
     # Also pick up any _cif_fallback block_ids not yet covered
@@ -297,7 +306,7 @@ def _collect_grouped(
 
     for bid in remaining_block_ids:
         table_rows = {}
-        for t in block_id_tables:
+        for t in all_table_names:
             rows = _fetch_rows(conn, t, '"_block_id" = ?', (bid,))
             if rows:
                 table_rows[t] = rows
@@ -454,7 +463,10 @@ def _render_block(
         if not cols:
             continue
 
-        if suppress_fk_pk:
+        # FK-PK suppression only applies to Set categories rendered as scalar
+        # tag-value pairs.  Loop categories must emit all PK columns explicitly;
+        # a reader cannot recover a suppressed composite-key column from block scope.
+        if suppress_fk_pk and table_def.category_class == 'Set' and len(rows) == 1:
             suppressed = _suppressed_fk_pk_cols(table_def, rows, table_rows, schema)
             cols = [c for c in cols if c not in suppressed]
         if not cols:
@@ -691,6 +703,10 @@ def _suppressed_fk_pk_cols(
     schema: SchemaSpec,
 ) -> set[str]:
     """Return FK-PK columns that are implicit from a co-emitted Set category.
+
+    Only called for Set categories rendered as scalar tag-value pairs (single
+    row).  Loop categories must always emit all PK columns explicitly; a reader
+    cannot recover a suppressed composite-key column from block scope.
 
     A column can be suppressed when ALL of the following hold:
 

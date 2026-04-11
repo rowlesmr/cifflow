@@ -28,6 +28,48 @@ excluded for simplicity.
 value, the FK-PK column is redundant in the output.  Suppress it to keep the CIF clean; the
 reader derives the value from the target Set's own PK tag.
 
+## Lesson 58 — Two root causes of NULL columns after emit → re-ingest (2026-04-11)
+
+**Context:** `_flush` in `ingestion/ingest.py`; `_collect_grouped` in `output/emit.py`.
+
+**Bug 1: `_flush` uses only `rows[0].keys()` as the INSERT column list.**
+
+Rows in `merged_rows` are Python dicts whose key sets can differ.  A stub created by
+`_apply_fk` starts with only `{_block_id, id}`.  When later merged with real data, the stub
+dict grows in-place — but only for the one row that actually received the merge.  Other rows
+for the same table (created from other stubs that never received real data) keep a smaller
+key set.  If such a "slim" row happens to be `rows[0]`, `_flush` builds its INSERT column
+list from only those keys, silently omitting columns present in later rows.  Chrome_dome's
+`2theta_monochr_pre` was absent from the INSERT because `copper_top` (inserted first, slim)
+was `rows[0]`.
+
+**Fix:** Compute the union of all row keys:
+```python
+seen: dict[str, None] = {}
+for r in rows:
+    seen.update(dict.fromkeys(r.keys()))
+cols = list(seen)
+```
+
+**Bug 2: GROUPED "remaining blocks" only iterated `block_id_tables`, missing keyed-anchor tables.**
+
+`diffrn_radiation_wavelength` is in the `pd_phase` keyed-anchor group.  Its rows have
+`phase_id = NULL` (no FK link to any phase), so `_fetch_rows_via_fk_path` returns nothing and
+the second-pass `_block_id` filter covers `pd_phase` block_ids — not the wavelength block_ids.
+`exptl_crystal` has no rows → its entire FK group falls back to `block_id_tables`, causing the
+wavelength block_ids to appear in `remaining_block_ids`.  But only `block_id_tables` were swept
+in the remaining-blocks pass, so `diffrn_radiation_wavelength` (a keyed-anchor table) was never
+emitted.
+
+**Fix:** Sweep all schema tables in the remaining-blocks pass.  It is safe because
+`remaining_block_ids` is filtered to block_ids not in `absorbed_all` — those rows were never
+emitted by any keyed-anchor group.
+
+**Rule:** When rows have NULL FK columns they cannot be found via FK-path joins.  Any table
+whose rows may have NULL links to the anchor must also be swept by block_id in the fallback.
+Always compute the full column-key union in `_flush`; never assume that all rows share the
+same dict shape.
+
 ## Lesson 56 — GROUPED mode: empty root-anchor table silently drops its entire FK group (2026-04-11)
 
 **Context:** `_collect_grouped` in `output/emit.py`.
@@ -60,7 +102,7 @@ Tables whose root anchor is unpopulated are promoted to `block_id_tables`, which
 
 **Root cause:** Block emission order is alphabetical, which can differ from the original ingestion order.  The ingest layer's merge logic keeps the first occurrence and ignores later arrivals for the same PK.  Stubs created by FK scaffolding therefore block real data.
 
-**Disposition:** Three integration tests are marked `xfail(strict=True)` documenting the failure.  The fix belongs in the ingest layer: when real data arrives for a row that already exists as an all-NULL stub, non-NULL values should be merged in rather than ignored.
+**Disposition (original):** Three integration tests were marked `xfail(strict=True)`.  Two (`test_multi_one_original`, `test_multi_one_grouped`) were fixed in Lesson 58.  The actual root causes were in `_flush` (slim-row key union) and GROUPED remaining-blocks sweep (keyed-anchor tables excluded), not in the merge logic itself.  The xfail decorators have been removed.
 
 **Rule:** Any time a new emit mode or block-ordering strategy is added, check whether its output can be faithfully re-ingested regardless of block order.  If not, the ingest merge logic needs to handle stub → real-data promotion.
 

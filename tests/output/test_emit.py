@@ -1094,22 +1094,10 @@ class TestEmitRoundTripIntegration:
         conn2 = _emit_and_reingest(one_structure_conn, core_schema, EmitMode.GROUPED)
         _assert_same_data(one_structure_conn, conn2, core_schema)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            'Domain-key PK conflict: blocks are emitted alphabetically so '
-            'preferred_orientation blocks precede instrument blocks, creating '
-            'pd_instr stubs that block real data inserts on re-ingest.'
-        ),
-    )
     def test_multi_one_original(self, multi_one_conn, pow_schema):
         conn2 = _emit_and_reingest(multi_one_conn, pow_schema, EmitMode.ORIGINAL)
         _assert_same_data(multi_one_conn, conn2, pow_schema)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='Domain-key PK conflict (same root cause as test_multi_one_original).',
-    )
     def test_multi_one_grouped(self, multi_one_conn, pow_schema):
         conn2 = _emit_and_reingest(multi_one_conn, pow_schema, EmitMode.GROUPED)
         _assert_same_data(multi_one_conn, conn2, pow_schema)
