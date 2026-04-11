@@ -40,6 +40,7 @@ _FRAME_TAGS = frozenset({
     '_units.code',
     '_description.text',
     '_enumeration_set.state',
+    '_enumeration.default',
     '_category_key.name',
     '_alias.definition_id',
     '_definition_replaced.id',
@@ -77,13 +78,25 @@ def directory_resolver(path: str | pathlib.Path) -> SourceResolver:
     return _resolve
 
 
-def _scalar(data: dict[str, list], tag: str, default: str | None = None) -> str | None:
-    """Return the first string value for *tag*, or *default* if absent/placeholder."""
+def _scalar(
+    data: dict[str, list],
+    tag: str,
+    default: str | None = None,
+    *,
+    keep_dot: bool = False,
+) -> str | None:
+    """Return the first string value for *tag*, or *default* if absent/placeholder.
+
+    When *keep_dot* is True, the CIF inapplicable placeholder ``'.'`` is
+    returned as-is rather than being replaced by *default*.
+    """
     vals = data.get(tag)
     if not vals:
         return default
     v = vals[0]
-    if not isinstance(v, str) or v in ('.', '?'):
+    if not isinstance(v, str):
+        return default
+    if v == '?' or (v == '.' and not keep_dot):
         return default
     return v
 
@@ -136,6 +149,7 @@ def _extract_item(data: dict[str, list], warn: Callable[[str], None]) -> DdlmIte
     aliases = [v.lower() for v in _str_list(data, '_alias.definition_id')]
     category_keys = [v.lower() for v in _str_list(data, '_category_key.name')]
     enumeration_states = _str_list(data, '_enumeration_set.state')
+    enumeration_default = _scalar(data, '_enumeration.default', keep_dot=True)
 
     return DdlmItem(
         definition_id=definition_id,
@@ -151,6 +165,7 @@ def _extract_item(data: dict[str, list], warn: Callable[[str], None]) -> DdlmIte
         units_code=_scalar(data, '_units.code'),
         description=_scalar(data, '_description.text'),
         enumeration_states=enumeration_states,
+        enumeration_default=enumeration_default,
         category_keys=category_keys,
         aliases=aliases,
         replaced_by=replaced_by,

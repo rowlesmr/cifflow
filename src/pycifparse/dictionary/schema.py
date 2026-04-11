@@ -190,6 +190,15 @@ class SchemaSpec:
     deprecated_ids: set[str] = field(default_factory=set)
     warnings: list[str] = field(default_factory=list)
     bridge_columns: list[BridgeColumnDef] = field(default_factory=list)
+    propagation_links: dict[str, list[tuple[str, str, str | None]]] = field(default_factory=dict)
+    """Mapping from table name to ``[(column_name, target_def_id, default), ...]``.
+
+    For PK columns that are DDLm ``Link`` items but whose ``FOREIGN KEY``
+    constraint was skipped at schema generation time (e.g. because the FK
+    target is not a PK of the target table), the ingest layer still needs to
+    propagate the value from the ``fk_accumulator`` or the current loop row.
+    Each entry records the target ``_definition.id`` to look up.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -681,6 +690,40 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 target_columns=list(tgt_pks),
             ))
 
+    # --- Third pass: propagation links ---
+    # For every PK column that is a Link item, record the target definition_id
+    # so that _apply_fk can still fill the column from the fk_accumulator or
+    # loop values even when no formal FK constraint was emitted.
+    #
+    # Additionally, PK Link columns with skipped FKs are made nullable: the
+    # database cannot enforce referential integrity for them, and NULL is the
+    # correct representation of an absent/default value.
+    propagation_links: dict[str, list[tuple[str, str, str | None]]] = {}
+    _seen_prop: set[tuple[str, str]] = set()
+    for item in dictionary.items.values():
+        if item.type_purpose != 'Link' or item.linked_item_id is None:
+            continue
+        if item.category_id is None or item.object_id is None:
+            continue
+        src_tbl = _table_name(item.category_id)
+        if src_tbl not in tables:
+            continue
+        src_col_def = next(
+            (c for c in tables[src_tbl].columns if c.name == item.object_id),
+            None,
+        )
+        if src_col_def is None or not src_col_def.is_primary_key:
+            continue
+        key = (src_tbl, item.object_id)
+        if key in _seen_prop:
+            continue
+        _seen_prop.add(key)
+        propagation_links.setdefault(src_tbl, []).append(
+            (item.object_id, item.linked_item_id, item.enumeration_default)
+        )
+        # Make the column nullable: FK was skipped, so NULL is valid here.
+        src_col_def.nullable = True
+
     return SchemaSpec(
         tables=tables,
         column_to_tag=column_to_tag,
@@ -688,6 +731,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         deprecated_ids=set(dictionary.deprecated_ids),
         warnings=warnings,
         bridge_columns=bridge_columns,
+        propagation_links=propagation_links,
     )
 
 

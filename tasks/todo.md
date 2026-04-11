@@ -4,32 +4,45 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 4 (SQLite ingestion) + `compactify_database` — COMPLETE. Ready for Stage 5.
+**Current stage:** Stage 4 (SQLite ingestion) — all known bugs fixed. Stage 5 spec written.
+Ready to begin Stage 5.
 
-**Test suite state (2026-04-10):**
-- 798 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
-- 12 slow tests pass: `.venv/Scripts/pytest -m slow`
+**Test suite state (2026-04-11):**
+- ~803 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
+- ~17 slow tests pass: `.venv/Scripts/pytest -m slow`
 - 18 database tests pass: `.venv/Scripts/pytest tests/database/ -q`
 
-**What was just completed:**
-- `compactify_database(src, dst, schema)` implemented in `src/pycifparse/database/compact.py`:
-  - Drops zero-row tables and all-NULL columns from src when copying to dst.
-  - FK constraints omitted when target table is dropped.
-  - Fallback-tier tables always copied with full schema.
-  - Tables created in topological dependency order so FK enforcement works in dst.
-  - 18 unit tests in `tests/database/test_compact.py`.
-- `example_workflow.py` updated: Step 7 demonstrates `compactify_database`.
-- `prompts/API Reference.md` updated: `compactify_database` fully documented.
-
-**What was completed before:**
-- Fixed FK constraint gap in `_apply_fk` (Lesson 35): stub parent rows created for any non-NULL
-  FK value; `PRAGMA foreign_keys = OFF` workaround removed.
-- Integration tests use `one_structure.cif`; two tests verify stub creation explicitly.
+**What was just completed (this session):**
+- **Composite FK with conflicts** (`chemical_conn_bond` bond-endpoints pattern): when multiple
+  source columns independently reference the same target column, emit one FK per source column
+  rather than skipping all of them (Lesson 40).
+- **Transitive FK bridging** (`geom_*` / `model_site`): when a missing PK column can be derived
+  via a bridge table, a `BridgeColumnDef` is emitted and `_fill_bridge_columns` populates it
+  before flush.
+- **`_row_id` is INTEGER** in `compact.py` DDL generation (was hardcoded TEXT).
+- **`diffrn_radiation_wavelength.radiation_id` propagation link**: PK Link columns with no SQL FK
+  (because the FK was skipped) now use `propagation_links` to fill their value from `fk_accumulator`
+  or `enumeration_default` rather than generating UUIDs (Lesson 42).
+- **`diffrn_radiation.variant` enumeration_default**: `_enumeration.default = '.'` is now preserved
+  by `_scalar(keep_dot=True)` (Lesson 41) and stored as the fallback value for absent columns.
+- **`second_short.cif` integration tests** (not slow): 5 tests in `TestIngestSecondShort` using a
+  class-scoped fixture that ingests once.
+- **Class-scoped fixtures** for `TestIngestWithSchema` and `TestIngestNoSchema` (Lesson 43):
+  ingestion now runs once per class, not once per test.
+- **Stage 5 spec** written: `prompts/Stage5_Ingest_Debug_Prompt.md` — `inspect_*` family
+  (`inspect_lexer`, `inspect_parse`, `inspect_model`, `inspect_schema`, `inspect_ingest`).
 
 **What comes next (Stage 5):**
-- Consult `prompts/` for the Stage 5 specification before starting
+- Consult `prompts/Stage5_Ingest_Debug_Prompt.md` before starting
+- Implement `inspect_*` family in a new `inspect` module (exact module layout TBD — see open decisions)
+- `inspect_lexer` and `inspect_parse` will wrap / replace `debug.py` functionality
 
 **Open decisions / known limitations:**
+- **Stage 5 module layout**: single `inspect.py` vs `inspect/` package with one module per layer.
+- **`inspect_ingest` API shape**: context-manager collector vs flag gating a `TraceEvent` list.
+- **`inspect_ingest` granularity**: pre-flush vs post-FK-resolution row snapshots.
+- **`inspect_schema` input**: accept raw dictionary source string (parse internally) or require a
+  pre-loaded `DdlmDictionary`?
 - `uuid_reference_check` is a stub — no rows written in Stage 4. Implement in a later stage.
 - Looped keyless Set: error is supposed to be emitted and UUID assigned per row, but this path is
   not explicitly tested. Covered implicitly by the `_pycifparse_id` test but no error-emission test.
@@ -219,6 +232,13 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 ## Future work
 
 ### Planned features
+
+- **Duplicate tag deduplication in `CifBlock`** — if a duplicate tag value is byte-for-byte
+  identical to the already-stored value, discard the duplicate silently rather than appending it.
+  Only true duplicates (same raw string, same `ValueType`) are discarded; differing values are
+  still preserved per the non-negotiable constraint (no silent data loss). Emit a semantic error
+  either way. Affects `CifBuilder` (Stage 2 layer). Decide whether deduplication applies to loop
+  columns as well, or only to scalar tags.
 
 - **`convert_database(src, dst, schema, *, on_coercion_failure='null') -> list[str]`** —
   copies a TEXT-storage database to a new connection with value columns cast to the

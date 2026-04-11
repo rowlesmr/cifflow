@@ -855,3 +855,89 @@ same `(point_id, diffractogram_id)` PK) were being routed to `_cif_fallback` wit
 **How to apply:** The two-part pattern (compatibility check + cross-propagation) is needed whenever
 sibling-category tables link to each other through composite-PK columns. Never rely solely on SQL FK
 constraints being present for PK fill logic.
+
+---
+
+## Lesson 40 — Composite FK groups with conflicting source columns (bond endpoints) (2026-04-11)
+
+**Context:** `generate_schema` FK group loop; `_chemical_conn_bond` in `cif_core.dic`.
+
+**Problem:** `_chemical_conn_bond.atom_1` and `.atom_2` both carry `type_purpose='Link'`
+targeting `_chemical_conn_atom.number`. The FK-group loop detected `has_conflicts=True`
+(multiple source columns pointing to the same target column) and skipped all FKs.
+
+**Correct rule:** `has_conflicts=True` means multiple source columns independently reference
+the same target — each reference is valid on its own. When all PK columns of the target table
+are covered by the group AND there are no non-PK target columns, emit one `ForeignKeyDef` per
+source column individually, rather than skipping the group.
+
+**How to apply:** In the FK group loop, add a branch:
+`if has_conflicts and not missing_pk_cols and not non_pk_tgt_cols:` — iterate over all
+`(src_col, tgt_col)` pairs and emit a separate FK for each. Only skip when there is a genuine
+ambiguity (missing PKs or conflicting non-PK targets).
+
+---
+
+## Lesson 41 — `_scalar` must not filter `.` when reading `_enumeration.default` (2026-04-11)
+
+**Context:** `DictionaryLoader` `_scalar` helper; `_enumeration.default` in DDLm dictionaries.
+
+**Problem:** `_scalar` filtered both `'.'` (inapplicable) and `'?'` (unknown) as CIF placeholders,
+returning `default` (usually `None`) for both. `_enumeration.default = '.'` is a legitimate
+dictionary value meaning "the enumeration default is the CIF inapplicable sentinel", but it was
+being silently dropped, leaving `DdlmItem.enumeration_default = None`.
+
+**Fix:** Added `keep_dot: bool = False` parameter to `_scalar`. When `True`, `'.'` is returned
+as a real value. Call `_scalar(data, '_enumeration.default', keep_dot=True)`.
+
+**How to apply:** Any `_scalar` call reading a tag where `'.'` is a semantically meaningful value
+(not a missing-data placeholder) must pass `keep_dot=True`. The `'?'` filter (unknown/missing) is
+always applied regardless.
+
+---
+
+## Lesson 42 — Propagation links use `enumeration_default` as fallback; not UUID generation (2026-04-11)
+
+**Context:** `generate_schema` propagation links; `_diffrn_radiation.variant` and
+`_diffrn_radiation_wavelength.radiation_id` in `cif_pow.dic`.
+
+**Problem (original attempt):** PK Link columns whose FK was skipped (because the FK target had a
+composite PK) were left NULL, causing NOT NULL constraint violations. A first fix attempted to
+generate UUIDs as a last resort, but UUID stubs for columns like `variant` (no parent table to stub
+into) were semantically wrong and caused FK violations in the parent stub.
+
+**Correct rule:**
+1. PK Link columns with skipped FKs are recorded in `propagation_links`. At ingest time, their value
+   is filled from (in priority order): the current loop row's matching `definition_id`, then
+   `fk_accumulator`, then `enumeration_default` from `DdlmItem`. No UUID generation.
+2. These columns are marked `nullable=True` in the schema — NULL is valid when no value is available
+   from any source.
+3. `DdlmItem.enumeration_default` must be populated (see Lesson 41) for this to work when the CIF
+   omits the tag entirely.
+
+**How to apply:** The propagation link tuple is `(col_name, target_def_id, enumeration_default)`.
+Unpack all three in `_apply_fk`. If no value is found from loop or accumulator, use `enumeration_default`
+as the final fallback. If that is also `None`, leave the column NULL (which is now permitted).
+
+---
+
+## Lesson 43 — Use class-scoped fixtures for shared ingestion state in tests (2026-04-11)
+
+**Context:** `tests/ingestion/test_integration.py`; `TestIngestWithSchema`, `TestIngestNoSchema`,
+`TestIngestSecondShort`.
+
+**Problem:** Each test method called `_conn_with_schema(...)` and `ingest(...)` independently.
+For a class of 7 tests against `cif_core.dic`, this ran 7 full ingestions of the same CIF/schema
+pair. Each ingestion is expensive (~0.5s); total wall time was proportionally wasteful.
+
+**Correct rule:** When multiple tests in a class all query the same ingested database and none of
+them mutate state (all queries are SELECT-only), use a `@pytest.fixture(scope='class')` that runs
+ingestion once and shares the connection. All test methods take the fixture as a parameter.
+
+**Caution:** Only safe when tests are read-only. If any test inserts, updates, or deletes rows,
+shared connections cause cross-test pollution. Check all tests in the class before converting.
+
+**How to apply:** Name the fixture `{descriptive}_conn` (e.g. `one_structure_conn`,
+`second_short_conn`). Declare it at module level with `scope='class'`. Tests that verified the
+ingest return value (e.g. `assert errors == []`) must be rewritten — the return value is discarded
+by the fixture. Replace with an equivalent read assertion.

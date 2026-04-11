@@ -55,6 +55,9 @@ class DdlmItem:
     enumeration_states:
         Allowed enumeration values from ``_enumeration_set.state``.  Empty
         list when not present.  Item-scope frames only.
+    enumeration_default:
+        Default value from ``_enumeration.default``.  ``None`` if absent.
+        The CIF inapplicable placeholder ``'.'`` is preserved as-is.
     category_keys:
         Lowercased fully-qualified tag names from ``_category_key.name``.
         Empty list when not present.  Category-scope frames only.
@@ -83,6 +86,7 @@ class DdlmItem:
     units_code: str | None
     description: str | None
     enumeration_states: list[str] = field(default_factory=list)
+    enumeration_default: str | None = None
     category_keys: list[str] = field(default_factory=list)
     aliases: list[str] = field(default_factory=list)
     replaced_by: list[str] = field(default_factory=list)

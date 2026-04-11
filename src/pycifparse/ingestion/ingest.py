@@ -352,6 +352,29 @@ def _apply_fk(
                         _merge_into(merged_rows, fk.target_table, stub,
                                     parent_table, row_id_counters, emit)
 
+    # ── Propagation links ─────────────────────────────────────────────────────
+    # PK columns that are DDLm Link items but have no FK constraint (e.g. the
+    # FK was skipped because the target is not a PK of the target table).
+    # Fill from loop values / fk_accumulator, then enumeration_default.
+    # No UUID fallback: these columns are nullable in the schema, so NULL is
+    # valid when no value can be found.
+    for col_name, target_def_id, default_val in schema.propagation_links.get(table.name, []):
+        if row.get(col_name) is not None:
+            continue  # already filled by FK handler or CIF data
+        col = col_by_name.get(col_name)
+        is_key_col = col is not None and col.is_primary_key
+        if not is_key_col and not propagate_fk:
+            continue
+        val = None
+        if loop_row_by_defid is not None:
+            val = loop_row_by_defid.get(target_def_id)
+        if val is None:
+            val = fk_accumulator.get(target_def_id)
+        if val is None:
+            val = default_val  # e.g. '.' for null-variant convention
+        if val is not None:
+            row[col_name] = val
+
 
 # ---------------------------------------------------------------------------
 # Bridge column fill
