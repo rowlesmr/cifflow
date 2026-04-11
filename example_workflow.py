@@ -30,7 +30,19 @@ DIC_FILE  = DIC_DIR / 'cif_core.dic'
 DIC_CACHE = ROOT / 'cif_core_cache.json'   # JSON cache; delete to force re-parse
 
 # CIF file to ingest
-CIF_FILE = ROOT / 'tests' / 'cif_files' / 'one_structure.cif'
+CIF_FILE = ROOT / 'tests' / 'cif_files' / 'pycifparse' / 'core_keyless_sets.cif'
+
+# # Dictionary
+# DIC_DIR   = ROOT / 'data' / 'dictionaries'
+# DIC_FILE  = DIC_DIR / 'cif_pow.dic'
+# DIC_CACHE = ROOT / 'cif_pow_cache.json'   # JSON cache; delete to force re-parse
+#
+# # CIF file to ingest
+# CIF_FILE = ROOT / 'tests' / 'cif_files' / 'second_short.cif'
+#
+
+
+
 
 # Output database (opened directly as a file so DB Browser can open it)
 DB_FILE = ROOT / 'output.db'
@@ -56,6 +68,7 @@ from pycifparse import (
     apply_fallback_schema,
     build,
     ingest,
+    IngestionError,
     resolve_tag,
     compactify_database,
 )
@@ -216,18 +229,35 @@ ingest_warnings: list[str] = []
 def _on_ingest_error(message: str) -> None:
     ingest_warnings.append(message)
 
-semantic_errors = ingest(
-    cif,                          # CifFile from build()
-    conn,                         # connection with schema already applied
-    schema,                       # SchemaSpec; pass None to route all tags to fallback
-    propagate_fk=False,           # True -> fill missing non-key FK columns from
-                                  #        block context (fk_accumulator).
-                                  # Stub parent rows are always created for any FK
-                                  # column that has a value, regardless of this flag.
-    dataset_id=None,              # str -> ingest only blocks belonging to that dataset
-                                  # None -> ingest all (raises ValueError on conflict)
-    on_error=_on_ingest_error,    # non-fatal semantic error callback
-)
+try:
+    semantic_errors = ingest(
+        cif,                          # CifFile from build()
+        conn,                         # connection with schema already applied
+        schema,                       # SchemaSpec; pass None to route all tags to fallback
+        propagate_fk=False,           # True -> fill missing non-key FK columns from
+                                      #        block context (fk_accumulator).
+                                      # Stub parent rows are always created for any FK
+                                      # column that has a value, regardless of this flag.
+        dataset_id=None,              # str -> ingest only blocks belonging to that dataset
+                                      # None -> ingest all (raises ValueError on conflict)
+        on_error=_on_ingest_error,    # non-fatal semantic error callback
+    )
+except IngestionError as exc:
+    # Two possible causes:
+    #   • Semantic errors (key collisions with conflicting values, etc.) — detected
+    #     during block processing; all errors collected before raising.
+    #   • COMMIT failure (deferred FK violation, disk full, etc.) — first error is
+    #     the SQLite message; subsequent entries are foreign_key_check rows.
+    is_commit_failure = exc.errors and exc.errors[0].startswith('COMMIT failed:')
+    if is_commit_failure:
+        print(f'\n  COMMIT FAILED — database constraint violation:')
+    else:
+        print(f'\n  INGESTION FAILED — {len(exc.errors)} semantic error(s):')
+    for i, err in enumerate(exc.errors, 1):
+        print(f'    [{i:>3}] {err}')
+    print('\n  The database transaction was rolled back.  No data was written.')
+    conn.close()
+    sys.exit(1)
 
 all_warnings = ingest_warnings + semantic_errors
 if all_warnings:
