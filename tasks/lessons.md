@@ -1,5 +1,17 @@
 # pycifparse — Lessons Learned
 
+## Lesson 47 — Composite FK column fill requires transitive single-column FK lookup (2026-04-11)
+
+**Context:** `_apply_fk` composite FK branch in `ingestion/ingest.py`.
+
+**Mistake:** When filling a missing source column of a composite FK, the lookup searched `fk_accumulator` using `column_to_tag(target_table, target_col)`. This is correct when the target column is a natural PK given directly in the CIF data. But if the target column is itself a single-column FK (e.g. `pd_data.diffractogram_id → pd_diffractogram.id`), the fk_accumulator holds the value under the *ultimate* tag (`_pd_diffractogram.id`), not under the intermediate one (`_pd_data.diffractogram_id`). The one-level lookup found nothing, leaving the column NULL.
+
+**Consequence:** The UUID fill pass then assigned a UUID to the NULL PK column. The composite FK stub section created parent stubs with that UUID. Later, when the real loop produced rows with the correct value (e.g. `'degaussa_raw_01'`), they got a different PK and were inserted as separate rows — doubling the row count.
+
+**Fix:** After the direct `fk_accumulator` lookup fails, walk the single-column FK chain from the target column up to 15 levels. At each step, look up the current `(table, col)` in `column_to_tag` and try `fk_accumulator`. Stop as soon as a value is found. Emit a warning if the depth limit is reached (possible FK cycle).
+
+**Rule:** Composite FK column fill must be transitively FK-aware. A column whose value originates two or more FK hops away is still resolvable — follow the chain rather than assuming one hop is sufficient.
+
 ## Lesson 46 — Loop-class scalar tags must be buffered per-block, not merged immediately (2026-04-11)
 
 **Context:** `_process_scalar` in `ingestion/ingest.py`.

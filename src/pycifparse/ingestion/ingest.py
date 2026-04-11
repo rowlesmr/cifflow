@@ -407,6 +407,42 @@ def _apply_fk(
                     val = loop_row_by_defid.get(target_def_id)
                 if val is None:
                     val = fk_accumulator.get(target_def_id)
+                # Transitive lookup: follow the single-column FK chain from the
+                # target column up to 15 levels.  Covers cases like
+                # pd_calc_component → pd_data.diffractogram_id → pd_diffractogram.id
+                # where only _pd_diffractogram.id is in the fk_accumulator.
+                if val is None:
+                    _cur_table, _cur_col = fk.target_table, tgt_col
+                    for _depth in range(15):
+                        _tbl = schema.tables.get(_cur_table)
+                        if _tbl is None:
+                            break
+                        _next = next(
+                            (
+                                (tfk.target_table, tfk.target_columns[0])
+                                for tfk in _tbl.foreign_keys
+                                if len(tfk.source_columns) == 1
+                                and tfk.source_columns[0] == _cur_col
+                            ),
+                            None,
+                        )
+                        if _next is None:
+                            break
+                        _cur_table, _cur_col = _next
+                        trans_def_id = schema.column_to_tag.get((_cur_table, _cur_col))
+                        if trans_def_id is not None:
+                            if loop_row_by_defid is not None:
+                                val = loop_row_by_defid.get(trans_def_id)
+                            if val is None:
+                                val = fk_accumulator.get(trans_def_id)
+                        if val is not None:
+                            break
+                    else:
+                        emit(
+                            f"composite FK '{fk.target_table}'.'{tgt_col}': "
+                            f"transitive lookup reached depth limit; "
+                            f"possible FK cycle — leaving NULL"
+                        )
                 if val is not None:
                     row[src_col] = val
 
@@ -571,7 +607,24 @@ class _Ingester:
             self._flush()
             if _pre_commit_hook is not None:
                 _pre_commit_hook(self)
-            self.conn.execute('COMMIT')
+            try:
+                self.conn.execute('COMMIT')
+            except sqlite3.Error as commit_exc:
+                # Failed COMMIT leaves the transaction open in SQLite, so we can
+                # still interrogate the database before rolling back.
+                messages: list[str] = [f'COMMIT failed: {commit_exc}']
+                try:
+                    for tbl, rowid, parent, fkid in self.conn.execute(
+                        'PRAGMA foreign_key_check'
+                    ):
+                        messages.append(
+                            f"foreign key violation: '{tbl}' rowid={rowid}"
+                            f" → '{parent}' (constraint #{fkid})"
+                        )
+                except sqlite3.Error:
+                    pass
+                self.conn.execute('ROLLBACK')
+                raise IngestionError(messages) from commit_exc
         except ValueError:
             self.conn.execute('ROLLBACK')
             raise
