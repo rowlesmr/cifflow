@@ -1,7 +1,7 @@
 """
 pycifparse — example workflow
 ==============================
-Demonstrates the full pipeline from dictionary loading through SQLite ingestion.
+Demonstrates the full pipeline: dictionary loading → SQLite ingestion → CIF emission.
 
 All function arguments are shown explicitly so you can see every available
 option without consulting the API reference.
@@ -12,6 +12,10 @@ Run from the repository root:
 Output files are written to the current directory:
     cif_core_cache.json     — serialised dictionary (avoids re-parsing on reuse)
     output.db               — SQLite database ready for DB Browser for SQLite
+    output_compact.db       — compacted copy (empty tables / all-NULL columns removed)
+    output_original.cif     — CIF re-emitted in ORIGINAL mode (one block per source block)
+    output_grouped.cif      — CIF re-emitted in GROUPED mode (grouped by Set anchor keys)
+    output_one_block.cif    — CIF re-emitted in ONE_BLOCK mode (everything in one block)
 """
 
 import pathlib
@@ -71,7 +75,12 @@ from pycifparse import (
     IngestionError,
     resolve_tag,
     compactify_database,
+    emit,
+    EmitMode,
+    OutputPlan,
+    BlockSpec,
 )
+from pycifparse.types import CifVersion
 
 print('=== Step 1: Load dictionary ===')
 
@@ -325,12 +334,124 @@ print(f'  Compact database saved to: {COMPACT_DB_FILE}')
 
 
 # ---------------------------------------------------------------------------
-# Step 8 — convert_database (not yet available; shown for future reference)
+# Step 8 — Emit CIF: ORIGINAL mode (one output block per source block)
+# ---------------------------------------------------------------------------
+# emit() reads the populated database and produces a valid CIF string.
+# ORIGINAL is the simple inverse of ingestion: each source data_ block
+# becomes one output block, in _block_id order.
+
+print('\n=== Step 8: Emit CIF (ORIGINAL mode) ===')
+
+ORIGINAL_CIF_FILE = ROOT / 'output_original.cif'
+
+cif_original = emit(
+    conn,                          # open sqlite3.Connection (read-only)
+    schema,                        # SchemaSpec used during ingestion
+    mode=EmitMode.ORIGINAL,        # one block per original _block_id (default)
+    version=CifVersion.CIF_2_0,    # magic line and quoting strategy
+    plan=None,                     # OutputPlan | None; None -> default ordering
+    reconstruct_su=False,          # True -> merge (measurand, su) back into value(su)
+    emit_defaults=True,            # True -> emit default-fill values (no-op for now)
+)
+
+ORIGINAL_CIF_FILE.write_text(cif_original, encoding='utf-8')
+
+original_blocks = [l for l in cif_original.splitlines() if l.startswith('data_')]
+print(f'  {len(original_blocks)} block(s) emitted -> {ORIGINAL_CIF_FILE.name}')
+for header in original_blocks:
+    print(f'    {header}')
+
+
+# ---------------------------------------------------------------------------
+# Step 9 — Emit CIF: GROUPED mode (grouped by Set-anchor key values)
+# ---------------------------------------------------------------------------
+# GROUPED traverses the FK graph (BFS) from each table to find the nearest
+# Set-class ancestor.  Tables that share the same anchor key values are
+# placed in the same output block, merging rows from multiple source blocks
+# that carry the same Set-level identity.
+
+print('\n=== Step 9: Emit CIF (GROUPED mode) ===')
+
+GROUPED_CIF_FILE = ROOT / 'output_grouped.cif'
+
+cif_grouped = emit(
+    conn,
+    schema,
+    mode=EmitMode.GROUPED,
+    version=CifVersion.CIF_2_0,
+    plan=None,
+    reconstruct_su=False,
+    emit_defaults=True,
+)
+
+GROUPED_CIF_FILE.write_text(cif_grouped, encoding='utf-8')
+
+grouped_blocks = [l for l in cif_grouped.splitlines() if l.startswith('data_')]
+print(f'  {len(grouped_blocks)} block(s) emitted -> {GROUPED_CIF_FILE.name}')
+for header in grouped_blocks:
+    print(f'    {header}')
+
+
+# ---------------------------------------------------------------------------
+# Step 10 — Emit CIF: ONE_BLOCK mode with custom OutputPlan
+# ---------------------------------------------------------------------------
+# ONE_BLOCK collapses all data into a single block named 'output'.
+# An OutputPlan + BlockSpec can override the default category and column
+# ordering.  Categories not listed in BlockSpec.categories are appended
+# alphabetically; columns not listed in BlockSpec.column_order follow
+# alphabetically within their category.
+
+print('\n=== Step 10: Emit CIF (ONE_BLOCK mode with OutputPlan) ===')
+
+ONE_BLOCK_CIF_FILE = ROOT / 'output_one_block.cif'
+
+# Example: emit cell parameters first, then atom sites, then everything else.
+spec = BlockSpec(
+    categories=['cell', 'atom_site'],   # preferred category order
+    column_order={
+        'cell': ['length_a', 'length_b', 'length_c',
+                 'angle_alpha', 'angle_beta', 'angle_gamma'],
+        'atom_site': ['id', 'type_symbol', 'fract_x', 'fract_y', 'fract_z'],
+    },
+)
+plan = OutputPlan(
+    blocks=[spec],   # single spec reused for all blocks (only one in ONE_BLOCK mode)
+)
+
+cif_one_block = emit(
+    conn,
+    schema,
+    mode=EmitMode.ONE_BLOCK,
+    version=CifVersion.CIF_2_0,
+    plan=plan,
+    reconstruct_su=False,
+    emit_defaults=True,
+)
+
+ONE_BLOCK_CIF_FILE.write_text(cif_one_block, encoding='utf-8')
+
+one_block_lines = [l for l in cif_one_block.splitlines() if l.startswith('data_')]
+print(f'  {len(one_block_lines)} block(s) emitted -> {ONE_BLOCK_CIF_FILE.name}')
+
+# Round-trip check: re-parse the emitted CIF and verify no errors.
+cif_rt, rt_errors = build(
+    cif_one_block,
+    mode='pad',
+)
+if rt_errors:
+    print(f'  WARNING: round-trip produced {len(rt_errors)} parse error(s):')
+    for e in rt_errors:
+        print(f'    [{e.error_type}] line {e.line}: {e.message}')
+else:
+    print(f'  Round-trip parse: OK  ({len(cif_rt.blocks)} block(s), no errors)')
+
+
+# ---------------------------------------------------------------------------
+# Step 11 — convert_database (not yet available; shown for future reference)
 # ---------------------------------------------------------------------------
 # convert_database() copies a TEXT-storage database to a new file and casts
 # each column to the type indicated by ColumnDef.type_contents.
 # CIF sentinels '.' and '?' are converted to NULL.
-# It is planned for Stage 5 and not yet part of the public API.
 
 # Uncomment when available:
 #
@@ -364,4 +485,8 @@ print(f'  Compact database saved to: {COMPACT_DB_FILE}')
 
 conn.close()
 print('\nDone.')
-print(f'  Open {DB_FILE} in DB Browser for SQLite to inspect the results.')
+print(f'  {DB_FILE.name}              — SQLite database (DB Browser for SQLite)')
+print(f'  {COMPACT_DB_FILE.name}      — compacted copy')
+print(f'  {ORIGINAL_CIF_FILE.name}   — CIF (ORIGINAL mode)')
+print(f'  {GROUPED_CIF_FILE.name}    — CIF (GROUPED mode)')
+print(f'  {ONE_BLOCK_CIF_FILE.name}  — CIF (ONE_BLOCK mode)')

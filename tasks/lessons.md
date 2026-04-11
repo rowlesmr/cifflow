@@ -1,6 +1,46 @@
 # pycifparse — Lessons Learned
 
-## Lesson 48 — JediTerm/PyCharm has a column-tracking bug with ANSI codes and line wrapping (2026-04-11)
+## Lesson 51 — GROUPED mode: covered_block_ids must be expanded from FK-chained rows, not just the anchor table (2026-04-11)
+
+**Context:** `_collect_grouped` in `output/emit.py`.
+
+**Problem:** When a Set category has a domain PK (e.g. `expt.id`), two input blocks with the same
+key value conflict at ingestion — only the first block's anchor row survives. `covered_block_ids`
+was seeded only from anchor table rows, so the second block's `_block_id` was never recorded.
+Loop descendants from the second block (which stored their rows without conflict, since their own
+PKs differ) were fetched correctly by the FK JOIN, but the no-anchor tables from that block were
+not absorbed — they produced an orphan standalone block.
+
+**Fix:** Seed `covered_block_ids` from anchor rows as before, then extend it after each FK-chained
+table fetch by scanning the returned rows' `_block_id` values. Only after all FK-chained tables
+are processed are no-anchor tables fetched (using the now-complete `covered_block_ids`) and
+`absorbed_block_ids` updated. A second pass handles tables where the FK path was `None`
+(block-id fallback), using the expanded `covered_block_ids`.
+
+**Rule:** In GROUPED mode, `covered_block_ids` is the union of all `_block_id` values present in
+any row belonging to this anchor group — not just those in the anchor table itself.
+
+## Lesson 50 — GROUPED mode: Set-anchor BFS must explore all FK targets, not just the first (2026-04-11)
+
+**Context:** `_find_set_anchor` in `output/emit.py`.
+
+**Problem:** The original implementation followed only the first FK target at each hop (depth-first,
+single path). A table with composite keys may have multiple FKs: some to Loop tables (no Set
+ancestor) and others directly to a Set. If the Loop FK appeared first in the `foreign_keys` list,
+the Set was never found and the table fell through to `_block_id` fallback grouping instead of
+being anchored to the Set.
+
+**Example:** A table like ATOM_SITE_ANISO with FK to ATOM_SITE (Loop) and FK to STRUCTURE (Set).
+With depth-first traversal and ATOM_SITE first, `_find_set_anchor` would follow ATOM_SITE, find no
+Set there, and return `None` — incorrectly treating ATOM_SITE_ANISO as a no-anchor table.
+
+**Fix:** Replace the depth-first single-path walk with BFS over all FK targets at each level.  The
+first Set-class table reached (closest by FK hop count) is returned as the anchor.
+
+**Rule:** When searching for a Set ancestor through FK links, always use BFS across all FK
+targets — never assume one path is sufficient.
+
+## Lesson 49 — Check whether ' and " are legal mid-word in CIF 2.0 unquoted strings (2026-04-11) JediTerm/PyCharm has a column-tracking bug with ANSI codes and line wrapping (2026-04-11)
 
 **Context:** `inspect/` package output in PyCharm Community with terminal emulation enabled.
 
@@ -20,6 +60,33 @@ wrap and therefore avoids the symptom.
 
 **Rule:** Do not attempt to work around JediTerm line-wrap rendering bugs in library code. Accept
 that output may look odd in narrow PyCharm terminals; document it as a known limitation.
+
+## Lesson 48b — Semicolon-delimited text fields: content starts on the same line as the opening `;` (2026-04-11)
+
+**Context:** `_make_semicolon` in `output/quote.py`.
+
+**Mistake:** Initial implementation used `f'\n;\n{s}\n;'`, placing an extra blank line between the
+opening delimiter and the content. The CIF specification requires the content to begin immediately
+after the opening `;` on the same line — `\n;content\nhere\n;`. The extra `\n` would cause the
+round-tripped value to gain a leading newline.
+
+**Fix:** `f'\n;{s}\n;'`.
+
+**Rule:** In a semicolon-delimited text field, the opening `;` and the first character of content
+are on the same line. The closing `;` is on a line by itself (column 1).
+
+## Lesson 49 — Check whether ' and " are legal mid-word in CIF 2.0 unquoted strings (2026-04-11)
+
+**Context:** In `quote.py` Rule 2 (bare word), we defensively excluded values containing `'` or `"`
+from being emitted unquoted, because our lexer re-enters SINGLE_QUOTED / DOUBLE_QUOTED state when
+it encounters those characters mid-token.
+
+**Suspicion:** CIF 2.0 may legally permit `'` and `"` as non-first characters in an unquoted
+string (bare word). If so, the lexer is wrong, not the spec.
+
+**Action required:** Check the CIF 2.0 EBNF (`references/CIF2-ENBF.txt`) for the definition of
+an unquoted data value. If `'` and `"` are allowed mid-word, fix the lexer to not re-enter a
+quoted-string state when already mid-token, and relax the Rule 2 guard in `quote.py` accordingly.
 
 ## Lesson 47 — Composite FK column fill requires transitive single-column FK lookup (2026-04-11)
 

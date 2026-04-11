@@ -4,29 +4,30 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 5 complete. 969 tests passing. Ready for Stage 6 (output layer).
+**Current stage:** Stage 6 (output layer) — `emit()` complete. 1064 tests passing (non-slow).
 
 **Test suite state (2026-04-11):**
-- 920 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
+- 1064 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
 - 49 slow tests pass: `.venv/Scripts/pytest -m slow`
-- Total: 969 passing
+- Total: 1113 passing
 
 **What was just completed (this session):**
-- **Stage 5 — `inspect/` package** (`src/pycifparse/inspect/`):
-  - Replaced `src/pycifparse/debug.py` with a proper `inspect/` package.
-  - `_common.py`: shared ANSI colour helpers, `resolve_source`, `fmt_value`.
-  - `_lexer.py`: `inspect_lexer` (renamed from `debug_lex`).
-  - `_parser.py`: `inspect_parse` + `ParseHandler` (renamed from `debug_parse` / `DebugHandler`).
-  - `_model.py`: `inspect_model` (renamed from `debug_build`).
-  - `_schema.py`: `inspect_schema` (renamed from `debug_schema`; now also accepts `DdlmDictionary`).
-  - `_ingest.py`: `inspect_ingest` + `TraceEvent` dataclass (new). Captures semantic warnings,
-    errors, and FK violations at point-of-occurrence; returns `list[TraceEvent]`.
-  - All symbols exported from `pycifparse.inspect.__init__` and `pycifparse.__init__`.
-  - `tests/test_debug.py` deleted; replaced with `tests/test_inspect.py` (46 tests).
-  - `example_inspect.py` added: demonstrates all six entry points.
-- **ANSI colours**: `inspect/` output is coloured on ttys (via `supports_colour`). JediTerm/PyCharm
-  Community has a known column-tracking bug when lines containing ANSI codes wrap — nothing we can
-  do; widening the terminal panel avoids it. Lesson 48.
+- **Stage 6 — output layer** (`src/pycifparse/output/`):
+  - `quote.py`: CIF 2.0 and 1.1 quoting decision trees; `_make_semicolon` fix (content on same
+    line as opening `;`); 95 tests in `tests/output/test_quote.py`.
+  - `plan.py`: `EmitMode` enum (`ONE_BLOCK`, `ALL_BLOCKS`, `ORIGINAL`, `GROUPED`),
+    `BlockSpec`, `OutputPlan`. Default mode is `ORIGINAL`.
+  - `emit.py`: `emit(conn, schema, *, mode, version, plan, reconstruct_su, emit_defaults)`.
+    Four mode collectors: `_collect_original`, `_collect_one_block`, `_collect_all_blocks`,
+    `_collect_grouped`. Set/Loop category renderers, fallback renderer, SU reconstruction.
+  - `GROUPED` mode: BFS anchor search (`_find_set_anchor`) across all FK targets so composite-key
+    tables are correctly anchored to a Set even when Loop FKs appear first. `covered_block_ids`
+    is expanded after fetching FK-chained rows so blocks from Set PK conflicts are not orphaned.
+    No-anchor tables (Loop-only FK chains) are absorbed into co-located Set-anchored blocks; any
+    truly uncovered `_block_id`s produce standalone blocks.
+  - All symbols exported from `pycifparse.output.__init__` and `pycifparse.__init__`.
+  - 43 tests in `tests/output/test_emit.py` covering all four modes, `OutputPlan`, quoting in
+    output, CIF 1.1 emission, NULL handling, GROUPED merging, and composite-key anchoring.
 
 **Open decisions / known limitations:**
 - **`inspect_ingest` routing trace**: currently captures warnings, errors, FK violations only.
@@ -42,6 +43,11 @@
   duplicate scalar tags, the fallback PK (`_block_id, _row_id, tag`) will cause a DB-level error
   on the second occurrence. The spec says duplicate tags are undefined behaviour — caller must
   consolidate before `ingest()`. Documented in the Assumptions section of Stage4 prompt.
+- **`emit_defaults` flag**: accepted but has no effect. Suppressing default-fill values requires
+  per-value provenance tracking not yet implemented.
+- **CIF 2.0 bare-word `'`/`"` legality** (Lesson 49): Rule 2 in `quote.py` defensively excludes
+  values containing `'` or `"` from bare-word emission. Check `references/CIF2-ENBF.txt`; if they
+  are legal mid-word, fix the lexer and relax the guard.
 
 ---
 
