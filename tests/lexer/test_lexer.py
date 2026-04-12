@@ -440,17 +440,20 @@ def test_plain_value_still_split_at_bracket_cif2():
 
 def test_plain_value_not_split_at_bracket_cif11():
     # Plain unquoted value: Fc^*^=kFc[1+0.001xFc^2^\l^3^/sin(2\q)]^-1/4^ is a single value.
-    tokens = lex('Fc^*^=kFc[1+0.001xFc^2^\l^3^/sin(2\q)]^-1/4^', version=CIF1)
+    tokens = lex(r'Fc^*^=kFc[1+0.001xFc^2^\l^3^/sin(2\q)]^-1/4^', version=CIF1)
     assert len(tokens) == 1
-    assert tokens[0].value == 'Fc^*^=kFc[1+0.001xFc^2^\l^3^/sin(2\q)]^-1/4^'
+    assert tokens[0].value == r'Fc^*^=kFc[1+0.001xFc^2^\l^3^/sin(2\q)]^-1/4^'
 
-def test_delimiters_not_special_in_cif11():
-    # In CIF 1.1 mode, '[', ']', '{', '}' are part of bare words
+def test_illegal_starting_chars_in_cif11():
+    # In CIF 1.1 mode, '[', '$' are part of bare words
     tokens = lex('[value]', version=CIF1)
+    errs = errors(tokens)
     assert len(tokens) == 1
     assert tokens[0].value == '[value]'
     assert tokens[0].value_type == ValueType.STRING
-    assert False # this test is wrong need to re-spec the lexer. The characters above should be accepted, but should also have an error
+    assert len(errs) == 1
+    assert "bare word beginning with" in errs[0].message
+   # assert False # this test is wrong need to re-spec the lexer. The characters above should be accepted, but should also have an error
 
 def test_colon_part_of_bare_word_in_cif11():
     tokens = lex('http://example.com', version=CIF1)

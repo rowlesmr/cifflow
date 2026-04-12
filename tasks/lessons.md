@@ -1287,6 +1287,24 @@ canonical = format(Decimal(value), 'f')
 need this treatment — string comparison is sufficient. Do not use `float()` for equality checks
 on Real CIF values.
 
+## Lesson 61 — Triple-quoted strings must not end with a bare quote of the same type (2026-04-12)
+
+**Context:** `_quote_cif2` in `output/quote.py`.
+
+**Problem:** A string ending with `'` wrapped in `'''...'''` produces `''''` at the close.
+A CIF reader sees `'''` (closing delimiter) then a stray `'` — the value is truncated and the
+next token is malformed.  Same applies to `"` and `"""`.
+
+**Fix:** Before choosing a triple-quoted delimiter, check whether the value ends with the
+same quote character.  `has_ending_single` and `has_ending_double` are computed alongside
+`has_triple_single` / `has_triple_double` and used as additional guards in every branch that
+would produce `'''...'''` or `"""..."""`.  If the preferred triple delimiter would create an
+ambiguous closing sequence, fall through to the next rule (use the other triple type, or
+semicolon).
+
+**How to apply:** Any time a triple-quoted string is chosen, verify
+`not has_ending_{quote_type}` before committing to that delimiter.
+
 ## Lesson 60 — Validation is an observation layer; it never gates further processing (2026-04-12)
 
 **Context:** `validate()` in `src/pycifparse/validation/`.
