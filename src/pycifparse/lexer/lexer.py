@@ -265,7 +265,13 @@ class Lexer:
             return
 
         token_type, value_type = _classify_bare_word(word)
-        yield Token(token_type, word, value_type, line, col)
+        errors: List[LexerError] = []
+        if not self._is_cif2 and word[0] in ('[', "$"):
+            errors.append(LexerError(
+                f'bare word beginning with {word[0]!r} is not permitted in CIF 1.x',
+                line, col, word[0],
+            ))
+        yield Token(token_type, word, value_type, line, col, errors)
 
     def _read_quoted(self, delimiter: str) -> Iterator[Token]:
         """Single- or double-quoted string."""

@@ -98,6 +98,15 @@ def test_magic_after_candidate_position_is_not_re_evaluated():
     assert remaining == src   # nothing consumed
 
 
+def test_magic_after_initial_comment_is_not_re_evaluated():
+    # Magic line appearing after an initial comment is a plain comment;
+    # version must already be fixed as CIF 1.1 from the candidate line.
+    src = '#comment\ndata_block\n#\\#CIF_2.0\n'
+    version, remaining, offset, errors = detect_version(src)
+    assert version == CifVersion.CIF_1_1
+    assert remaining == src   # nothing consumed
+
+
 def test_cif20_file(tmp_path):
     p = tmp_path / 'test.cif'
     p.write_text('#\\#CIF_2.0\ndata_test\n', encoding='utf-8')

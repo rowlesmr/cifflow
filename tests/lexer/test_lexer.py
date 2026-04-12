@@ -30,6 +30,9 @@ def errors(tokens):
     return [e for t in tokens for e in t.errors]
 
 
+def pp(tokens):
+    print(f"\n{tokens=}")
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Whitespace and comments
 # ─────────────────────────────────────────────────────────────────────────────
@@ -48,6 +51,13 @@ def test_comment_mid_line():
     assert tokens[0].value == 'data_foo'
     assert tokens[1].value == '_tag'
     assert len(tokens) == 2
+
+def test_comment_data_item():
+    tokens = lex('data_foo \n_tag #comment \n value')
+    assert tokens[0].value == 'data_foo'
+    assert tokens[1].value == '_tag'
+    assert tokens[2].value == 'value'
+    assert len(tokens) == 3
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -71,6 +81,10 @@ def test_underscore_prefix_keyword_is_tag():
     tokens = lex('_data_foo')
     assert tokens[0].token_type == TokenType.TAG
 
+def test_tag_after_multiline():
+    tokens = lex('\n_tag1 \n;string\n;_tag2 value')
+    assert tokens[2].token_type == TokenType.TAG
+    assert tokens[2].value == '_tag2'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Keywords
@@ -112,7 +126,7 @@ def test_global_keyword():
     assert tokens[0].value == 'global_'
 
 def test_keywords_case_insensitive():
-    for kw in ('LOOP_', 'Loop_', 'DATA_foo', 'SAVE_frame', 'STOP_', 'GLOBAL_'):
+    for kw in ('LOOP_', 'Loop_', 'DATA_foo', 'SAVE_frame', 'STOP_', 'GLOBAL_', 'LoOp_', 'dAtA_'):
         tokens = lex(kw)
         assert tokens[0].token_type == TokenType.KEYWORD, kw
 
@@ -250,7 +264,7 @@ def test_triple_with_embedded_single_quotes():
     tokens = lex("''''tricky'''")
     assert tokens[0].value == "'tricky"
 
-def test_triple_with_embedded_double_quotes():
+def test_triple_with_embedded_beginning_double_quotes():
     tokens = lex('"""""tricky"""')
     assert tokens[0].value == '""tricky'
 
@@ -306,6 +320,7 @@ def test_multiline_preserves_internal_content():
     # text-delim = line-term, ';': any \n; closes the field.
     # '\n;still content' IS a closing delimiter; 'still content' becomes
     # the next tokens in NORMAL state.
+    # Ends with an error of an unterminated multiline string
     src = '\n;line 1\n# not a comment\n;still content\n;'
     tokens = lex(src)
     assert tokens[0].value_type == ValueType.MULTILINE_STRING
@@ -313,15 +328,25 @@ def test_multiline_preserves_internal_content():
     # 'still' and 'content' are regular VALUE tokens after the closing ';'
     assert tokens[1].value == 'still'
     assert tokens[2].value == 'content'
+    errs = errors(tokens)
+    assert any('unterminated' in e.message for e in errs)
+    assert len(errs) == 1
 
 def test_multiline_semicolon_not_at_col1_is_content():
-    src = '\n; ;not a delimiter\nend\n;'
+    src = '\n; ;not a delimiter\n ;end\n;'
     tokens = lex(src)
-    assert tokens[0].value == ' ;not a delimiter\nend'
+    assert tokens[0].value == ' ;not a delimiter\n ;end'
 
 def test_comment_after_closing_delimiter_is_skipped():
     # After the closing ';', ' # comment' is whitespace + comment — skipped normally.
     src = '\n;text\n; # this is a comment\nnext_token'
+    tokens = lex(src)
+    assert tokens[0].value == 'text'
+    assert tokens[1].value == 'next_token'
+
+def test_comment_after_closing_delimiter_is_skipped_no_space():
+    # After the closing ';', '# comment' is comment — skipped normally.
+    src = '\n;text\n;# this is a comment\nnext_token'
     tokens = lex(src)
     assert tokens[0].value == 'text'
     assert tokens[1].value == 'next_token'
@@ -335,6 +360,15 @@ def test_value_after_closing_delimiter_is_tokenised():
     assert tokens[1].value == '1.0'
     assert tokens[2].value == 'next'
 
+def test_value_after_closing_delimiter_is_tokenised_no_space():
+    # Content after the closing ';' on the same line is tokenised normally.
+    # This matches simple_loops.cif: '; 1.0' where '1.0' is the next loop value.
+    src = '\n;v2\n;1.0\tnext'
+    tokens = lex(src)
+    assert tokens[0].value == 'v2'
+    assert tokens[1].value == '1.0'
+    assert tokens[2].value == 'next'
+
 def test_multiline_unterminated():
     src = '\n;text without closing'
     tokens = lex(src)
@@ -343,11 +377,14 @@ def test_multiline_unterminated():
     assert tokens[0].value == 'text without closing'
 
 def test_multiline_line_numbers():
-    src = 'data_foo\n;text\n;\n_tag'
+    src = 'data_foo\n;text\nwith\nmultiple\nlines\n;\n_tag'
     tokens = lex(src)
     assert tokens[0].value == 'data_foo'
+    assert tokens[0].line == 1
     assert tokens[1].value_type == ValueType.MULTILINE_STRING
+    assert tokens[1].line == 2
     assert tokens[2].value == '_tag'
+    assert tokens[2].line == 7
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -369,6 +406,12 @@ def test_colon_is_standalone_token_cif2():
     tokens = lex('"key": value')
     colon_tokens = [t for t in tokens if t.value == ':']
     assert len(colon_tokens) == 1
+
+def test_colon_is_standalone_token_colon_in_string_cif2():
+    tokens = lex('"key": va:lue')
+    colon_tokens = [t for t in tokens if t.value == ':']
+    assert len(colon_tokens) == 1
+    assert tokens[-1].value == 'va:lue'
 
 def test_tag_with_subscript_brackets_cif2():
     # Tags (data-name) may contain '[' and ']' per CIF 2.0 EBNF (non-blank-char).
@@ -395,12 +438,22 @@ def test_plain_value_still_split_at_bracket_cif2():
     assert tokens[2].value == '1'
     assert tokens[3].value == ']'
 
-def test_delimiters_not_special_in_cif11():
-    # In CIF 1.1 mode, '[', ']', '{', '}' are part of bare words
+def test_plain_value_not_split_at_bracket_cif11():
+    # Plain unquoted value: Fc^*^=kFc[1+0.001xFc^2^\l^3^/sin(2\q)]^-1/4^ is a single value.
+    tokens = lex(r'Fc^*^=kFc[1+0.001xFc^2^\l^3^/sin(2\q)]^-1/4^', version=CIF1)
+    assert len(tokens) == 1
+    assert tokens[0].value == r'Fc^*^=kFc[1+0.001xFc^2^\l^3^/sin(2\q)]^-1/4^'
+
+def test_illegal_starting_chars_in_cif11():
+    # In CIF 1.1 mode, '[', '$' are part of bare words
     tokens = lex('[value]', version=CIF1)
+    errs = errors(tokens)
     assert len(tokens) == 1
     assert tokens[0].value == '[value]'
     assert tokens[0].value_type == ValueType.STRING
+    assert len(errs) == 1
+    assert "bare word beginning with" in errs[0].message
+   # assert False # this test is wrong need to re-spec the lexer. The characters above should be accepted, but should also have an error
 
 def test_colon_part_of_bare_word_in_cif11():
     tokens = lex('http://example.com', version=CIF1)

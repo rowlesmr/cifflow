@@ -144,22 +144,39 @@ class TestIllegalStart:
         '#comment_like',
         '$reference',
         '[list_like',
+        '[list as string]',
         '{table_like',
+        '{\'table\': as_string}',
         ' leading_space',
         '\tleading_tab',
     ])
-    def test_illegal_start_gets_quoted(self, value):
+    def test_illegal_start_gets_quoted_cif2(self, value):
         result = quote(value, CIF20)
-        assert result != value   # must not be bare word
+        assert result[0] == result[-1] and (result.startswith("'") or result.startswith('"')) # must not be bare word
+
+    @pytest.mark.parametrize('value', [
+        '_tag_like',
+        '#comment_like',
+        '$reference',
+        '[list_like',
+        '[list as string]',
+        '{table_like',
+        '{"table": as_string}',
+        ' leading_space',
+        '\tleading_tab',
+    ])
+    def test_illegal_start_gets_quoted_cif1(self, value):
+        result = quote(value, CIF11)
+        assert result[0] == result[-1] and (result.startswith("'") or result.startswith('"'))   # must not be bare word
 
     @pytest.mark.parametrize('keyword', [
         'loop_', 'LOOP_', 'Loop_',
-        'stop_', 'STOP_',
+        'stop_', 'STOP_', 'StoP_',
         'global_', 'GLOBAL_',
     ])
     def test_reserved_keyword_gets_quoted(self, keyword):
         result = quote(keyword, CIF20)
-        assert result != keyword
+        assert result[0] == result[-1] and (result.startswith("'") or result.startswith('"'))
 
     @pytest.mark.parametrize('value', [
         'data_block',
@@ -169,7 +186,7 @@ class TestIllegalStart:
     ])
     def test_reserved_prefix_gets_quoted(self, value):
         result = quote(value, CIF20)
-        assert result != value
+        assert result[0] == result[-1] and (result.startswith("'") or result.startswith('"'))
 
     def test_underscore_start_roundtrip(self):
         rt('_tag_like', CIF20)
@@ -189,20 +206,36 @@ class TestIllegalStart:
 # ---------------------------------------------------------------------------
 
 class TestSingleQuoted:
-    def test_space_gives_single_quotes(self):
+    def test_space_gives_single_quotes_cif2(self):
         result = quote('hello world', CIF20)
         assert result == "'hello world'"
 
-    def test_begins_with_space_gives_single_quotes(self):
+    def test_begins_with_space_gives_single_quotes_cif2(self):
         result = quote(' hello', CIF20)
         assert result == "' hello'"
 
-    def test_double_quote_in_value_gives_single_quotes(self):
+    def test_double_quote_in_value_gives_single_quotes_cif2(self):
         result = quote('say "hi"', CIF20)
         assert result == "'say \"hi\"'"
 
-    def test_double_quote_with_space_in_value_gives_single_quotes(self):
+    def test_double_quote_with_space_in_value_gives_single_quotes_cif2(self):
         result = quote('say c " c "c " hi" ', CIF20)
+        assert result == "'say c \" c \"c \" hi\" '"
+
+    def test_space_gives_single_quotes_cif1(self):
+        result = quote('hello world', CIF11)
+        assert result == "'hello world'"
+
+    def test_begins_with_space_gives_single_quotes_cif1(self):
+        result = quote(' hello', CIF11)
+        assert result == "' hello'"
+
+    def test_double_quote_in_value_gives_single_quotes_cif1(self):
+        result = quote('say "hi"', CIF11)
+        assert result == "'say \"hi\"'"
+
+    def test_double_quote_with_space_in_value_gives_single_quotes_cif1(self):
+        result = quote('say c " c "c " hi" ', CIF11)
         assert result == "'say c \" c \"c \" hi\" '"
 
     def test_space_roundtrip_20(self):
@@ -232,16 +265,35 @@ class TestSingleQuoted:
 # ---------------------------------------------------------------------------
 
 class TestDoubleQuoted:
-    def test_single_quote_in_value_with_space_gives_double_quotes(self):
+    def test_single_quote_in_value_with_space_gives_double_quotes_cif2(self):
         # Has space (needs quoting) + has single-quote → must use double-quotes
         result = quote("it's a test", CIF20)
         assert result == '"it\'s a test"'
 
-    def test_starts_with_single_quote_gives_double_quotes(self):
+    def test_starts_with_single_quote_gives_double_quotes_cif2(self):
         # Starts with ' → illegal bare-word start → must be quoted
         # Has single-quote → use double-quotes
         result = quote("'hello'", CIF20)
         assert result == '"\'hello\'"'
+
+    def test_double_quote_with_space_in_value_gives_single_quotes_cif2(self):
+        result = quote("say c ' c 'c ' hi' ", CIF20)
+        assert result == '"say c \' c \'c \' hi\' "'
+
+    def test_single_quote_in_value_with_space_gives_double_quotes_cif1(self):
+        # Has space (needs quoting) + has single-quote → must use double-quotes
+        result = quote("it's a test", CIF11)
+        assert result == '"it\'s a test"'
+
+    def test_starts_with_single_quote_gives_double_quotes_cif1(self):
+        # Starts with ' → illegal bare-word start → must be quoted
+        # Has single-quote → use double-quotes
+        result = quote("'hello'", CIF11)
+        assert result == '"\'hello\'"'
+
+    def test_double_quote_with_space_in_value_gives_single_quotes_cif1(self):
+        result = quote("say c ' c 'c ' hi' ", CIF11)
+        assert result == '"say c \' c \'c \' hi\' "'
 
     def test_single_quote_with_space_roundtrip_20(self):
         rt("it's a test", CIF20)
@@ -256,7 +308,7 @@ class TestDoubleQuoted:
         rt("'hello'", CIF20)
 
     def test_apostrophe_mid_word_gets_quoted(self):
-        # ' mid-word causes CIF readers to enter single-quoted state; must quote
+        # ' mid-word could cause CIF readers to enter single-quoted state; must quote
         result = quote("it's", CIF20)
         assert result != "it's"
 
@@ -281,7 +333,7 @@ class TestBothQuoteTypesNoNewline:
 
     def test_cif11_gives_semicolon(self):
         result = quote(self.BOTH, CIF11)
-        assert result.startswith('\n;')
+        assert result.startswith('\n;') and result.endswith('\n;')
 
     def test_roundtrip_20(self):
         rt(self.BOTH, CIF20)
@@ -304,7 +356,7 @@ class TestNewline:
 
     def test_cif11_gives_semicolon(self):
         result = quote(self.NEWLINE, CIF11)
-        assert result.startswith('\n;')
+        assert result.startswith('\n;') and result.endswith('\n;')
 
     def test_roundtrip_20(self):
         rt(self.NEWLINE, CIF20)
@@ -369,7 +421,7 @@ class TestBothTripleTypes:
 
     def test_gives_semicolon(self):
         result = quote(self.BOTH_TRIPLE, CIF20)
-        assert result.startswith('\n;')
+        assert result.startswith('\n;') and result.endswith('\n;')
 
     def test_roundtrip_20(self):
         rt(self.BOTH_TRIPLE, CIF20)
@@ -385,7 +437,7 @@ class TestPrefixedSemicolon:
     def test_cif20_uses_triple_quoted(self):
         # CIF 2.0: \n; inside '''...''' is not a closing delimiter — no prefix needed
         result = quote(self.NEWLINE_SEMI, CIF20)
-        assert result.startswith("'''")
+        assert result.startswith("'''") and result.endswith("'''")
 
     def test_cif11_uses_prefix(self):
         result = quote(self.NEWLINE_SEMI, CIF11)
@@ -409,6 +461,90 @@ class TestPrefixedSemicolon:
 
     def test_semicolon_at_start_roundtrip_11(self):
         rt('\n;starts with semicolon', CIF11)
+
+
+class TestAllTheDelimiters:
+    # A string with all of the delimiters
+    NEWLINE_ALL = "line one\n;this \' would\" close '''the\"\"\" field\nline three"
+
+    def test_cif20_uses_prefix(self):
+        result = quote(self.NEWLINE_ALL, CIF20)
+        assert result.startswith("\n;>\\\n") and result.endswith("\n;")
+
+    def test_cif11_uses_prefix(self):
+        result = quote(self.NEWLINE_ALL, CIF11)
+        assert result.startswith("\n;>\\\n") and result.endswith("\n;")
+
+    def test_roundtrip_20(self):
+        rt(self.NEWLINE_ALL, CIF20)
+
+    def test_roundtrip_11(self):
+        rt(self.NEWLINE_ALL, CIF11)
+
+
+class TestStringsEndWithDelimiters:
+    # strings ending in delimiters
+    NO_NEWLINE_DELIM_ENDINGS = \
+        ["I have\" spaces\'",       # """
+         "I have\' spaces\"",       # '''
+         "I have\'\'\' spaces\"",       # \n;
+         "I have\"\"\" spaces\'",       # \n;
+         ]
+
+    NEWLINE_DELIM_ENDINGS = \
+        ["I \nhave\" spaces\'",       # """
+         "I \nhave\' spaces\"",       # '''
+         "I \nhave\'\'\' spaces\"",       # \n;
+         "I \nhave\"\"\" spaces\'",       # \n;
+         "I \n;have\" spaces\'",  # """
+         "I \n;have\' spaces\"",  # '''
+         "I \n;have\'\'\' spaces\"",  # \n;
+         "I \n;have\"\"\" spaces\'",  # \n;
+         ]
+
+    def test_no_newline_delim_endings_dealt_with_cif2(self):
+        for value in self.NO_NEWLINE_DELIM_ENDINGS:
+            result = quote(value, CIF20)
+            assert (result[0] == result[-1] or result[:2] == result[-2:]
+                    and (result.startswith("'") or result.startswith('"') or result.startswith('\n;'))
+                    and not (result.endswith("''''") or result.endswith('""""'))), value
+
+    def test_newline_delim_endings_dealt_with_cif2(self):
+        for value in self.NEWLINE_DELIM_ENDINGS:
+            result = quote(value, CIF20)
+            assert (result[0] == result[-1] or result[:2] == result[-2:]
+                    and (result.startswith("'") or result.startswith('"') or result.startswith('\n;'))
+                    and not (result.endswith("''''") or result.endswith('""""'))), value
+
+    def test_no_newline_delim_endings_dealt_with_cif1(self):
+        delim = "\n;"
+        dl = len(delim)
+        for value in self.NO_NEWLINE_DELIM_ENDINGS:
+            result = quote(value, CIF11)
+            assert result.startswith(delim) and result.endswith(delim) and delim not in result[dl:-dl], value
+
+    def test_newline_delim_endings_dealt_with_cif1(self):
+        delim = "\n;"
+        dl = len(delim)
+        for value in self.NEWLINE_DELIM_ENDINGS:
+            result = quote(value, CIF11)
+            assert result.startswith(delim) and result.endswith(delim) and delim not in result[dl:-dl], value
+
+    def test_no_newline_roundtrip_20(self):
+        for value in self.NO_NEWLINE_DELIM_ENDINGS:
+            rt(value, CIF20)
+
+    def test_newline_roundtrip_20(self):
+        for value in self.NEWLINE_DELIM_ENDINGS:
+            rt(value, CIF20)
+
+    def test_no_newline_roundtrip_11(self):
+        for value in self.NO_NEWLINE_DELIM_ENDINGS:
+            rt(value, CIF11)
+
+    def test_newline_roundtrip_11(self):
+        for value in self.NEWLINE_DELIM_ENDINGS:
+            rt(value, CIF11)
 
 
 # ---------------------------------------------------------------------------

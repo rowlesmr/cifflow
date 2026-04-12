@@ -144,6 +144,9 @@ def _quote_cif2(
     has_triple_single = "'''" in s
     has_triple_double = '"""' in s
 
+    has_ending_single = s.endswith("'")
+    has_ending_double = s.endswith('"')
+
     if not has_newline:
         # Rules 3 & 4 — use single quotes when no single-quote in value
         if not has_single:
@@ -153,26 +156,29 @@ def _quote_cif2(
             return f'"{s}"'
         # Rule 6 — both quote types present, no newline.
         # Must still check for triple-quote conflicts before choosing delimiter.
-        if not has_triple_single and not has_triple_double:
+        if not has_triple_single and not has_triple_double and not has_ending_single:
             return f"'''{s}'''"
-        if has_triple_single and not has_triple_double:
+        if not has_triple_single and not has_triple_double and not has_ending_double:
             return f'"""{s}"""'
-        if has_triple_double and not has_triple_single:
+        if has_triple_single and not has_triple_double and not has_ending_double:
+            return f'"""{s}"""'
+        if has_triple_double and not has_triple_single and not has_ending_single:
             return f"'''{s}'''"
         # Both triple types present — fall through to semicolon below
     else:
         # has_newline is True
         # Rule 7 — newline, no triple quotes present
-        if not has_triple_single and not has_triple_double:
+        if not has_triple_single and not has_triple_double and not has_ending_single:
             return f"'''{s}'''"
+        if not has_triple_single and not has_triple_double and not has_ending_double:
+            return f'"""{s}"""'
         # Rule 8 — contains ''' but not """
-        if has_triple_single and not has_triple_double:
+        if has_triple_single and not has_triple_double and not has_ending_double:
             return f'"""{s}"""'
         # Rule 9 — contains """ but not '''
-        if has_triple_double and not has_triple_single:
+        if has_triple_double and not has_triple_single and not has_ending_single:
             return f"'''{s}'''"
         # Both triple types present — fall through to semicolon below
-
     # Rules 10 & 11 — contains both triple types → semicolon
     if '\n;' not in s:
         return _make_semicolon(s)
@@ -201,9 +207,7 @@ def _quote_cif11(
         if not has_double:
             return f'"{s}"'
         # Rule 6 — both quote types, no newline → semicolon (no triple in 1.1)
-        if '\n;' not in s:
-            return _make_semicolon(s)
-        return _make_prefixed_semicolon(s)
+        return _make_semicolon(s)
 
     # has_newline → must use semicolon in CIF 1.1 (no triple-quoted strings)
     if '\n;' not in s:
