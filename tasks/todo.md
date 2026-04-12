@@ -80,9 +80,9 @@
   - Missing rows in any member produce `NULL` in the merged result, rendered as `.`.
   - The join is performed in SQLite.  SQLite has no native FULL OUTER JOIN, so
     use a two-phase strategy:
-    (1) Primary LEFT JOIN chain — `pd_meas LEFT JOIN pd_proc LEFT JOIN pd_calc`
+    1. Primary LEFT JOIN chain — `pd_meas LEFT JOIN pd_proc LEFT JOIN pd_calc`
         on shared key.  Handles the common case (identical key sets) in one pass.
-    (2) Stragglers query — collect keys present in later members but absent from
+    2. Stragglers query — collect keys present in later members but absent from
         the first table and append those rows.  Avoids a full UNION ALL in the
         typical case where key sets are identical.
     **Profile before committing to this approach** — with tens of thousands of
@@ -305,6 +305,21 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 ## Future work
 
 ### Planned features
+
+- **Validation layer** (`src/pycifparse/validation/`) — spec: `prompts/Stage6_Validation_Prompt.md`.
+  Operates on `CifFile` before ingestion. Checks `type_container`, `type_dimension`, `ValueType`
+  consistency, `type_contents` format, `enumeration_states` membership, `enumeration_range` bounds.
+  Returns `ValidationReport`; never blocks processing.
+  **Prerequisites:** extend `DdlmItem` + `loader.py` with `enumeration_range` and `type_dimension`;
+  extend `ColumnDef` with `type_container`, `type_dimension`, `enumeration_states`, `enumeration_range`.
+
+- **`check_fidelity`** (`src/pycifparse/fidelity/`) — spec: `prompts/Stage6_FidelityCheck_Prompt.md`.
+  Compares two CIF sources (file path or `CifFile`) by ingesting both and comparing the resulting
+  databases as flat row collections. Block names, block order, row order, and synthetic IDs are
+  irrelevant. UUID values matched by value-chain fingerprint. Real values normalised via
+  `format(Decimal(v), 'f')` before comparison (preserves significant figures; collapses scientific
+  notation). SU semantic equality deferred (known limitation).
+  Returns `ValidationReport`; never raises.
 
 - **Duplicate tag deduplication in `CifBlock`** — if a duplicate tag value is byte-for-byte
   identical to the already-stored value, discard the duplicate silently rather than appending it.

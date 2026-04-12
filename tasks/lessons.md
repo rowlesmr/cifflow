@@ -1261,3 +1261,41 @@ shared connections cause cross-test pollution. Check all tests in the class befo
 `second_short_conn`). Declare it at module level with `scope='class'`. Tests that verified the
 ingest return value (e.g. `assert errors == []`) must be rewritten — the return value is discarded
 by the fixture. Replace with an equivalent read assertion.
+
+## Lesson 59 — Real value comparison must preserve significant figures, not just numeric equality (2026-04-12)
+
+**Context:** `check_fidelity` row normalisation for `Real`-typed columns.
+
+**Problem:** Naïve `float` comparison collapses `1.2` and `1.20` to the same value, but in
+crystallography these are different measurements with different precision. Significant figures are
+meaningful and must be preserved in fidelity checks.
+
+**Rule:** Two Real values are equal for fidelity purposes iff they represent the same number
+*with the same number of significant digits*. Scientific notation and fixed-point notation are
+interchangeable representations of the same value: `1.200e2 == 120.0` (both 4 sig figs),
+but `1.2 != 1.20` (2 vs 3 sig figs).
+
+**Fix:** Normalise Real values to canonical fixed-point form using Python's `decimal` module:
+```python
+from decimal import Decimal
+canonical = format(Decimal(value), 'f')
+```
+`format(..., 'f')` converts scientific notation to decimal while preserving trailing zeros
+(significant figures). Compare canonical strings, not floats.
+
+**How to apply:** Strip any SU suffix before constructing the `Decimal`. Integer columns do not
+need this treatment — string comparison is sufficient. Do not use `float()` for equality checks
+on Real CIF values.
+
+## Lesson 60 — Validation is an observation layer; it never gates further processing (2026-04-12)
+
+**Context:** `validate()` in `src/pycifparse/validation/`.
+
+**Rule:** The validation layer reports semantic violations in a `ValidationReport` but never
+prevents ingestion, emission, or any other processing step. If a user ignores validation errors
+and downstream processing fails as a result, that is the user's responsibility. `ValidationMode`
+controls only the severity label and `passed` flag in the report — it does not cause the function
+to raise or block.
+
+**How to apply:** `ingest()` must never call `validate()` internally. Any caller that wants
+validation must call it explicitly before ingestion and decide what to do with the report.
