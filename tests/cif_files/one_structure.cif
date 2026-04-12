@@ -3,19 +3,7 @@
 
 #######  Begin powder crystal structure  #######
 data_Selenium_0
-# _audit_dataset.id	c90a4a1d-fde3-43f4-9c71-bf71048649b5
-
-#_pd_phase.id	Selenium_0
-#_pd_phase.name	Selenium
-#_model.id	Selenium_0
-#_structure.id	Selenium_0
-#_space_group.id	Selenium_0
-#_model.structure_id	Selenium_0
-#_structure.diffrn_id	STP
-#_structure.space_group_id	Selenium_0
-#_structure.phase_id	Selenium_0
-
-#_diffrn.id	STP
+# set up for just core
 
 _cell.length_a    3.992
 _cell.length_b    3.992

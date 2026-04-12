@@ -24,6 +24,7 @@ from pycifparse.dictionary import (
     save_dictionary,
     load_dictionary,
 )
+from pycifparse.output import emit, quote, EmitMode, OutputPlan, BlockSpec
 from pycifparse.inspect import (
     inspect_lexer,
     inspect_parse,
@@ -49,6 +50,8 @@ __all__ = [
     'apply_schema', 'apply_fallback_schema',
     'ResolvedTag', 'resolve_tag',
     'save_dictionary', 'load_dictionary',
+    # Output
+    'emit', 'quote', 'EmitMode', 'OutputPlan', 'BlockSpec',
     # Inspect
     'inspect_lexer', 'inspect_parse', 'ParseHandler',
     'inspect_model', 'inspect_schema', 'inspect_ingest', 'TraceEvent',

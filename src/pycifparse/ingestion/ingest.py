@@ -1181,8 +1181,12 @@ class _Ingester:
             if not tbl_rows:
                 continue
             rows = list(tbl_rows.values())
-            # Determine columns from first row (all rows have same keys by construction)
-            cols = list(rows[0].keys())
+            # Determine columns as the union of all row keys (rows merged from stubs
+            # may have fewer keys than fully-populated rows).
+            seen: dict[str, None] = {}
+            for r in rows:
+                seen.update(dict.fromkeys(r.keys()))
+            cols = list(seen)
             placeholders = ', '.join('?' for _ in cols)
             col_list = ', '.join(f'"{c}"' for c in cols)
             sql = (

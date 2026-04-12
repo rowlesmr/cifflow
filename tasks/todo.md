@@ -4,29 +4,105 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 5 complete. 969 tests passing. Ready for Stage 6 (output layer).
+**Current stage:** Stage 6 (output layer) — complete and stable.
 
-**Test suite state (2026-04-11):**
-- 920 tests pass (non-slow): `.venv/Scripts/pytest -m "not slow" --tb=short -q`
-- 49 slow tests pass: `.venv/Scripts/pytest -m slow`
-- Total: 969 passing
+**Test suite state (2026-04-12):**
+- ~1083 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+- 49 slow tests pass: `pytest -m slow`
+- Total: 1132 passing, 0 xfail
 
-**What was just completed (this session):**
-- **Stage 5 — `inspect/` package** (`src/pycifparse/inspect/`):
-  - Replaced `src/pycifparse/debug.py` with a proper `inspect/` package.
-  - `_common.py`: shared ANSI colour helpers, `resolve_source`, `fmt_value`.
-  - `_lexer.py`: `inspect_lexer` (renamed from `debug_lex`).
-  - `_parser.py`: `inspect_parse` + `ParseHandler` (renamed from `debug_parse` / `DebugHandler`).
-  - `_model.py`: `inspect_model` (renamed from `debug_build`).
-  - `_schema.py`: `inspect_schema` (renamed from `debug_schema`; now also accepts `DdlmDictionary`).
-  - `_ingest.py`: `inspect_ingest` + `TraceEvent` dataclass (new). Captures semantic warnings,
-    errors, and FK violations at point-of-occurrence; returns `list[TraceEvent]`.
-  - All symbols exported from `pycifparse.inspect.__init__` and `pycifparse.__init__`.
-  - `tests/test_debug.py` deleted; replaced with `tests/test_inspect.py` (46 tests).
-  - `example_inspect.py` added: demonstrates all six entry points.
-- **ANSI colours**: `inspect/` output is coloured on ttys (via `supports_colour`). JediTerm/PyCharm
-  Community has a known column-tracking bug when lines containing ANSI codes wrap — nothing we can
-  do; widening the terminal panel avoids it. Lesson 48.
+**What was completed in recent sessions:**
+- `quote.py`: CIF 2.0 and 1.1 quoting decision trees; 95 tests in `tests/output/test_quote.py`.
+- `plan.py`: `EmitMode` (`ONE_BLOCK`, `ALL_BLOCKS`, `ORIGINAL`, `GROUPED`), `BlockSpec`, `OutputPlan`.
+- `emit.py`: `emit(conn, schema, *, mode, version, plan, reconstruct_su, emit_defaults)`.
+  Four mode collectors. Set/Loop/fallback renderers. SU reconstruction. GROUPED BFS anchor search.
+- All symbols exported from `pycifparse.output.__init__` and `pycifparse.__init__`.
+- 62 tests in `tests/output/test_emit.py` (all four modes, round-trip integration, OutputPlan,
+  quoting, NULL handling, GROUPED merging, composite-key anchoring). 0 xfail.
+- **FK-PK suppression** (ORIGINAL and GROUPED): Set-category FK-PK columns redundant from block
+  scope are suppressed.  `_suppressed_fk_pk_cols()` in `emit.py`.
+- **`_audit_dataset.id` injection** (ALL_BLOCKS, CIF 2.0 only): links blocks to one dataset UUID.
+- **`example_workflow.py` Step 11**: ALL_BLOCKS emit added with round-trip parse check.
+- **API Reference** updated: FK-PK suppression and ALL_BLOCKS dataset injection documented.
+- **Bug fix — `_flush` slim-row column loss** (`ingest.py`): INSERT column list now uses union of
+  all row keys, not just `rows[0].keys()`.  Fixes NULL columns after re-ingest of emitted CIF.
+- **Bug fix — GROUPED remaining-blocks scope** (`emit.py`): remaining-blocks pass now sweeps all
+  schema tables, not just `block_id_tables`.  Fixes keyed-anchor tables with NULL FK values being
+  silently dropped (e.g. `diffrn_radiation_wavelength`).
+- Both `test_multi_one_original` and `test_multi_one_grouped` xfail decorators removed.
+
+**Next targets (in priority order):**
+1. **Fix ALL_BLOCKS block granularity** — Set categories: one block per row; Loop categories:
+   group by Set-anchor key.  Requires reworking `_collect_all_blocks` to mirror GROUPED logic.
+   Revisit `_audit_dataset.id` injection once granularity is correct.
+2. **`BlockSpec` merge-group syntax** — `list[str | list[str]]` inner lists emit categories as
+   a single `loop_` via FULL OUTER JOIN on shared keys (see design notes below).
+3. **Line ending option** — `line_ending: Literal['\n', '\r\n', '\r'] = '\n'` parameter on
+   `emit()`.  Applied as a final substitution over the assembled output string before return.
+   The 2048-character line-length check must operate on the content before line endings are
+   applied (i.e. measure raw content length, not including the terminator).
+4. **Pretty-print output** — `pretty: bool = True` flag on `emit()`.  When `True`:
+   - Tag–value pairs: tag and value column-aligned across all scalar pairs in the category.
+   - Loop columns: each value column width determined by the widest value in that column
+     (requires a full pass over all rows before writing any output).
+   - `False` skips alignment; use for large files where the per-column scan is too slow.
+   - Profile on a large powder-diffraction file (tens of thousands of loop rows) to quantify
+     the cost before finalising the default.
+5. **Line length checks for output** — both CIF 1.1 and CIF 2.0 impose a 2048-character line
+   length limit, excluding the OS line-termination character(s).  CIF 1.1 additionally limits
+   data names, block codes, and frame codes to 75 characters; CIF 2.0 has no such identifier
+   limit.  The emitter must:
+   - Detect lines exceeding 2048 characters and either wrap them (loop data rows can be split
+     across lines) or escalate to a semicolon-delimited text field where inline wrapping is not
+     possible (e.g. a very long unquoted value).
+   - For CIF 1.1 output, validate that all data names, block codes, and frame codes are at most
+     75 characters; raise on violation.
+   - Implement as a post-render validation pass, version-aware, that warns or raises on
+     violations before the final string is returned from `emit()`.
+6. **`convert_database(src, dst, schema)`** — copy a TEXT-storage database to a new file,
+   casting each column to the SQLite type indicated by `ColumnDef.type_contents`:
+   `"Integer"` → `INTEGER`, `"Real"` / `"Float"` → `REAL`, everything else stays `TEXT`.
+   CIF sentinels `'.'` and `'?'` convert to `NULL`.  Failed casts produce `NULL`, a kept
+   TEXT value, or raise — controlled by an `on_coercion_failure` parameter (`'null'` /
+   `'keep'` / `'error'`).  Stub is already shown in `example_workflow.py` Step 12.
+7. ~~**Ingest stub promotion / emit round-trip bugs**~~ — **DONE** (2026-04-12).  See Lesson 58.
+
+**Required future work:**
+- **`BlockSpec.categories` — merge groups**: allow inner lists to specify categories that should
+  be emitted as a single `loop_` construct via a FULL OUTER JOIN on shared key columns.
+  Proposed syntax: `categories=['audit_dataset', 'cell', ['pd_data', 'pd_meas', 'pd_proc']]`.
+  Design:
+  - All members of a merge group must be Loop-class categories.
+  - Members are joined on their shared key columns (identical or subset PK relationship);
+    if no common key can be identified, fall back to separate loops with a warning.
+  - Key columns appear once in the loop header; each member's non-key columns follow in
+    list order.
+  - Missing rows in any member produce `NULL` in the merged result, rendered as `.`.
+  - The join is performed in SQLite.  SQLite has no native FULL OUTER JOIN, so
+    use a two-phase strategy:
+    1. Primary LEFT JOIN chain — `pd_meas LEFT JOIN pd_proc LEFT JOIN pd_calc`
+        on shared key.  Handles the common case (identical key sets) in one pass.
+    2. Stragglers query — collect keys present in later members but absent from
+        the first table and append those rows.  Avoids a full UNION ALL in the
+        typical case where key sets are identical.
+    **Profile before committing to this approach** — with tens of thousands of
+    rows, verify that the two-phase query outperforms a Python-side merge dict
+    on realistic powder-diffraction data.
+  - `BlockSpec.categories` type changes from `list[str]` to `list[str | list[str]]`;
+    all downstream helpers (`_ordered_categories`, `_render_block`, column ordering,
+    FK-PK suppression) need to handle both element types.
+
+
+- **`ALL_BLOCKS` mode — correct block granularity**: the current implementation emits one block
+  per non-empty SQLite table, which is wrong for multi-row tables.  The correct behaviour is:
+  - **Set categories**: one output block per row (each row is a distinct instance; rows arrive
+    from different original `_block_id`s).
+  - **Loop categories**: group rows by the Set-anchor key (the domain PK of the nearest Set
+    ancestor in the FK chain).  Rows that share the same Set-anchor key values belong to the
+    same output block.  Tables with no Set ancestor remain one block per table.
+  - **Consequence for `_audit_dataset.id` injection**: the dataset UUID should be derived from
+    whichever `_block_id`s contributed to the block, not just the global session UUID.  Revisit
+    this logic once block granularity is correct.
 
 **Open decisions / known limitations:**
 - **`inspect_ingest` routing trace**: currently captures warnings, errors, FK violations only.
@@ -42,6 +118,11 @@
   duplicate scalar tags, the fallback PK (`_block_id, _row_id, tag`) will cause a DB-level error
   on the second occurrence. The spec says duplicate tags are undefined behaviour — caller must
   consolidate before `ingest()`. Documented in the Assumptions section of Stage4 prompt.
+- **`emit_defaults` flag**: accepted but has no effect. Suppressing default-fill values requires
+  per-value provenance tracking not yet implemented.
+- **CIF 2.0 bare-word `'`/`"` legality** (Lesson 49): Rule 2 in `quote.py` defensively excludes
+  values containing `'` or `"` from bare-word emission. Check `references/CIF2-ENBF.txt`; if they
+  are legal mid-word, fix the lexer and relax the guard.
 
 ---
 
@@ -224,6 +305,21 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 ## Future work
 
 ### Planned features
+
+- **Validation layer** (`src/pycifparse/validation/`) — spec: `prompts/Stage6_Validation_Prompt.md`.
+  Operates on `CifFile` before ingestion. Checks `type_container`, `type_dimension`, `ValueType`
+  consistency, `type_contents` format, `enumeration_states` membership, `enumeration_range` bounds.
+  Returns `ValidationReport`; never blocks processing.
+  **Prerequisites:** extend `DdlmItem` + `loader.py` with `enumeration_range` and `type_dimension`;
+  extend `ColumnDef` with `type_container`, `type_dimension`, `enumeration_states`, `enumeration_range`.
+
+- **`check_fidelity`** (`src/pycifparse/fidelity/`) — spec: `prompts/Stage6_FidelityCheck_Prompt.md`.
+  Compares two CIF sources (file path or `CifFile`) by ingesting both and comparing the resulting
+  databases as flat row collections. Block names, block order, row order, and synthetic IDs are
+  irrelevant. UUID values matched by value-chain fingerprint. Real values normalised via
+  `format(Decimal(v), 'f')` before comparison (preserves significant figures; collapses scientific
+  notation). SU semantic equality deferred (known limitation).
+  Returns `ValidationReport`; never raises.
 
 - **Duplicate tag deduplication in `CifBlock`** — if a duplicate tag value is byte-for-byte
   identical to the already-stored value, discard the duplicate silently rather than appending it.
