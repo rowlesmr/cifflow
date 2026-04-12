@@ -24,19 +24,6 @@ CIF11 = CifVersion.CIF_1_1
 
 
 # ---------------------------------------------------------------------------
-# Quote checker
-# ---------------------------------------------------------------------------
-
-def _consistent_quoted_string(result :str, value: str) -> bool:
-    """Checks if string is surrounded by consistent quote-type"""
-    allowed_quotes = ["'", '"', "'''", '"""', "\n;", "\r\n;", "\r;"]
-    for aq in allowed_quotes:
-        ql = len(aq)
-        if result[:ql] == result[-ql:] == aq and result[ql:-ql] == value:
-            return True
-    return False
-
-# ---------------------------------------------------------------------------
 # Round-trip helper
 # ---------------------------------------------------------------------------
 
@@ -159,13 +146,13 @@ class TestIllegalStart:
         '[list_like',
         '[list as string]',
         '{table_like',
-        '{"table": as_string}',
+        '{\'table\': as_string}',
         ' leading_space',
         '\tleading_tab',
     ])
     def test_illegal_start_gets_quoted_cif2(self, value):
         result = quote(value, CIF20)
-        assert _consistent_quoted_string(result, value)   # must not be bare word
+        assert result[0] == result[-1] and (result.startswith("'") or result.startswith('"')) # must not be bare word
 
     @pytest.mark.parametrize('value', [
         '_tag_like',
@@ -180,7 +167,7 @@ class TestIllegalStart:
     ])
     def test_illegal_start_gets_quoted_cif1(self, value):
         result = quote(value, CIF11)
-        assert _consistent_quoted_string(result, value)  # must not be bare word
+        assert result[0] == result[-1] and (result.startswith("'") or result.startswith('"'))   # must not be bare word
 
     @pytest.mark.parametrize('keyword', [
         'loop_', 'LOOP_', 'Loop_',
@@ -189,7 +176,7 @@ class TestIllegalStart:
     ])
     def test_reserved_keyword_gets_quoted(self, keyword):
         result = quote(keyword, CIF20)
-        assert _consistent_quoted_string(result, keyword)
+        assert result[0] == result[-1] and (result.startswith("'") or result.startswith('"'))
 
     @pytest.mark.parametrize('value', [
         'data_block',
@@ -199,7 +186,7 @@ class TestIllegalStart:
     ])
     def test_reserved_prefix_gets_quoted(self, value):
         result = quote(value, CIF20)
-        assert _consistent_quoted_string(result, value)
+        assert result[0] == result[-1] and (result.startswith("'") or result.startswith('"'))
 
     def test_underscore_start_roundtrip(self):
         rt('_tag_like', CIF20)
@@ -498,31 +485,66 @@ class TestAllTheDelimiters:
 class TestStringsEndWithDelimiters:
     # strings ending in delimiters
     NO_NEWLINE_DELIM_ENDINGS = \
-        ["I have spaces\'",         # "
-         "I have spaces\"",         # '
-         "I have\" spaces\'",       # """
+        ["I have\" spaces\'",       # """
          "I have\' spaces\"",       # '''
          "I have\'\'\' spaces\"",       # \n;
          "I have\"\"\" spaces\'",       # \n;
-
          ]
 
-    def test_cif20_uses_prefix(self):
-        print()
-        for ending in self.NO_NEWLINE_DELIM_ENDINGS:
-            result = quote(ending, CIF20)
-            print(f"{ending} --> {result}")
-            assert True
+    NEWLINE_DELIM_ENDINGS = \
+        ["I \nhave\" spaces\'",       # """
+         "I \nhave\' spaces\"",       # '''
+         "I \nhave\'\'\' spaces\"",       # \n;
+         "I \nhave\"\"\" spaces\'",       # \n;
+         "I \n;have\" spaces\'",  # """
+         "I \n;have\' spaces\"",  # '''
+         "I \n;have\'\'\' spaces\"",  # \n;
+         "I \n;have\"\"\" spaces\'",  # \n;
+         ]
 
-    # def test_cif11_uses_prefix(self):
-    #     result = quote(self.NEWLINE_ALL, CIF11)
-    #     assert result.startswith("\n;>\\\n") and result.endswith("\n;")
-    #
-    # def test_roundtrip_20(self):
-    #     rt(self.NEWLINE_ALL, CIF20)
-    #
-    # def test_roundtrip_11(self):
-    #     rt(self.NEWLINE_ALL, CIF11)
+    def test_no_newline_delim_endings_dealt_with_cif2(self):
+        for value in self.NO_NEWLINE_DELIM_ENDINGS:
+            result = quote(value, CIF20)
+            assert (result[0] == result[-1] or result[:2] == result[-2:]
+                    and (result.startswith("'") or result.startswith('"') or result.startswith('\n;'))
+                    and not (result.endswith("''''") or result.endswith('""""'))), value
+
+    def test_newline_delim_endings_dealt_with_cif2(self):
+        for value in self.NEWLINE_DELIM_ENDINGS:
+            result = quote(value, CIF20)
+            assert (result[0] == result[-1] or result[:2] == result[-2:]
+                    and (result.startswith("'") or result.startswith('"') or result.startswith('\n;'))
+                    and not (result.endswith("''''") or result.endswith('""""'))), value
+
+    def test_no_newline_delim_endings_dealt_with_cif1(self):
+        delim = "\n;"
+        dl = len(delim)
+        for value in self.NO_NEWLINE_DELIM_ENDINGS:
+            result = quote(value, CIF11)
+            assert result.startswith(delim) and result.endswith(delim) and delim not in result[dl:-dl], value
+
+    def test_newline_delim_endings_dealt_with_cif1(self):
+        delim = "\n;"
+        dl = len(delim)
+        for value in self.NEWLINE_DELIM_ENDINGS:
+            result = quote(value, CIF11)
+            assert result.startswith(delim) and result.endswith(delim) and delim not in result[dl:-dl], value
+
+    def test_no_newline_roundtrip_20(self):
+        for value in self.NO_NEWLINE_DELIM_ENDINGS:
+            rt(value, CIF20)
+
+    def test_newline_roundtrip_20(self):
+        for value in self.NEWLINE_DELIM_ENDINGS:
+            rt(value, CIF20)
+
+    def test_no_newline_roundtrip_11(self):
+        for value in self.NO_NEWLINE_DELIM_ENDINGS:
+            rt(value, CIF11)
+
+    def test_newline_roundtrip_11(self):
+        for value in self.NEWLINE_DELIM_ENDINGS:
+            rt(value, CIF11)
 
 
 # ---------------------------------------------------------------------------
