@@ -10,6 +10,7 @@ from pycifparse.dictionary import (
     DictionaryLoader,
     SourceResolver,
     directory_resolver,
+    directory_path_resolver,
     ForeignKeyDef,
     ColumnDef,
     TableDef,
@@ -45,7 +46,7 @@ __all__ = [
     'compactify_database',
     # Dictionary
     'DdlmItem', 'DdlmDictionary',
-    'DictionaryLoader', 'SourceResolver', 'directory_resolver',
+    'DictionaryLoader', 'SourceResolver', 'directory_resolver', 'directory_path_resolver',
     'ForeignKeyDef', 'ColumnDef', 'TableDef', 'SchemaSpec',
     'generate_schema', 'emit_create_statements', 'emit_fallback_create_statements',
     'apply_schema', 'apply_fallback_schema',

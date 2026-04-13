@@ -191,6 +191,8 @@ class SchemaSpec:
     warnings: list[str] = field(default_factory=list)
     bridge_columns: list[BridgeColumnDef] = field(default_factory=list)
     propagation_links: dict[str, list[tuple[str, str, str | None]]] = field(default_factory=dict)
+    dictionary_name: str | None = None
+    source_files: list[str] = field(default_factory=list)
     """Mapping from table name to ``[(column_name, target_def_id, default), ...]``.
 
     For PK columns that are DDLm ``Link`` items but whose ``FOREIGN KEY``
@@ -732,6 +734,8 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         warnings=warnings,
         bridge_columns=bridge_columns,
         propagation_links=propagation_links,
+        dictionary_name=dictionary.name or None,
+        source_files=list(dictionary.source_files),
     )
 
 

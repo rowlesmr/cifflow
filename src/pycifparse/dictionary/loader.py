@@ -78,6 +78,36 @@ def directory_resolver(path: str | pathlib.Path) -> SourceResolver:
     return _resolve
 
 
+def directory_path_resolver(path: str | pathlib.Path) -> 'Callable[[str], str | None]':
+    """
+    Return a path resolver that maps a URI to its absolute file path.
+
+    Companion to :func:`directory_resolver`.  Pass to
+    ``DictionaryLoader(path_resolver=...)`` so that ``source_files`` in the
+    resulting ``DdlmDictionary`` contains absolute paths rather than bare URIs.
+
+    Parameters
+    ----------
+    path:
+        Directory to search for dictionary files.
+
+    Returns
+    -------
+    Callable[[str], str | None]
+        Maps URI strings to absolute path strings, or ``None`` if not found.
+    """
+    directory = pathlib.Path(path)
+
+    def _resolve_path(uri: str) -> str | None:
+        filename = pathlib.PurePosixPath(uri).name
+        candidate = directory / filename
+        if candidate.exists():
+            return str(candidate.resolve())
+        return None
+
+    return _resolve_path
+
+
 def _scalar(
     data: dict[str, list],
     tag: str,
@@ -282,10 +312,12 @@ class DictionaryLoader:
         self,
         resolver: SourceResolver | None = None,
         *,
+        path_resolver: 'Callable[[str], str | None] | None' = None,
         on_warning: Callable[[str], None] | None = None,
         ignore_head_imports: bool = False,
     ) -> None:
         self._resolver = resolver
+        self._path_resolver = path_resolver
         self._on_warning = on_warning if on_warning is not None else lambda msg: None
         self._ignore_head_imports = ignore_head_imports
         self._source_cache: dict[str, str] = {}
@@ -319,13 +351,18 @@ class DictionaryLoader:
         DdlmDictionary
             The fully loaded dictionary with all imports resolved.
         """
-        return self._load_recursive(source, base_uri, set())
+        collected: list[str] = []
+        if base_uri:
+            resolved = self._path_resolver(base_uri) if self._path_resolver else None
+            collected.append(resolved or base_uri)
+        return self._load_recursive(source, base_uri, set(), collected)
 
     def _load_recursive(
         self,
         source: str,
         base_uri: str | None,
         loading: set[str],
+        collected: list[str],
     ) -> DdlmDictionary:
         """Parse and resolve one dictionary, tracking *loading* for cycle detection."""
         warnings: list[str] = []
@@ -383,7 +420,7 @@ class DictionaryLoader:
                 if directives_val and isinstance(directives_val[0], list):
                     directives = directives_val[0]
                     self._resolve_imports(
-                        frame_data, directives, base_uri, loading, pool, warn
+                        frame_data, directives, base_uri, loading, pool, warn, collected
                     )
 
             item = _extract_item(frame_data, warn)
@@ -407,6 +444,7 @@ class DictionaryLoader:
             alias_to_definition_id=alias_to_def_id,
             deprecated_ids=deprecated_ids,
             warnings=warnings,
+            source_files=list(collected),
         )
 
     def _load_constituent(
@@ -414,6 +452,7 @@ class DictionaryLoader:
         uri: str,
         loading: set[str],
         warn: Callable[[str], None],
+        collected: list[str] | None = None,
     ) -> DdlmDictionary | None:
         """
         Load and return the dictionary at *uri*, or ``None`` on failure.
@@ -427,9 +466,14 @@ class DictionaryLoader:
         src = self._get_source(uri)
         if src is None:
             return None
+        if collected is not None:
+            resolved = self._path_resolver(uri) if self._path_resolver else None
+            entry = resolved or uri
+            if entry not in collected:
+                collected.append(entry)
         loading.add(uri)
         try:
-            return self._load_recursive(src, uri, loading)
+            return self._load_recursive(src, uri, loading, collected if collected is not None else [])
         finally:
             loading.discard(uri)
 
@@ -441,6 +485,7 @@ class DictionaryLoader:
         loading: set[str],
         pool: dict[str, DdlmItem],
         warn: Callable[[str], None],
+        collected: list[str] | None = None,
     ) -> None:
         """Apply ``_import.get`` directives to *frame_data* and/or *pool*."""
         # Sort by 'order' if present; fall back to list order.
@@ -524,7 +569,7 @@ class DictionaryLoader:
                 if target_class == 'head':
                     # Dictionary-level import: load the entire constituent
                     # dictionary and merge all its definitions into pool.
-                    constituent = self._load_constituent(resolved_uri, loading, warn)
+                    constituent = self._load_constituent(resolved_uri, loading, warn, collected)
                     if constituent is None:
                         msg = (
                             f"_import.get could not load constituent "

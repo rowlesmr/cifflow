@@ -52,3 +52,4 @@ class DdlmDictionary:
     alias_to_definition_id: dict[str, str]
     deprecated_ids: set[str]
     warnings: list[str] = field(default_factory=list)
+    source_files: list[str] = field(default_factory=list)

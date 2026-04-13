@@ -4,12 +4,12 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 6 (output layer) — complete and stable.
+**Current stage:** Stage 6 — fidelity check complete. Output layer complete and stable.
 
-**Test suite state (2026-04-12):**
-- ~1083 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+**Test suite state (2026-04-13):**
+- ~1152 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
 - 49 slow tests pass: `pytest -m slow`
-- Total: 1132 passing, 0 xfail
+- Total: ~1201 passing, 0 xfail
 
 **What was completed in recent sessions:**
 - `quote.py`: CIF 2.0 and 1.1 quoting decision trees; 95 tests in `tests/output/test_quote.py`.
@@ -30,6 +30,11 @@
   schema tables, not just `block_id_tables`.  Fixes keyed-anchor tables with NULL FK values being
   silently dropped (e.g. `diffrn_radiation_wavelength`).
 - Both `test_multi_one_original` and `test_multi_one_grouped` xfail decorators removed.
+- **`check_fidelity`** (`src/pycifparse/fidelity/`): complete. 21 tests. See below.
+- **`directory_path_resolver`**: new companion to `directory_resolver`; passes full paths into
+  `DdlmDictionary.source_files` and therefore `SchemaSpec.source_files` for report use.
+- **`DdlmDictionary.source_files`** / **`SchemaSpec.source_files`** / **`SchemaSpec.dictionary_name`**:
+  populated during loading; serialised in JSON cache.
 
 **Next targets (in priority order):**
 1. **Fix ALL_BLOCKS block granularity** — Set categories: one block per row; Loop categories:
@@ -313,13 +318,7 @@ Tests: `tests/dictionary/test_fallback_schema.py`
   **Prerequisites:** extend `DdlmItem` + `loader.py` with `enumeration_range` and `type_dimension`;
   extend `ColumnDef` with `type_container`, `type_dimension`, `enumeration_states`, `enumeration_range`.
 
-- **`check_fidelity`** (`src/pycifparse/fidelity/`) — spec: `prompts/Stage6_FidelityCheck_Prompt.md`.
-  Compares two CIF sources (file path or `CifFile`) by ingesting both and comparing the resulting
-  databases as flat row collections. Block names, block order, row order, and synthetic IDs are
-  irrelevant. UUID values matched by value-chain fingerprint. Real values normalised via
-  `format(Decimal(v), 'f')` before comparison (preserves significant figures; collapses scientific
-  notation). SU semantic equality deferred (known limitation).
-  Returns `ValidationReport`; never raises.
+- ~~**`check_fidelity`**~~ — **DONE** (2026-04-13). See Lessons 62–64.
 
 - **Duplicate tag deduplication in `CifBlock`** — if a duplicate tag value is byte-for-byte
   identical to the already-stored value, discard the duplicate silently rather than appending it.

@@ -21,6 +21,7 @@ from pycifparse import (
     FidelityMismatch,
     DictionaryLoader,
     directory_resolver,
+    directory_path_resolver,
     generate_schema,
 )
 
@@ -34,6 +35,7 @@ DIC_FILE = DIC_DIR / 'cif_pow.dic'
 
 CIF_A = ROOT / 'tests' / 'cif_files' / 'multi_one.cif'
 CIF_B = ROOT / 'tests' / 'cif_files' / 'multi_one_as_oneblock.cif'
+CIF_B = ROOT / 'output_grouped.cif'
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +45,7 @@ CIF_B = ROOT / 'tests' / 'cif_files' / 'multi_one_as_oneblock.cif'
 print('=== Step 1: Load dictionary ===')
 
 resolver = directory_resolver(DIC_DIR)
-dictionary = DictionaryLoader(resolver=resolver).load(
+dictionary = DictionaryLoader(resolver=resolver, path_resolver=directory_path_resolver(DIC_DIR)).load(
     DIC_FILE.read_text(encoding='utf-8'),
     base_uri=DIC_FILE.name,
 )

@@ -270,6 +270,8 @@ def _fingerprint_uuid(
         if val is None:
             continue
         str_val = str(val)
+        if str_val in ('.', '?'):
+            continue
         if col_name in row_fk_cols and _is_uuid(str_val):
             continue  # handled in step 2.3
         col_def = cmap.get((tname, col_name))
@@ -306,6 +308,8 @@ def _fingerprint_uuid(
                     if val is None:
                         continue
                     str_val = str(val)
+                    if str_val in ('.', '?'):
+                        continue
                     if col_name in child_fk_cols and _is_uuid(str_val):
                         # Recursively fingerprint child UUID FK values
                         if str_val not in visited:
@@ -430,11 +434,12 @@ def _normalised_rows(
                 continue
             if val is None:
                 continue
+            str_val = str(val)
+            if str_val in ('.', '?'):
+                continue
             # Strip default-filled values
             if row_id is not None and (tname, row_id, col_name) in synthetic_set:
                 continue
-
-            str_val = str(val)
             if col_name in row_fk_cols and _is_uuid(str_val):
                 normalised[col_name] = fingerprints.get(str_val, frozenset())
             else:
@@ -446,6 +451,39 @@ def _normalised_rows(
 
         result.append(frozenset(normalised.items()))
     return result
+
+
+def _row_diff_hint(row: frozenset, candidates: list[frozenset]) -> str:
+    """Return a compact diff string between *row* and its closest candidate."""
+    if not candidates:
+        pairs = sorted((k, v) for k, v in row if not isinstance(v, frozenset))
+        parts = [f'{k}={v}' for k, v in pairs[:2]]
+        return f' [{", ".join(parts)}]' if parts else ''
+
+    best = max(candidates, key=lambda c: len(row & c))
+    row_d = dict(row)
+    best_d = dict(best)
+
+    diffs: list[str] = []
+    for k in sorted(set(row_d) | set(best_d)):
+        va, vb = row_d.get(k), best_d.get(k)
+        if isinstance(va, frozenset) or isinstance(vb, frozenset):
+            continue
+        if va != vb:
+            if va is None:
+                diffs.append(f'-{k}={vb}')   # this row is missing it
+            elif vb is None:
+                diffs.append(f'+{k}={va}')   # this row has it, match doesn't
+            else:
+                diffs.append(f'{k}: {va}!={vb}')
+
+    if not diffs:
+        return ''
+    if len(diffs) > 3:
+        hint = ', '.join(diffs[:3]) + f', +{len(diffs) - 3} more'
+    else:
+        hint = ', '.join(diffs)
+    return f' [{hint}]'
 
 
 def _compare_structured(
@@ -491,18 +529,20 @@ def _compare_structured(
         surplus_b = ctr_b - ctr_a
 
         for row, count in surplus_a.items():
+            hint = _row_diff_hint(row, rows_b)
             for _ in range(count):
                 mismatches.append(FidelityMismatch(
                     kind='row_content',
                     source='both',
-                    description=f'table {tname!r}: row in A has no equivalent in B',
+                    description=f'table {tname!r}: row in A has no equivalent in B{hint}',
                 ))
         for row, count in surplus_b.items():
+            hint = _row_diff_hint(row, rows_a)
             for _ in range(count):
                 mismatches.append(FidelityMismatch(
                     kind='row_content',
                     source='both',
-                    description=f'table {tname!r}: row in B has no equivalent in A',
+                    description=f'table {tname!r}: row in B has no equivalent in A{hint}',
                 ))
 
     return mismatches
@@ -667,6 +707,7 @@ def _format_report(
     report: FidelityReport,
     label_a: str,
     label_b: str,
+    schema_spec: 'SchemaSpec | None' = None,
 ) -> str:
     """Return a human-readable text summary of *report*."""
     lines: list[str] = []
@@ -674,6 +715,16 @@ def _format_report(
     lines.append('=' * 60)
     lines.append(f'Source A : {label_a}')
     lines.append(f'Source B : {label_b}')
+    if schema_spec is None:
+        lines.append('Schema   : none (fallback comparison only)')
+    elif schema_spec.dictionary_name:
+        if schema_spec.source_files:
+            files = ', '.join(schema_spec.source_files)
+            lines.append(f'Schema   : {schema_spec.dictionary_name} ({files})')
+        else:
+            lines.append(f'Schema   : {schema_spec.dictionary_name}')
+    else:
+        lines.append('Schema   : (unknown)')
     lines.append('')
 
     if report.passed:
@@ -762,7 +813,7 @@ def check_fidelity(
         rep = FidelityReport(passed=len(ms) == 0, mismatches=ms)
         if report_file is not None:
             pathlib.Path(report_file).write_text(
-                _format_report(rep, label_a, label_b), encoding='utf-8'
+                _format_report(rep, label_a, label_b, schema_spec), encoding='utf-8'
             )
         return rep
 
