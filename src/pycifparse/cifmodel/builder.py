@@ -236,10 +236,12 @@ class CifBuilder:
 
         if total % n != 0:
             missing = n - (total % n)
+            tag_list = ', '.join(self._loop_tags)
             self._semantic_error(
                 message=(
                     f'loop value count {total} is not divisible by tag count {n} '
-                    f'({missing} value(s) missing from final row)'
+                    f'({missing} value(s) missing from final row); '
+                    f'tags: {tag_list}'
                 ),
                 recovery='stopped' if self._mode == 'strict' else f'padded {missing} placeholder(s)',
             )

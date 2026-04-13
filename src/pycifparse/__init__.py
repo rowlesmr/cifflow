@@ -25,6 +25,7 @@ from pycifparse.dictionary import (
     load_dictionary,
 )
 from pycifparse.output import emit, quote, EmitMode, OutputPlan, BlockSpec
+from pycifparse.fidelity import check_fidelity, FidelityReport, FidelityMismatch
 from pycifparse.inspect import (
     inspect_lexer,
     inspect_parse,
@@ -52,6 +53,8 @@ __all__ = [
     'save_dictionary', 'load_dictionary',
     # Output
     'emit', 'quote', 'EmitMode', 'OutputPlan', 'BlockSpec',
+    # Fidelity
+    'check_fidelity', 'FidelityReport', 'FidelityMismatch',
     # Inspect
     'inspect_lexer', 'inspect_parse', 'ParseHandler',
     'inspect_model', 'inspect_schema', 'inspect_ingest', 'TraceEvent',
