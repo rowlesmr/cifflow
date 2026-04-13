@@ -141,6 +141,10 @@ class TestDataBlocks:
         h = parse('data_My_Block_123\n')
         assert h.events[0] == Event('on_data_block', ('My_Block_123',))
 
+    def test_data_block_name_with_strange_chars(self):
+        h = parse('data_My-[1](block)\n')
+        assert h.events[0] == Event('on_data_block', ('My-[1](block)',))
+
     def test_empty_data_block_name(self):
         h = parse('data_\n')
         assert h.has_error_containing('empty name')
@@ -246,12 +250,13 @@ class TestSaveFrames:
         assert ev[4] == Event('on_save_frame_end')
         assert h.errors == []
 
-    def test_save_frame_eof_terminates_cleanly(self):
+    def test_save_frame_eof_terminates_with_error(self):
         src = 'data_d\nsave_SF\n_tag val\n'
         h = parse(src)
         ev = h.non_error_events()
         assert ev[-1] == Event('on_save_frame_end')
-        assert h.errors == []
+        assert len(h.errors) == 1
+        assert h.has_error_containing('unterminated')
 
     def test_nested_save_frame_emits_error(self):
         src = 'data_d\nsave_outer\nsave_inner\nsave_\n'
@@ -278,7 +283,7 @@ class TestSaveFrames:
         ev = h.non_error_events()
         assert Event('on_save_frame_end') in ev
         assert Event('on_data_block', ('e',)) in ev
-
+        assert h.errors == []
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Loops

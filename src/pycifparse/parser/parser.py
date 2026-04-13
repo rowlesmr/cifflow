@@ -659,7 +659,11 @@ class CifParser:
             self._h.add_value('?', ValueType.PLACEHOLDER)
             self._active_tag = None
 
-        # Save frame: EOF is a valid terminator — no error emitted.
+        # Save frame: EOF is not a valid terminator.
         if self._in_save_frame:
+            self._h.on_error(self._err_at(
+                'syntactic',
+                'unterminated save frame at EOF',
+                line, col, '', 'emitted on_save_frame_end'))
             self._h.on_save_frame_end()
             self._in_save_frame = False
