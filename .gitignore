@@ -156,3 +156,4 @@ prompts
 *.zip
 .claude/
 scripts/
+tests/test_coverage/

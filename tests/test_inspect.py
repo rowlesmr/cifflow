@@ -340,6 +340,7 @@ class TestInspectIngest:
 
         buf = io.StringIO()
         result = inspect_ingest(cif, conn, schema=None, file=buf)
+        conn.close()
         assert isinstance(result, list)
 
     def test_trace_events_are_trace_event_instances(self):
@@ -355,6 +356,7 @@ class TestInspectIngest:
 
         buf = io.StringIO()
         result = inspect_ingest(cif, conn, schema=None, file=buf)
+        conn.close()
         for ev in result:
             assert isinstance(ev, TraceEvent)
 
@@ -371,6 +373,7 @@ class TestInspectIngest:
 
         buf = io.StringIO()
         inspect_ingest(cif, conn, schema=None, file=buf)
+        conn.close()
         assert buf.getvalue()  # something was written
 
     def test_header_present_in_output(self):
@@ -386,6 +389,7 @@ class TestInspectIngest:
 
         buf = io.StringIO()
         inspect_ingest(cif, conn, schema=None, file=buf)
+        conn.close()
         assert 'inspect_ingest' in buf.getvalue()
 
     def test_trace_event_fields(self):
