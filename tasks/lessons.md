@@ -1,5 +1,69 @@
 # pycifparse — Lessons Learned
 
+## Lesson 62 — CIF placeholder '.' and '?' must be treated as NULL in structured-table fidelity comparison (2026-04-13)
+
+**Context:** `_normalised_rows()` and `_fingerprint_uuid()` in `fidelity/check.py`.
+
+**Problem:** SQL `NULL` (tag absent from block) and the CIF placeholder string `'.'` (tag explicitly
+inapplicable) are semantically equivalent for structured tables, but the fidelity checker treated them
+differently.  A block with an absent `_diffrn.ambient_temperature` (stored as `NULL`) would not match
+a block where `_diffrn.ambient_temperature .` was written explicitly (stored as `'.'`), producing
+spurious `row_content` mismatches.
+
+**Fix:** In both `_normalised_rows` and `_fingerprint_uuid`, skip values that are `'.'` or `'?'`
+immediately after the `is None` guard:
+```python
+str_val = str(val)
+if str_val in ('.', '?'):
+    continue
+```
+
+**Rule:** For structured table comparison, `NULL`, `'.'`, and `'?'` all mean "no data here".
+Treat them identically.  This does not apply to `_cif_fallback`, where `ValueType.PLACEHOLDER`
+is stored and the distinction between absent and explicit placeholder is meaningful.
+
+---
+
+## Lesson 63 — Row diff hints must use row-relative (+/-) not absolute (A+/B+) labels (2026-04-13)
+
+**Context:** `_row_diff_hint()` in `fidelity/check.py`.
+
+**Problem:** The diff hint function computed `B+col=val` when the best-match row had a value the
+surplus row didn't, and `A+col=val` when the surplus row had an extra value.  These labels were
+hardcoded but the `row` parameter can come from either surplus_a or surplus_b.  For surplus_b rows
+this produced contradictory output: both sides claimed the other had the extra value.
+
+**Fix:** Use row-relative labels:
+- `+col=val` — this row has it, closest match doesn't (the surplus row carries the extra value).
+- `-col=val` — closest match has it, this row doesn't (the surplus row is missing the value).
+
+**Rule:** Diff hints must be described relative to the row being reported, not relative to absolute
+source labels.  The caller (which knows which side the row came from) supplies context via the
+description string; the hint just describes the delta.
+
+---
+
+## Lesson 64 — DictionaryLoader needs a separate path_resolver to record full paths in source_files (2026-04-13)
+
+**Context:** `DictionaryLoader` in `dictionary/loader.py`; `DdlmDictionary.source_files`;
+`SchemaSpec.source_files`.
+
+**Problem:** The `SourceResolver` callable returns file *content* (a string), not a path.  When
+building the `source_files` list for `DdlmDictionary`, only the URI (bare filename) was available,
+not the full absolute path.  The fidelity report header needed full paths to be unambiguous.
+
+**Fix:** Added an optional `path_resolver: Callable[[str], str | None]` parameter to
+`DictionaryLoader.__init__`.  Added `directory_path_resolver(path)` as a companion to
+`directory_resolver(path)`.  In `_load_constituent`, the path resolver is called to resolve the
+URI to a full path; if absent, the URI is stored as-is.  The base URI is resolved the same way in
+`load()`.
+
+**Rule:** Source and path resolution are separate concerns.  The source resolver fetches content;
+the path resolver maps URIs to filesystem paths for human-readable output.  Keep them separate
+rather than trying to make the source resolver do double duty.
+
+---
+
 ## Lesson 57 — Emit: FK-PK columns pointing to a co-emitted Set are implicit from block scope (2026-04-11)
 
 **Context:** `_suppressed_fk_pk_cols()` and `_render_block()` in `output/emit.py`.

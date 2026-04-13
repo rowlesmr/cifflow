@@ -57,6 +57,7 @@ def save_dictionary(
         'alias_to_definition_id': dictionary.alias_to_definition_id,
         'deprecated_ids': sorted(dictionary.deprecated_ids),
         'warnings': dictionary.warnings,
+        'source_files': dictionary.source_files,
     }
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -129,6 +130,7 @@ def load_dictionary(path: str | pathlib.Path) -> DdlmDictionary:
             alias_to_definition_id=data['alias_to_definition_id'],
             deprecated_ids=set(data['deprecated_ids']),
             warnings=data['warnings'],
+            source_files=data.get('source_files', []),
         )
     except (KeyError, TypeError) as e:
         raise ValueError(f'invalid dictionary cache structure in {path}: {e}')

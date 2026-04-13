@@ -26,6 +26,7 @@ from pycifparse.dictionary.loader import (
     DictionaryLoader,
     SourceResolver,
     directory_resolver,
+    directory_path_resolver,
 )
 from pycifparse.dictionary.schema import (
     ColumnDef,
@@ -46,6 +47,7 @@ __all__ = [
     'DictionaryLoader',
     'SourceResolver',
     'directory_resolver',
+    'directory_path_resolver',
     'ForeignKeyDef',
     'ColumnDef',
     'TableDef',

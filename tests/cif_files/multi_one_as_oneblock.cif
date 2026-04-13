@@ -41,8 +41,8 @@ loop_
 
 loop_
   _cell_measurement.structure_id
-  _cell_measurement.theta_min
   _cell_measurement.theta_max
+  _cell_measurement.theta_min
     Selenium_0  35  5
     Second_0  35  5
     This_is_a_unique_string  35  5
@@ -57,10 +57,11 @@ loop_
 
 loop_
   _diffrn.id
-    dd0df871-57c5-465e-a064-9377cee81e11
-    d06558dc-fd4d-409e-bf44-f61de26dd40c
-    ac0b9c97-0d3d-4da9-9559-c9170bb1a079
-    STP
+  _diffrn.ambient_temperature
+    dd0df871-57c5-465e-a064-9377cee81e11  .
+    d06558dc-fd4d-409e-bf44-f61de26dd40c  .
+    ac0b9c97-0d3d-4da9-9559-c9170bb1a079  .
+    STP  293
 
 loop_
   _diffrn_radiation.diffrn_id
@@ -101,8 +102,8 @@ loop_
   _diffrn_source.current
   _diffrn_source.device
   _diffrn_source.power
-  _diffrn_source.voltage
   _diffrn_source.target
+  _diffrn_source.voltage
     dd0df871-57c5-465e-a064-9377cee81e11  40  tube  1200  Cr  30
     d06558dc-fd4d-409e-bf44-f61de26dd40c  40  tube  1600  Cu  40
     ac0b9c97-0d3d-4da9-9559-c9170bb1a079  15  tube  525  Co  35
@@ -505,7 +506,10 @@ loop_
 
 loop_
   _pd_data.point_id
-  _pd_data.diffractogram.id
+  _pd_data.diffractogram_id
+    0  some_characters
+    1  some_characters
+    2  some_characters
     5  some_characters
     6  some_characters
     7  some_characters
@@ -542,9 +546,6 @@ loop_
     12  another_string
     0  another_string
     1  another_string
-    0  some_characters
-    1  some_characters
-    2  some_characters
 
 loop_
   _pd_diffractogram.id
@@ -560,21 +561,28 @@ loop_
   _pd_instr.cons_illum_flag
   _pd_instr.detector_circle_radius
   _pd_instr.divg_eq_mono_spec
+  _pd_instr.divg_eq_src_spec
   _pd_instr.geometry
   _pd_instr.monochr_pre_spec
   _pd_instr.radiation_id
   _pd_instr.soller_ax_mono_spec
-    chrome_dome           26.6  no  250  0.2    Bragg-Brentano  mosaic graphite  CR_RAD  4
-    copper_top             .  no  295   .    Bragg-Brentano    .         copper    .
-    the_best_wavelength     .  no  145  0.25  Bragg-Brentano  Fe filter  cobalt_tube  4
+  _pd_instr.soller_ax_src_spec
+    chrome_dome           26.6  no  250  0.2    .    Bragg-Brentano  "mosaic graphite"  CR_RAD       4  .
+    copper_top             .    no  295   .    0.15  Bragg-Brentano    .                copper       .  2
+    the_best_wavelength    .    no  145  0.25   .    Bragg-Brentano  "Fe filter"        cobalt_tube  4  .
+
 
 loop_
   _pd_instr_detector.id
   _pd_instr_detector.instr_id
+  _pd_instr.2theta_monochr_post
+  _pd_instr.monochr_post_spec
+  _pd_instr.soller_ax_spec_anal
   _pd_instr.soller_ax_spec_detc
-    CD-detc  chrome_dome  4.5
-    CT_detc  copper_top
-    best-detc  the_best_wavelength  4
+    CD-detc    chrome_dome            .  .                  .  4.5
+    CT_detc    copper_top           26.6 "mosaic graphite"  2  .
+    best-detc  the_best_wavelength    .  .                  .  4
+
 
 loop_
   _pd_meas.point_id
@@ -781,111 +789,112 @@ loop_
   _space_group_symop.id
   _space_group_symop.space_group_id
   _space_group_symop.operation_xyz
-    1  Selenium_0  x, y, z
-    2  Selenium_0  -x, -y, -z
-    3  Selenium_0  -x+y, -x, z
-    4  Selenium_0  -x+y, y, z
-    5  Selenium_0  -y, -x, z
-    6  Selenium_0  -y, x-y, z
-    7  Selenium_0  y, -x+y, -z
-    8  Selenium_0  y, x, -z
-    9  Selenium_0  x-y, -y, -z
-    10  Selenium_0  x-y, x, -z
-    11  Selenium_0  -x, -x+y, -z
-    12  Selenium_0  x, x-y, z
-    13  Selenium_0  x-1/3, y+1/3, z+1/3
-    14  Selenium_0  -x-1/3, -y+1/3, -z+1/3
-    15  Selenium_0  -x+y-1/3, -x+1/3, z+1/3
-    16  Selenium_0  -x+y-1/3, y+1/3, z+1/3
-    17  Selenium_0  -y-1/3, -x+1/3, z+1/3
-    18  Selenium_0  -y-1/3, x-y+1/3, z+1/3
-    19  Selenium_0  y-1/3, -x+y+1/3, -z+1/3
-    20  Selenium_0  y-1/3, x+1/3, -z+1/3
-    21  Selenium_0  x-y-1/3, -y+1/3, -z+1/3
-    22  Selenium_0  x-y-1/3, x+1/3, -z+1/3
-    23  Selenium_0  -x-1/3, -x+y+1/3, -z+1/3
-    24  Selenium_0  x-1/3, x-y+1/3, z+1/3
-    25  Selenium_0  x+1/3, y-1/3, z-1/3
-    26  Selenium_0  -x+1/3, -y-1/3, -z-1/3
-    27  Selenium_0  -x+y+1/3, -x-1/3, z-1/3
-    28  Selenium_0  -x+y+1/3, y-1/3, z-1/3
-    29  Selenium_0  -y+1/3, -x-1/3, z-1/3
-    30  Selenium_0  -y+1/3, x-y-1/3, z-1/3
-    31  Selenium_0  y+1/3, -x+y-1/3, -z-1/3
-    32  Selenium_0  y+1/3, x-1/3, -z-1/3
-    33  Selenium_0  x-y+1/3, -y-1/3, -z-1/3
-    34  Selenium_0  x-y+1/3, x-1/3, -z-1/3
-    35  Selenium_0  -x+1/3, -x+y-1/3, -z-1/3
-    36  Selenium_0  x+1/3, x-y-1/3, z-1/3
-    1  Second_0  x, y, z
-    2  Second_0  -x, -y, z
-    3  Second_0  -x, y, -z
-    4  Second_0  -x, y, z
-    5  Second_0  -y, -x, -z
-    6  Second_0  -y, -x, z
-    7  Second_0  -y, x, -z
-    8  Second_0  -y, x, z
-    9  Second_0  y, -x, -z
-    10  Second_0  y, -x, z
-    11  Second_0  y, x, -z
-    12  Second_0  y, x, z
-    13  Second_0  x, -y, -z
-    14  Second_0  x, -y, z
-    15  Second_0  x, y, -z
-    16  Second_0  -x, -y, -z
-    17  Second_0  x+1/2, y+1/2, z+1/2
-    18  Second_0  -x+1/2, -y+1/2, z+1/2
-    19  Second_0  -x+1/2, y+1/2, -z+1/2
-    20  Second_0  -x+1/2, y+1/2, z+1/2
-    21  Second_0  -y+1/2, -x+1/2, -z+1/2
-    22  Second_0  -y+1/2, -x+1/2, z+1/2
-    23  Second_0  -y+1/2, x+1/2, -z+1/2
-    24  Second_0  -y+1/2, x+1/2, z+1/2
-    25  Second_0  y+1/2, -x+1/2, -z+1/2
-    26  Second_0  y+1/2, -x+1/2, z+1/2
-    27  Second_0  y+1/2, x+1/2, -z+1/2
-    28  Second_0  y+1/2, x+1/2, z+1/2
-    29  Second_0  x+1/2, -y+1/2, -z+1/2
-    30  Second_0  x+1/2, -y+1/2, z+1/2
-    31  Second_0  x+1/2, y+1/2, -z+1/2
-    32  Second_0  -x+1/2, -y+1/2, -z+1/2
-    1  This_is_a_unique_string  x, y, z
-    2  This_is_a_unique_string  -x, -y, z
-    3  This_is_a_unique_string  -x, y, -z
-    4  This_is_a_unique_string  -x, y, z
-    5  This_is_a_unique_string  -y, -x, -z
-    6  This_is_a_unique_string  -y, -x, z
-    7  This_is_a_unique_string  -y, x, -z
-    8  This_is_a_unique_string  -y, x, z
-    9  This_is_a_unique_string  y, -x, -z
-    10  This_is_a_unique_string  y, -x, z
-    11  This_is_a_unique_string  y, x, -z
-    12  This_is_a_unique_string  y, x, z
-    13  This_is_a_unique_string  x, -y, -z
-    14  This_is_a_unique_string  x, -y, z
-    15  This_is_a_unique_string  x, y, -z
-    16  This_is_a_unique_string  -x, -y, -z
-    17  This_is_a_unique_string  x+1/2, y+1/2, z+1/2
-    18  This_is_a_unique_string  -x+1/2, -y+1/2, z+1/2
-    19  This_is_a_unique_string  -x+1/2, y+1/2, -z+1/2
-    20  This_is_a_unique_string  -x+1/2, y+1/2, z+1/2
-    21  This_is_a_unique_string  -y+1/2, -x+1/2, -z+1/2
-    22  This_is_a_unique_string  -y+1/2, -x+1/2, z+1/2
-    23  This_is_a_unique_string  -y+1/2, x+1/2, -z+1/2
-    24  This_is_a_unique_string  -y+1/2, x+1/2, z+1/2
-    25  This_is_a_unique_string  y+1/2, -x+1/2, -z+1/2
-    26  This_is_a_unique_string  y+1/2, -x+1/2, z+1/2
-    27  This_is_a_unique_string  y+1/2, x+1/2, -z+1/2
-    28  This_is_a_unique_string  y+1/2, x+1/2, z+1/2
-    29  This_is_a_unique_string  x+1/2, -y+1/2, -z+1/2
-    30  This_is_a_unique_string  x+1/2, -y+1/2, z+1/2
-    31  This_is_a_unique_string  x+1/2, y+1/2, -z+1/2
-    32  This_is_a_unique_string  -x+1/2, -y+1/2, -z+1/2
+    1  Selenium_0   "x, y, z "
+    2  Selenium_0   "-x, -y, -z "
+    3  Selenium_0   "-x+y, -x, z "
+    4  Selenium_0   "-x+y, y, z "
+    5  Selenium_0   "-y, -x, z "
+    6  Selenium_0   "-y, x-y, z "
+    7  Selenium_0   "y, -x+y, -z "
+    8  Selenium_0   "y, x, -z "
+    9  Selenium_0   "x-y, -y, -z "
+    10  Selenium_0  "x-y, x, -z "
+    11  Selenium_0  "-x, -x+y, -z "
+    12  Selenium_0  "x, x-y, z "
+    13  Selenium_0  "x-1/3, y+1/3, z+1/3 "
+    14  Selenium_0  "-x-1/3, -y+1/3, -z+1/3 "
+    15  Selenium_0  "-x+y-1/3, -x+1/3, z+1/3 "
+    16  Selenium_0  "-x+y-1/3, y+1/3, z+1/3 "
+    17  Selenium_0  "-y-1/3, -x+1/3, z+1/3 "
+    18  Selenium_0  "-y-1/3, x-y+1/3, z+1/3 "
+    19  Selenium_0  "y-1/3, -x+y+1/3, -z+1/3 "
+    20  Selenium_0  "y-1/3, x+1/3, -z+1/3 "
+    21  Selenium_0  "x-y-1/3, -y+1/3, -z+1/3 "
+    22  Selenium_0  "x-y-1/3, x+1/3, -z+1/3 "
+    23  Selenium_0  "-x-1/3, -x+y+1/3, -z+1/3 "
+    24  Selenium_0  "x-1/3, x-y+1/3, z+1/3 "
+    25  Selenium_0  "x+1/3, y-1/3, z-1/3 "
+    26  Selenium_0  "-x+1/3, -y-1/3, -z-1/3 "
+    27  Selenium_0  "-x+y+1/3, -x-1/3, z-1/3 "
+    28  Selenium_0  "-x+y+1/3, y-1/3, z-1/3 "
+    29  Selenium_0  "-y+1/3, -x-1/3, z-1/3 "
+    30  Selenium_0  "-y+1/3, x-y-1/3, z-1/3 "
+    31  Selenium_0  "y+1/3, -x+y-1/3, -z-1/3 "
+    32  Selenium_0  "y+1/3, x-1/3, -z-1/3 "
+    33  Selenium_0  "x-y+1/3, -y-1/3, -z-1/3 "
+    34  Selenium_0  "x-y+1/3, x-1/3, -z-1/3 "
+    35  Selenium_0  "-x+1/3, -x+y-1/3, -z-1/3 "
+    36  Selenium_0  "x+1/3, x-y-1/3, z-1/3 "
+    1  Second_0   "x, y, z "
+    2  Second_0   "-x, -y, z "
+    3  Second_0   "-x, y, -z "
+    4  Second_0   "-x, y, z "
+    5  Second_0   "-y, -x, -z "
+    6  Second_0   "-y, -x, z "
+    7  Second_0   "-y, x, -z "
+    8  Second_0   "-y, x, z "
+    9  Second_0   "y, -x, -z "
+    10  Second_0  "y, -x, z "
+    11  Second_0  "y, x, -z "
+    12  Second_0  "y, x, z "
+    13  Second_0  "x, -y, -z "
+    14  Second_0  "x, -y, z "
+    15  Second_0  "x, y, -z "
+    16  Second_0  "-x, -y, -z "
+    17  Second_0  "x+1/2, y+1/2, z+1/2 "
+    18  Second_0  "-x+1/2, -y+1/2, z+1/2 "
+    19  Second_0  "-x+1/2, y+1/2, -z+1/2 "
+    20  Second_0  "-x+1/2, y+1/2, z+1/2 "
+    21  Second_0  "-y+1/2, -x+1/2, -z+1/2 "
+    22  Second_0  "-y+1/2, -x+1/2, z+1/2 "
+    23  Second_0  "-y+1/2, x+1/2, -z+1/2 "
+    24  Second_0  "-y+1/2, x+1/2, z+1/2 "
+    25  Second_0  "y+1/2, -x+1/2, -z+1/2 "
+    26  Second_0  "y+1/2, -x+1/2, z+1/2 "
+    27  Second_0  "y+1/2, x+1/2, -z+1/2 "
+    28  Second_0  "y+1/2, x+1/2, z+1/2 "
+    29  Second_0  "x+1/2, -y+1/2, -z+1/2 "
+    30  Second_0  "x+1/2, -y+1/2, z+1/2 "
+    31  Second_0  "x+1/2, y+1/2, -z+1/2 "
+    32  Second_0  "-x+1/2, -y+1/2, -z+1/2 "
+    1  This_is_a_unique_string   "x, y, z "
+    2  This_is_a_unique_string   "-x, -y, z "
+    3  This_is_a_unique_string   "-x, y, -z "
+    4  This_is_a_unique_string   "-x, y, z "
+    5  This_is_a_unique_string   "-y, -x, -z "
+    6  This_is_a_unique_string   "-y, -x, z "
+    7  This_is_a_unique_string   "-y, x, -z "
+    8  This_is_a_unique_string   "-y, x, z "
+    9  This_is_a_unique_string   "y, -x, -z "
+    10  This_is_a_unique_string  "y, -x, z "
+    11  This_is_a_unique_string  "y, x, -z "
+    12  This_is_a_unique_string  "y, x, z "
+    13  This_is_a_unique_string  "x, -y, -z "
+    14  This_is_a_unique_string  "x, -y, z "
+    15  This_is_a_unique_string  "x, y, -z "
+    16  This_is_a_unique_string  "-x, -y, -z "
+    17  This_is_a_unique_string  "x+1/2, y+1/2, z+1/2 "
+    18  This_is_a_unique_string  "-x+1/2, -y+1/2, z+1/2 "
+    19  This_is_a_unique_string  "-x+1/2, y+1/2, -z+1/2 "
+    20  This_is_a_unique_string  "-x+1/2, y+1/2, z+1/2 "
+    21  This_is_a_unique_string  "-y+1/2, -x+1/2, -z+1/2 "
+    22  This_is_a_unique_string  "-y+1/2, -x+1/2, z+1/2 "
+    23  This_is_a_unique_string  "-y+1/2, x+1/2, -z+1/2 "
+    24  This_is_a_unique_string  "-y+1/2, x+1/2, z+1/2 "
+    25  This_is_a_unique_string  "y+1/2, -x+1/2, -z+1/2 "
+    26  This_is_a_unique_string  "y+1/2, -x+1/2, z+1/2 "
+    27  This_is_a_unique_string  "y+1/2, x+1/2, -z+1/2 "
+    28  This_is_a_unique_string  "y+1/2, x+1/2, z+1/2 "
+    29  This_is_a_unique_string  "x+1/2, -y+1/2, -z+1/2 "
+    30  This_is_a_unique_string  "x+1/2, -y+1/2, z+1/2 "
+    31  This_is_a_unique_string  "x+1/2, y+1/2, -z+1/2 "
+    32  This_is_a_unique_string  "-x+1/2, -y+1/2, -z+1/2 "
 
 loop_
   _structure.id
   _structure.diffrn_id
+  _structure.phase_id
   _structure.space_group_id
-    Selenium_0  STP    Selenium_0
-    Second_0  STP    Second_0
-    This_is_a_unique_string  STP  This_is_a_unique_string
+    Selenium_0  STP    Selenium_0  Selenium_0
+    Second_0  STP    Second_0  Second_0
+    This_is_a_unique_string  STP  This_is_a_unique_string  This_is_a_unique_string

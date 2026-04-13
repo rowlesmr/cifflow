@@ -10,6 +10,7 @@ from pycifparse.dictionary import (
     DictionaryLoader,
     SourceResolver,
     directory_resolver,
+    directory_path_resolver,
     ForeignKeyDef,
     ColumnDef,
     TableDef,
@@ -25,6 +26,7 @@ from pycifparse.dictionary import (
     load_dictionary,
 )
 from pycifparse.output import emit, quote, EmitMode, OutputPlan, BlockSpec
+from pycifparse.fidelity import check_fidelity, FidelityReport, FidelityMismatch
 from pycifparse.inspect import (
     inspect_lexer,
     inspect_parse,
@@ -44,7 +46,7 @@ __all__ = [
     'compactify_database',
     # Dictionary
     'DdlmItem', 'DdlmDictionary',
-    'DictionaryLoader', 'SourceResolver', 'directory_resolver',
+    'DictionaryLoader', 'SourceResolver', 'directory_resolver', 'directory_path_resolver',
     'ForeignKeyDef', 'ColumnDef', 'TableDef', 'SchemaSpec',
     'generate_schema', 'emit_create_statements', 'emit_fallback_create_statements',
     'apply_schema', 'apply_fallback_schema',
@@ -52,6 +54,8 @@ __all__ = [
     'save_dictionary', 'load_dictionary',
     # Output
     'emit', 'quote', 'EmitMode', 'OutputPlan', 'BlockSpec',
+    # Fidelity
+    'check_fidelity', 'FidelityReport', 'FidelityMismatch',
     # Inspect
     'inspect_lexer', 'inspect_parse', 'ParseHandler',
     'inspect_model', 'inspect_schema', 'inspect_ingest', 'TraceEvent',
