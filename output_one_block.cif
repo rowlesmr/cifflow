@@ -1,9 +1,0 @@
-#\#CIF_2.0
-data_output
-_chemical.absolute_configuration  unk
-
-_diffrn_detector.area_resol_mean  1.0
-
-_diffrn_measurement.details  'text goes here'
-
-_space_group.bravais_type  ap

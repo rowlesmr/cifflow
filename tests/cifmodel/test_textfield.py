@@ -44,6 +44,13 @@ def test_fold_joins_continuation():
     raw = '\\\nThis line is \\\ncontinued here.'
     assert transform_multiline(raw) == 'This line is continued here.'
 
+def test_separator_at_end_disappears():
+    # If the last character of a folded string is the fold separator
+    #  then it doesn't appear in the result
+    raw = '\\\nfirst\\\nsecond\\'
+    result = transform_multiline(raw)
+    assert result == 'firstsecond'
+
 def test_fold_trailing_whitespace_after_backslash_ignored():
     # Fold separator: \ followed by spaces — the spaces are part of the separator
     raw = '\\\npart one\\   \npart two'

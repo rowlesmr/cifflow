@@ -1,0 +1,891 @@
+#\#CIF_2.0
+
+#hand constructed
+
+data_output
+_audit_dataset.id  975eb50d-3a40-4a3c-9625-68f11733da5f
+
+loop_
+  _atom_site.label
+  _atom_site.structure_id
+  _atom_site.B_iso_or_equiv
+  _atom_site.fract_x
+  _atom_site.fract_y
+  _atom_site.fract_z
+  _atom_site.occupancy
+  _atom_site.site_symmetry_multiplicity
+  _atom_site.type_symbol
+    Se1  Selenium_0  1  0  0  0  1  3  Se
+    Pa1  Second_0  1  0  0  0  1  2  Pa
+    Sn1  This_is_a_unique_string  1  0  0  0  1  2  Sn
+
+loop_
+  _atom_type.symbol
+    Se
+    Pa
+    Sn
+
+loop_
+  _cell.structure_id
+  _cell.angle_alpha
+  _cell.angle_beta
+  _cell.angle_gamma
+  _cell.formula_units_Z
+  _cell.length_a
+  _cell.length_b
+  _cell.length_c
+  _cell.volume
+    Selenium_0  90  90  120  3  3.9  3.9  3.1  40.8339638
+    Second_0  90  90  90  2  3.9  3.9  3.2  48.672
+    This_is_a_unique_string  90  90  90  2  3.4  3.4  3.2  36.992
+
+loop_
+  _cell_measurement.structure_id
+  _cell_measurement.theta_min
+  _cell_measurement.theta_max
+    Selenium_0  35  5
+    Second_0  35  5
+    This_is_a_unique_string  35  5
+
+loop_
+  _chemical_formula.phase_id
+  _chemical_formula.sum
+  _chemical_formula.weight
+    Selenium_0  Se  78.96
+    Second_0  Pa  231.03588
+    This_is_a_unique_string  Sn  118.71
+
+loop_
+  _diffrn.id
+    dd0df871-57c5-465e-a064-9377cee81e11
+    d06558dc-fd4d-409e-bf44-f61de26dd40c
+    ac0b9c97-0d3d-4da9-9559-c9170bb1a079
+    STP
+
+loop_
+  _diffrn_radiation.diffrn_id
+  _diffrn_radiation.variant
+  _diffrn_radiation.id
+  _diffrn_radiation.probe
+    dd0df871-57c5-465e-a064-9377cee81e11  .  CR_RAD  x-ray
+    d06558dc-fd4d-409e-bf44-f61de26dd40c  .  copper  x-ray
+    ac0b9c97-0d3d-4da9-9559-c9170bb1a079  .  cobalt_tube  x-ray
+
+loop_
+  _diffrn_radiation_wavelength.id
+  _diffrn_radiation_wavelength.radiation_id
+  _diffrn_radiation_wavelength.value
+  _diffrn_radiation_wavelength.wt
+    0  CR_RAD  2.2896977  0.3780000
+    1  CR_RAD  2.2900254  0.1320000
+    2  CR_RAD  2.2905983  0.0840000
+    3  CR_RAD  2.2915136  0.0730000
+    4  CR_RAD  2.2882482  0.0090000
+    5  CR_RAD  2.2936467  0.2710000
+    6  CR_RAD  2.2943110  0.0540000
+    0  copper  1.5405960  0.5691000
+    1  copper  1.5347530  0.0159000
+    2  copper  1.5410580  0.0762000
+    3  copper  1.5444100  0.2517000
+    4  copper  1.5447210  0.0871000
+    0  cobalt_tube  1.7889847  0.3780000
+    1  cobalt_tube  1.7892524  0.1440000
+    2  cobalt_tube  1.7896946  0.1270000
+    3  cobalt_tube  1.7888515  0.0880000
+    4  cobalt_tube  1.7927905  0.1970000
+    5  cobalt_tube  1.7930637  0.0950000
+    6  cobalt_tube  1.7934738  0.0500000
+
+loop_
+  _diffrn_source.diffrn_id
+  _diffrn_source.current
+  _diffrn_source.device
+  _diffrn_source.power
+  _diffrn_source.voltage
+  _diffrn_source.target
+    dd0df871-57c5-465e-a064-9377cee81e11  40  tube  1200  Cr  30
+    d06558dc-fd4d-409e-bf44-f61de26dd40c  40  tube  1600  Cu  40
+    ac0b9c97-0d3d-4da9-9559-c9170bb1a079  15  tube  525  Co  35
+
+loop_
+_geom_angle.atom_site_label_1
+_geom_angle.atom_site_label_2
+_geom_angle.atom_site_label_3
+_geom_angle.model_id
+_geom_angle.site_symmetry_1
+_geom_angle.site_symmetry_2
+_geom_angle.site_symmetry_3
+_geom_angle.value
+    Se1  Se1  Se1  Selenium_0  13_545  1_555  25_555  76.170
+    Se1  Se1  Se1  Selenium_0  13_555  1_555  13_545  103.830
+    Se1  Se1  Se1  Selenium_0  13_555  1_555  25_555  180.000
+    Se1  Se1  Se1  Selenium_0  25_565  1_555  13_555  76.170
+    Se1  Se1  Se1  Selenium_0  25_565  1_555  13_545  180.000
+    Se1  Se1  Se1  Selenium_0  25_565  1_555  25_555  103.830
+    Se1  Se1  Se1  Selenium_0  25_455  1_555  25_565  103.830
+    Se1  Se1  Se1  Selenium_0  25_455  1_555  13_555  76.170
+    Se1  Se1  Se1  Selenium_0  25_455  1_555  13_545  76.170
+    Se1  Se1  Se1  Selenium_0  25_455  1_555  25_555  103.830
+    Se1  Se1  Se1  Selenium_0  13_655  1_555  25_455  180.000
+    Se1  Se1  Se1  Selenium_0  13_655  1_555  25_565  76.170
+    Se1  Se1  Se1  Selenium_0  13_655  1_555  13_555  103.830
+    Se1  Se1  Se1  Selenium_0  13_655  1_555  13_545  103.830
+    Se1  Se1  Se1  Selenium_0  13_655  1_555  25_555  76.170
+    Se1  Se1  Se1  Selenium_0  25_456  1_555  13_655  112.802
+    Se1  Se1  Se1  Selenium_0  25_456  1_555  25_455  67.198
+    Se1  Se1  Se1  Selenium_0  25_456  1_555  25_565  128.085
+    Se1  Se1  Se1  Selenium_0  25_456  1_555  13_555  51.915
+    Se1  Se1  Se1  Selenium_0  25_456  1_555  13_545  51.915
+    Se1  Se1  Se1  Selenium_0  25_456  1_555  25_555  128.085
+    Se1  Se1  Se1  Selenium_0  13_654  1_555  25_456  180.000
+    Se1  Se1  Se1  Selenium_0  13_654  1_555  13_655  67.198
+    Se1  Se1  Se1  Selenium_0  13_654  1_555  25_455  112.802
+    Se1  Se1  Se1  Selenium_0  13_654  1_555  25_565  51.915
+    Se1  Se1  Se1  Selenium_0  13_654  1_555  13_555  128.085
+    Se1  Se1  Se1  Selenium_0  13_654  1_555  13_545  128.085
+    Se1  Se1  Se1  Selenium_0  13_654  1_555  25_555  51.915
+    Se1  Se1  Se1  Selenium_0  25_556  1_555  13_654  100.711
+    Se1  Se1  Se1  Selenium_0  25_556  1_555  25_456  79.289
+    Se1  Se1  Se1  Selenium_0  25_556  1_555  13_655  51.915
+    Se1  Se1  Se1  Selenium_0  25_556  1_555  25_455  128.085
+    Se1  Se1  Se1  Selenium_0  25_556  1_555  25_565  128.085
+    Se1  Se1  Se1  Selenium_0  25_556  1_555  13_555  112.802
+    Se1  Se1  Se1  Selenium_0  25_556  1_555  13_545  51.915
+    Se1  Se1  Se1  Selenium_0  25_556  1_555  25_555  67.198
+    Se1  Se1  Se1  Selenium_0  13_554  1_555  25_556  180.000
+    Se1  Se1  Se1  Selenium_0  13_554  1_555  13_654  79.289
+    Se1  Se1  Se1  Selenium_0  13_554  1_555  25_456  100.711
+    Se1  Se1  Se1  Selenium_0  13_554  1_555  13_655  128.085
+    Se1  Se1  Se1  Selenium_0  13_554  1_555  25_455  51.915
+    Se1  Se1  Se1  Selenium_0  13_554  1_555  25_565  51.915
+    Se1  Se1  Se1  Selenium_0  13_554  1_555  13_555  67.198
+    Se1  Se1  Se1  Selenium_0  13_554  1_555  13_545  128.085
+    Se1  Se1  Se1  Selenium_0  13_554  1_555  25_555  112.802
+    Se1  Se1  Se1  Selenium_0  13_544  1_555  13_554  79.289
+    Se1  Se1  Se1  Selenium_0  13_544  1_555  25_556  100.711
+    Se1  Se1  Se1  Selenium_0  13_544  1_555  13_654  79.289
+    Se1  Se1  Se1  Selenium_0  13_544  1_555  25_456  100.711
+    Se1  Se1  Se1  Selenium_0  13_544  1_555  13_655  128.085
+    Se1  Se1  Se1  Selenium_0  13_544  1_555  25_455  51.915
+    Se1  Se1  Se1  Selenium_0  13_544  1_555  25_565  112.802
+    Se1  Se1  Se1  Selenium_0  13_544  1_555  13_555  128.085
+    Se1  Se1  Se1  Selenium_0  13_544  1_555  13_545  67.198
+    Se1  Se1  Se1  Selenium_0  13_544  1_555  25_555  51.915
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  13_544  180.000
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  13_554  100.711
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  25_556  79.289
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  13_654  100.711
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  25_456  79.289
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  13_655  51.915
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  25_455  128.085
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  25_565  67.198
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  13_555  51.915
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  13_545  112.802
+    Se1  Se1  Se1  Selenium_0  25_566  1_555  25_555  128.085
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  25_566  132.547
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  13_544  47.453
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  13_554  47.453
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  25_556  132.547
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  13_654  47.453
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  25_456  132.547
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  13_655  114.651
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  25_455  65.349
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  25_565  65.349
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  13_555  114.651
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  13_545  114.651
+    Se1  Se1  Se1  Selenium_0  1_554  1_555  25_555  65.349
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  1_554  180.000
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  25_566  47.453
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  13_544  132.547
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  13_554  132.547
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  25_556  47.453
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  13_654  132.547
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  25_456  47.453
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  13_655  65.349
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  25_455  114.651
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  25_565  114.651
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  13_555  65.349
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  13_545  65.349
+    Se1  Se1  Se1  Selenium_0  1_556  1_555  25_555  114.651
+    Pa1  Pa1  Pa1  Second_0  17_455  1_555  17_454  60.244
+    Pa1  Pa1  Pa1  Second_0  17_544  1_555  17_455  180.000
+    Pa1  Pa1  Pa1  Second_0  17_544  1_555  17_454  119.756
+    Pa1  Pa1  Pa1  Second_0  17_545  1_555  17_544  60.244
+    Pa1  Pa1  Pa1  Second_0  17_545  1_555  17_455  119.756
+    Pa1  Pa1  Pa1  Second_0  17_545  1_555  17_454  180.000
+    Pa1  Pa1  Pa1  Second_0  17_445  1_555  17_545  75.413
+    Pa1  Pa1  Pa1  Second_0  17_445  1_555  17_544  104.587
+    Pa1  Pa1  Pa1  Second_0  17_445  1_555  17_455  75.413
+    Pa1  Pa1  Pa1  Second_0  17_445  1_555  17_454  104.587
+    Pa1  Pa1  Pa1  Second_0  17_554  1_555  17_445  180.000
+    Pa1  Pa1  Pa1  Second_0  17_554  1_555  17_545  104.587
+    Pa1  Pa1  Pa1  Second_0  17_554  1_555  17_544  75.413
+    Pa1  Pa1  Pa1  Second_0  17_554  1_555  17_455  104.587
+    Pa1  Pa1  Pa1  Second_0  17_554  1_555  17_454  75.413
+    Pa1  Pa1  Pa1  Second_0  17_444  1_555  17_554  119.756
+    Pa1  Pa1  Pa1  Second_0  17_444  1_555  17_445  60.244
+    Pa1  Pa1  Pa1  Second_0  17_444  1_555  17_545  104.587
+    Pa1  Pa1  Pa1  Second_0  17_444  1_555  17_544  75.413
+    Pa1  Pa1  Pa1  Second_0  17_444  1_555  17_455  104.587
+    Pa1  Pa1  Pa1  Second_0  17_444  1_555  17_454  75.413
+    Pa1  Pa1  Pa1  Second_0  17_555  1_555  17_444  180.000
+    Pa1  Pa1  Pa1  Second_0  17_555  1_555  17_554  60.244
+    Pa1  Pa1  Pa1  Second_0  17_555  1_555  17_445  119.756
+    Pa1  Pa1  Pa1  Second_0  17_555  1_555  17_545  75.413
+    Pa1  Pa1  Pa1  Second_0  17_555  1_555  17_544  104.587
+    Pa1  Pa1  Pa1  Second_0  17_555  1_555  17_455  75.413
+    Pa1  Pa1  Pa1  Second_0  17_555  1_555  17_454  104.587
+    Pa1  Pa1  Pa1  Second_0  1_554  1_555  17_555  120.122
+    Pa1  Pa1  Pa1  Second_0  1_554  1_555  17_444  59.878
+    Pa1  Pa1  Pa1  Second_0  1_554  1_555  17_554  59.878
+    Pa1  Pa1  Pa1  Second_0  1_554  1_555  17_445  120.122
+    Pa1  Pa1  Pa1  Second_0  1_554  1_555  17_545  120.122
+    Pa1  Pa1  Pa1  Second_0  1_554  1_555  17_544  59.878
+    Pa1  Pa1  Pa1  Second_0  1_554  1_555  17_455  120.122
+    Pa1  Pa1  Pa1  Second_0  1_554  1_555  17_454  59.878
+    Pa1  Pa1  Pa1  Second_0  1_556  1_555  1_554  180.000
+    Pa1  Pa1  Pa1  Second_0  1_556  1_555  17_555  59.878
+    Pa1  Pa1  Pa1  Second_0  1_556  1_555  17_444  120.122
+    Pa1  Pa1  Pa1  Second_0  1_556  1_555  17_554  120.122
+    Pa1  Pa1  Pa1  Second_0  1_556  1_555  17_445  59.878
+    Pa1  Pa1  Pa1  Second_0  1_556  1_555  17_545  59.878
+    Pa1  Pa1  Pa1  Second_0  1_556  1_555  17_544  120.122
+    Pa1  Pa1  Pa1  Second_0  1_556  1_555  17_455  59.878
+    Pa1  Pa1  Pa1  Second_0  1_556  1_555  17_454  120.122
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_454  1_555  17_455  67.289
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_545  1_555  17_454  180.000
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_545  1_555  17_455  112.711
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_544  1_555  17_545  67.289
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_544  1_555  17_454  112.711
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_544  1_555  17_455  180.000
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_445  1_555  17_544  107.876
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_445  1_555  17_545  72.124
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_445  1_555  17_454  107.876
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_445  1_555  17_455  72.124
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_554  1_555  17_445  180.000
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_554  1_555  17_544  72.124
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_554  1_555  17_545  107.876
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_554  1_555  17_454  72.124
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_554  1_555  17_455  107.876
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_444  1_555  17_554  112.711
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_444  1_555  17_445  67.289
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_444  1_555  17_544  72.124
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_444  1_555  17_545  107.876
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_444  1_555  17_454  72.124
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_444  1_555  17_455  107.876
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_555  1_555  17_444  180.000
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_555  1_555  17_554  67.289
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_555  1_555  17_445  112.711
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_555  1_555  17_544  107.876
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_555  1_555  17_545  72.124
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_555  1_555  17_454  107.876
+    Sn1  Sn1  Sn1  This_is_a_unique_string  17_555  1_555  17_455  72.124
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_554  1_555  17_555  123.644
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_554  1_555  17_444  56.356
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_554  1_555  17_554  56.356
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_554  1_555  17_445  123.644
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_554  1_555  17_544  56.356
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_554  1_555  17_545  123.644
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_554  1_555  17_454  56.356
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_554  1_555  17_455  123.644
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_556  1_555  1_554  180.000
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_556  1_555  17_555  56.356
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_556  1_555  17_444  123.644
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_556  1_555  17_554  123.644
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_556  1_555  17_445  56.356
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_556  1_555  17_544  123.644
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_556  1_555  17_545  56.356
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_556  1_555  17_454  123.644
+    Sn1  Sn1  Sn1  This_is_a_unique_string  1_556  1_555  17_455  56.356
+
+loop_
+  _geom_bond.atom_site_label_1
+  _geom_bond.atom_site_label_2
+  _geom_bond.model_id
+  _geom_bond.site_symmetry_1
+  _geom_bond.site_symmetry_2
+  _geom_bond.distance
+    Se1  Se1  Selenium_0  1_555  25_555  2.47745
+    Se1  Se1  Selenium_0  1_555  13_545  2.47745
+    Se1  Se1  Selenium_0  1_555  13_555  2.47745
+    Se1  Se1  Selenium_0  1_555  25_565  2.47745
+    Se1  Se1  Selenium_0  1_555  25_455  2.47745
+    Se1  Se1  Selenium_0  1_555  13_655  2.47745
+    Se1  Se1  Selenium_0  1_555  25_456  3.05632
+    Se1  Se1  Selenium_0  1_555  13_654  3.05632
+    Se1  Se1  Selenium_0  1_555  25_556  3.05632
+    Se1  Se1  Selenium_0  1_555  13_554  3.05632
+    Se1  Se1  Selenium_0  1_555  13_544  3.05632
+    Se1  Se1  Selenium_0  1_555  25_566  3.05632
+    Se1  Se1  Selenium_0  1_555  1_554  3.10000
+    Se1  Se1  Selenium_0  1_555  1_556  3.10000
+    Pa1  Pa1  Second_0  1_555  17_454  3.18826
+    Pa1  Pa1  Second_0  1_555  17_455  3.18826
+    Pa1  Pa1  Second_0  1_555  17_544  3.18826
+    Pa1  Pa1  Second_0  1_555  17_545  3.18826
+    Pa1  Pa1  Second_0  1_555  17_445  3.18826
+    Pa1  Pa1  Second_0  1_555  17_554  3.18826
+    Pa1  Pa1  Second_0  1_555  17_444  3.18826
+    Pa1  Pa1  Second_0  1_555  17_555  3.18826
+    Pa1  Pa1  Second_0  1_555  1_554  3.20000
+    Pa1  Pa1  Second_0  1_555  1_556  3.20000
+    Sn1  Sn1  This_is_a_unique_string  1_555  17_455  2.88791
+    Sn1  Sn1  This_is_a_unique_string  1_555  17_454  2.88791
+    Sn1  Sn1  This_is_a_unique_string  1_555  17_545  2.88791
+    Sn1  Sn1  This_is_a_unique_string  1_555  17_544  2.88791
+    Sn1  Sn1  This_is_a_unique_string  1_555  17_445  2.88791
+    Sn1  Sn1  This_is_a_unique_string  1_555  17_554  2.88791
+    Sn1  Sn1  This_is_a_unique_string  1_555  17_444  2.88791
+    Sn1  Sn1  This_is_a_unique_string  1_555  17_555  2.88791
+    Sn1  Sn1  This_is_a_unique_string  1_555  1_554  3.20000
+    Sn1  Sn1  This_is_a_unique_string  1_555  1_556  3.20000
+
+loop_
+  _model.id
+  _model.structure_id
+    Selenium_0  Selenium_0
+    Second_0  Second_0
+    This_is_a_unique_string  This_is_a_unique_string
+
+loop_
+  _pd_calc.point_id
+  _pd_calc.diffractogram_id
+  _pd_calc.intensity_bkg
+  _pd_calc.intensity_total
+    0  some_characters  2.000000  2.000000
+    1  some_characters  0.500000  0.500000
+    2  some_characters  -0.666667  -0.666667
+    3  some_characters  -1.500000  -1.500000
+    4  some_characters  -2.000000  -2.000000
+    5  some_characters  -2.166667  -2.166667
+    6  some_characters  -2.000000  -2.000000
+    7  some_characters  -1.500000  -1.428918
+    8  some_characters  -0.666667  0.850280
+    9  some_characters  0.500000  3.879597
+    10  some_characters  2.000000  3.598799
+    11  some_characters  3.833333  3.874679
+    12  some_characters  6.000000  6.000000
+    0  a_couple_of_ascii_things  5.000000  5.000000
+    1  a_couple_of_ascii_things  2.166667  2.166667
+    2  a_couple_of_ascii_things  0.000000  0.000000
+    3  a_couple_of_ascii_things  -1.500000  -1.382265
+    4  a_couple_of_ascii_things  -2.333333  -0.980738
+    5  a_couple_of_ascii_things  -2.500000  0.915701
+    6  a_couple_of_ascii_things  -2.000000  1.882979
+    7  a_couple_of_ascii_things  -0.833333  0.774275
+    8  a_couple_of_ascii_things  1.000000  2.174571
+    9  a_couple_of_ascii_things  3.500000  4.916924
+    10  a_couple_of_ascii_things  6.666667  9.883535
+    11  a_couple_of_ascii_things  10.500000  14.209492
+    12  a_couple_of_ascii_things  15.000000  18.379811
+    0  another_string  8.000000  8.000000
+    1  another_string  3.833333  3.833333
+    2  another_string  0.666667  0.666667
+    3  another_string  -1.500000  -1.499611
+    4  another_string  -2.666667  -2.591920
+    5  another_string  -2.833333  -2.041627
+    6  another_string  -2.000000  0.747108
+    7  another_string  -0.166667  7.107417
+    8  another_string  2.666667  4.218258
+    9  another_string  6.500000  8.625384
+    10  another_string  11.333333  12.010790
+    11  another_string  17.166667  18.212252
+    12  another_string  24.000000  24.786397
+
+loop_
+  _pd_calc_component.diffractogram_id
+  _pd_calc_component.point_id
+  _pd_calc_component.phase_id
+  _pd_calc_component.intensity_net
+    some_characters  5  Selenium_0  0.000000
+    some_characters  6  Selenium_0  0.000000
+    some_characters  7  Selenium_0  0.000000
+    some_characters  8  Selenium_0  0.000000
+    some_characters  9  Selenium_0  0.001128
+    some_characters  10  Selenium_0  0.694603
+    some_characters  11  Selenium_0  0.001353
+    some_characters  12  Selenium_0  0.000000
+    some_characters  3  Second_0  0.000000
+    some_characters  4  Second_0  0.000000
+    some_characters  5  Second_0  0.000000
+    some_characters  6  Second_0  0.000000
+    some_characters  7  Second_0  0.071082
+    some_characters  8  Second_0  1.494255
+    some_characters  9  Second_0  3.023972
+    some_characters  10  Second_0  0.003691
+    some_characters  11  Second_0  0.000000
+    some_characters  12  Second_0  0.000000
+    some_characters  4  This_is_a_unique_string  0.000000
+    some_characters  5  This_is_a_unique_string  0.000000
+    some_characters  6  This_is_a_unique_string  0.000000
+    some_characters  7  This_is_a_unique_string  0.000000
+    some_characters  8  This_is_a_unique_string  0.022693
+    some_characters  9  This_is_a_unique_string  0.354497
+    some_characters  10  This_is_a_unique_string  0.900505
+    some_characters  11  This_is_a_unique_string  0.039992
+    some_characters  12  This_is_a_unique_string  0.000000
+    a_couple_of_ascii_things  2  Selenium_0  0.000000
+    a_couple_of_ascii_things  3  Selenium_0  0.000000
+    a_couple_of_ascii_things  4  Selenium_0  0.000000
+    a_couple_of_ascii_things  5  Selenium_0  0.019910
+    a_couple_of_ascii_things  6  Selenium_0  1.339203
+    a_couple_of_ascii_things  7  Selenium_0  0.514866
+    a_couple_of_ascii_things  8  Selenium_0  0.404537
+    a_couple_of_ascii_things  9  Selenium_0  0.024461
+    a_couple_of_ascii_things  10  Selenium_0  0.534743
+    a_couple_of_ascii_things  11  Selenium_0  0.984208
+    a_couple_of_ascii_things  12  Selenium_0  0.117588
+    a_couple_of_ascii_things  0  Second_0  0.000000
+    a_couple_of_ascii_things  1  Second_0  0.000000
+    a_couple_of_ascii_things  2  Second_0  0.000000
+    a_couple_of_ascii_things  3  Second_0  0.117735
+    a_couple_of_ascii_things  4  Second_0  1.234078
+    a_couple_of_ascii_things  5  Second_0  2.227874
+    a_couple_of_ascii_things  6  Second_0  1.339094
+    a_couple_of_ascii_things  7  Second_0  0.767300
+    a_couple_of_ascii_things  8  Second_0  0.613015
+    a_couple_of_ascii_things  9  Second_0  0.923026
+    a_couple_of_ascii_things  10  Second_0  2.305422
+    a_couple_of_ascii_things  11  Second_0  2.288778
+    a_couple_of_ascii_things  12  Second_0  1.776921
+    a_couple_of_ascii_things  1  This_is_a_unique_string  0.000000
+    a_couple_of_ascii_things  2  This_is_a_unique_string  0.000000
+    a_couple_of_ascii_things  3  This_is_a_unique_string  0.000000
+    a_couple_of_ascii_things  4  This_is_a_unique_string  0.118517
+    a_couple_of_ascii_things  5  This_is_a_unique_string  1.167917
+    a_couple_of_ascii_things  6  This_is_a_unique_string  1.204682
+    a_couple_of_ascii_things  7  This_is_a_unique_string  0.325442
+    a_couple_of_ascii_things  8  This_is_a_unique_string  0.157019
+    a_couple_of_ascii_things  9  This_is_a_unique_string  0.469437
+    a_couple_of_ascii_things  10  This_is_a_unique_string  0.376703
+    a_couple_of_ascii_things  11  This_is_a_unique_string  0.436506
+    a_couple_of_ascii_things  12  This_is_a_unique_string  1.485302
+    another_string  2  Selenium_0  0.000000
+    another_string  3  Selenium_0  0.000000
+    another_string  4  Selenium_0  0.000000
+    another_string  5  Selenium_0  0.000448
+    another_string  6  Selenium_0  0.085664
+    another_string  7  Selenium_0  2.068297
+    another_string  8  Selenium_0  0.201925
+    another_string  9  Selenium_0  1.314393
+    another_string  10  Selenium_0  0.004710
+    another_string  11  Selenium_0  0.000000
+    another_string  12  Selenium_0  0.000000
+    another_string  0  Second_0  0.000000
+    another_string  1  Second_0  0.000000
+    another_string  2  Second_0  0.000000
+    another_string  3  Second_0  0.000389
+    another_string  4  Second_0  0.074746
+    another_string  5  Second_0  0.790313
+    another_string  6  Second_0  2.283823
+    another_string  7  Second_0  2.008360
+    another_string  8  Second_0  0.438287
+    another_string  9  Second_0  0.744376
+    another_string  10  Second_0  0.384143
+    another_string  11  Second_0  0.185132
+    another_string  12  Second_0  0.386129
+    another_string  2  This_is_a_unique_string  0.000000
+    another_string  3  This_is_a_unique_string  0.000000
+    another_string  4  This_is_a_unique_string  0.000000
+    another_string  5  This_is_a_unique_string  0.000946
+    another_string  6  This_is_a_unique_string  0.377622
+    another_string  7  This_is_a_unique_string  3.197426
+    another_string  8  This_is_a_unique_string  0.911380
+    another_string  9  This_is_a_unique_string  0.066615
+    another_string  10  This_is_a_unique_string  0.288604
+    another_string  11  This_is_a_unique_string  0.860453
+    another_string  12  This_is_a_unique_string  0.400268
+
+loop_
+  _pd_calc_overall.diffractogram_id
+  _pd_calc.method
+    some_characters  Rietveld
+    a_couple_of_ascii_things  Rietveld
+    another_string  Rietveld
+
+loop_
+  _pd_data.point_id
+  _pd_data.diffractogram.id
+    5  some_characters
+    6  some_characters
+    7  some_characters
+    8  some_characters
+    9  some_characters
+    10  some_characters
+    11  some_characters
+    12  some_characters
+    3  some_characters
+    4  some_characters
+    2  a_couple_of_ascii_things
+    3  a_couple_of_ascii_things
+    4  a_couple_of_ascii_things
+    5  a_couple_of_ascii_things
+    6  a_couple_of_ascii_things
+    7  a_couple_of_ascii_things
+    8  a_couple_of_ascii_things
+    9  a_couple_of_ascii_things
+    10  a_couple_of_ascii_things
+    11  a_couple_of_ascii_things
+    12  a_couple_of_ascii_things
+    0  a_couple_of_ascii_things
+    1  a_couple_of_ascii_things
+    2  another_string
+    3  another_string
+    4  another_string
+    5  another_string
+    6  another_string
+    7  another_string
+    8  another_string
+    9  another_string
+    10  another_string
+    11  another_string
+    12  another_string
+    0  another_string
+    1  another_string
+    0  some_characters
+    1  some_characters
+    2  some_characters
+
+loop_
+  _pd_diffractogram.id
+  _pd_diffractogram.diffrn_id
+  _pd_diffractogram.instr_id
+    some_characters  STP  chrome_dome
+    a_couple_of_ascii_things  STP  copper_top
+    another_string  STP  the_best_wavelength
+
+loop_
+  _pd_instr.id
+  _pd_instr.2theta_monochr_pre
+  _pd_instr.cons_illum_flag
+  _pd_instr.detector_circle_radius
+  _pd_instr.divg_eq_mono_spec
+  _pd_instr.geometry
+  _pd_instr.monochr_pre_spec
+  _pd_instr.radiation_id
+  _pd_instr.soller_ax_mono_spec
+    chrome_dome           26.6  no  250  0.2    Bragg-Brentano  mosaic graphite  CR_RAD  4
+    copper_top             .  no  295   .    Bragg-Brentano    .         copper    .
+    the_best_wavelength     .  no  145  0.25  Bragg-Brentano  Fe filter  cobalt_tube  4
+
+loop_
+  _pd_instr_detector.id
+  _pd_instr_detector.instr_id
+  _pd_instr.soller_ax_spec_detc
+    CD-detc  chrome_dome  4.5
+    CT_detc  copper_top
+    best-detc  the_best_wavelength  4
+
+loop_
+  _pd_meas.point_id
+  _pd_meas.diffractogram_id
+  _pd_meas.2theta_scan
+    0  some_characters  10.000000
+    1  some_characters  15.000000
+    2  some_characters  20.000000
+    3  some_characters  25.000000
+    4  some_characters  30.000000
+    5  some_characters  35.000000
+    6  some_characters  40.000000
+    7  some_characters  45.000000
+    8  some_characters  50.000000
+    9  some_characters  55.000000
+    10  some_characters  60.000000
+    11  some_characters  65.000000
+    12  some_characters  70.000000
+    0  a_couple_of_ascii_things  10.000000
+    1  a_couple_of_ascii_things  15.000000
+    2  a_couple_of_ascii_things  20.000000
+    3  a_couple_of_ascii_things  25.000000
+    4  a_couple_of_ascii_things  30.000000
+    5  a_couple_of_ascii_things  35.000000
+    6  a_couple_of_ascii_things  40.000000
+    7  a_couple_of_ascii_things  45.000000
+    8  a_couple_of_ascii_things  50.000000
+    9  a_couple_of_ascii_things  55.000000
+    10  a_couple_of_ascii_things  60.000000
+    11  a_couple_of_ascii_things  65.000000
+    12  a_couple_of_ascii_things  70.000000
+    0  another_string  10.000000
+    1  another_string  15.000000
+    2  another_string  20.000000
+    3  another_string  25.000000
+    4  another_string  30.000000
+    5  another_string  35.000000
+    6  another_string  40.000000
+    7  another_string  45.000000
+    8  another_string  50.000000
+    9  another_string  55.000000
+    10  another_string  60.000000
+    11  another_string  65.000000
+    12  another_string  70.000000
+
+loop_
+  _pd_meas_overall.diffractogram_id
+  _pd_meas.datetime_initiated
+  _pd_meas.scan_method
+    some_characters  2022-01-11T14:32:57+02:00  cont
+    a_couple_of_ascii_things  2022-01-12T13:36:23+02:00  cont
+    another_string  2022-01-13T12:22:58+02:00  cont
+
+loop_
+  _pd_phase.id
+  _pd_phase.atten_coef_mu_calc
+  _pd_phase.density_diffrn
+  _pd_phase.mass_atten_coef_mu_calc
+  _pd_phase.name
+    Selenium_0  221.210233  9.63288219  229.640754  Selenium
+    Second_0  1259.58679  15.7644792  799.003107  Second
+    This_is_a_unique_string  732.954793  10.6575869  687.730534  Tin
+
+loop_
+  _pd_phase_mass.diffractogram_id
+  _pd_phase_mass.phase_id
+  _pd_phase_mass.percent
+    some_characters  Selenium_0  23.623562
+    some_characters  Second_0  54.9267707
+    some_characters  This_is_a_unique_string  21.4496673
+    a_couple_of_ascii_things  Selenium_0  32.5677757
+    a_couple_of_ascii_things  Second_0  37.8614104
+    a_couple_of_ascii_things  This_is_a_unique_string  29.5708139
+    another_string  Selenium_0  37.2716307
+    another_string  Second_0  28.8865599
+    another_string  This_is_a_unique_string  33.8418093
+
+loop_
+  _pd_pref_orient.diffractogram_id
+  _pd_pref_orient.phase_id
+  _pd_pref_orient.geom
+    some_characters  Selenium_0  srefln
+    a_couple_of_ascii_things  Selenium_0  srefln
+    another_string  Selenium_0  srefln
+
+loop_
+  _pd_pref_orient_March_Dollase.diffractogram_id
+  _pd_pref_orient_March_Dollase.id
+  _pd_pref_orient_March_Dollase.phase_id
+  _pd_pref_orient_March_Dollase.hkl
+  _pd_pref_orient_March_Dollase.r
+    some_characters  0  Selenium_0  [ 1 2 3 ]  0.9
+    a_couple_of_ascii_things  0  Selenium_0  [ 1 2 3 ]  0.8
+    another_string  0  Selenium_0  [ 1 2 3 ]  0.7
+
+loop_
+  _pd_proc.point_id
+  _pd_proc.diffractogram_id
+  _pd_proc.2theta_corrected
+  _pd_proc.intensity_total
+  _pd_proc.ls_weight
+    0  some_characters  10.000000  1.000000  1.000000
+    1  some_characters  15.000000  1.000000  1.000000
+    2  some_characters  20.000000  1.000000  1.000000
+    3  some_characters  25.000000  1.000000  1.000000
+    4  some_characters  30.000000  1.000000  1.000000
+    5  some_characters  35.000000  1.000000  1.000000
+    6  some_characters  40.000000  1.000000  1.000000
+    7  some_characters  45.000000  1.000000  1.000000
+    8  some_characters  50.000000  1.000000  1.000000
+    9  some_characters  55.000000  1.000000  1.000000
+    10  some_characters  60.000000  1.000000  1.000000
+    11  some_characters  65.000000  1.000000  1.000000
+    12  some_characters  70.000000  1.000000  1.000000
+    0  a_couple_of_ascii_things  9.967007  2.000000  0.500000
+    1  a_couple_of_ascii_things  14.967164  2.000000  0.500000
+    2  a_couple_of_ascii_things  19.967384  2.000000  0.500000
+    3  a_couple_of_ascii_things  24.967666  2.000000  0.500000
+    4  a_couple_of_ascii_things  29.968010  2.000000  0.500000
+    5  a_couple_of_ascii_things  34.968414  2.000000  0.500000
+    6  a_couple_of_ascii_things  39.968878  2.000000  0.500000
+    7  a_couple_of_ascii_things  44.969402  2.000000  0.500000
+    8  a_couple_of_ascii_things  49.969984  2.000000  0.500000
+    9  a_couple_of_ascii_things  54.970623  2.000000  0.500000
+    10  a_couple_of_ascii_things  59.971318  2.000000  0.500000
+    11  a_couple_of_ascii_things  64.972068  2.000000  0.500000
+    12  a_couple_of_ascii_things  69.972871  2.000000  0.500000
+    0  another_string  10.032993  3.000000  0.333333
+    1  another_string  15.032836  3.000000  0.333333
+    2  another_string  20.032616  3.000000  0.333333
+    3  another_string  25.032334  3.000000  0.333333
+    4  another_string  30.031990  3.000000  0.333333
+    5  another_string  35.031586  3.000000  0.333333
+    6  another_string  40.031122  3.000000  0.333333
+    7  another_string  45.030598  3.000000  0.333333
+    8  another_string  50.030016  3.000000  0.333333
+    9  another_string  55.029377  3.000000  0.333333
+    10  another_string  60.028682  3.000000  0.333333
+    11  another_string  65.027932  3.000000  0.333333
+    12  another_string  70.027129  3.000000  0.333333
+
+loop_
+  _pd_proc_ls.diffractogram_id
+  _pd_proc_ls.peak_cutoff
+  _pd_proc_ls.prof_r_factor
+  _pd_proc_ls.prof_wr_expected
+  _pd_proc_ls.prof_wr_factor
+    some_characters  0.0001  2.36654  1.00000  2.66800
+    a_couple_of_ascii_things  0.0001  2.05850  0.70711  3.17473
+    another_string  0.0001  2.11572  0.57735  2.85010
+
+loop_
+  _refln.id
+  _pd_refln.phase_id
+  _refln.diffractogram_id
+  _refln.d_spacing
+  _refln.f_squared_calc
+  _refln.f_squared_meas
+  _refln.index_h
+  _refln.index_k
+  _refln.index_l
+  _refln.wavelength_id
+    101  Selenium_0  some_characters  2.283844  3.351732  0.931110  1  0  1  0
+    101  Second_0  some_characters  2.473835  14.991692  3.879232  1  0  1  0
+    110  Second_0  some_characters  2.757716  7.986333  355583.428368  1  1  0  0
+    101  This_is_a_unique_string  some_characters  2.330240  4.358992  1.202619  1  0  1  0
+    110  This_is_a_unique_string  some_characters  2.404163  2.233577  0.691579  1  1  0  0
+    10-2  Selenium_0  a_couple_of_ascii_things  1.408738  3.649552  0.508650  1  0  -2  0
+    101  Selenium_0  a_couple_of_ascii_things  2.283844  6.338879  6.984046  1  0  1  0
+    2-10  Selenium_0  a_couple_of_ascii_things  1.950000  5.458469  9.933590  2  -1  0  0
+    20-1  Selenium_0  a_couple_of_ascii_things  1.482980  3.932593  0.734234  2  0  -1  0
+    002  Second_0  a_couple_of_ascii_things  1.600000  2.754013  0.884908  0  0  2  0
+    101  Second_0  a_couple_of_ascii_things  2.473835  15.977578  2388365.058112  1  0  1  0
+    110  Second_0  a_couple_of_ascii_things  2.757716  8.518095  4374402.136265  1  1  0  0
+    112  Second_0  a_couple_of_ascii_things  1.383936  9.251318  1.153249  1  1  2  0
+    200  Second_0  a_couple_of_ascii_things  1.950000  6.688723  11.515440  2  0  0  0
+    211  Second_0  a_couple_of_ascii_things  1.531432  20.966272  4.757181  2  1  1  0
+    220  Second_0  a_couple_of_ascii_things  1.378858  4.603383  0.562502  2  2  0  0
+    002  This_is_a_unique_string  a_couple_of_ascii_things  1.600000  1.583164  0.494831  0  0  2  0
+    101  This_is_a_unique_string  a_couple_of_ascii_things  2.330240  9.305829  350891.738946  1  0  1  0
+    110  This_is_a_unique_string  a_couple_of_ascii_things  2.404163  4.767936  242091.226282  1  1  0  0
+    200  This_is_a_unique_string  a_couple_of_ascii_things  1.700000  3.413946  1.752403  2  0  0  0
+    211  This_is_a_unique_string  a_couple_of_ascii_things  1.373370  10.185292  1.195495  2  1  1  0
+    101  Selenium_0  another_string  2.283844  9.723072  1863.452096  1  0  1  0
+    2-10  Selenium_0  another_string  1.950000  8.384258  2.945139  2  -1  0  0
+    002  Second_0  another_string  1.600000  2.766117  0.381988  0  0  2  0
+    101  Second_0  another_string  2.473835  15.989989  986409.733943  1  0  1  0
+    110  Second_0  another_string  2.757716  8.520133  3026921.691428  1  1  0  0
+    200  Second_0  another_string  1.950000  6.704785  2.621793  2  0  0  0
+    002  This_is_a_unique_string  another_string  1.600000  2.364504  0.326527  0  0  2  0
+    101  This_is_a_unique_string  another_string  2.330240  13.879576  10.611063  1  0  1  0
+    110  This_is_a_unique_string  another_string  2.404163  7.110879  4392.449564  1  1  0  0
+    200  This_is_a_unique_string  another_string  1.700000  5.097206  0.959128  2  0  0  0
+
+loop_
+  _space_group.id
+  _space_group.crystal_system
+  _space_group.name_h-m_alt
+    Selenium_0  hexagonal  R-3m
+    Second_0  tetragonal  I4/mmm
+    This_is_a_unique_string  tetragonal  I4/mmm
+
+loop_
+  _space_group_symop.id
+  _space_group_symop.space_group_id
+  _space_group_symop.operation_xyz
+    1  Selenium_0  x, y, z
+    2  Selenium_0  -x, -y, -z
+    3  Selenium_0  -x+y, -x, z
+    4  Selenium_0  -x+y, y, z
+    5  Selenium_0  -y, -x, z
+    6  Selenium_0  -y, x-y, z
+    7  Selenium_0  y, -x+y, -z
+    8  Selenium_0  y, x, -z
+    9  Selenium_0  x-y, -y, -z
+    10  Selenium_0  x-y, x, -z
+    11  Selenium_0  -x, -x+y, -z
+    12  Selenium_0  x, x-y, z
+    13  Selenium_0  x-1/3, y+1/3, z+1/3
+    14  Selenium_0  -x-1/3, -y+1/3, -z+1/3
+    15  Selenium_0  -x+y-1/3, -x+1/3, z+1/3
+    16  Selenium_0  -x+y-1/3, y+1/3, z+1/3
+    17  Selenium_0  -y-1/3, -x+1/3, z+1/3
+    18  Selenium_0  -y-1/3, x-y+1/3, z+1/3
+    19  Selenium_0  y-1/3, -x+y+1/3, -z+1/3
+    20  Selenium_0  y-1/3, x+1/3, -z+1/3
+    21  Selenium_0  x-y-1/3, -y+1/3, -z+1/3
+    22  Selenium_0  x-y-1/3, x+1/3, -z+1/3
+    23  Selenium_0  -x-1/3, -x+y+1/3, -z+1/3
+    24  Selenium_0  x-1/3, x-y+1/3, z+1/3
+    25  Selenium_0  x+1/3, y-1/3, z-1/3
+    26  Selenium_0  -x+1/3, -y-1/3, -z-1/3
+    27  Selenium_0  -x+y+1/3, -x-1/3, z-1/3
+    28  Selenium_0  -x+y+1/3, y-1/3, z-1/3
+    29  Selenium_0  -y+1/3, -x-1/3, z-1/3
+    30  Selenium_0  -y+1/3, x-y-1/3, z-1/3
+    31  Selenium_0  y+1/3, -x+y-1/3, -z-1/3
+    32  Selenium_0  y+1/3, x-1/3, -z-1/3
+    33  Selenium_0  x-y+1/3, -y-1/3, -z-1/3
+    34  Selenium_0  x-y+1/3, x-1/3, -z-1/3
+    35  Selenium_0  -x+1/3, -x+y-1/3, -z-1/3
+    36  Selenium_0  x+1/3, x-y-1/3, z-1/3
+    1  Second_0  x, y, z
+    2  Second_0  -x, -y, z
+    3  Second_0  -x, y, -z
+    4  Second_0  -x, y, z
+    5  Second_0  -y, -x, -z
+    6  Second_0  -y, -x, z
+    7  Second_0  -y, x, -z
+    8  Second_0  -y, x, z
+    9  Second_0  y, -x, -z
+    10  Second_0  y, -x, z
+    11  Second_0  y, x, -z
+    12  Second_0  y, x, z
+    13  Second_0  x, -y, -z
+    14  Second_0  x, -y, z
+    15  Second_0  x, y, -z
+    16  Second_0  -x, -y, -z
+    17  Second_0  x+1/2, y+1/2, z+1/2
+    18  Second_0  -x+1/2, -y+1/2, z+1/2
+    19  Second_0  -x+1/2, y+1/2, -z+1/2
+    20  Second_0  -x+1/2, y+1/2, z+1/2
+    21  Second_0  -y+1/2, -x+1/2, -z+1/2
+    22  Second_0  -y+1/2, -x+1/2, z+1/2
+    23  Second_0  -y+1/2, x+1/2, -z+1/2
+    24  Second_0  -y+1/2, x+1/2, z+1/2
+    25  Second_0  y+1/2, -x+1/2, -z+1/2
+    26  Second_0  y+1/2, -x+1/2, z+1/2
+    27  Second_0  y+1/2, x+1/2, -z+1/2
+    28  Second_0  y+1/2, x+1/2, z+1/2
+    29  Second_0  x+1/2, -y+1/2, -z+1/2
+    30  Second_0  x+1/2, -y+1/2, z+1/2
+    31  Second_0  x+1/2, y+1/2, -z+1/2
+    32  Second_0  -x+1/2, -y+1/2, -z+1/2
+    1  This_is_a_unique_string  x, y, z
+    2  This_is_a_unique_string  -x, -y, z
+    3  This_is_a_unique_string  -x, y, -z
+    4  This_is_a_unique_string  -x, y, z
+    5  This_is_a_unique_string  -y, -x, -z
+    6  This_is_a_unique_string  -y, -x, z
+    7  This_is_a_unique_string  -y, x, -z
+    8  This_is_a_unique_string  -y, x, z
+    9  This_is_a_unique_string  y, -x, -z
+    10  This_is_a_unique_string  y, -x, z
+    11  This_is_a_unique_string  y, x, -z
+    12  This_is_a_unique_string  y, x, z
+    13  This_is_a_unique_string  x, -y, -z
+    14  This_is_a_unique_string  x, -y, z
+    15  This_is_a_unique_string  x, y, -z
+    16  This_is_a_unique_string  -x, -y, -z
+    17  This_is_a_unique_string  x+1/2, y+1/2, z+1/2
+    18  This_is_a_unique_string  -x+1/2, -y+1/2, z+1/2
+    19  This_is_a_unique_string  -x+1/2, y+1/2, -z+1/2
+    20  This_is_a_unique_string  -x+1/2, y+1/2, z+1/2
+    21  This_is_a_unique_string  -y+1/2, -x+1/2, -z+1/2
+    22  This_is_a_unique_string  -y+1/2, -x+1/2, z+1/2
+    23  This_is_a_unique_string  -y+1/2, x+1/2, -z+1/2
+    24  This_is_a_unique_string  -y+1/2, x+1/2, z+1/2
+    25  This_is_a_unique_string  y+1/2, -x+1/2, -z+1/2
+    26  This_is_a_unique_string  y+1/2, -x+1/2, z+1/2
+    27  This_is_a_unique_string  y+1/2, x+1/2, -z+1/2
+    28  This_is_a_unique_string  y+1/2, x+1/2, z+1/2
+    29  This_is_a_unique_string  x+1/2, -y+1/2, -z+1/2
+    30  This_is_a_unique_string  x+1/2, -y+1/2, z+1/2
+    31  This_is_a_unique_string  x+1/2, y+1/2, -z+1/2
+    32  This_is_a_unique_string  -x+1/2, -y+1/2, -z+1/2
+
+loop_
+  _structure.id
+  _structure.diffrn_id
+  _structure.space_group_id
+    Selenium_0  STP    Selenium_0
+    Second_0  STP    Second_0
+    This_is_a_unique_string  STP  This_is_a_unique_string
