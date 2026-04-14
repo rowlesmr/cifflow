@@ -235,3 +235,27 @@ class TestDuplicateSaveFrames:
 
     def test_get_all_missing_name_returns_empty(self):
         assert self.b.get_all('nonexistent') == []
+
+    def test_contains_save_frame_name(self):
+        """CifBlock.__contains__ for non-tag key checks _save_frames (line 103)."""
+        self.b._add_save_frame(CifSaveFrame('myframe'))
+        assert 'myframe' in self.b
+        assert 'otherframe' not in self.b
+
+
+class TestCifSaveFrameDirect:
+    """Tests that exercise CifSaveFrame methods directly (not via CifBlock override)."""
+
+    def test_getitem_missing_key_raises_key_error(self):
+        """CifSaveFrame.__getitem__ KeyError path (lines 42-43)."""
+        sf = CifSaveFrame('f')
+        sf._append_value('_x', 'v')
+        with pytest.raises(KeyError):
+            _ = sf['_missing']
+
+    def test_contains_present_and_absent(self):
+        """CifSaveFrame.__contains__ (line 46)."""
+        sf = CifSaveFrame('f')
+        sf._append_value('_x', 'v')
+        assert '_x' in sf
+        assert '_y' not in sf
