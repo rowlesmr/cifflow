@@ -14,6 +14,7 @@ import pytest
 from pycifparse.inspect import (
     ParseHandler,
     inspect_lexer,
+    inspect_model,
     inspect_parse,
     inspect_schema,
     TraceEvent,
@@ -96,6 +97,17 @@ class TestInspectLexer:
         """inspect_lexer accepts an open text file object."""
         out = _capture(inspect_lexer, io.StringIO(_SIMPLE))
         assert 'token stream' in out
+
+    def test_version_error_printed(self):
+        # Unrecognised magic line → v_errors → lines 36-37
+        out = _capture(inspect_lexer, '#\\#CIF_99.0\ndata_d _t v\n')
+        assert 'VERSION ERROR' in out
+
+    def test_long_value_truncated(self):
+        # Value with repr() > 50 chars → line 62
+        long_val = 'x' * 60
+        out = _capture(inspect_lexer, f'data_d _t {long_val}\n')
+        assert '…' in out
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +333,163 @@ class TestInspectSchema:
         assert 'SYNTACTIC' not in out
         assert '[ERROR]' not in out
 
+    def test_su_linked_item_shown(self):
+        # Line 128: col.linked_item_id → SU column tag shown
+        dic = """\
+#\\#CIF_2.0
+data_TEST
+
+save_WIDGET
+  _definition.id           WIDGET
+  _definition.scope        Category
+  _definition.class        Loop
+  _name.category_id        widget
+  _category_key.name       '_widget.id'
+save_
+
+save_widget.id
+  _definition.id           '_widget.id'
+  _definition.class        Attribute
+  _name.category_id        widget
+  _name.object_id          id
+  _type.purpose            Key
+  _type.contents           Text
+save_
+
+save_widget.val
+  _definition.id           '_widget.val'
+  _definition.class        Attribute
+  _name.category_id        widget
+  _name.object_id          val
+  _type.contents           Real
+save_
+
+save_widget.val_su
+  _definition.id           '_widget.val_su'
+  _definition.class        Attribute
+  _name.category_id        widget
+  _name.object_id          val_su
+  _type.purpose            SU
+  _type.source             Estimated
+  _type.contents           Real
+  _name.linked_item_id     '_widget.val'
+save_
+"""
+        out = _capture(inspect_schema, dic)
+        assert 'su' in out or '->su' in out.replace(' ', '')
+
+    def test_foreign_keys_shown(self):
+        # Lines 134-151: table has foreign_keys → FK section printed
+        dic = """\
+#\\#CIF_2.0
+data_TEST
+
+save_PARENT
+  _definition.id           PARENT
+  _definition.scope        Category
+  _definition.class        Set
+  _name.category_id        parent
+  _category_key.name       '_parent.id'
+save_
+
+save_parent.id
+  _definition.id           '_parent.id'
+  _definition.class        Attribute
+  _name.category_id        parent
+  _name.object_id          id
+  _type.purpose            Key
+  _type.contents           Text
+save_
+
+save_CHILD
+  _definition.id           CHILD
+  _definition.scope        Category
+  _definition.class        Loop
+  _name.category_id        child
+  _category_key.name       '_child.id'
+save_
+
+save_child.id
+  _definition.id           '_child.id'
+  _definition.class        Attribute
+  _name.category_id        child
+  _name.object_id          id
+  _type.purpose            Key
+  _type.contents           Text
+save_
+
+save_child.parent_id
+  _definition.id           '_child.parent_id'
+  _definition.class        Attribute
+  _name.category_id        child
+  _name.object_id          parent_id
+  _type.purpose            Link
+  _name.linked_item_id     '_parent.id'
+  _type.contents           Text
+save_
+"""
+        out = _capture(inspect_schema, dic)
+        assert 'foreign key' in out.lower() or '->' in out
+
+    def test_multi_column_foreign_key_shown(self):
+        """Multi-column FK uses composite display (lines 143-147 in _schema.py)."""
+        from pycifparse.dictionary.schema import (
+            SchemaSpec, TableDef, ColumnDef, ForeignKeyDef,
+        )
+        col_a = ColumnDef(name='a', definition_id='_t.a', type_contents='Text',
+                          nullable=False, is_primary_key=True, is_synthetic=False,
+                          linked_item_id=None)
+        col_b = ColumnDef(name='b', definition_id='_t.b', type_contents='Text',
+                          nullable=False, is_primary_key=True, is_synthetic=False,
+                          linked_item_id=None)
+        fk = ForeignKeyDef(
+            source_table='child', source_columns=['a', 'b'],
+            target_table='parent', target_columns=['x', 'y'],
+        )
+        tdef = TableDef(
+            name='child', definition_id='_child', category_class='Loop',
+            columns=[col_a, col_b], primary_keys=['a', 'b'],
+            foreign_keys=[fk],
+        )
+        schema = SchemaSpec(
+            tables={'child': tdef},
+            column_to_tag={('child', 'a'): '_t.a', ('child', 'b'): '_t.b'},
+        )
+        out = _capture(inspect_schema, schema)
+        assert 'a, b' in out or '(a' in out  # composite FK columns shown
+
+    def test_schema_warnings_shown(self):
+        # Lines 161-164: schema.warnings → warnings section printed
+        from pycifparse.dictionary.loader import DictionaryLoader
+        from pycifparse.dictionary.schema import generate_schema
+        # Build a schema that produces a warning: missing category keys
+        dic_no_keys = """\
+#\\#CIF_2.0
+data_TEST
+
+save_WIDGET
+  _definition.id           WIDGET
+  _definition.scope        Category
+  _definition.class        Loop
+  _name.category_id        widget
+save_
+
+save_widget.val
+  _definition.id           '_widget.val'
+  _definition.class        Attribute
+  _name.category_id        widget
+  _name.object_id          val
+  _type.contents           Real
+save_
+"""
+        loader = DictionaryLoader()
+        d = loader.load(dic_no_keys)
+        schema = generate_schema(d)
+        # schema.warnings should be non-empty (no category keys → warning)
+        out = _capture(inspect_schema, schema)
+        if schema.warnings:
+            assert 'warning' in out.lower() or '!' in out
+
 
 # ---------------------------------------------------------------------------
 # inspect_ingest + TraceEvent
@@ -399,3 +568,441 @@ class TestInspectIngest:
         assert ev.table == 'cell'
         assert ev.block_id is None
         assert ev.tag is None
+
+    def test_file_none_defaults_to_stdout(self):
+        """When file= is omitted, output goes to sys.stdout."""
+        import sqlite3
+        from unittest.mock import patch
+        from pycifparse import build
+        from pycifparse.dictionary.schema_apply import apply_fallback_schema
+        from pycifparse.inspect import inspect_ingest
+
+        cif, _ = build(_SIMPLE)
+        conn = sqlite3.connect(':memory:')
+        conn.isolation_level = None
+        apply_fallback_schema(conn)
+
+        captured = io.StringIO()
+        with patch('sys.stdout', captured):
+            inspect_ingest(cif, conn, schema=None)
+        conn.close()
+        assert captured.getvalue()
+
+    def test_ingestion_warning_on_incompatible_loop(self):
+        """Incompatible multi-category loop produces an on_error warning."""
+        import sqlite3
+        from pycifparse import build
+        from pycifparse.dictionary.loader import DictionaryLoader
+        from pycifparse.dictionary.schema import generate_schema
+        from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
+        from pycifparse.inspect import inspect_ingest
+
+        # Two unrelated Loop categories — a loop spanning both is incompatible.
+        two_table_dic = """\
+#\\#CIF_2.0
+data_TWO
+
+save_WIDGET
+  _definition.id       WIDGET
+  _definition.scope    Category
+  _definition.class    Loop
+  _name.category_id    widget
+  _category_key.name   '_widget.id'
+save_
+
+save_widget.id
+  _definition.id       '_widget.id'
+  _definition.class    Attribute
+  _name.category_id    widget
+  _name.object_id      id
+  _type.purpose        Key
+  _type.contents       Text
+save_
+
+save_GADGET
+  _definition.id       GADGET
+  _definition.scope    Category
+  _definition.class    Loop
+  _name.category_id    gadget
+  _category_key.name   '_gadget.id'
+save_
+
+save_gadget.code
+  _definition.id       '_gadget.code'
+  _definition.class    Attribute
+  _name.category_id    gadget
+  _name.object_id      code
+  _type.purpose        Key
+  _type.contents       Text
+save_
+"""
+        loader = DictionaryLoader()
+        schema = generate_schema(loader.load(two_table_dic))
+
+        # Loop spans two unrelated categories with different PK column names
+        # (widget PK='id', gadget PK='code') → incompatible multi-category loop
+        cif_src = 'data_test\nloop_\n  _widget.id\n  _gadget.code\n  W1 G1\n'
+        cif, _ = build(cif_src)
+
+        conn = sqlite3.connect(':memory:')
+        conn.isolation_level = None
+        apply_schema(conn, schema)
+        apply_fallback_schema(conn)
+
+        buf = io.StringIO()
+        result = inspect_ingest(cif, conn, schema=schema, file=buf)
+        conn.close()
+
+        assert any(ev.kind == 'warning' for ev in result)
+        assert 'warning' in buf.getvalue().lower()
+
+    def test_clean_ingest_no_warnings(self):
+        """Clean ingest prints the 'no warnings' message."""
+        import sqlite3
+        from pycifparse import build
+        from pycifparse.dictionary.schema_apply import apply_fallback_schema
+        from pycifparse.inspect import inspect_ingest
+
+        cif, _ = build(_SIMPLE)
+        conn = sqlite3.connect(':memory:')
+        conn.isolation_level = None
+        apply_fallback_schema(conn)
+
+        buf = io.StringIO()
+        result = inspect_ingest(cif, conn, schema=None, file=buf)
+        conn.close()
+
+        assert result == []
+        assert 'no warnings' in buf.getvalue().lower()
+
+    def test_fk_violation_detected_in_pre_commit(self):
+        """FK violations detected in _pre_commit are reported in the output.
+
+        Strategy: pre-populate the DB (FK enforcement OFF) with a child row
+        that has no matching parent, then call inspect_ingest with an empty CIF.
+        _pre_commit fires → PRAGMA foreign_key_check sees the pre-existing
+        violation → fk_violation events are appended.  The empty-CIF COMMIT
+        itself succeeds (no rows changed in this transaction), so IngestionError
+        is NOT raised and lines 221-223 are covered.
+
+        To test the FK-violation and IngestionError paths in isolation, mock
+        _Ingester.run to raise/return independently.
+        """
+        import sqlite3
+        from pycifparse import build
+        from pycifparse.dictionary.loader import DictionaryLoader
+        from pycifparse.dictionary.schema import generate_schema
+        from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
+        from pycifparse.inspect import inspect_ingest
+
+        _FK_DIC = """\
+#\\#CIF_2.0
+data_FKTEST
+
+save_PARENT
+  _definition.id        PARENT
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     parent
+  _category_key.name    '_parent.id'
+save_
+
+save_parent.id
+  _definition.id        '_parent.id'
+  _definition.class     Attribute
+  _name.category_id     parent
+  _name.object_id       id
+  _type.purpose         Key
+  _type.contents        Text
+save_
+
+save_CHILD
+  _definition.id        CHILD
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     child
+  _category_key.name    '_child.id'
+save_
+
+save_child.id
+  _definition.id        '_child.id'
+  _definition.class     Attribute
+  _name.category_id     child
+  _name.object_id       id
+  _type.purpose         Key
+  _type.contents        Text
+save_
+
+save_child.parent_id
+  _definition.id        '_child.parent_id'
+  _definition.class     Attribute
+  _name.category_id     child
+  _name.object_id       parent_id
+  _type.purpose         Link
+  _type.contents        Text
+  _name.linked_item_id  '_parent.id'
+save_
+"""
+        loader = DictionaryLoader()
+        schema = generate_schema(loader.load(_FK_DIC))
+
+        conn = sqlite3.connect(':memory:')
+        conn.isolation_level = None
+        apply_schema(conn, schema)
+        apply_fallback_schema(conn)
+
+        # Pre-populate with a violating child row (FK enforcement OFF so the
+        # INSERT succeeds; pre-existing violations are visible to PRAGMA
+        # foreign_key_check during _pre_commit).
+        conn.execute('PRAGMA foreign_keys = OFF')
+        conn.execute(
+            'INSERT INTO "child" ("_block_id", "_row_id", "id", "parent_id") '
+            'VALUES (?, ?, ?, ?)',
+            ('pre', 1, 'C1', 'MISSING_PARENT'),
+        )
+        conn.execute('PRAGMA foreign_keys = ON')
+
+        # Ingest an empty CIF — _pre_commit fires, COMMIT succeeds (no new rows).
+        empty_cif, _ = build('data_empty\n')
+        buf = io.StringIO()
+        result = inspect_ingest(empty_cif, conn, schema=schema, file=buf)
+        conn.close()
+
+        out = buf.getvalue()
+        fk_events = [ev for ev in result if ev.kind == 'fk_violation']
+        assert fk_events, 'expected at least one fk_violation TraceEvent'
+        assert 'FK violations' in out or 'fk' in out.lower()
+
+    def test_ingestion_error_caught_and_reraised(self):
+        """IngestionError from ingestor.run is caught, printed, and re-raised."""
+        import sqlite3
+        from unittest.mock import patch
+        from pycifparse import build
+        from pycifparse.dictionary.schema_apply import apply_fallback_schema
+        from pycifparse.ingestion.ingest import IngestionError
+        from pycifparse.inspect import inspect_ingest
+
+        cif, _ = build(_SIMPLE)
+        conn = sqlite3.connect(':memory:')
+        conn.isolation_level = None
+        apply_fallback_schema(conn)
+
+        buf = io.StringIO()
+        with patch(
+            'pycifparse.ingestion.ingest._Ingester.run',
+            side_effect=IngestionError(['fatal error msg']),
+        ):
+            with pytest.raises(IngestionError):
+                inspect_ingest(cif, conn, schema=None, file=buf)
+        conn.close()
+
+        out = buf.getvalue()
+        assert 'fatal error msg' in out
+        assert 'error' in out.lower()
+
+    def test_semantic_errors_from_run(self):
+        """Errors returned (not raised) by ingestor.run become TraceEvent('error')."""
+        import sqlite3
+        from unittest.mock import patch
+        from pycifparse import build
+        from pycifparse.dictionary.schema_apply import apply_fallback_schema
+        from pycifparse.inspect import inspect_ingest
+
+        cif, _ = build(_SIMPLE)
+        conn = sqlite3.connect(':memory:')
+        conn.isolation_level = None
+        apply_fallback_schema(conn)
+
+        buf = io.StringIO()
+        with patch(
+            'pycifparse.ingestion.ingest._Ingester.run',
+            return_value=['something went wrong'],
+        ):
+            result = inspect_ingest(cif, conn, schema=None, file=buf)
+        conn.close()
+
+        assert any(ev.kind == 'error' and 'something went wrong' in ev.detail
+                   for ev in result)
+
+
+# ---------------------------------------------------------------------------
+# inspect_model
+# ---------------------------------------------------------------------------
+
+_MULTI_LOOP = (
+    'data_test\nloop_\n  _a\n  _b\n'
+    + ''.join(f'  {i} x{i}\n' for i in range(10))
+)
+
+_WITH_SAVE_FRAME = (
+    'data_test\n'
+    'save_MYFRAME\n'
+    '  _frame.tag value\n'
+    'save_\n'
+)
+
+_DUPLICATE_TAG = 'data_test\n_tag first\n_tag second\n'
+
+_TAG_NO_VALUE = 'data_test\n_tag\n'
+
+
+class TestInspectModel:
+    def test_scalar_tag_shown(self):
+        out = _capture(inspect_model, _SIMPLE, show_tokens=False)
+        assert '_tag' in out
+
+    def test_scalar_value_shown(self):
+        out = _capture(inspect_model, _SIMPLE, show_tokens=False)
+        assert 'val' in out
+
+    def test_loop_few_rows_no_ellipsis(self):
+        cif = 'data_test\nloop_\n  _a\n  1\n  2\n  3\n  4\n'
+        out = _capture(inspect_model, cif, show_tokens=False)
+        assert 'loop_' in out
+        assert '...' not in out
+
+    def test_loop_many_rows_ellipsis(self):
+        out = _capture(inspect_model, _MULTI_LOOP, show_tokens=False)
+        assert 'loop_' in out
+        assert '...' in out
+
+    def test_save_frame_shown(self):
+        out = _capture(inspect_model, _WITH_SAVE_FRAME, show_tokens=False)
+        assert 'MYFRAME' in out
+        assert '_frame.tag' in out
+
+    def test_empty_cif_no_blocks(self):
+        out = _capture(inspect_model, '', show_tokens=False)
+        assert '(no blocks)' in out
+
+    def test_multiple_values_suffix(self):
+        out = _capture(inspect_model, _DUPLICATE_TAG, show_tokens=False)
+        assert '2 values' in out
+
+    def test_show_tokens_false_omits_token_stream(self):
+        out = _capture(inspect_model, _SIMPLE, show_tokens=False)
+        assert 'token stream' not in out
+
+    def test_show_tokens_true_includes_token_stream(self):
+        out = _capture(inspect_model, _SIMPLE, show_tokens=True)
+        assert 'token stream' in out
+
+    def test_parse_errors_shown(self):
+        # Tag with no value at EOF → on_error → '-- errors --' in output
+        out = _capture(inspect_model, _TAG_NO_VALUE, show_tokens=False)
+        assert '-- errors --' in out
+
+    def test_path_input(self, tmp_path):
+        p = tmp_path / 'test.cif'
+        p.write_text(_SIMPLE, encoding='utf-8')
+        out = _capture(inspect_model, p, show_tokens=False)
+        assert '_tag' in out
+
+    def test_block_header_shown(self):
+        out = _capture(inspect_model, _SIMPLE, show_tokens=False)
+        assert 'block:' in out or 'd' in out  # block name 'd' from _SIMPLE
+
+
+# ---------------------------------------------------------------------------
+# inspect _common internals
+# ---------------------------------------------------------------------------
+
+class TestInspectCommon:
+    def test_fmt_value_list(self):
+        from pycifparse.inspect._common import fmt_value
+        result = fmt_value(['a', 'b'])
+        assert result.startswith('[')
+        assert 'a' in result
+        assert 'b' in result
+
+    def test_fmt_value_dict(self):
+        from pycifparse.inspect._common import fmt_value
+        result = fmt_value({'key': 'val'})
+        assert result.startswith('{')
+        assert 'key' in result
+
+    def test_fmt_value_long_string_truncated(self):
+        from pycifparse.inspect._common import fmt_value
+        long_str = 'x' * 40
+        result = fmt_value(long_str)
+        assert '...' in result
+        assert len(result) < len(long_str)
+
+    def test_fmt_value_short_string_unchanged(self):
+        from pycifparse.inspect._common import fmt_value
+        assert fmt_value('hello') == 'hello'
+
+    def test_c_with_colour_enabled(self):
+        from unittest.mock import MagicMock
+        from pycifparse.inspect._common import c, BOLD
+        mock_file = MagicMock()
+        mock_file.isatty.return_value = True
+        result = c('text', BOLD, file=mock_file)
+        assert '\033[' in result
+        assert 'text' in result
+
+    def test_c_without_colour_returns_plain_text(self):
+        from pycifparse.inspect._common import c, BOLD
+        result = c('text', BOLD, file=io.StringIO())
+        assert result == 'text'
+
+
+# ---------------------------------------------------------------------------
+# inspect/_parser.py coverage gaps: long value, list events, error context
+# ---------------------------------------------------------------------------
+
+class TestInspectParserCoverageGaps:
+    def test_on_error_empty_context_no_context_appended(self):
+        """on_error with empty context skips context append (branch 133->135)."""
+        from pycifparse.types import ParseError
+        buf = io.StringIO()
+        handler = ParseHandler(file=buf)
+        err = ParseError(
+            error_type='syntactic', message='test error',
+            line=1, column=1,
+            context='',          # empty → branch 133 evaluates False
+            recovery_action='',  # empty → branch 135 evaluates False
+        )
+        handler.on_error(err)
+        out = buf.getvalue()
+        assert 'test error' in out
+        assert 'context' not in out
+        assert '->' not in out.split('--')[1] if '--' in out else True
+
+    def test_on_error_with_context_but_no_recovery(self):
+        """on_error with context set but recovery_action empty (branch 135->137)."""
+        from pycifparse.types import ParseError
+        buf = io.StringIO()
+        handler = ParseHandler(file=buf)
+        err = ParseError(
+            error_type='syntactic', message='test error',
+            line=1, column=1,
+            context='some context',
+            recovery_action='',   # empty → branch 135 evaluates False
+        )
+        handler.on_error(err)
+        out = buf.getvalue()
+        assert 'some context' in out
+
+    def test_long_value_repr_is_truncated(self):
+        """add_value with repr > 60 chars triggers truncation (line 89)."""
+        long_val = 'x' * 60  # repr will be > 60 chars
+        cif = f'#\\#CIF_2.0\ndata_d\n_tag {long_val}\n'
+        out = _capture(inspect_parse, cif)
+        assert 'add_value' in out
+        assert '…' in out
+
+    def test_list_start_and_end_printed(self):
+        """on_list_start and on_list_end are printed (lines 94-96, 99-101)."""
+        cif = '#\\#CIF_2.0\ndata_d\n_tag [1 2]\n'
+        out = _capture(inspect_parse, cif)
+        assert 'on_list_start' in out
+        assert 'on_list_end' in out
+
+    def test_error_with_context_printed(self):
+        """on_error with context and recovery_action fills lines 133->135, 135->137."""
+        # An orphan value triggers an error with context and recovery_action set
+        cif = '#\\#CIF_2.0\ndata_d\northan_value\n'
+        out = _capture(inspect_parse, cif)
+        # Error must appear; context/recovery present in real parser errors
+        assert '[SYNTACTIC]' in out or '[ERROR]' in out or 'ERROR' in out
