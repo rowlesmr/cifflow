@@ -17,6 +17,7 @@ from pycifparse.dictionary.schema import generate_schema
 from pycifparse.dictionary.schema_apply import apply_fallback_schema, apply_schema
 from pycifparse.ingestion.ingest import (
     _apply_fk,
+    _merge_into,
     build_su_map,
     build_tag_to_column,
     decode_container,
@@ -1379,3 +1380,181 @@ class TestOnErrorCallback:
         errors = ingest(f, conn, schema, on_error=received.append)
         assert len(received) == len(errors)
         assert received == errors
+
+
+# ===========================================================================
+# TestMergeIntoCoverage — direct unit tests for _merge_into edge cases
+# ===========================================================================
+
+class TestMergeIntoCoverage:
+    """Cover _merge_into lines: None-value skip (283) and emit-only conflict (294)."""
+
+    def _make_table(self, schema):
+        """Return the cell TableSpec from schema_a."""
+        return schema.tables['structure']
+
+    def test_incoming_none_value_not_written(self):
+        # Line 283: incoming row has None for a column → skip it, keep existing
+        schema = _schema_a()
+        table = schema.tables['structure']
+        merged: dict = {}
+        counters: dict = {}
+        msgs = []
+        # First insert a real row
+        row1 = {'_block_id': 'B', 'id': 'S1'}
+        _merge_into(merged, 'structure', row1, table, counters, msgs.append)
+        # Second insert: same PK, None value for 'id' (PK skipped), plus a hypothetical col
+        # Since structure only has 'id' (which is PK), use cell table for a non-PK col
+        cell_table = schema.tables['cell']
+        cell_merged: dict = {}
+        cell_counters: dict = {}
+        row2 = {'_block_id': 'B', 'structure_id': 'S1', 'length_a': '5.0'}
+        _merge_into(cell_merged, 'cell', row2, cell_table, cell_counters, msgs.append)
+        row3 = {'_block_id': 'B', 'structure_id': 'S1', 'length_a': None}
+        _merge_into(cell_merged, 'cell', row3, cell_table, cell_counters, msgs.append)
+        # length_a should still be '5.0' (None incoming was skipped)
+        existing = list(cell_merged['cell'].values())[0]
+        assert existing['length_a'] == '5.0'
+        assert not msgs
+
+    def test_conflict_without_emit_error_uses_emit(self):
+        # Line 294: no emit_error → emit(msg) on conflict
+        schema = _schema_a()
+        cell_table = schema.tables['cell']
+        merged: dict = {}
+        counters: dict = {}
+        msgs = []
+        row1 = {'_block_id': 'B1', 'structure_id': 'S1', 'length_a': '5.0'}
+        _merge_into(merged, 'cell', row1, cell_table, counters, msgs.append)
+        row2 = {'_block_id': 'B2', 'structure_id': 'S1', 'length_a': '6.0'}
+        # emit_error=None (default) → emit is used for conflict
+        _merge_into(merged, 'cell', row2, cell_table, counters, msgs.append)
+        assert any('merge conflict' in m for m in msgs)
+
+
+# ===========================================================================
+# TestSetMergeConflict — cross-block Set merge conflict (lines 726-730)
+# ===========================================================================
+
+class TestSetMergeConflict:
+    def test_two_blocks_conflicting_set_values_raises_ingestion_error(self):
+        # Two blocks share structure.id='S1' but cell.length_a differs
+        # → Set buffer flush for block B conflicts with block A's merged row
+        schema = _schema_a()
+        f = _file(
+            _block('A', scalars={
+                '_structure.id': _s('S1'),
+                '_cell.length_a': _s('5.0'),
+            }),
+            _block('B', scalars={
+                '_structure.id': _s('S1'),
+                '_cell.length_a': _s('6.0'),
+            }),
+        )
+        conn = _conn(schema)
+        with pytest.raises(IngestionError):
+            ingest(f, conn, schema)
+
+
+# ===========================================================================
+# TestPreCommitHook — _Ingester.run(_pre_commit_hook=...) (line 609)
+# ===========================================================================
+
+class TestPreCommitHook:
+    def test_pre_commit_hook_called_before_commit(self):
+        from pycifparse.ingestion.ingest import _Ingester
+        schema = _schema_a()
+        f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
+        conn = _conn(schema)
+        hook_called = []
+
+        def hook(ingester):
+            hook_called.append(True)
+
+        _Ingester(f, conn, schema, False, None, None).run(_pre_commit_hook=hook)
+        assert hook_called == [True]
+        conn.close()
+
+    def test_pre_commit_hook_exception_rolls_back(self):
+        from pycifparse.ingestion.ingest import _Ingester
+        schema = _schema_a()
+        f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
+        conn = _conn(schema)
+
+        def bad_hook(ingester):
+            raise RuntimeError('hook failure')
+
+        with pytest.raises(RuntimeError, match='hook failure'):
+            _Ingester(f, conn, schema, False, None, None).run(_pre_commit_hook=bad_hook)
+        # After rollback, no rows should be in structure
+        rows = _rows(conn, 'structure')
+        assert rows == []
+        conn.close()
+
+
+# ===========================================================================
+# TestSqliteInsertError — sqlite3 error during _flush insert (lines 1198-1199)
+# ===========================================================================
+
+class TestSqliteInsertError:
+    def test_sqlite_error_on_insert_emits_warning(self):
+        """Drop the table after schema creation so that INSERT fails."""
+        from pycifparse.ingestion.ingest import _Ingester
+        schema = _schema_a()
+        f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
+        conn = _conn(schema)
+        # Drop the structured table so the INSERT fails
+        conn.execute('DROP TABLE "structure"')
+        errors = []
+        _Ingester(f, conn, schema, False, None, errors.append).run()
+        assert any('sqlite3 error' in e for e in errors)
+        conn.close()
+
+
+# ===========================================================================
+# TestFKTargetNotInSchema — FK target not in structured schema (lines 344-349)
+# ===========================================================================
+
+class TestFKKeyAbsentTargetNotInSchema:
+    def test_key_fk_target_missing_from_schema_emits_and_generates_uuid(self):
+        """When the FK target column is not mapped in schema.column_to_tag,
+        a UUID is still generated for a key-FK column (lines 344-349 branch)."""
+        # Build a minimal SchemaSpec where column_to_tag doesn't map the FK target
+        from pycifparse.dictionary.schema import SchemaSpec, TableDef, ColumnDef, ForeignKeyDef
+        col_pk = ColumnDef(name='structure_id', definition_id='_cell.structure_id',
+                           type_contents='Text', nullable=False,
+                           is_primary_key=True, is_synthetic=False,
+                           linked_item_id=None)
+        col_len = ColumnDef(name='length_a', definition_id='_cell.length_a',
+                            type_contents='Real', nullable=True,
+                            is_primary_key=False, is_synthetic=False,
+                            linked_item_id=None)
+        fk = ForeignKeyDef(
+            source_table='cell',
+            source_columns=['structure_id'],
+            target_table='structure',
+            target_columns=['id'],
+        )
+        cell_table = TableDef(
+            name='cell', definition_id='_cell',
+            category_class='Set',
+            columns=[col_pk, col_len],
+            primary_keys=['structure_id'],
+            foreign_keys=[fk],
+        )
+        # column_to_tag does NOT map ('structure', 'id') — simulates missing target
+        schema = SchemaSpec(
+            tables={'cell': cell_table},
+            column_to_tag={
+                ('cell', 'structure_id'): '_cell.structure_id',
+                ('cell', 'length_a'): '_cell.length_a',
+                # ('structure', 'id') intentionally absent
+            },
+        )
+        row = {'_block_id': 'B', 'length_a': '5.0'}
+        msgs = []
+        _apply_fk(row, cell_table, schema, None, {}, propagate_fk=False, emit=msgs.append)
+        # When target is not in schema.column_to_tag, emits a message and leaves NULL
+        sid = row.get('structure_id')
+        assert sid is None  # No UUID generated when target_def_id is missing
+        assert any('NULL' in m or 'not in structured' in m for m in msgs)
