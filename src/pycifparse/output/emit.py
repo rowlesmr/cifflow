@@ -96,6 +96,7 @@ def emit(
     reconstruct_su: bool = False,
     emit_defaults: bool = True,
     line_ending: str = '\n',
+    pretty: bool = True,
 ) -> str:
     """Emit CIF text from a populated SQLite database.
 
@@ -126,6 +127,12 @@ def emit(
         the output.  Use ``'\\n'`` (default, Unix LF), ``'\\r\\n'`` (Windows
         CRLF), or ``'\\r'`` (legacy CR).  The 2048-character line-length limit
         is measured on content before line endings are applied.
+    pretty:
+        When ``True`` (default), tag–value pairs are column-aligned within
+        each Set category and loop column values are padded to the widest
+        value in that column.  When ``False``, output is compact (two spaces
+        between tag and value / between tokens) — recommended for very large
+        loop tables where the alignment pass would be expensive.
 
     Returns
     -------
@@ -157,7 +164,7 @@ def emit(
         if i > 0:
             lines.append('')
             lines.append('')
-        lines.extend(_render_block(name, data, schema, version, spec, reconstruct_su))
+        lines.extend(_render_block(name, data, schema, version, spec, reconstruct_su, pretty))
 
     return line_ending.join(lines) + line_ending
 
@@ -462,14 +469,27 @@ def _collect_one_block(
     conn: sqlite3.Connection,
     schema: SchemaSpec,
 ) -> list[_BlockData]:
-    """ONE_BLOCK: all data in a single block named 'output'."""
+    """ONE_BLOCK: all data in a single block.
+
+    The anchor_key_dict is intentionally empty: the block name is not derived
+    from key values (which would concatenate every anchor key from the entire
+    database).  The name is resolved by block_namer if provided, otherwise
+    falls back to ``'output'``.
+    """
     table_rows = {}
     for table_name in schema.tables:
         rows = _fetch_rows(conn, table_name)
         if rows:
             table_rows[table_name] = rows
     fallback = _fetch_rows(conn, '_cif_fallback')
-    return [_make_block_data('output', table_rows, fallback, schema, suppress_fk_pk=False)]
+    return [_BlockData(
+        name='output',
+        table_rows=table_rows,
+        fallback_rows=fallback,
+        anchor_frozenset=frozenset(),
+        anchor_key_dict={},
+        suppress_fk_pk=False,
+    )]
 
 
 def _collect_all_blocks(
@@ -523,6 +543,7 @@ def _render_block(
     version: CifVersion,
     spec: BlockSpec | None,
     reconstruct_su: bool,
+    pretty: bool,
 ) -> list[str]:
     """Render a single CIF block as a flat list of output lines."""
     lines: list[str] = [f'data_{block_name}']
@@ -543,7 +564,7 @@ def _render_block(
     for item in _ordered_categories(schema, spec, data.table_rows):
         if isinstance(item, list):
             # Merge group
-            cat_lines = _render_merge_group(item, data.table_rows, schema, version, spec, reconstruct_su)
+            cat_lines = _render_merge_group(item, data.table_rows, schema, version, spec, reconstruct_su, pretty)
             if cat_lines:
                 if not first_category:
                     lines.append('')
@@ -570,14 +591,14 @@ def _render_block(
             first_category = False
 
             if table_def.category_class == 'Set' and len(rows) == 1:
-                lines.extend(_render_set_category(rows[0], cols, table_name, schema, version, table_def, reconstruct_su))
+                lines.extend(_render_set_category(rows[0], cols, table_name, schema, version, table_def, reconstruct_su, pretty))
             else:
-                lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su))
+                lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su, pretty))
 
     if data.fallback_rows:
         if not first_category:
             lines.append('')
-        lines.extend(_render_fallback(data.fallback_rows, version))
+        lines.extend(_render_fallback(data.fallback_rows, version, pretty))
 
     return lines
 
@@ -683,6 +704,7 @@ def _render_merge_group(
     version: CifVersion,
     spec: BlockSpec | None,
     reconstruct_su: bool,
+    pretty: bool,
 ) -> list[str]:
     """Render a merge group as a single loop_ or as plain loops.
 
@@ -719,7 +741,7 @@ def _render_merge_group(
             if not first:
                 lines.append('')
             first = False
-            lines.extend(_render_loop_category(rows, cols, cat, schema, version, tdef, reconstruct_su))
+            lines.extend(_render_loop_category(rows, cols, cat, schema, version, tdef, reconstruct_su, pretty))
         return lines
 
     # Key-compatible: FULL OUTER JOIN in Python.
@@ -771,6 +793,8 @@ def _render_merge_group(
 
     su_maps = {cat: (_su_col_map(schema.tables[cat]) if reconstruct_su else {}) for cat in present}
 
+    # Build token matrix.
+    matrix: list[list[str]] = []
     for pk_vals in all_pk_vals:
         tokens = []
         for cat, col in merged_cols:
@@ -786,7 +810,12 @@ def _render_merge_group(
                         value = _merge_su(value, su_val)
                 token = quote(value, version)
             tokens.append(token)
-        lines.extend(_format_row(tokens))
+        matrix.append(tokens)
+
+    col_widths = _col_widths(matrix) if pretty else None
+
+    for tokens in matrix:
+        lines.extend(_format_row(tokens, col_widths))
 
     return lines
 
@@ -803,27 +832,41 @@ def _render_set_category(
     version: CifVersion,
     table_def: TableDef,
     reconstruct_su: bool,
+    pretty: bool,
 ) -> list[str]:
     """Emit a Set-class category as scalar tag–value pairs."""
     lines = []
     su_map = _su_col_map(table_def) if reconstruct_su else {}
 
+    # Build (tag, token) pairs first so we can measure tag widths for alignment.
+    pairs: list[tuple[str, str]] = []
     for col in cols:
         tag = _col_tag(table_name, col, schema)
         value = row.get(col)
         if value is None:
             continue
-
         if reconstruct_su and col in su_map:
             su_col = su_map[col]
             su_val = row.get(su_col)
             if su_val is not None:
                 value = _merge_su(value, su_val)
+        pairs.append((tag, quote(value, version)))
 
-        token = quote(value, version)
+    if pretty:
+        # Width = longest tag among tags whose value fits on one line.
+        tag_width = max(
+            (len(tag) for tag, token in pairs if not token.startswith('\n')),
+            default=0,
+        )
+    else:
+        tag_width = 0
+
+    for tag, token in pairs:
         if token.startswith('\n'):
             lines.append(tag)
             lines.extend(token.split('\n')[1:])
+        elif pretty:
+            lines.append(f'{tag:<{tag_width}}  {token}')
         else:
             lines.append(f'{tag}  {token}')
 
@@ -838,6 +881,7 @@ def _render_loop_category(
     version: CifVersion,
     table_def: TableDef,
     reconstruct_su: bool,
+    pretty: bool,
 ) -> list[str]:
     """Emit a Loop-class category as a ``loop_`` construct."""
     su_map = _su_col_map(table_def) if reconstruct_su else {}
@@ -847,6 +891,8 @@ def _render_loop_category(
         tag = _col_tag(table_name, col, schema)
         lines.append(f'  {tag}')
 
+    # Build token matrix: one quote() call per cell.
+    matrix: list[list[str]] = []
     for row in rows:
         tokens = []
         for col in cols:
@@ -861,12 +907,17 @@ def _render_loop_category(
                         value = _merge_su(value, su_val)
                 token = quote(value, version)
             tokens.append(token)
-        lines.extend(_format_row(tokens))
+        matrix.append(tokens)
+
+    col_widths = _col_widths(matrix) if pretty else None
+
+    for tokens in matrix:
+        lines.extend(_format_row(tokens, col_widths))
 
     return lines
 
 
-def _render_fallback(rows: list[dict], version: CifVersion) -> list[str]:
+def _render_fallback(rows: list[dict], version: CifVersion, pretty: bool = False) -> list[str]:
     """Emit ``_cif_fallback`` rows as tag–value pairs or single-column loops."""
     tag_values: dict[str, list[tuple[str, str]]] = {}
     for row in sorted(rows, key=lambda r: (r.get('tag', ''), r.get('_row_id', 0))):
@@ -875,15 +926,35 @@ def _render_fallback(rows: list[dict], version: CifVersion) -> list[str]:
         vtype = row.get('value_type', '')
         tag_values.setdefault(tag, []).append((value, vtype))
 
-    lines = []
+    # Scalar tags: build (tag, token) pairs first for alignment.
+    scalar_pairs: list[tuple[str, str]] = []
     for tag in sorted(tag_values):
         entries = tag_values[tag]
         if len(entries) == 1:
             value, vtype = entries[0]
             token = _fallback_token(value, vtype, version)
+            scalar_pairs.append((tag, token))
+
+    if pretty and scalar_pairs:
+        tag_width = max(
+            (len(tag) for tag, token in scalar_pairs if not token.startswith('\n')),
+            default=0,
+        )
+    else:
+        tag_width = 0
+
+    lines = []
+    scalar_map = dict(scalar_pairs)
+
+    for tag in sorted(tag_values):
+        entries = tag_values[tag]
+        if len(entries) == 1:
+            token = scalar_map[tag]
             if token.startswith('\n'):
                 lines.append(tag)
                 lines.extend(token.split('\n')[1:])
+            elif pretty:
+                lines.append(f'{tag:<{tag_width}}  {token}')
             else:
                 lines.append(f'{tag}  {token}')
         else:
@@ -891,7 +962,7 @@ def _render_fallback(rows: list[dict], version: CifVersion) -> list[str]:
             lines.append(f'  {tag}')
             for value, vtype in entries:
                 token = _fallback_token(value, vtype, version)
-                lines.extend(_format_row([token]))
+                lines.extend(_format_row([token], None))
 
     return lines
 
@@ -900,23 +971,53 @@ def _render_fallback(rows: list[dict], version: CifVersion) -> list[str]:
 # Formatting helpers
 # ---------------------------------------------------------------------------
 
-def _format_row(tokens: list[str]) -> list[str]:
-    """Format one loop data row as a list of output lines."""
+def _col_widths(matrix: list[list[str]]) -> list[int]:
+    """Compute per-column max token width for pretty-printing.
+
+    Columns that contain any multiline token (``token.startswith('\\n')``)
+    are given width 0 — they cannot be padded inline.
+    """
+    if not matrix:
+        return []
+    n_cols = len(matrix[0])
+    widths = [0] * n_cols
+    for j in range(n_cols):
+        col = [row[j] for row in matrix]
+        if any(t.startswith('\n') for t in col):
+            widths[j] = 0  # unaligned: multiline values present
+        else:
+            widths[j] = max(len(t) for t in col)
+    return widths
+
+
+def _format_row(tokens: list[str], col_widths: list[int] | None) -> list[str]:
+    """Format one loop data row as a list of output lines.
+
+    When ``col_widths`` is provided (pretty mode), each inline token is
+    left-padded to the column width.  Multiline tokens (col_width == 0) are
+    never padded.
+    """
+    def _pad(token: str, j: int) -> str:
+        if col_widths and col_widths[j]:
+            return f'{token:<{col_widths[j]}}'
+        return token
+
     if not any(t.startswith('\n') for t in tokens):
-        row_line = '  ' + '  '.join(tokens)
+        padded = [_pad(t, j) for j, t in enumerate(tokens)]
+        row_line = '  ' + '  '.join(padded)
         return [row_line.rstrip()]
 
     result: list[str] = []
     inline_buf: list[str] = []
 
-    for t in tokens:
+    for j, t in enumerate(tokens):
         if t.startswith('\n'):
             if inline_buf:
                 result.append(('  ' + '  '.join(inline_buf)).rstrip())
                 inline_buf = []
             result.extend(t.split('\n')[1:])
         else:
-            inline_buf.append(t)
+            inline_buf.append(_pad(t, j))
 
     if inline_buf:
         result.append(('  ' + '  '.join(inline_buf)).rstrip())

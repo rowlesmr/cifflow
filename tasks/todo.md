@@ -58,9 +58,10 @@
   pass fidelity (0 mismatches).
 
 **Open questions / things to revisit:**
-- **ONE_BLOCK block naming**: review how the output block is named in ONE_BLOCK mode.
-  Currently hardcoded to `'output'` in `_collect_one_block`.  Consider whether the name
-  should be derived from block_namer / OutputPlan, or whether `'output'` is correct.
+- ~~**ONE_BLOCK block naming**~~ — **FIXED**.  `_collect_one_block` now constructs
+  `_BlockData` directly with `anchor_key_dict={}`, so `_resolve_block_name` falls
+  through to the `fallback` string (`'output'`) instead of calling `_default_block_name`
+  and concatenating every anchor key value from the entire database into one monster name.
 
 - **Line ending option** (2026-04-14): `line_ending: str = '\n'` parameter added to `emit()`.
   `_render_block` changed to return `list[str]` (was `str`); all lines collected flat in
@@ -69,14 +70,31 @@
   extending the lines list.  6 new tests in `TestLineEnding`.
 
 **Next targets (in priority order):**
-2. **Pretty-print output** — `pretty: bool = True` flag on `emit()`.  When `True`:
-   - Tag–value pairs: tag and value column-aligned across all scalar pairs in the category.
-   - Loop columns: each value column width determined by the widest value in that column
-     (requires a full pass over all rows before writing any output).
-   - `False` skips alignment; use for large files where the per-column scan is too slow.
-   - Profile on a large powder-diffraction file (tens of thousands of loop rows) to quantify
-     the cost before finalising the default.
-5. **Line length checks for output** — both CIF 1.1 and CIF 2.0 impose a 2048-character line
+2. ~~**Pretty-print output**~~ — **DONE**.  `pretty: bool = True` flag on `emit()`.
+   - Set categories: tag names padded to the longest tag in the category (f-string `:<width>`).
+   - Loop categories: token matrix built first (one `quote()` call per cell), column widths
+     computed via `_col_widths()`, then `_format_row(tokens, col_widths)` pads each token.
+   - Columns containing any multiline token are excluded from padding (width 0).
+   - Fallback scalar tags aligned the same way as Set categories.
+   - `pretty=False` skips all alignment (compact two-space separator mode).
+   - 9 new tests in `TestPretty`.  Default is `True`; profile on large files if needed.
+3. **Decimal-aligned pretty-print** — for loop columns (and Set scalar values) whose
+   `ColumnDef.type_contents` is `"Real"` or `"Float"`, align values on the decimal point
+   rather than left-justifying.  Rules:
+   - Determine integer-part width = max digits before `.` across all values in the column.
+   - Determine fractional-part width = max digits after `.` (0 if no value has a `.`).
+   - Right-pad each value with spaces after the last digit so all decimal points line up.
+   - Values without a decimal point are treated as having zero fractional digits and are
+     right-padded to the fractional-part width.
+   - SU suffixes (e.g. `0.1234(5)`) count as part of the fractional field; align on `.` first,
+     then right-pad the remainder.
+   - Non-numeric tokens in a nominally-Real column (e.g. `.`, `?`, quoted strings) fall back
+     to plain left-justify for that value; do not break the column alignment.
+   - Gated by `pretty=True`; requires `SchemaSpec` column type information to be threaded
+     into `_col_widths()` or a new `_numeric_col_widths()` variant.
+   - Only applies to unquoted bare-word tokens (ValueType STRING); quoted strings and
+     placeholders are always left-justified regardless of column type.
+4. **Line length checks for output** — both CIF 1.1 and CIF 2.0 impose a 2048-character line
    length limit, excluding the OS line-termination character(s).  CIF 1.1 additionally limits
    data names, block codes, and frame codes to 75 characters; CIF 2.0 has no such identifier
    limit.  The emitter must:

@@ -399,6 +399,176 @@ class TestLineEnding:
 
 
 # ---------------------------------------------------------------------------
+# pretty parameter
+# ---------------------------------------------------------------------------
+
+class TestPretty:
+    """pretty=True (default) aligns Set tag–value pairs and loop columns."""
+
+    # Set category: three tags of different lengths.
+    SET_CIF = (
+        '#\\#CIF_2.0\ndata_b\n'
+        '_cell.length_a  5.4\n'
+        '_cell.length_b  5.4\n'
+        '_cell.length_c  13.2\n'
+    )
+
+    # Loop category: two rows, columns of different widths.
+    LOOP_CIF = (
+        '#\\#CIF_2.0\ndata_b\n'
+        'loop_\n'
+        '_atom_site.id\n'
+        '_atom_site.type_symbol\n'
+        '_atom_site.fract_x\n'
+        'Se  Se  0.1234\n'
+        'C   C   0.5\n'
+    )
+
+    @pytest.fixture
+    def set_conn(self):
+        schema = _make_schema(_MINI_DIC)
+        return _ingest_src(self.SET_CIF, schema), schema
+
+    @pytest.fixture
+    def loop_conn(self):
+        schema = _make_schema(_LOOP_DIC)
+        return _ingest_src(self.LOOP_CIF, schema), schema
+
+    # --- pretty=True (default) ---
+
+    def test_set_tags_aligned(self, set_conn):
+        """All inline tag–value lines share the same tag column width."""
+        c, s = set_conn
+        result = emit(c, s, pretty=True)
+        tag_value_lines = [
+            ln for ln in result.splitlines()
+            if ln.startswith('_cell.')
+        ]
+        assert tag_value_lines, 'no tag-value lines found'
+        # Split at the two-space separator; tag portion widths must all match.
+        tag_widths = set()
+        for ln in tag_value_lines:
+            idx = ln.index('  ')
+            tag_widths.add(idx)
+        assert len(tag_widths) == 1, f'tags not aligned: widths={tag_widths}'
+
+    def test_set_values_correct_after_align(self, set_conn):
+        """Alignment must not corrupt values."""
+        c, s = set_conn
+        result = emit(c, s, pretty=True)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_cell.length_a'][0]) == '5.4'
+        assert str(block['_cell.length_c'][0]) == '13.2'
+
+    def test_loop_columns_aligned(self, loop_conn):
+        """Loop data rows have consistent column widths.
+
+        With two rows ['Se', '0.1234', 'Se'] and ['C', '0.5', 'C'], col0
+        has max width 2.  'C' must be padded to 'C ' so that col1 starts
+        at the same character offset (indent + 2 + 2 sep = offset 6) in both rows.
+        """
+        c, s = loop_conn
+        result = emit(c, s, pretty=True)
+        data_lines = [
+            ln for ln in result.splitlines()
+            if ln.startswith('  ') and not ln.startswith('  _')
+        ]
+        assert len(data_lines) == 2
+        # Column starts are computed as: indent(2) + sum of (col_width + sep(2)) for prior cols.
+        # With col_widths [2, 6, 2]: col0 @ 2, col1 @ 6, col2 @ 10.
+        # Verify by slicing each line at the known offsets.
+        # We can recover col widths from the 'Se' row (row 0).
+        se_row = data_lines[0]
+        c_row  = data_lines[1]
+        # col0 starts at offset 2, width = 2 ('Se' is the max).
+        # So col1 starts at 2 + 2 + 2 = 6 in both rows.
+        assert se_row[6] not in (' ', ''), f'col1 not at offset 6 in Se row: {se_row!r}'
+        assert c_row[6] not in (' ', ''),  f'col1 not at offset 6 in C row: {c_row!r}'
+        # 'C' padded to width 2 means two spaces before the separator,
+        # giving three spaces total between 'C' and the next token.
+        assert c_row[2:5] == 'C  ', f'C not padded: {c_row!r}'
+
+    def test_loop_values_correct_after_align(self, loop_conn):
+        """Alignment must not corrupt loop values."""
+        c, s = loop_conn
+        result = emit(c, s, pretty=True)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_atom_site.fract_x'][0]) == '0.1234'
+        assert str(block['_atom_site.fract_x'][1]) == '0.5'
+
+    # --- pretty=False ---
+
+    def test_pretty_false_no_padding(self, set_conn):
+        """pretty=False: tag–value lines use exactly two spaces, no extra padding."""
+        c, s = set_conn
+        result = emit(c, s, pretty=False)
+        # Every tag-value line must be of the form '{tag}  {value}' with no
+        # extra spaces between the tag name and the two-space separator.
+        for ln in result.splitlines():
+            if ln.startswith('_cell.'):
+                tag, _, rest = ln.partition('  ')
+                # There must be no leading space in rest (no extra padding).
+                assert not rest.startswith(' '), (
+                    f'unexpected padding in compact mode: {ln!r}'
+                )
+
+    def test_pretty_false_values_correct(self, set_conn):
+        """pretty=False output must still parse correctly."""
+        c, s = set_conn
+        result = emit(c, s, pretty=False)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_cell.length_a'][0]) == '5.4'
+
+    # --- pretty is default True ---
+
+    def test_default_is_pretty(self, set_conn):
+        """Omitting pretty= should give the same output as pretty=True."""
+        c, s = set_conn
+        assert emit(c, s) == emit(c, s, pretty=True)
+
+    # --- fallback alignment ---
+
+    def test_fallback_scalars_aligned(self):
+        """pretty=True aligns fallback scalar tags.
+
+        '_a.short' (8 chars) is padded to match '_a.longer_tag' (13 chars),
+        so both values start at column 15 (13 + 2 sep).
+        """
+        schema = _empty_schema()
+        src = (
+            '#\\#CIF_2.0\ndata_x\n'
+            '_a.short  1\n'
+            '_a.longer_tag  2\n'
+        )
+        conn = _ingest_src(src, schema)
+        result = emit(conn, schema, pretty=True)
+        tag_lines = [ln for ln in result.splitlines() if ln.startswith('_a.')]
+        assert len(tag_lines) == 2
+        # The value follows the tag+padding+2-space separator.
+        # tag_width = len('_a.longer_tag') = 13; value starts at 13 + 2 = 15.
+        tag_width = max(len(ln.split()[0]) for ln in tag_lines)
+        value_starts = set()
+        for ln in tag_lines:
+            tag = ln.split()[0]
+            # Value starts after tag (padded to tag_width) + 2-space separator.
+            value_starts.add(ln.index(ln.split()[1]))
+        assert len(value_starts) == 1, f'fallback tags not aligned: {tag_lines}'
+
+    def test_no_trailing_whitespace_pretty(self, set_conn):
+        """pretty=True must not introduce trailing whitespace."""
+        c, s = set_conn
+        result = emit(c, s, pretty=True)
+        for ln in result.splitlines():
+            assert ln == ln.rstrip(), f'Trailing whitespace: {ln!r}'
+
+
+# ---------------------------------------------------------------------------
 # ALL_BLOCKS mode
 # ---------------------------------------------------------------------------
 
