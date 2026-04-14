@@ -363,6 +363,33 @@ Tests: `tests/dictionary/test_fallback_schema.py`
   NumPy-style `Parameters`/`Returns`/`Raises` sections (see Lesson 9). Do when the public
   surface has stabilised (after Stage 4+).
 
+### Planned features (inspect layer)
+
+- **`visualise_schema(schema) -> str`** — Graphviz DOT output alongside `inspect_schema`.
+  Lives in `src/pycifparse/inspect/` (new file `_schema_viz.py`), exported from
+  `pycifparse.inspect` and `pycifparse`.  Should show:
+  - **Parent–child category relationships** (from `SchemaSpec.category_parent`): directed
+    edges from parent to child, visually grouping the category hierarchy.
+  - **Set vs Loop class**: node shape or fill distinguishes Set categories (e.g. box) from
+    Loop categories (e.g. ellipse).
+  - **PK/FK relationships**: directed FK edges labelled with the source and target column
+    names; highlight whether the FK target is a terminal Set category that carries a
+    `_category_key.name` keyword (i.e. a keyed anchor) vs a keyless Set (PK is
+    `_pycifparse_id`).
+  - **Non-key linked data names**: edges or annotations for columns whose `linked_item_id` 
+    points to another key column in a different table (eg `_model.structure_id`). SU links are excluded.
+  - Highlight orphaned categories.
+  - Show category connectivity: it should be possible to travel from one category to any other
+    via PK/FK relations, or by using a non-key linked data name.
+  - Output is a plain DOT string; caller renders with Graphviz or pastes into an online
+    viewer. 
+     - Alternatively: output is a self-contained HTML file generated from the dictionary 
+                      would be ideal: no installation, no server, just open in a browser. 
+                      Graphviz can export SVG which embeds directly into HTML, and you can 
+                      layer interactivity on top with plain JavaScript. Clickable nodes 
+                      showing full category definition: description, data names, types, units...
+                      Highlight FK chains: click a FK and highlight the PK it resolves to.
+
 ### Refactors
 
 - **`CifBlock`/`CifSaveFrame` inheritance** — `CifBlock extends CifSaveFrame` is a mild LSP
