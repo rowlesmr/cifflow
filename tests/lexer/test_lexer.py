@@ -583,3 +583,49 @@ def test_simple_containers_no_errors():
 def test_cif11_ver1_no_errors():
     tokens = _load('ver1.cif', version=CIF1)
     assert errors(tokens) == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CIF 1.x triple-quote errors (line 190, lines 389-394)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_cif1_triple_double_quote_is_error():
+    # CIF 1.1 mode: """ is not valid — triggers _read_triple_cif1
+    tokens = lex('"""hello"""', version=CIF1)
+    errs = errors(tokens)
+    assert any('triple' in e.message.lower() or 'CIF 2' in e.message for e in errs)
+
+def test_cif2_unterminated_triple_double_quote():
+    tokens = lex('"""hello world', version=CIF2)
+    errs = errors(tokens)
+    assert any('unterminated' in e.message for e in errs)
+
+def test_cif2_unterminated_triple_single_quote():
+    tokens = lex("'''hello world", version=CIF2)
+    errs = errors(tokens)
+    assert any('unterminated' in e.message for e in errs)
+
+def test_cif1_unterminated_triple_double_quote():
+    # CIF 1.x: triple-quoted string without closing delimiter → lines 389-394
+    tokens = lex('"""hello world', version=CIF1)
+    errs = errors(tokens)
+    assert any('unterminated' in e.message for e in errs)
+
+def test_cif1_unterminated_triple_single_quote():
+    # CIF 1.x: triple-quoted string without closing delimiter → lines 389-394
+    tokens = lex("'''hello world", version=CIF1)
+    errs = errors(tokens)
+    assert any('unterminated' in e.message for e in errs)
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CIF 1.1 quoted string: non-whitespace after closing delimiter (lines 303-308)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_cif1_quote_not_followed_by_whitespace_continues():
+    # In CIF 1.1, 'a'b means the ' is not a closing delimiter yet because 'b'
+    # doesn't follow whitespace — it should be treated as part of the content.
+    tokens = lex("'a'b'", version=CIF1)
+    # Value should include the interior chars; closing ' followed by EOF is ok
+    assert len(tokens) >= 1

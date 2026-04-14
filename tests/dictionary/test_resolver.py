@@ -163,3 +163,37 @@ class TestResolveTagCaseInsensitive:
         r = resolve_tag('_ATOM.LABEL', d)
         assert r is not None
         assert r.was_alias is True
+
+
+class TestResolveTagEdgeCases:
+    def test_category_item_returns_none(self):
+        """Category item has object_id=None → return None at line 77."""
+        d = _make_dict()
+        # 'atom_site' is the category entry (object_id=None)
+        assert resolve_tag('atom_site', d) is None
+
+    def test_alias_to_deprecated_item(self):
+        """was_alias=True and is_deprecated=True combined."""
+        deprecated = DdlmItem(
+            definition_id='_atom_site.fract_y', scope='Item',
+            definition_class='Datum', category_id='atom_site',
+            object_id='fract_y', type_purpose=None, type_source=None,
+            type_container='Single', type_contents=None,
+            linked_item_id=None, units_code=None, description=None,
+            is_deprecated=True,
+        )
+        d = DdlmDictionary(
+            name='T', title=None, version=None,
+            categories={},
+            items={'_atom_site.fract_y': deprecated},
+            tag_to_item={
+                '_atom_site.fract_y': deprecated,
+                '_old.fract_y': deprecated,  # alias
+            },
+            alias_to_definition_id={'_old.fract_y': '_atom_site.fract_y'},
+            deprecated_ids={'_atom_site.fract_y'},
+        )
+        r = resolve_tag('_old.fract_y', d)
+        assert r is not None
+        assert r.was_alias is True
+        assert r.is_deprecated is True

@@ -296,6 +296,22 @@ class TestApplyFallbackSchemaBehaviour:
         rows = list(conn.execute('SELECT * FROM "_cif_fallback"'))
         assert len(rows) == 1
 
+    def test_rollback_when_view_conflicts_with_table_name(self):
+        """apply_fallback_schema rolls back and re-raises when a VIEW named
+        _cif_fallback already exists (IF NOT EXISTS only suppresses for tables,
+        not views). Exercises the except sqlite3.Error path (lines 138-140)."""
+        conn = sqlite3.connect(':memory:')
+        conn.execute('CREATE VIEW "_cif_fallback" AS SELECT 1')
+        with pytest.raises(sqlite3.Error):
+            apply_fallback_schema(conn)
+        # Verify no _cif_fallback TABLE was created (the view still exists)
+        names = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert '_cif_fallback' not in names
+        conn.close()
+
     def test_coexists_with_structured_schema(self):
         from pycifparse.dictionary.ddlm_item import DdlmItem
         from pycifparse.dictionary.ddlm_parser import DdlmDictionary

@@ -23,3 +23,18 @@ testpaths = ["tests"]
 markers = [
     "slow: large real-world CIF files (deselect with -m 'not slow')",
 ]
+addopts = "--cov=pycifparse --cov-branch --cov-report=term-missing --cov-report=html:tests/test_coverage"
+filterwarnings = [
+    "ignore::ResourceWarning",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["pycifparse"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "tests/test_coverage"

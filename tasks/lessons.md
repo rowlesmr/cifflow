@@ -1381,3 +1381,46 @@ to raise or block.
 
 **How to apply:** `ingest()` must never call `validate()` internally. Any caller that wants
 validation must call it explicitly before ingestion and decide what to do with the report.
+
+---
+
+## Lesson 65 — Dead code in the lexer cannot be covered; identify it rather than chasing it (2026-04-14)
+
+**Context:** `lexer/lexer.py` — `_check_su` (lines 69-78), `_read_bare_word` CIF2-delimiter guard (lines 257-265), single-quoted CIF1.x illegal-char guard (line 307).
+
+**Problem:** These lines appear reachable by reading the code but are structurally unreachable:
+- `_check_su` is defined but never called.
+- The CIF2 delimiter guard in `_read_bare_word` (lines 257-265) is never reached because CIF2 delimiters are consumed as separate tokens before `_read_bare_word` is entered.
+- Line 307 (`errors.append(err)` for the delimiter character): the delimiter is always `'` or `"` (ASCII 39/34), which `_check_cif1_char` always accepts — so `err` is always `None`.
+
+**How to apply:** Before writing tests to cover a "missing" line, verify the line is reachable by tracing the actual call paths. If the line is structurally unreachable (dead code), note it and move on rather than trying to contort inputs to hit it. Accept the residual gap.
+
+---
+
+## Lesson 66 — `_cif_fallback` column names must be verified before hand-crafting INSERT statements in tests (2026-04-14)
+
+**Context:** `tests/fidelity/test_check_fidelity.py` — `_compare_schema_mismatch` tests.
+
+**Problem:** Hand-written INSERT into `_cif_fallback` used `block_id` (wrong) instead of `_block_id` (correct). The actual schema uses underscore-prefixed names (`_block_id`, `_row_id`) for all synthetic columns. The error only surfaced at test runtime.
+
+**How to apply:** Before writing raw SQL INSERTs into framework-managed tables in tests, read `emit_fallback_create_statements()` (or the relevant DDL emitter) to confirm exact column names. Never guess — the underscore prefix convention is easy to miss.
+
+---
+
+## Lesson 67 — `CifSaveFrame.__getitem__` and `__contains__` are shadowed by `CifBlock`; test both classes separately (2026-04-14)
+
+**Context:** `cifmodel/model.py` — lines 42-43 (CifSaveFrame.__getitem__ KeyError), line 46 (__contains__).
+
+**Problem:** Both `CifBlock` and `CifSaveFrame` define `__getitem__` and `__contains__`. All existing tests used `CifBlock` instances, which hit the `CifBlock` overrides. The `CifSaveFrame` base-class implementations (lines 39-46) were never exercised because `CifBlock` short-circuits to its own versions.
+
+**How to apply:** When a base class defines methods that subclasses override, coverage of the base-class versions requires explicit tests using direct base-class instances, not instances of any subclass.
+
+---
+
+## Lesson 68 — Lines 389-394 in lexer.py are in `_read_triple_cif1x`, not the CIF 2.0 handler (2026-04-14)
+
+**Context:** `lexer/lexer.py` — `_read_triple_cif1x` (the CIF 1.x triple-quote handler).
+
+**Problem:** The unterminated triple-quote path (lines 389-394) was assumed to be the CIF 2.0 handler and tests were written with `version=CIF2`. They failed to cover the lines because the CIF 2.0 handler is a separate function. Lines 389-394 live in `_read_triple_cif1x`, which is only entered for CIF 1.x input.
+
+**How to apply:** When targeting a specific line range for coverage, confirm which function it actually lives in (not just what the surrounding code looks like) before writing the test. Use `grep -n "def " file.py` to map line ranges to function names.

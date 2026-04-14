@@ -733,6 +733,12 @@ class TestOutputPlan:
         names = [l.split('  ')[0] for l in tag_lines]
         assert names == ['_cell.length_c', '_cell.length_a', '_cell.length_b']
 
+    def test_spec_for_empty_blocks_returns_none(self):
+        """OutputPlan.spec_for returns None when blocks list is empty (line 90)."""
+        plan = OutputPlan(blocks=[])
+        assert plan.spec_for(0) is None
+        assert plan.spec_for(99) is None
+
 
 # ---------------------------------------------------------------------------
 # Quoting in output

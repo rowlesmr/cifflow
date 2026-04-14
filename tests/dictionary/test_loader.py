@@ -1078,3 +1078,224 @@ class TestIgnoreHeadImports:
         # Both the primary and child HEAD imports are skipped.
         assert '_leaf.val' not in d.tag_to_item
 
+
+# ---------------------------------------------------------------------------
+# directory_path_resolver
+# ---------------------------------------------------------------------------
+
+class TestDirectoryPathResolver:
+    def test_finds_file_returns_absolute_path(self, tmp_path):
+        from pycifparse.dictionary.loader import directory_path_resolver
+        f = tmp_path / 'foo.dic'
+        f.write_text('#\\#CIF_2.0\n', encoding='utf-8')
+        resolver = directory_path_resolver(tmp_path)
+        result = resolver('file:///foo.dic')
+        assert result is not None
+        assert result.endswith('foo.dic')
+        assert pathlib.Path(result).is_absolute()
+
+    def test_returns_none_for_missing(self, tmp_path):
+        from pycifparse.dictionary.loader import directory_path_resolver
+        resolver = directory_path_resolver(tmp_path)
+        assert resolver('file:///nonexistent.dic') is None
+
+
+# ---------------------------------------------------------------------------
+# Edge cases in _extract_item and _load_recursive
+# ---------------------------------------------------------------------------
+
+class TestUnknownScope:
+    def test_unknown_scope_warns_and_treats_as_item(self):
+        src = """\
+#\\#CIF_2.0
+data_D
+save_weird
+  _definition.id    '_weird.x'
+  _definition.scope Unusual
+  _definition.class Attribute
+  _name.category_id weird
+  _name.object_id   x
+  _type.purpose     Key
+save_
+"""
+        warnings = []
+        d = DictionaryLoader(on_warning=warnings.append).load(src)
+        assert any('treating as Item' in w for w in warnings)
+        assert '_weird.x' in d.items
+
+
+class TestLoadRecursiveEdgeCases:
+    def test_multiple_data_blocks_warns_uses_first(self):
+        src = """\
+#\\#CIF_2.0
+data_FIRST
+save_FIRST_HEAD
+  _definition.id    FIRST_HEAD
+  _definition.scope Category
+  _definition.class Head
+  _name.category_id FIRST_HEAD
+  _name.object_id   FIRST_HEAD
+save_
+data_SECOND
+_dictionary.title SECOND
+"""
+        warnings = []
+        d = DictionaryLoader(on_warning=warnings.append).load(src)
+        assert any('data blocks' in w for w in warnings)
+        assert d.name == 'FIRST'
+
+    def test_load_with_base_uri_collects_source_file(self):
+        src = """\
+#\\#CIF_2.0
+data_D
+save_D_HEAD
+  _definition.id    D_HEAD
+  _definition.scope Category
+  _definition.class Head
+  _name.category_id D_HEAD
+  _name.object_id   D_HEAD
+save_
+"""
+        d = DictionaryLoader().load(src, base_uri='mydict.dic')
+        assert 'mydict.dic' in d.source_files
+
+    def test_load_with_base_uri_and_path_resolver(self, tmp_path):
+        from pycifparse.dictionary.loader import directory_path_resolver
+        f = tmp_path / 'mydict.dic'
+        f.write_text("""\
+#\\#CIF_2.0
+data_D
+save_D_HEAD
+  _definition.id    D_HEAD
+  _definition.scope Category
+  _definition.class Head
+  _name.category_id D_HEAD
+  _name.object_id   D_HEAD
+save_
+""", encoding='utf-8')
+        resolver_fn = directory_path_resolver(tmp_path)
+        src = f.read_text(encoding='utf-8')
+        d = DictionaryLoader(path_resolver=resolver_fn).load(src, base_uri='mydict.dic')
+        # path_resolver is called for base_uri → absolute path in source_files
+        assert any(pathlib.Path(p).is_absolute() for p in d.source_files)
+
+
+# ---------------------------------------------------------------------------
+# mode='Full' frame not found (miss='Ignore' / 'Exit')
+# ---------------------------------------------------------------------------
+
+_TEMPLATE_WITH_FRAME = """\
+#\\#CIF_2.0
+data_T
+save_present_frame
+  _definition.id   present_frame
+  _type.purpose    Key
+save_
+"""
+
+
+class TestModeFullFrameNotFound:
+    def test_miss_ignore_when_frame_not_found(self):
+        warnings = []
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [{'file':t.cif  'mode':Full  'save':NONEXISTENT  'miss':Ignore}]\n",
+        )
+        d = DictionaryLoader(
+            resolver=_make_resolver({'t.cif': _TEMPLATE_WITH_FRAME}),
+            on_warning=warnings.append,
+        ).load(primary)
+        assert any('NONEXISTENT' in w and 'ignored' in w for w in warnings)
+
+    def test_miss_exit_when_frame_not_found(self):
+        warnings = []
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [{'file':t.cif  'mode':Full  'save':NONEXISTENT}]\n",
+        )
+        DictionaryLoader(
+            resolver=_make_resolver({'t.cif': _TEMPLATE_WITH_FRAME}),
+            on_warning=warnings.append,
+        ).load(primary)
+        assert any('NONEXISTENT' in w and 'aborting' in w for w in warnings)
+
+
+# ---------------------------------------------------------------------------
+# mode='Contents' frame not found (miss='Ignore' / 'Exit')
+# ---------------------------------------------------------------------------
+
+class TestModeContentsFrameNotFound:
+    def test_miss_ignore_when_frame_not_found(self):
+        warnings = []
+        src = """\
+#\\#CIF_2.0
+data_D
+save_item_x
+  _definition.id    '_item.x'
+  _definition.class Attribute
+  _name.category_id item
+  _name.object_id   x
+  _type.purpose     Key
+  _import.get       [{'file':t.cif  'save':NONEXISTENT  'miss':Ignore}]
+save_
+"""
+        d = DictionaryLoader(
+            resolver=_make_resolver({'t.cif': _TEMPLATE_WITH_FRAME}),
+            on_warning=warnings.append,
+        ).load(src)
+        assert any('NONEXISTENT' in w and 'ignored' in w for w in warnings)
+        assert '_item.x' in d.items
+
+    def test_miss_exit_when_frame_not_found(self):
+        warnings = []
+        src = """\
+#\\#CIF_2.0
+data_D
+save_item_x
+  _definition.id    '_item.x'
+  _definition.class Attribute
+  _name.category_id item
+  _name.object_id   x
+  _type.purpose     Key
+  _import.get       [{'file':t.cif  'save':NONEXISTENT}]
+save_
+save_item_y
+  _definition.id    '_item.y'
+  _definition.class Attribute
+  _name.category_id item
+  _name.object_id   y
+save_
+"""
+        d = DictionaryLoader(
+            resolver=_make_resolver({'t.cif': _TEMPLATE_WITH_FRAME}),
+            on_warning=warnings.append,
+        ).load(src)
+        assert any('NONEXISTENT' in w and 'aborting' in w for w in warnings)
+
+
+# ---------------------------------------------------------------------------
+# _merge_constituent dupl='Exit' conflict (lines 273-277)
+# ---------------------------------------------------------------------------
+
+class TestMergeConstituentDuplExit:
+    def test_dupl_exit_conflict_aborts(self):
+        """Two Full imports with the same def_id and dupl=Exit → abort after first conflict."""
+        c1 = _item_cif('C1', '_shared.id', 'shared', 'id', 'Key')
+        c2 = _item_cif('C2', '_shared.id', 'shared', 'id', 'Link')
+        primary = _head_cif(
+            'PRIMARY',
+            "  _import.get\n"
+            "    [\n"
+            "      {'file':c1.dic  'mode':Full  'save':C1_HEAD  'dupl':Exit  'order':1}\n"
+            "      {'file':c2.dic  'mode':Full  'save':C2_HEAD  'dupl':Exit  'order':2}\n"
+            "    ]\n",
+        )
+        warnings = []
+        DictionaryLoader(
+            resolver=_make_resolver({'c1.dic': c1, 'c2.dic': c2}),
+            on_warning=warnings.append,
+        ).load(primary)
+        assert any('dupl=Exit' in w and 'conflicts' in w for w in warnings)
+

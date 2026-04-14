@@ -746,3 +746,63 @@ class TestSmokeFiles:
         src = load_cif('ver1.cif')
         h = parse(src)
         assert h.errors == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Additional coverage tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestParserCoverageGaps:
+    """Tests targeting specific uncovered branches."""
+
+    def test_save_close_outside_save_frame_is_error(self):
+        # save_ with no open frame → line 346-348 (else branch at 341)
+        h = parse('data_b save_')
+        assert h.has_error_containing('outside save frame')
+
+    def test_global_keyword_is_fatal(self):
+        # global_ → halts parser (lines 350-365)
+        h = parse('data_b _tag global_')
+        assert h.has_error_containing('global_')
+
+    def test_global_with_open_containers_halts(self):
+        # global_ while containers are open → line 356
+        h = parse('#\\#CIF_2.0\ndata_b _tag [ global_')
+        assert h.has_error_containing('global_')
+
+    def test_loop_with_no_tags_is_error(self):
+        # loop_ immediately followed by a value, not a tag → lines 378-382
+        h = parse('data_b loop_ value')
+        assert h.has_error_containing('no tags')
+
+    def test_table_key_has_no_value_before_close(self):
+        # { 'key': } — key+colon present but table closes before value → lines 191-194
+        h = parse("#\\#CIF_2.0\ndata_b _t {'key': }")
+        assert h.has_error_containing('no value') or h.has_error_containing('placeholder')
+
+    def test_colon_in_table_value_position_is_error(self):
+        # { 'k': 1 : } — extra colon in value position → line 566
+        h = parse("#\\#CIF_2.0\ndata_b _t {'k':1 :}")
+        assert h.has_error_containing('value position') or h.has_error_containing('no pending key')
+
+    def test_container_open_in_table_key_position(self):
+        # { [ ] } — list opens while table expects a key → lines 472-475
+        h = parse('#\\#CIF_2.0\ndata_b _t { [ ] }')
+        assert h.has_error_containing('table key position') or h.has_error_containing('table')
+
+    def test_container_open_after_key_no_colon(self):
+        # { 'key' [ ] } — after key, list opens without colon → lines 477-483
+        h = parse("#\\#CIF_2.0\ndata_b _t {'key' [ ] }")
+        assert h.has_error_containing('missing : separator') or h.has_error_containing('colon')
+
+    def test_triple_quoted_key_colon_adjacent(self):
+        # Triple-quoted key followed by colon — exercises lines 534-537
+        h = parse('#\\#CIF_2.0\ndata_b _t {"""key""":1}')
+        # Should parse and emit on_table_key
+        assert 'on_table_key' in h.event_names()
+
+    def test_colon_not_adjacent_to_key_warns(self):
+        # Key and colon on separate lines — exercises line 546→556 warning path
+        h = parse("#\\#CIF_2.0\ndata_b _t {'key'\n: 1}")
+        # The parser warns but still emits on_table_key
+        assert 'on_table_key' in h.event_names()
