@@ -4,6 +4,7 @@ Unit and integration tests for check_fidelity().
 
 import pathlib
 import sqlite3
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -453,3 +454,577 @@ def test_round_trip_one_structure():
     # Compare original vs round-tripped
     r = check_fidelity(cif_orig, cif_rt, schema=schema)
     assert r.passed, [m.description for m in r.mismatches]
+
+
+# ---------------------------------------------------------------------------
+# Minimal DDLm dictionary string used by _load_schema tests
+# ---------------------------------------------------------------------------
+
+_MINI_DDL = """\
+#\\#CIF_2.0
+
+data_MINI_DICT
+
+_dictionary.title          MINI_DICT
+_dictionary.version        1.0.0
+
+save_MINI_HEAD
+  _definition.id           MINI_HEAD
+  _definition.scope        Category
+  _definition.class        Head
+  _name.category_id        MINI_HEAD
+  _name.object_id          MINI_HEAD
+save_
+
+save_CELL
+  _definition.id           CELL
+  _definition.scope        Category
+  _definition.class        Set
+  _name.category_id        CELL
+  _name.object_id          CELL
+  _category_key.name       '_cell.id'
+save_
+
+save_cell.id
+  _definition.id           '_cell.id'
+  _definition.class        Attribute
+  _name.category_id        cell
+  _name.object_id          id
+  _type.purpose            Key
+  _type.source             Assigned
+  _type.container          Single
+  _type.contents           Text
+save_
+
+save_cell.a
+  _definition.id           '_cell.a'
+  _definition.class        Attribute
+  _name.category_id        cell
+  _name.object_id          a
+  _type.purpose            Measurand
+  _type.source             Measured
+  _type.container          Single
+  _type.contents           Real
+save_
+"""
+
+
+# ---------------------------------------------------------------------------
+# Easy cluster: _load_schema / _load_source / _format_report / helpers
+# ---------------------------------------------------------------------------
+
+def test_load_schema_dict_raises_type_error():
+    from pycifparse.fidelity.check import _load_schema
+    with pytest.raises(TypeError):
+        _load_schema({})
+
+
+def test_load_schema_unrecognised_extension(tmp_path):
+    from pycifparse.fidelity.check import _load_schema
+    f = tmp_path / 'data.xyz'
+    f.write_text('', encoding='utf-8')
+    with pytest.raises(ValueError, match='unrecognised schema file extension'):
+        _load_schema(f)
+
+
+def test_load_schema_dic_file(tmp_path):
+    from pycifparse.fidelity.check import _load_schema
+    from pycifparse.dictionary.schema import SchemaSpec
+    dic_file = tmp_path / 'mini.dic'
+    dic_file.write_text(_MINI_DDL, encoding='utf-8')
+    result = _load_schema(dic_file)
+    assert isinstance(result, SchemaSpec)
+
+
+def test_load_schema_json_file(tmp_path):
+    from pycifparse.fidelity.check import _load_schema
+    from pycifparse.dictionary.loader import DictionaryLoader
+    from pycifparse.dictionary.cache import save_dictionary
+    from pycifparse.dictionary.schema import SchemaSpec
+    d = DictionaryLoader().load(_MINI_DDL)
+    json_file = tmp_path / 'mini.json'
+    save_dictionary(d, json_file)
+    result = _load_schema(json_file)
+    assert isinstance(result, SchemaSpec)
+
+
+def test_load_source_file_path(tmp_path):
+    from pycifparse.fidelity.check import _load_source
+    from pycifparse.cifmodel.model import CifFile
+    from pycifparse.types import CifVersion
+    cif_file = tmp_path / 'x.cif'
+    cif_file.write_text('data_block1\n_a.b 1\n', encoding='utf-8')
+    cif, errors = _load_source(cif_file, CifVersion.CIF_2_0)
+    assert isinstance(cif, CifFile)
+    assert errors == []
+
+
+def test_load_source_ciffile_passthrough():
+    from pycifparse.fidelity.check import _load_source
+    from pycifparse.types import CifVersion
+    cif_obj, _ = _build('data_block1\n_a.b 1\n')
+    result, errors = _load_source(cif_obj, CifVersion.CIF_2_0)
+    assert result is cif_obj
+    assert errors == []
+
+
+def test_format_report_failed_branch():
+    cif_a = "data_block1\n_foo.bar alpha\n"
+    cif_b = "data_block1\n_foo.bar beta\n"
+    r = check_fidelity(cif_a, cif_b, schema=None)
+    assert not r.passed
+    assert len(r.mismatches) > 0
+
+
+def test_format_report_schema_name_no_source_files():
+    from pycifparse.fidelity.check import _format_report
+    from pycifparse.dictionary.schema import SchemaSpec
+    spec = SchemaSpec(tables={}, column_to_tag={}, dictionary_name='TEST', source_files=[])
+    report = FidelityReport(passed=True, mismatches=[])
+    text = _format_report(report, 'A', 'B', schema_spec=spec)
+    assert 'Schema   : TEST' in text
+    assert '(' not in text.split('Schema')[1].split('\n')[0]  # no filename in parens
+
+
+def test_format_report_schema_name_with_source_files():
+    from pycifparse.fidelity.check import _format_report
+    from pycifparse.dictionary.schema import SchemaSpec
+    spec = SchemaSpec(tables={}, column_to_tag={}, dictionary_name='TEST',
+                      source_files=['a.dic', 'b.dic'])
+    report = FidelityReport(passed=True, mismatches=[])
+    text = _format_report(report, 'A', 'B', schema_spec=spec)
+    assert 'Schema   : TEST (a.dic, b.dic)' in text
+
+
+def test_format_report_schema_name_unknown():
+    from pycifparse.fidelity.check import _format_report
+    from pycifparse.dictionary.schema import SchemaSpec
+    spec = SchemaSpec(tables={}, column_to_tag={}, dictionary_name=None, source_files=[])
+    report = FidelityReport(passed=True, mismatches=[])
+    text = _format_report(report, 'A', 'B', schema_spec=spec)
+    assert '(unknown)' in text
+
+
+def test_format_report_failed_branch_direct():
+    from pycifparse.fidelity.check import _format_report
+    report = FidelityReport(
+        passed=False,
+        mismatches=[FidelityMismatch(kind='fallback_mismatch', source='both',
+                                     description='tag foo differs')],
+    )
+    text = _format_report(report, 'source_a.cif', 'source_b.cif')
+    assert 'FAILED' in text
+    assert 'fallback_mismatch' in text
+    assert 'foo differs' in text
+
+
+def test_report_file_written(tmp_path):
+    cif = "data_block1\n_a.b 1\n"
+    r_file = tmp_path / 'r.txt'
+    check_fidelity(cif, cif, schema=None, report_file=r_file)
+    assert r_file.exists()
+    assert 'Fidelity Report' in r_file.read_text(encoding='utf-8')
+
+
+def test_report_file_written_with_failure(tmp_path):
+    """report_file is written even when the comparison fails; exercises the FAILED format path."""
+    cif_a = "data_block1\n_foo.bar alpha\n"
+    cif_b = "data_block1\n_foo.bar beta\n"
+    r_file = tmp_path / 'fail.txt'
+    r = check_fidelity(cif_a, cif_b, schema=None, report_file=r_file)
+    assert not r.passed
+    text = r_file.read_text(encoding='utf-8')
+    assert 'FAILED' in text
+    assert 'fallback_mismatch' in text
+
+
+def test_check_fidelity_accepts_ciffile_source():
+    """Passing a CifFile object directly exercises the _label CifFile branch."""
+    cif_str = "data_block1\n_a.b 1\n"
+    cif_obj, _ = _build(cif_str)
+    r = check_fidelity(cif_obj, cif_str, schema=None)
+    assert r.passed
+
+
+def test_canonical_real_su_normalizes_trailing_zeros():
+    from pycifparse.fidelity.check import _canonical_real
+    # SU=True → Decimal.normalize() strips trailing zeros
+    assert _canonical_real('1.2300', True) == '1.23'
+    # SU=False → format(d, 'f') preserves trailing zeros
+    assert _canonical_real('1.2300', False) == '1.2300'
+
+
+def test_canonical_real_non_numeric_passthrough():
+    from pycifparse.fidelity.check import _canonical_real
+    # Non-numeric value passes through unchanged
+    assert _canonical_real('abc', False) == 'abc'
+
+
+def test_strip_su_suffix():
+    from pycifparse.fidelity.check import _strip_su_suffix
+    assert _strip_su_suffix('3.14(5)') == '3.14'
+    assert _strip_su_suffix('3.14') == '3.14'
+    assert _strip_su_suffix('1.2(10)') == '1.2'
+
+
+# ---------------------------------------------------------------------------
+# Schema-backed cluster: structural helpers
+# ---------------------------------------------------------------------------
+
+def test_table_present_operational_error():
+    from pycifparse.fidelity.check import _table_present
+    from pycifparse.dictionary.schema import TableDef, ColumnDef
+    tdef = TableDef(
+        name='test', definition_id='_test', category_class='Loop',
+        columns=[ColumnDef(name='id', definition_id='_test.id', type_contents='Text',
+                           nullable=False, is_primary_key=True, is_synthetic=False,
+                           linked_item_id=None)],
+        primary_keys=['id'],
+    )
+    mock_conn = MagicMock()
+    mock_conn.execute.side_effect = sqlite3.OperationalError('no such table')
+    result = _table_present(mock_conn, 'test', tdef)
+    assert result is False
+
+
+def test_normalised_rows_operational_error():
+    from pycifparse.fidelity.check import _normalised_rows
+    from pycifparse.dictionary.schema import TableDef, ColumnDef
+    tdef = TableDef(
+        name='test', definition_id='_test', category_class='Loop',
+        columns=[ColumnDef(name='id', definition_id='_test.id', type_contents='Text',
+                           nullable=False, is_primary_key=True, is_synthetic=False,
+                           linked_item_id=None)],
+        primary_keys=['id'],
+    )
+    mock_conn = MagicMock()
+    mock_conn.execute.side_effect = sqlite3.OperationalError('no such table')
+    result = _normalised_rows(mock_conn, 'test', tdef, {}, {}, {}, set())
+    assert result == []
+
+
+def test_row_diff_hint_no_candidates():
+    from pycifparse.fidelity.check import _row_diff_hint
+    row = frozenset({('a', '1'), ('b', '2')})
+    hint = _row_diff_hint(row, [])
+    assert hint.startswith(' [')
+
+
+def test_row_diff_hint_no_candidates_empty_row():
+    from pycifparse.fidelity.check import _row_diff_hint
+    # Row has only frozenset values → pairs is empty → returns ''
+    row = frozenset({('fp', frozenset())})
+    hint = _row_diff_hint(row, [])
+    assert hint == ''
+
+
+def test_row_diff_hint_va_none_branch():
+    """va is None (row missing key that best has) — line 474."""
+    from pycifparse.fidelity.check import _row_diff_hint
+    row = frozenset({('x', '1')})
+    best = frozenset({('x', '1'), ('z', '3')})  # z only in best
+    hint = _row_diff_hint(row, [best])
+    assert '-z=3' in hint
+
+
+def test_row_diff_hint_vb_none_branch():
+    """vb is None (row has key that best lacks) — line 476."""
+    from pycifparse.fidelity.check import _row_diff_hint
+    row = frozenset({('x', '1'), ('extra', '5')})
+    best = frozenset({('x', '1')})  # extra not in best
+    hint = _row_diff_hint(row, [best])
+    assert '+extra=5' in hint
+
+
+def test_row_diff_hint_frozenset_skip():
+    """frozenset value columns are skipped — line 471."""
+    from pycifparse.fidelity.check import _row_diff_hint
+    row = frozenset({('fp', frozenset({('a', '1')})), ('x', '1')})
+    best = frozenset({('fp', frozenset({('b', '2')})), ('x', '2')})
+    hint = _row_diff_hint(row, [best])
+    assert 'fp' not in hint   # frozenset col skipped
+    assert 'x' in hint        # x: 1!=2 shown
+
+
+def test_row_diff_hint_no_diffs_returns_empty():
+    """All fields match → return '' — line 481."""
+    from pycifparse.fidelity.check import _row_diff_hint
+    row = frozenset({('x', '1'), ('y', '2')})
+    best = frozenset({('x', '1'), ('y', '2')})
+    hint = _row_diff_hint(row, [best])
+    assert hint == ''
+
+
+def test_row_diff_hint_many_diffs():
+    from pycifparse.fidelity.check import _row_diff_hint
+    row = frozenset({('a', '1'), ('b', '2'), ('c', '3'), ('d', '4')})
+    best = frozenset({('a', 'X'), ('b', 'X'), ('c', 'X'), ('d', 'X')})
+    hint = _row_diff_hint(row, [best])
+    assert 'more' in hint
+
+
+def test_compare_schema_mismatch_tag_in_fallback_a_structured_b():
+    from pycifparse.fidelity.check import _compare_schema_mismatch
+    from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
+    from pycifparse.ingestion.ingest import ingest
+
+    schema = _simple_set_schema()
+    cif = "data_b\n_cell.id 1\n_cell.a 5.0\n"
+
+    # conn_a: ingested without schema → _cell.a lands in fallback
+    conn_a = sqlite3.connect(':memory:')
+    conn_a.row_factory = sqlite3.Row
+    apply_fallback_schema(conn_a)
+    ingest(_build(cif)[0], conn_a, None)
+
+    # conn_b: ingested with schema → _cell.a lands in structured table
+    conn_b = sqlite3.connect(':memory:')
+    conn_b.row_factory = sqlite3.Row
+    apply_schema(conn_b, schema)
+    apply_fallback_schema(conn_b)
+    ingest(_build(cif)[0], conn_b, schema)
+
+    mismatches = _compare_schema_mismatch(conn_a, conn_b, schema)
+    conn_a.close()
+    conn_b.close()
+
+    assert any(m.kind == 'schema_mismatch' for m in mismatches)
+
+
+def test_compare_schema_mismatch_reverse_direction():
+    """Tag in fallback in B but structured in A — exercises the second loop (line 688)."""
+    from pycifparse.fidelity.check import _compare_schema_mismatch
+    from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
+    from pycifparse.ingestion.ingest import ingest
+
+    schema = _simple_set_schema()
+    cif = "data_b\n_cell.id 1\n_cell.a 5.0\n"
+
+    # conn_a: WITH schema → _cell.a in structured table
+    conn_a = sqlite3.connect(':memory:')
+    conn_a.row_factory = sqlite3.Row
+    apply_schema(conn_a, schema)
+    apply_fallback_schema(conn_a)
+    ingest(_build(cif)[0], conn_a, schema)
+
+    # conn_b: WITHOUT schema → _cell.a in fallback
+    conn_b = sqlite3.connect(':memory:')
+    conn_b.row_factory = sqlite3.Row
+    apply_fallback_schema(conn_b)
+    ingest(_build(cif)[0], conn_b, None)
+
+    mismatches = _compare_schema_mismatch(conn_a, conn_b, schema)
+    conn_a.close()
+    conn_b.close()
+
+    assert any(m.kind == 'schema_mismatch' for m in mismatches)
+
+
+def test_compare_fallback_no_table():
+    """_compare_fallback returns [] when _cif_fallback table does not exist."""
+    from pycifparse.fidelity.check import _compare_fallback
+    conn_a = sqlite3.connect(':memory:')
+    conn_b = sqlite3.connect(':memory:')
+    result = _compare_fallback(conn_a, conn_b)
+    conn_a.close()
+    conn_b.close()
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# check_fidelity ingest error paths
+# ---------------------------------------------------------------------------
+
+def test_ingest_error_in_check_fidelity():
+    from pycifparse.ingestion.ingest import IngestionError
+    cif = "data_b\n_a.b 1\n"
+    with patch('pycifparse.fidelity.check.ingest') as mock_ingest:
+        mock_ingest.side_effect = IngestionError(['broken ingest'])
+        r = check_fidelity(cif, cif, schema=None)
+    assert not r.passed
+    assert any(m.kind == 'ingest_error' for m in r.mismatches)
+    assert any('broken ingest' in m.description for m in r.mismatches)
+
+
+def test_generic_exception_in_check_fidelity():
+    """ValueError in ingest for source_a exercises the except (ValueError, Exception) path."""
+    cif = "data_b\n_a.b 1\n"
+    with patch('pycifparse.fidelity.check.ingest') as mock_ingest:
+        mock_ingest.side_effect = ValueError('unexpected failure')
+        r = check_fidelity(cif, cif, schema=None)
+    assert not r.passed
+    assert any(m.kind == 'ingest_error' and 'unexpected failure' in m.description
+               for m in r.mismatches)
+
+
+# ---------------------------------------------------------------------------
+# _normalised_rows: placeholder / synthetic_set paths (lines 439, 442)
+# ---------------------------------------------------------------------------
+
+def test_placeholder_value_in_structured_table_is_skipped():
+    """Placeholder values (. or ?) in structured columns are excluded from normalised rows."""
+    schema = _simple_loop_schema()
+    # A has atom A1 with x = '.' (placeholder); B has A1 with x = 1.0
+    cif_a = "data_b\nloop_\n  _atom.id\n  _atom.x\n  A1 .\n"
+    cif_b = "data_b\nloop_\n  _atom.id\n  _atom.x\n  A1 1.0\n"
+    r = check_fidelity(cif_a, cif_b, schema=schema)
+    # placeholder stripped → A1 row has only id; B has id + x → mismatch
+    assert not r.passed
+    assert any(m.kind == 'row_content' for m in r.mismatches)
+
+
+def test_normalised_rows_synthetic_set_skipped():
+    """Rows in synthetic_set are excluded from normalised output (line 442)."""
+    from pycifparse.fidelity.check import _normalised_rows
+    from pycifparse.dictionary.schema import TableDef, ColumnDef
+
+    tdef = TableDef(
+        name='atom', definition_id='_atom', category_class='Loop',
+        columns=[
+            ColumnDef(name='id', definition_id='_atom.id', type_contents='Text',
+                      nullable=False, is_primary_key=True, is_synthetic=False,
+                      linked_item_id=None),
+            ColumnDef(name='x', definition_id='_atom.x', type_contents='Real',
+                      nullable=True, is_primary_key=False, is_synthetic=False,
+                      linked_item_id=None),
+            ColumnDef(name='_row_id', definition_id='_row_id', type_contents='Text',
+                      nullable=True, is_primary_key=False, is_synthetic=True,
+                      linked_item_id=None),
+        ],
+        primary_keys=['id'],
+    )
+
+    conn = sqlite3.connect(':memory:')
+    conn.row_factory = sqlite3.Row
+    conn.execute('CREATE TABLE "atom" (id TEXT, x REAL, _row_id TEXT)')
+    conn.execute("INSERT INTO atom VALUES ('A1', 1.5, 'ROW1')")
+    conn.commit()
+
+    # synthetic_set says ('atom', 'ROW1', 'x') is default-filled → should be skipped
+    synthetic_set = {('atom', 'ROW1', 'x')}
+    rows = _normalised_rows(conn, 'atom', tdef, {}, {}, {}, synthetic_set)
+    conn.close()
+
+    assert len(rows) == 1
+    row_dict = dict(rows[0])
+    # 'x' should be absent because it was in synthetic_set
+    assert 'x' not in row_dict
+
+
+# ---------------------------------------------------------------------------
+# _load_synthetic_set: table-with-data path (line 382)
+# ---------------------------------------------------------------------------
+
+def test_load_synthetic_set_with_data():
+    """_load_synthetic_set returns set of tuples when _cif_synthetic exists and has rows."""
+    from pycifparse.fidelity.check import _load_synthetic_set
+    conn = sqlite3.connect(':memory:')
+    conn.execute(
+        'CREATE TABLE _cif_synthetic (table_name TEXT, row_id TEXT, column_name TEXT)'
+    )
+    conn.execute("INSERT INTO _cif_synthetic VALUES ('cell', 'R1', 'length_a')")
+    conn.commit()
+    result = _load_synthetic_set(conn)
+    conn.close()
+    assert ('cell', 'R1', 'length_a') in result
+
+
+# ---------------------------------------------------------------------------
+# _compare_schema_mismatch: OperationalError paths (lines 659->654, 661-662, 672-673)
+# ---------------------------------------------------------------------------
+
+def test_compare_schema_mismatch_no_fallback_table():
+    """_fallback_tags returns [] when _cif_fallback does not exist (lines 672-673)."""
+    from pycifparse.fidelity.check import _compare_schema_mismatch
+    schema = _simple_set_schema()
+    conn_a = sqlite3.connect(':memory:')
+    conn_b = sqlite3.connect(':memory:')
+    # Neither connection has _cif_fallback or structured tables
+    result = _compare_schema_mismatch(conn_a, conn_b, schema)
+    conn_a.close()
+    conn_b.close()
+    assert result == []
+
+
+def test_compare_schema_mismatch_structured_table_missing_in_b():
+    """_in_structured swallows OperationalError when table missing in conn_b (lines 661-662)."""
+    from pycifparse.fidelity.check import _compare_schema_mismatch
+    from pycifparse.dictionary.schema_apply import apply_fallback_schema
+
+    schema = _simple_set_schema()
+
+    # conn_a: _cif_fallback has a schema-known tag (_cell.a)
+    conn_a = sqlite3.connect(':memory:')
+    conn_a.row_factory = sqlite3.Row
+    apply_fallback_schema(conn_a)
+    conn_a.execute(
+        "INSERT INTO _cif_fallback (_block_id, _row_id, tag, value, value_type) "
+        "VALUES ('B', 1, '_cell.a', '5.0', 'string')"
+    )
+    conn_a.commit()
+
+    # conn_b: _cif_fallback exists but structured tables do NOT (no apply_schema)
+    conn_b = sqlite3.connect(':memory:')
+    conn_b.row_factory = sqlite3.Row
+    apply_fallback_schema(conn_b)
+
+    # Should not raise; OperationalError on missing table is caught silently
+    result = _compare_schema_mismatch(conn_a, conn_b, schema)
+    conn_a.close()
+    conn_b.close()
+    assert isinstance(result, list)
+
+
+def test_compare_schema_mismatch_in_structured_multi_table_mapping():
+    """_in_structured loops over multiple (table, col) pairs for same defid (line 659->654)."""
+    from pycifparse.fidelity.check import _compare_schema_mismatch
+    from pycifparse.dictionary.schema import SchemaSpec, TableDef, ColumnDef
+    from pycifparse.dictionary.schema_apply import apply_fallback_schema
+
+    # Build an artificial schema where _item.val maps to two tables
+    col_id = ColumnDef(name='id', definition_id='_item.id', type_contents='Text',
+                       nullable=False, is_primary_key=True, is_synthetic=False,
+                       linked_item_id=None)
+    col_val = ColumnDef(name='val', definition_id='_item.val', type_contents='Text',
+                        nullable=True, is_primary_key=False, is_synthetic=False,
+                        linked_item_id=None)
+    tdef1 = TableDef(name='table1', definition_id='_cat1', category_class='Loop',
+                     columns=[col_id, col_val], primary_keys=['id'])
+    tdef2 = TableDef(name='table2', definition_id='_cat2', category_class='Loop',
+                     columns=[col_id, col_val], primary_keys=['id'])
+    # Both tables map 'val' to the same defid → defid_to_cols has two entries
+    schema = SchemaSpec(
+        tables={'table1': tdef1, 'table2': tdef2},
+        column_to_tag={
+            ('table1', 'val'): '_item.val',
+            ('table2', 'val'): '_item.val',
+            ('table1', 'id'): '_item.id',
+            ('table2', 'id'): '_item.id',
+        },
+    )
+
+    # conn_a has _cif_fallback with _item.val
+    conn_a = sqlite3.connect(':memory:')
+    conn_a.row_factory = sqlite3.Row
+    apply_fallback_schema(conn_a)
+    conn_a.execute(
+        "INSERT INTO _cif_fallback (_block_id, _row_id, tag, value, value_type) "
+        "VALUES ('B', 1, '_item.val', 'foo', 'string')"
+    )
+    conn_a.commit()
+
+    # conn_b: table1 exists but empty (fetchone returns None → line 659->654)
+    #         table2 exists with non-NULL data → _in_structured returns True
+    conn_b = sqlite3.connect(':memory:')
+    conn_b.row_factory = sqlite3.Row
+    apply_fallback_schema(conn_b)
+    conn_b.execute('CREATE TABLE "table1" (id TEXT, val TEXT)')
+    conn_b.execute('CREATE TABLE "table2" (id TEXT, val TEXT)')
+    conn_b.execute("INSERT INTO \"table2\" VALUES ('1', 'foo')")
+    conn_b.commit()
+
+    result = _compare_schema_mismatch(conn_a, conn_b, schema)
+    conn_a.close()
+    conn_b.close()
+    # table2 has data → _in_structured eventually returns True → schema_mismatch emitted
+    assert any(m.kind == 'schema_mismatch' for m in result)
