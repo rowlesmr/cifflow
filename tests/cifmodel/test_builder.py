@@ -445,3 +445,133 @@ class TestDuplicateSaveFrameNames:
         assert len(all_f) == 2
         assert all_f[0]['_x'] == ['first']
         assert all_f[1]['_x'] == ['second']
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stopped-state coverage
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestStoppedState:
+    """Tests that events after builder.stop() are ignored (line 143, 161, etc.)"""
+
+    def _stopped_builder(self):
+        b, errors = make_builder(mode='strict')
+        b.on_data_block('d')
+        # Trigger a strict-mode loop error to stop the builder
+        b.on_loop_start(['_a', '_b'])
+        b.add_value('1', ST)  # only one value for a 2-tag loop
+        b.on_loop_end()       # incomplete row → strict mode stops
+        assert b._stopped
+        return b, errors
+
+    def test_on_data_block_after_stop_ignored(self):
+        # Line 143
+        b, _ = self._stopped_builder()
+        b.on_data_block('extra')
+        assert 'extra' not in b.result.blocks
+
+    def test_on_save_frame_start_after_stop_ignored(self):
+        # Line 161
+        b, _ = self._stopped_builder()
+        b.on_save_frame_start('sf')
+        # No crash, no save frame added (block is 'd' with no frames)
+
+    def test_on_save_frame_end_after_stop_ignored(self):
+        # Line 171
+        b, _ = self._stopped_builder()
+        b.on_save_frame_end()  # must not crash
+
+    def test_on_list_start_after_stop_ignored(self):
+        # Line 190
+        b, _ = self._stopped_builder()
+        b.on_list_start()  # must not crash
+
+    def test_on_list_end_after_stop_ignored(self):
+        # Line 195
+        b, _ = self._stopped_builder()
+        b.on_list_end()  # must not crash
+
+    def test_on_table_start_after_stop_ignored(self):
+        # Line 201
+        b, _ = self._stopped_builder()
+        b.on_table_start()  # must not crash
+
+    def test_on_table_key_after_stop_ignored(self):
+        # Line 206 (stopped branch) / Line 208 (container not a table)
+        b, _ = self._stopped_builder()
+        b.on_table_key('k', ST)  # must not crash
+
+    def test_on_table_end_after_stop_ignored(self):
+        # Line 213
+        b, _ = self._stopped_builder()
+        b.on_table_end()  # must not crash
+
+    def test_on_loop_start_after_stop_ignored(self):
+        # Line 220
+        b, _ = self._stopped_builder()
+        b.on_loop_start(['_x'])  # must not crash
+
+    def test_on_loop_end_after_stop_ignored(self):
+        # Line 228
+        b, _ = self._stopped_builder()
+        b.on_loop_end()  # must not crash
+
+
+class TestEdgeCaseDispatch:
+    """Cover edge cases in _dispatch_value and loop/container paths."""
+
+    def test_table_value_assigned_when_key_set(self):
+        # Line 122->125: table dispatch with current_key set
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.add_tag('_t')
+        b.on_table_start()
+        b.on_table_key('k', ST)
+        b.add_value('v', ST)   # dispatches to table with current_key='k'
+        b.on_table_end()
+        assert b.result['d']['_t'] == [{'k': 'v'}]
+
+    def test_loop_end_with_no_tags(self):
+        # Lines 234-235: on_loop_end with n==0 (loop was started with no tags)
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b._in_loop = True
+        b._loop_tags = []
+        b._loop_value_index = 0
+        b._loop_buffers = {}
+        b.on_loop_end()  # n==0 → early return
+        assert not b._in_loop
+
+    def test_loop_end_with_null_namespace(self):
+        # Line 257->260: ns is None → _add_loop not called
+        b, _ = make_builder()
+        # Don't call on_data_block so _block is None (ns is None)
+        b._in_loop = True
+        b._loop_tags = ['_a']
+        b._loop_value_index = 1
+        b._loop_buffers = {'_a': []}
+        b.on_loop_end()  # ns is None → no _add_loop call, no crash
+
+    def test_on_table_key_when_container_is_list_not_table(self):
+        # Line 208->exit: top is a list, not _TableInProgress
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.add_tag('_t')
+        b.on_list_start()  # push a list onto container_stack
+        b.on_table_key('k', ST)  # container is a list → no-op
+        b.on_list_end()
+
+    def test_on_table_end_when_container_is_list_not_table(self):
+        # Line 215->exit: top is a list (not _TableInProgress) when on_table_end called
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.add_tag('_t')
+        b.on_list_start()  # push a list
+        b.on_table_end()   # pops the list, which is not a _TableInProgress
+
+    def test_save_frame_end_with_none_save_frame(self):
+        # Line 172->174: on_save_frame_end when _save_frame is None
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b._save_frame = None
+        b.on_save_frame_end()  # _save_frame is None → skip _add_save_frame
