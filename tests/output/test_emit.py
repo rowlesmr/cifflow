@@ -344,6 +344,61 @@ class TestOneBlock:
 
 
 # ---------------------------------------------------------------------------
+# line_ending parameter
+# ---------------------------------------------------------------------------
+
+class TestLineEnding:
+    CIF = '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n'
+
+    @pytest.fixture
+    def conn(self):
+        schema = _make_schema(_MINI_DIC)
+        return _ingest_src(self.CIF, schema), schema
+
+    def test_default_is_lf(self, conn):
+        c, s = conn
+        result = emit(c, s)
+        assert '\r' not in result
+        assert result.endswith('\n')
+
+    def test_lf_explicit(self, conn):
+        c, s = conn
+        result = emit(c, s, line_ending='\n')
+        assert '\r' not in result
+
+    def test_crlf(self, conn):
+        c, s = conn
+        result = emit(c, s, line_ending='\r\n')
+        # Every \n is preceded by \r
+        assert '\r\n' in result
+        assert result.endswith('\r\n')
+        # No bare \n
+        assert '\n' not in result.replace('\r\n', '')
+
+    def test_cr(self, conn):
+        c, s = conn
+        result = emit(c, s, line_ending='\r')
+        assert '\r' in result
+        assert result.endswith('\r')
+        assert '\n' not in result
+
+    def test_content_unchanged_across_endings(self, conn):
+        c, s = conn
+        lf   = emit(c, s, line_ending='\n')
+        crlf = emit(c, s, line_ending='\r\n')
+        cr   = emit(c, s, line_ending='\r')
+        # Normalise all to LF and compare
+        assert crlf.replace('\r\n', '\n') == lf
+        assert cr.replace('\r', '\n') == lf
+
+    def test_magic_line_preserved(self, conn):
+        c, s = conn
+        result = emit(c, s, line_ending='\r\n')
+        first_line = result.split('\r\n')[0]
+        assert first_line == '#\\#CIF_2.0'
+
+
+# ---------------------------------------------------------------------------
 # ALL_BLOCKS mode
 # ---------------------------------------------------------------------------
 

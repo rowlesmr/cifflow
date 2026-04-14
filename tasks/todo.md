@@ -7,7 +7,7 @@
 **Current stage:** Stage 6 — OutputPlan fully implemented. Output layer complete and stable.
 
 **Test suite state (2026-04-14):**
-- ~1304 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+- ~1310 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
 - 58 slow tests pass: `pytest -m slow`
 - Total: ~1362 passing, 0 xfail
 
@@ -57,11 +57,18 @@
   for all four emit modes).  Validated on `multi_one.cif` + `cif_pow.dic`: all four modes
   pass fidelity (0 mismatches).
 
+**Open questions / things to revisit:**
+- **ONE_BLOCK block naming**: review how the output block is named in ONE_BLOCK mode.
+  Currently hardcoded to `'output'` in `_collect_one_block`.  Consider whether the name
+  should be derived from block_namer / OutputPlan, or whether `'output'` is correct.
+
+- **Line ending option** (2026-04-14): `line_ending: str = '\n'` parameter added to `emit()`.
+  `_render_block` changed to return `list[str]` (was `str`); all lines collected flat in
+  `emit()` and joined once with `line_ending`.  Multiline text fields handled correctly
+  because `_render_set_category` / `_format_row` already split tokens on `\n` before
+  extending the lines list.  6 new tests in `TestLineEnding`.
+
 **Next targets (in priority order):**
-1. **Line ending option** — `line_ending: Literal['\n', '\r\n', '\r'] = '\n'` parameter on
-   `emit()`.  Applied as a final substitution over the assembled output string before return.
-   The 2048-character line-length check must operate on the content before line endings are
-   applied (i.e. measure raw content length, not including the terminator).
 2. **Pretty-print output** — `pretty: bool = True` flag on `emit()`.  When `True`:
    - Tag–value pairs: tag and value column-aligned across all scalar pairs in the category.
    - Loop columns: each value column width determined by the widest value in that column

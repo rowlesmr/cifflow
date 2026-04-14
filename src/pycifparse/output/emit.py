@@ -95,6 +95,7 @@ def emit(
     plan: OutputPlan | None = None,
     reconstruct_su: bool = False,
     emit_defaults: bool = True,
+    line_ending: str = '\n',
 ) -> str:
     """Emit CIF text from a populated SQLite database.
 
@@ -120,11 +121,16 @@ def emit(
         are emitted normally.  When ``False``, they would be suppressed; this
         requires per-value provenance tracking which is not yet implemented,
         so the flag is currently accepted but has no effect.
+    line_ending:
+        Line terminator sequence written between every line and at the end of
+        the output.  Use ``'\\n'`` (default, Unix LF), ``'\\r\\n'`` (Windows
+        CRLF), or ``'\\r'`` (legacy CR).  The 2048-character line-length limit
+        is measured on content before line endings are applied.
 
     Returns
     -------
     str
-        Complete CIF text including magic line, terminated with a newline.
+        Complete CIF text including magic line, terminated with ``line_ending``.
     """
     magic = '#\\#CIF_2.0' if version == CifVersion.CIF_2_0 else '#\\#CIF_1.1'
 
@@ -139,9 +145,9 @@ def emit(
 
     ordered = _sort_and_merge(raw_blocks, plan)
 
-    # Disambiguate block names
+    # Disambiguate block names; collect all output lines flat.
     used_names: dict[str, int] = {}
-    parts = [magic]
+    lines = [magic]
     for i, (data, spec) in enumerate(ordered):
         base = data.name
         count = used_names.get(base, 0) + 1
@@ -149,11 +155,11 @@ def emit(
         name = f'{base}_{count}' if count > 1 else base
 
         if i > 0:
-            parts.append('')
-            parts.append('')
-        parts.append(_render_block(name, data, schema, version, spec, reconstruct_su))
+            lines.append('')
+            lines.append('')
+        lines.extend(_render_block(name, data, schema, version, spec, reconstruct_su))
 
-    return '\n'.join(parts) + '\n'
+    return line_ending.join(lines) + line_ending
 
 
 # ---------------------------------------------------------------------------
@@ -517,8 +523,8 @@ def _render_block(
     version: CifVersion,
     spec: BlockSpec | None,
     reconstruct_su: bool,
-) -> str:
-    """Render a single CIF block to a string."""
+) -> list[str]:
+    """Render a single CIF block as a flat list of output lines."""
     lines: list[str] = [f'data_{block_name}']
     first_category = True
 
@@ -573,7 +579,7 @@ def _render_block(
             lines.append('')
         lines.extend(_render_fallback(data.fallback_rows, version))
 
-    return '\n'.join(lines)
+    return lines
 
 
 # ---------------------------------------------------------------------------
