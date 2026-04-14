@@ -588,3 +588,32 @@ class TestEdgeCases:
     def test_json_stored_value_roundtrip_20(self):
         # JSON-encoded containers pass through as regular strings
         rt('["a","b"]', CIF20)
+
+
+# ---------------------------------------------------------------------------
+# Rule 6 edge: triple-single present, no triple-double (line 164)
+# Rule 6 edge: triple-double present, no triple-single (line 166)
+# ---------------------------------------------------------------------------
+
+class TestBothQuoteTypesTripleConflict:
+    def test_has_triple_single_no_triple_double_uses_triple_double(self):
+        """has_triple_single=True, has_triple_double=False, ends with ' → line 164."""
+        # Value has both ' and " AND contains ''' and ends with '
+        value = """it's "quoted" and '''"""
+        # Verify preconditions
+        assert "'" in value and '"' in value and "'''" in value
+        assert '"""' not in value
+        assert value.endswith("'")
+        result = quote(value, CIF20)
+        assert result.startswith('"""') and result.endswith('"""')
+
+    def test_has_triple_double_no_triple_single_uses_triple_single(self):
+        """has_triple_double=True, has_triple_single=False, ends with " → line 166."""
+        # Value has both ' and " AND contains """ and ends with "
+        value = 'it\'s "quoted" and """'
+        # Verify preconditions
+        assert "'" in value and '"' in value and '"""' in value
+        assert "'''" not in value
+        assert value.endswith('"')
+        result = quote(value, CIF20)
+        assert result.startswith("'''") and result.endswith("'''")
