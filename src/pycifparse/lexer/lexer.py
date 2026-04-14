@@ -63,7 +63,7 @@ def _check_cif1_char(ch: str, line: int, col: int) -> Optional[LexerError]:
         line=line, column=col, context=ch,
     )
 
-
+# this function never gets called. Should be removed.
 def _check_su(word: str, line: int, col: int) -> List[LexerError]:
     """Return a LexerError if *word* looks like numeric+SU but has a bad SU."""
     if '(' not in word:
