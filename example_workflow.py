@@ -543,16 +543,16 @@ else:
 print('\n=== Step 13: Fidelity checks ===')
 
 fidelity_cases = [
-    ('ORIGINAL',   cif_original,   ORIGINAL_CIF_FILE.with_suffix('.fidelity.txt')),
-    ('GROUPED',    cif_grouped,    GROUPED_CIF_FILE.with_suffix('.fidelity.txt')),
-    ('ONE_BLOCK',  cif_one_block,  ONE_BLOCK_CIF_FILE.with_suffix('.fidelity.txt')),
-    ('ALL_BLOCKS', cif_all_blocks, ALL_BLOCKS_CIF_FILE.with_suffix('.fidelity.txt')),
+    ('ORIGINAL',   ORIGINAL_CIF_FILE,   ORIGINAL_CIF_FILE.with_suffix('.fidelity.txt')),
+    ('GROUPED',    GROUPED_CIF_FILE,    GROUPED_CIF_FILE.with_suffix('.fidelity.txt')),
+    ('ONE_BLOCK',  ONE_BLOCK_CIF_FILE,  ONE_BLOCK_CIF_FILE.with_suffix('.fidelity.txt')),
+    ('ALL_BLOCKS', ALL_BLOCKS_CIF_FILE, ALL_BLOCKS_CIF_FILE.with_suffix('.fidelity.txt')),
 ]
 
 for mode_name, emitted_cif, report_path in fidelity_cases:
     report = check_fidelity(
         CIF_FILE,            # source A: original CIF file
-        emitted_cif,         # source B: emitted CIF string
+        emitted_cif,         # source B: saved emitted CIF file
         schema,              # SchemaSpec for structured comparison
         report_file=report_path,
     )
