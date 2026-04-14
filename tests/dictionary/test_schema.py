@@ -747,3 +747,177 @@ class TestEmitCreateStatements:
         assert fk[4] == 'id'         # to column
 
 
+# ---------------------------------------------------------------------------
+# Gap-coverage tests — category key warnings and FK edge cases
+# ---------------------------------------------------------------------------
+
+class TestCategoryKeyWarnings:
+    def test_category_key_not_in_dictionary_warns(self):
+        """category_keys contains a tag absent from tag_to_item → warning (lines 373-377)."""
+        cats = [_cat('atom', 'atom', 'Loop', ['_atom.missing_key'])]
+        items = [_item('_atom.x', 'atom', 'x', type_contents='Real')]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        assert any('not found in dictionary' in w for w in schema.warnings)
+
+    def test_category_key_no_object_id_warns(self):
+        """Key item has object_id=None → warning (lines 379-383)."""
+        cats = [_cat('atom', 'atom', 'Loop', ['_atom.noobj'])]
+        # Create the key item with object_id=None via DdlmItem directly
+        key_item = DdlmItem(
+            definition_id='_atom.noobj', scope='Item', definition_class='Datum',
+            category_id='atom', object_id=None,
+            type_purpose='Key', type_source=None, type_container='Single',
+            type_contents='Text', linked_item_id=None, units_code=None, description=None,
+        )
+        items = [key_item]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        assert any('has no object_id' in w for w in schema.warnings)
+
+    def test_pk_column_not_in_domain_items_warns(self):
+        """Key object_id does not appear in category items → warning (lines 446-450)."""
+        # Create a category whose key tag has object_id='ghost_col'
+        # but no item in the category has object_id='ghost_col'.
+        ghost_key = DdlmItem(
+            definition_id='_atom.ghost', scope='Item', definition_class='Datum',
+            category_id='atom', object_id='ghost_col',
+            type_purpose='Key', type_source=None, type_container='Single',
+            type_contents='Text', linked_item_id=None, units_code=None, description=None,
+        )
+        cats = [_cat('atom', 'atom', 'Loop', ['_atom.ghost'])]
+        # No item with object_id='ghost_col' in domain_items
+        items = [ghost_key, _item('_atom.x', 'atom', 'x')]
+        # Remove 'ghost' from the items list but keep it in tag_to_item
+        cat_obj = cats[0]
+        item_map = {'_atom.x': items[1]}  # ghost not in items
+        tag_to_item = {
+            'atom': cat_obj,
+            '_atom.ghost': ghost_key,
+            '_atom.x': items[1],
+        }
+        d = DdlmDictionary(
+            name='TEST', title=None, version=None,
+            categories={'atom': cat_obj},
+            items=item_map,
+            tag_to_item=tag_to_item,
+            alias_to_definition_id={}, deprecated_ids=set(),
+        )
+        schema = generate_schema(d)
+        assert any('not found in category items' in w for w in schema.warnings)
+
+
+class TestFKEdgeCases:
+    def test_link_item_with_no_category_id_skipped(self):
+        """Link item with category_id=None doesn't produce FK (lines 532-533)."""
+        cats = [_cat('tgt', 'tgt', 'Loop', ['_tgt.id'])]
+        items = [
+            _item('_tgt.id', 'tgt', 'id', type_purpose='Key', type_contents='Text'),
+        ]
+        link_item = DdlmItem(
+            definition_id='_orphan.ref', scope='Item', definition_class='Datum',
+            category_id=None,  # no category
+            object_id='ref', type_purpose='Link', type_source=None,
+            type_container='Single', type_contents='Text',
+            linked_item_id='_tgt.id', units_code=None, description=None,
+        )
+        cat_obj = cats[0]
+        item_map = {i.definition_id: i for i in items + [link_item]}
+        tag_to_item = {**{c.definition_id: c for c in cats}, **item_map}
+        d = DdlmDictionary(
+            name='T', title=None, version=None,
+            categories={c.definition_id: c for c in cats},
+            items=item_map, tag_to_item=tag_to_item,
+            alias_to_definition_id={}, deprecated_ids=set(),
+        )
+        schema = generate_schema(d)
+        assert schema.tables['tgt'].foreign_keys == []
+
+    def test_link_target_not_in_schema_warns(self):
+        """FK target table not in schema → warning (lines 543-547)."""
+        # Head category → no table generated
+        head_cat = DdlmItem(
+            definition_id='head', scope='Category', definition_class='Head',
+            category_id='head', object_id=None, type_purpose=None, type_source=None,
+            type_container='Single', type_contents=None, linked_item_id=None,
+            units_code=None, description=None, category_keys=[],
+        )
+        head_item = DdlmItem(
+            definition_id='_head.id', scope='Item', definition_class='Datum',
+            category_id='head', object_id='id',
+            type_purpose='Key', type_source=None, type_container='Single',
+            type_contents='Text', linked_item_id=None, units_code=None, description=None,
+        )
+        cats = [_cat('src', 'src', 'Loop', ['_src.id'])]
+        items = [
+            _item('_src.id', 'src', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_src.ref', 'src', 'ref', type_purpose='Link',
+                  linked_item_id='_head.id', type_contents='Text'),
+        ]
+        all_cats = {c.definition_id: c for c in cats}
+        all_cats['head'] = head_cat
+        item_map = {i.definition_id: i for i in items + [head_item]}
+        tag_to_item = {**all_cats, **item_map}
+        d = DdlmDictionary(
+            name='T', title=None, version=None,
+            categories=all_cats, items=item_map, tag_to_item=tag_to_item,
+            alias_to_definition_id={}, deprecated_ids=set(),
+        )
+        schema = generate_schema(d)
+        assert any('not in schema' in w for w in schema.warnings)
+
+    def test_link_target_item_no_category_id_skipped(self):
+        """Target item has category_id=None → silently skipped (line 535)."""
+        orphan_target = DdlmItem(
+            definition_id='_orphan.id', scope='Item', definition_class='Datum',
+            category_id=None, object_id='id',
+            type_purpose='Key', type_source=None, type_container='Single',
+            type_contents='Text', linked_item_id=None, units_code=None, description=None,
+        )
+        cats = [_cat('src', 'src', 'Loop', ['_src.id'])]
+        items = [
+            _item('_src.id', 'src', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_src.ref', 'src', 'ref', type_purpose='Link',
+                  linked_item_id='_orphan.id', type_contents='Text'),
+        ]
+        item_map = {i.definition_id: i for i in items + [orphan_target]}
+        tag_to_item = {**{c.definition_id: c for c in cats}, **item_map}
+        d = DdlmDictionary(
+            name='T', title=None, version=None,
+            categories={c.definition_id: c for c in cats},
+            items=item_map, tag_to_item=tag_to_item,
+            alias_to_definition_id={}, deprecated_ids=set(),
+        )
+        schema = generate_schema(d)
+        assert schema.tables['src'].foreign_keys == []
+
+
+class TestPropagationLinks:
+    def test_propagation_links_populated_for_pk_link_item(self):
+        """Loop category with a PK column that is a Link item → propagation_links
+        is non-empty and the PK column is made nullable (lines 709, 712, 721)."""
+        # parent Set category
+        cats = [
+            _cat('parent', 'parent', 'Set', ['_parent.id']),
+            _cat('child', 'child', 'Loop', ['_child.parent_id']),
+        ]
+        items = [
+            _item('_parent.id', 'parent', 'id', type_purpose='Key', type_contents='Text'),
+            # child PK is a Link to parent.id
+            _item('_child.parent_id', 'child', 'parent_id', type_purpose='Link',
+                  linked_item_id='_parent.id', type_contents='Text'),
+            _item('_child.val', 'child', 'val', type_contents='Real'),
+        ]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        assert 'child' in schema.propagation_links
+        entries = schema.propagation_links['child']
+        assert any(col == 'parent_id' for col, _, _ in entries)
+        # The PK column must be made nullable
+        col_def = next(
+            c for c in schema.tables['child'].columns if c.name == 'parent_id'
+        )
+        assert col_def.nullable is True
+
+
+
