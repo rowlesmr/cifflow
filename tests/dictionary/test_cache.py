@@ -165,6 +165,63 @@ class TestLoadErrors:
         finally:
             path.unlink(missing_ok=True)
 
+    def test_invalid_categories_raises_value_error(self):
+        # Lines 105-106: KeyError/TypeError in categories/items construction
+        item = _item('_atom_site.fract_x', cat='atom_site', obj='fract_x')
+        d = _make_dict(items={'_atom_site.fract_x': item}, tag_to_item={'_atom_site.fract_x': item})
+        with tempfile.NamedTemporaryFile(
+            suffix='.json', mode='w', delete=False, encoding='utf-8'
+        ) as f:
+            path = pathlib.Path(f.name)
+        try:
+            save_dictionary(d, path)
+            data = json.loads(path.read_text(encoding='utf-8'))
+            # Corrupt categories so DdlmItem(**v) fails
+            data['categories'] = {'bad_cat': {'not_a_valid_field': True}}
+            path.write_text(json.dumps(data), encoding='utf-8')
+            with pytest.raises(ValueError, match='invalid dictionary cache structure'):
+                load_dictionary(path)
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_invalid_tag_to_item_structure_raises_value_error(self):
+        # Line 119-120: KeyError in tag_to_item reconstruction (missing key)
+        item = _item('_atom_site.fract_x', cat='atom_site', obj='fract_x')
+        d = _make_dict(items={'_atom_site.fract_x': item}, tag_to_item={'_atom_site.fract_x': item})
+        with tempfile.NamedTemporaryFile(
+            suffix='.json', mode='w', delete=False, encoding='utf-8'
+        ) as f:
+            path = pathlib.Path(f.name)
+        try:
+            save_dictionary(d, path)
+            data = json.loads(path.read_text(encoding='utf-8'))
+            # Remove 'tag_to_item' key to cause KeyError when accessing it
+            del data['tag_to_item']
+            path.write_text(json.dumps(data), encoding='utf-8')
+            with pytest.raises(ValueError, match='invalid tag_to_item'):
+                load_dictionary(path)
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_invalid_final_construction_raises_value_error(self):
+        # Lines 135-136: KeyError/TypeError in DdlmDictionary construction
+        item = _item('_atom_site.fract_x', cat='atom_site', obj='fract_x')
+        d = _make_dict(items={'_atom_site.fract_x': item}, tag_to_item={'_atom_site.fract_x': item})
+        with tempfile.NamedTemporaryFile(
+            suffix='.json', mode='w', delete=False, encoding='utf-8'
+        ) as f:
+            path = pathlib.Path(f.name)
+        try:
+            save_dictionary(d, path)
+            data = json.loads(path.read_text(encoding='utf-8'))
+            # Remove 'name' so DdlmDictionary(**data) fails with KeyError
+            del data['name']
+            path.write_text(json.dumps(data), encoding='utf-8')
+            with pytest.raises(ValueError, match='invalid dictionary cache structure'):
+                load_dictionary(path)
+        finally:
+            path.unlink(missing_ok=True)
+
     def test_unknown_definition_id_in_tag_to_item_raises_value_error(self):
         item = _item('_atom_site.fract_x', cat='atom_site', obj='fract_x')
         d = _make_dict(
