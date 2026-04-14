@@ -4,12 +4,12 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 6 — fidelity check complete. Output layer complete and stable.
+**Current stage:** Stage 6 — OutputPlan fully implemented. Output layer complete and stable.
 
-**Test suite state (2026-04-13):**
-- ~1152 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
-- 49 slow tests pass: `pytest -m slow`
-- Total: ~1201 passing, 0 xfail
+**Test suite state (2026-04-14):**
+- ~1304 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+- 58 slow tests pass: `pytest -m slow`
+- Total: ~1362 passing, 0 xfail
 
 **What was completed in recent sessions:**
 - `quote.py`: CIF 2.0 and 1.1 quoting decision trees; 95 tests in `tests/output/test_quote.py`.
@@ -17,13 +17,10 @@
 - `emit.py`: `emit(conn, schema, *, mode, version, plan, reconstruct_su, emit_defaults)`.
   Four mode collectors. Set/Loop/fallback renderers. SU reconstruction. GROUPED BFS anchor search.
 - All symbols exported from `pycifparse.output.__init__` and `pycifparse.__init__`.
-- 62 tests in `tests/output/test_emit.py` (all four modes, round-trip integration, OutputPlan,
-  quoting, NULL handling, GROUPED merging, composite-key anchoring). 0 xfail.
 - **FK-PK suppression** (ORIGINAL and GROUPED): Set-category FK-PK columns redundant from block
   scope are suppressed.  `_suppressed_fk_pk_cols()` in `emit.py`.
 - **`_audit_dataset.id` injection** (ALL_BLOCKS, CIF 2.0 only): links blocks to one dataset UUID.
 - **`example_workflow.py` Step 11**: ALL_BLOCKS emit added with round-trip parse check.
-- **API Reference** updated: FK-PK suppression and ALL_BLOCKS dataset injection documented.
 - **Bug fix — `_flush` slim-row column loss** (`ingest.py`): INSERT column list now uses union of
   all row keys, not just `rows[0].keys()`.  Fixes NULL columns after re-ingest of emitted CIF.
 - **Bug fix — GROUPED remaining-blocks scope** (`emit.py`): remaining-blocks pass now sweeps all
@@ -35,18 +32,37 @@
   `DdlmDictionary.source_files` and therefore `SchemaSpec.source_files` for report use.
 - **`DdlmDictionary.source_files`** / **`SchemaSpec.source_files`** / **`SchemaSpec.dictionary_name`**:
   populated during loading; serialised in JSON cache.
+- **OutputPlan full spec implemented** (2026-04-14):
+  - `BlockSpec`: `matches` predicate, `category_order` (with wildcard `*` and merge groups),
+    `single_block`, `block_namer`.
+  - `OutputPlan`: `specs` (renamed from `blocks`), `block_namer`, `match()`.
+  - `emit.py` refactored: collectors return `list[_BlockData]`; `_sort_and_merge()` does
+    first-match spec assignment, `single_block` merging, and emission ordering.
+  - `_expand_wildcard()`: BFS over `SchemaSpec.category_parent` children map.
+  - `_render_merge_group()`: key-compatible → FULL OUTER JOIN in Python → single `loop_`;
+    incompatible → plain loops in listed order.
+  - GROUPED block names now derived from anchor key dict (e.g. `id_myexp`), not `_block_id`.
+  - `SchemaSpec.category_parent` added to `schema.py`; built in `generate_schema`.
+  - 19 new tests in `test_emit.py`. API Reference updated. Lessons 65–68 added.
+
+**What was completed in recent sessions (continued):**
+- **ALL_BLOCKS block granularity fixed** (2026-04-14): `_collect_all_blocks` now delegates to
+  `_collect_grouped` (mirrors GROUPED logic: one block per Set-anchor key combination).
+  `dataset_id` is a fresh UUID per `emit()` call (CIF 2.0 only), shared across all output blocks.
+  FK-PK suppression disabled (`suppress_fk_pk=False`).  `_block_dataset_membership` lookup
+  removed (dataset UUID now always fresh).  `audit_dataset` stripped from GROUPED block
+  table_rows so emission UUID is injected consistently into every block.  6 new tests.
+- **`example_workflow.py` updated**: `BlockSpec.categories` → `category_order`;
+  `OutputPlan.blocks` → `specs`; Step 11 comment corrected; Step 13 added (fidelity checks
+  for all four emit modes).  Validated on `multi_one.cif` + `cif_pow.dic`: all four modes
+  pass fidelity (0 mismatches).
 
 **Next targets (in priority order):**
-1. **Fix ALL_BLOCKS block granularity** — Set categories: one block per row; Loop categories:
-   group by Set-anchor key.  Requires reworking `_collect_all_blocks` to mirror GROUPED logic.
-   Revisit `_audit_dataset.id` injection once granularity is correct.
-2. **`BlockSpec` merge-group syntax** — `list[str | list[str]]` inner lists emit categories as
-   a single `loop_` via FULL OUTER JOIN on shared keys (see design notes below).
-3. **Line ending option** — `line_ending: Literal['\n', '\r\n', '\r'] = '\n'` parameter on
+1. **Line ending option** — `line_ending: Literal['\n', '\r\n', '\r'] = '\n'` parameter on
    `emit()`.  Applied as a final substitution over the assembled output string before return.
    The 2048-character line-length check must operate on the content before line endings are
    applied (i.e. measure raw content length, not including the terminator).
-4. **Pretty-print output** — `pretty: bool = True` flag on `emit()`.  When `True`:
+2. **Pretty-print output** — `pretty: bool = True` flag on `emit()`.  When `True`:
    - Tag–value pairs: tag and value column-aligned across all scalar pairs in the category.
    - Loop columns: each value column width determined by the widest value in that column
      (requires a full pass over all rows before writing any output).
@@ -70,44 +86,8 @@
    CIF sentinels `'.'` and `'?'` convert to `NULL`.  Failed casts produce `NULL`, a kept
    TEXT value, or raise — controlled by an `on_coercion_failure` parameter (`'null'` /
    `'keep'` / `'error'`).  Stub is already shown in `example_workflow.py` Step 12.
-7. ~~**Ingest stub promotion / emit round-trip bugs**~~ — **DONE** (2026-04-12).  See Lesson 58.
-
-**Required future work:**
-- **`BlockSpec.categories` — merge groups**: allow inner lists to specify categories that should
-  be emitted as a single `loop_` construct via a FULL OUTER JOIN on shared key columns.
-  Proposed syntax: `categories=['audit_dataset', 'cell', ['pd_data', 'pd_meas', 'pd_proc']]`.
-  Design:
-  - All members of a merge group must be Loop-class categories.
-  - Members are joined on their shared key columns (identical or subset PK relationship);
-    if no common key can be identified, fall back to separate loops with a warning.
-  - Key columns appear once in the loop header; each member's non-key columns follow in
-    list order.
-  - Missing rows in any member produce `NULL` in the merged result, rendered as `.`.
-  - The join is performed in SQLite.  SQLite has no native FULL OUTER JOIN, so
-    use a two-phase strategy:
-    1. Primary LEFT JOIN chain — `pd_meas LEFT JOIN pd_proc LEFT JOIN pd_calc`
-        on shared key.  Handles the common case (identical key sets) in one pass.
-    2. Stragglers query — collect keys present in later members but absent from
-        the first table and append those rows.  Avoids a full UNION ALL in the
-        typical case where key sets are identical.
-    **Profile before committing to this approach** — with tens of thousands of
-    rows, verify that the two-phase query outperforms a Python-side merge dict
-    on realistic powder-diffraction data.
-  - `BlockSpec.categories` type changes from `list[str]` to `list[str | list[str]]`;
-    all downstream helpers (`_ordered_categories`, `_render_block`, column ordering,
-    FK-PK suppression) need to handle both element types.
-
-
-- **`ALL_BLOCKS` mode — correct block granularity**: the current implementation emits one block
-  per non-empty SQLite table, which is wrong for multi-row tables.  The correct behaviour is:
-  - **Set categories**: one output block per row (each row is a distinct instance; rows arrive
-    from different original `_block_id`s).
-  - **Loop categories**: group rows by the Set-anchor key (the domain PK of the nearest Set
-    ancestor in the FK chain).  Rows that share the same Set-anchor key values belong to the
-    same output block.  Tables with no Set ancestor remain one block per table.
-  - **Consequence for `_audit_dataset.id` injection**: the dataset UUID should be derived from
-    whichever `_block_id`s contributed to the block, not just the global session UUID.  Revisit
-    this logic once block granularity is correct.
+5. ~~**Ingest stub promotion / emit round-trip bugs**~~ — **DONE** (2026-04-12).  See Lesson 58.
+6. ~~**OutputPlan full spec**~~ — **DONE** (2026-04-14).  See Lessons 65–68.
 
 **Open decisions / known limitations:**
 - **`inspect_ingest` routing trace**: currently captures warnings, errors, FK violations only.

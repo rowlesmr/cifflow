@@ -1,5 +1,109 @@
 # pycifparse — Lessons Learned
 
+## Lesson 69 — ALL_BLOCKS delegates to GROUPED and strips audit_dataset for UUID consistency (2026-04-14)
+
+**Context:** `_collect_all_blocks` in `output/emit.py`.
+
+**Problem 1 — wrong block granularity:** The old ALL_BLOCKS put all rows from one table into
+one block (one block per non-empty table).  Correct: one block per Set-anchor key combination.
+
+**Fix:** `_collect_all_blocks` now calls `_collect_grouped`, then wraps each result with
+`suppress_fk_pk=False` and a fresh session-scoped `dataset_id` UUID (CIF 2.0 only).
+
+**Problem 2 — inconsistent `_audit_dataset.id`:** The `_render_block` injection skips blocks
+that already have `audit_dataset` in `table_rows` (emitting the stored UUID instead).  When
+GROUPED gives one block an `audit_dataset` row and others nothing, the block with the row
+gets its stored UUID while the rest get the fresh emission UUID — causing a mismatch on
+re-ingest ("no common _audit_dataset.id").
+
+**Fix:** `_collect_all_blocks` strips `'audit_dataset'` from each block's `table_rows`
+before building `_BlockData`.  This guarantees the injection always fires, all blocks
+receive the same emission UUID, and the re-ingested CIF is treated as one coherent dataset.
+
+**Rule:** ALL_BLOCKS and GROUPED share block-partitioning.  Differences: (a) no FK-PK
+suppression; (b) `audit_dataset` stripped → emission UUID injected consistently.
+
+---
+
+## Lesson 68 — GROUPED block names changed from _block_id to anchor-key-derived names (2026-04-14)
+
+**Context:** `_collect_grouped` in `output/emit.py`; `_default_block_name`.
+
+**Change:** GROUPED mode previously used the first anchor row's `_block_id` as the output block
+name.  The spec requires names to be derived from the anchor key tuple
+(`{object_id}_{key_value}` joined with underscores, then sanitised).  Block names are now
+built from the anchor key dict (e.g. `expt.id=['myexp']` → `id_myexp`).
+
+**Impact on tests:** The existing GROUPED tests did not check specific block names (they always
+accessed blocks via `cif2.blocks[0]` or `cif2.blocks` index), so no test changes were needed
+for the naming switch.  New `TestDefaultBlockName` tests explicitly assert the new naming form.
+
+**Rule:** When adding new GROUPED tests, access blocks by index or by iterating `cif2.blocks`,
+not by a hardcoded `_block_id` string — the block name is now the anchor key value, not the
+source block's `data_` header.
+
+---
+
+## Lesson 67 — collect-then-sort architecture is required for spec-matched emission ordering (2026-04-14)
+
+**Context:** `emit()` and `_sort_and_merge()` in `output/emit.py`.
+
+**Problem:** The original emit.py rendered blocks during collection (each mode collector called
+`_render_block` directly and accumulated rendered strings).  This made it impossible to reorder
+blocks by spec index after the fact, because rendering happened before spec matching.
+
+**Fix:** Changed all mode collectors to return `list[_BlockData]` (raw data structures, not
+rendered strings).  `emit()` then passes the full list to `_sort_and_merge()`, which does spec
+matching, `single_block` merging, and alphabetical sorting, before finally rendering each block.
+
+**Rule:** Any future feature that requires post-collection reordering or grouping of blocks must
+operate on `_BlockData` objects, not rendered strings.  Do not render until the final emission
+order is known.
+
+---
+
+## Lesson 66 — Merge group key-compatibility check uses non-synthetic PK column sets (2026-04-14)
+
+**Context:** `_render_merge_group()` in `output/emit.py`.
+
+**Rule:** Two categories are key-compatible for merge group purposes when they share the
+*same frozenset of non-synthetic primary key column names*.  Synthetic columns (`_block_id`,
+`_row_id`, `_pycifparse_id`) are excluded from the comparison — every table has `_block_id`
+and `_row_id`, so including them would make all tables appear compatible.
+
+**Fallback:** When categories are not key-compatible (different non-synthetic PK sets), emit
+them as plain loops in the listed order — no warning, no error.
+
+**FULL OUTER JOIN implementation:** Done in Python (not SQL) by indexing each table's rows by
+PK tuple, collecting all unique PK tuples in encounter order, then iterating the union and
+looking up each table's row for that PK (substituting `'.'` for missing rows).  SQLite has no
+native FULL OUTER JOIN, and the Python approach avoids query complexity.
+
+---
+
+## Lesson 65 — category_parent self-references must be excluded (2026-04-14)
+
+**Context:** `generate_schema` in `dictionary/schema.py`; `SchemaSpec.category_parent`.
+
+**Problem:** In DDLm, top-level categories often have `_name.category_id` pointing to themselves
+(e.g. `CELL` has `_name.category_id = cell`).  Without a self-reference guard, `category_parent`
+would map `'cell' → 'cell'`, making `cell` appear as its own child.  Wildcard BFS would still
+terminate (the `found` set prevents revisiting), but the `children` map would contain
+`{'cell': ['cell', ...]}`, which is semantically wrong and misleading.
+
+**Fix:** Added `parent_tbl != tbl_name` guard:
+```python
+category_parent[tbl_name] = (
+    parent_tbl if parent_tbl in tables and parent_tbl != tbl_name else None
+)
+```
+
+**Rule:** When building a parent-child hierarchy from DDLm `_name.category_id`, always exclude
+self-references.  Top-level categories (with no parent in the schema) should have
+`category_parent[tbl] = None`.
+
+---
+
 ## Lesson 62 — CIF placeholder '.' and '?' must be treated as NULL in structured-table fidelity comparison (2026-04-13)
 
 **Context:** `_normalised_rows()` and `_fingerprint_uuid()` in `fidelity/check.py`.

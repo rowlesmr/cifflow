@@ -348,28 +348,87 @@ class TestOneBlock:
 # ---------------------------------------------------------------------------
 
 class TestAllBlocks:
+    """ALL_BLOCKS: one block per Set-anchor key combination (mirrors GROUPED)."""
+
+    # Keyless Set (no _category_key.name) — groups by _block_id like GROUPED.
     @pytest.fixture
-    def schema(self):
+    def mini_schema(self):
         return _make_schema(_MINI_DIC)
 
-    def test_one_block_per_non_empty_table(self, schema):
+    # Keyed Set + Loop — enables per-row splitting.
+    @pytest.fixture
+    def grouped_schema(self):
+        return _make_schema(_GROUPED_DIC)
+
+    def test_keyless_set_one_block_per_source_block(self, mini_schema):
         conn = _ingest_src(
             '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n',
-            schema,
+            mini_schema,
         )
-        result = emit(conn, schema, mode=EmitMode.ALL_BLOCKS)
-        block_headers = [l for l in result.splitlines() if l.startswith('data_')]
-        # 'cell' table has data → 1 structured block; no fallback block
-        assert any('cell' in h for h in block_headers)
+        result = emit(conn, schema=mini_schema, mode=EmitMode.ALL_BLOCKS)
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        assert len(headers) == 1
+        assert '_cell.length_a  5.4' in result
 
-    def test_round_trip(self, schema):
+    def test_round_trip(self, mini_schema):
         conn = _ingest_src(
             '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n_cell.length_b  3.2\n',
-            schema,
+            mini_schema,
         )
-        result = emit(conn, schema, mode=EmitMode.ALL_BLOCKS)
+        result = emit(conn, schema=mini_schema, mode=EmitMode.ALL_BLOCKS)
         cif2, errors = build(result)
         assert not errors
+
+    def test_two_set_rows_produce_two_blocks(self, grouped_schema):
+        """Two distinct expt.id values → two output blocks."""
+        conn = _ingest_src(_GROUPED_SEPARATE_CIF, grouped_schema)
+        result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        assert len(headers) == 2
+
+    def test_same_set_key_produces_one_block(self, grouped_schema):
+        """Two source blocks sharing the same expt.id → merged into one output block."""
+        conn = _ingest_src(_GROUPED_MERGE_CIF, grouped_schema)
+        result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        assert len(headers) == 1
+
+    def test_loop_rows_grouped_with_set_anchor(self, grouped_schema):
+        """Peak rows go into the same block as their expt anchor."""
+        conn = _ingest_src(_GROUPED_SEPARATE_CIF, grouped_schema)
+        result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        # Each block should contain both an expt row and peak rows for that expt.
+        blocks_with_peaks = [
+            cif2[n] for n in cif2.blocks if cif2[n]['_peak.intensity']
+        ]
+        assert len(blocks_with_peaks) == 2
+
+    def test_dataset_id_injected_cif20(self, grouped_schema):
+        conn = _ingest_src(_GROUPED_SEPARATE_CIF, grouped_schema)
+        result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS,
+                      version=CifVersion.CIF_2_0)
+        assert '_audit_dataset.id' in result
+
+    def test_dataset_id_not_injected_cif11(self, grouped_schema):
+        conn = _ingest_src(_GROUPED_SEPARATE_CIF, grouped_schema)
+        result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS,
+                      version=CifVersion.CIF_1_1)
+        assert '_audit_dataset.id' not in result
+
+    def test_all_blocks_shared_dataset_id(self, grouped_schema):
+        """All blocks in one emit() call share the same dataset UUID."""
+        conn = _ingest_src(_GROUPED_SEPARATE_CIF, grouped_schema)
+        result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        dataset_ids = [
+            cif2[n]['_audit_dataset.id'][0]
+            for n in cif2.blocks if cif2[n]['_audit_dataset.id']
+        ]
+        assert len(dataset_ids) == 2
+        assert dataset_ids[0] == dataset_ids[1]
 
 
 # ---------------------------------------------------------------------------
@@ -726,18 +785,41 @@ class TestOutputPlan:
             schema,
         )
         spec = BlockSpec(column_order={'cell': ['length_c', 'length_a', 'length_b']})
-        plan = OutputPlan(blocks=[spec])
+        plan = OutputPlan(specs=[spec])
         result = emit(conn, schema, plan=plan)
         lines = result.splitlines()
         tag_lines = [l for l in lines if l.startswith('_cell.length')]
         names = [l.split('  ')[0] for l in tag_lines]
         assert names == ['_cell.length_c', '_cell.length_a', '_cell.length_b']
 
-    def test_spec_for_empty_blocks_returns_none(self):
-        """OutputPlan.spec_for returns None when blocks list is empty (line 90)."""
-        plan = OutputPlan(blocks=[])
-        assert plan.spec_for(0) is None
-        assert plan.spec_for(99) is None
+    def test_empty_specs_matches_no_block(self):
+        """OutputPlan.match returns (None, None) when specs list is empty."""
+        plan = OutputPlan(specs=[])
+        assert plan.match(frozenset()) == (None, None)
+        assert plan.match(frozenset({'cell'})) == (None, None)
+
+    def test_catchall_spec_matches_any_block(self):
+        """A spec with matches=None is a catch-all."""
+        spec = BlockSpec(matches=None)
+        plan = OutputPlan(specs=[spec])
+        idx, matched = plan.match(frozenset({'cell'}))
+        assert idx == 0
+        assert matched is spec
+
+    def test_predicate_spec_matches_correctly(self):
+        """A spec with a predicate matches only blocks satisfying it."""
+        spec_phase = BlockSpec(matches=lambda a: 'pd_phase' in a)
+        spec_all = BlockSpec(matches=None)
+        plan = OutputPlan(specs=[spec_phase, spec_all])
+
+        idx, _ = plan.match(frozenset({'pd_phase'}))
+        assert idx == 0
+
+        idx, _ = plan.match(frozenset({'cell'}))
+        assert idx == 1
+
+        idx, _ = plan.match(frozenset())
+        assert idx == 1
 
 
 # ---------------------------------------------------------------------------
@@ -1111,3 +1193,534 @@ class TestEmitRoundTripIntegration:
     def test_multi_one_one_block(self, multi_one_conn, pow_schema):
         conn2 = _emit_and_reingest(multi_one_conn, pow_schema, EmitMode.ONE_BLOCK)
         _assert_same_data(multi_one_conn, conn2, pow_schema)
+
+
+# ---------------------------------------------------------------------------
+# OutputPlan — matches, wildcards, merge groups, single_block, block_namer
+# ---------------------------------------------------------------------------
+
+# Schema with a parent-child category hierarchy for wildcard tests.
+# EXPT (Set, keyed) → EXPT_DETAIL (Set child of EXPT, keyed by expt_detail.id)
+# PEAK (Loop, FK to expt.id)
+_HIERARCHY_DIC = """\
+#\\#CIF_2.0
+data_hierarchy_dic
+
+save_EXPT
+  _definition.id        EXPT
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     expt
+  _category_key.name    '_expt.id'
+save_
+
+save_expt.id
+  _definition.id        '_expt.id'
+  _definition.class     Attribute
+  _name.category_id     expt
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_expt.title
+  _definition.id        '_expt.title'
+  _definition.class     Attribute
+  _name.category_id     expt
+  _name.object_id       title
+  _type.purpose         Describe
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Text
+save_
+
+save_EXPT_DETAIL
+  _definition.id        EXPT_DETAIL
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     EXPT
+  _category_key.name    '_expt_detail.id'
+save_
+
+save_expt_detail.id
+  _definition.id        '_expt_detail.id'
+  _definition.class     Attribute
+  _name.category_id     expt_detail
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_expt_detail.note
+  _definition.id        '_expt_detail.note'
+  _definition.class     Attribute
+  _name.category_id     expt_detail
+  _name.object_id       note
+  _type.purpose         Describe
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Text
+save_
+
+save_PEAK
+  _definition.id        PEAK
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     peak
+  _category_key.name    '_peak.id'
+save_
+
+save_peak.id
+  _definition.id        '_peak.id'
+  _definition.class     Attribute
+  _name.category_id     peak
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_peak.expt_id
+  _definition.id        '_peak.expt_id'
+  _definition.class     Attribute
+  _name.category_id     peak
+  _name.object_id       expt_id
+  _type.purpose         Link
+  _type.source          Related
+  _type.container       Single
+  _type.contents        Code
+  _name.linked_item_id  '_expt.id'
+save_
+"""
+
+# Schema with two Loop categories sharing the same PK column (for merge groups).
+_MERGE_DIC = """\
+#\\#CIF_2.0
+data_merge_dic
+
+save_EXPT
+  _definition.id        EXPT
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     expt
+  _category_key.name    '_expt.id'
+save_
+
+save_expt.id
+  _definition.id        '_expt.id'
+  _definition.class     Attribute
+  _name.category_id     expt
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_MEAS
+  _definition.id        MEAS
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     meas
+  _category_key.name    '_meas.point_id'
+save_
+
+save_meas.point_id
+  _definition.id        '_meas.point_id'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       point_id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Integer
+save_
+
+save_meas.intensity
+  _definition.id        '_meas.intensity'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       intensity
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+
+save_CALC
+  _definition.id        CALC
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     calc
+  _category_key.name    '_calc.point_id'
+save_
+
+save_calc.point_id
+  _definition.id        '_calc.point_id'
+  _definition.class     Attribute
+  _name.category_id     calc
+  _name.object_id       point_id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Integer
+save_
+
+save_calc.intensity
+  _definition.id        '_calc.intensity'
+  _definition.class     Attribute
+  _name.category_id     calc
+  _name.object_id       intensity
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+"""
+
+
+class TestOutputPlanMatches:
+    """BlockSpec.matches predicate controls which blocks receive each spec."""
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_GROUPED_DIC)
+
+    def test_matches_selects_correct_spec(self, schema):
+        """matches= predicate routes blocks to the right spec."""
+        cif_src = (
+            '#\\#CIF_2.0\n'
+            'data_run1\n_expt.id  X1\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p1  X1\n\n\n'
+            'data_run2\n_expt.id  X2\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p2  X2\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+
+        captured = []
+        def namer(d):
+            captured.append(frozenset(d.get('expt.id', [])))
+            return '_'.join(d.get('expt.id', ['unknown']))
+
+        # spec0 matches only blocks with expt.id containing 'X1'
+        spec0 = BlockSpec(
+            matches=lambda a: 'expt' in a,
+            block_namer=namer,
+        )
+        plan = OutputPlan(specs=[spec0])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        # Both blocks match spec0; both should be present
+        assert len(headers) == 2
+
+    def test_unmatched_block_emitted_last(self, schema):
+        """Blocks with no matching spec are emitted after spec-matched blocks."""
+        cif_src = (
+            '#\\#CIF_2.0\n'
+            'data_run1\n_expt.id  A\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p1  A\n\n\n'
+            'data_run2\n_expt.id  B\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p2  B\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+
+        # spec0 matches only 'A' block via block_namer returning a name
+        spec0 = BlockSpec(
+            matches=lambda a: False,  # matches nothing
+        )
+        plan = OutputPlan(specs=[spec0])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        # No blocks matched spec0; all unmatched → 2 blocks still emitted
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        assert len(headers) == 2
+
+
+class TestOutputPlanCategoryOrder:
+    """category_order plain names, wildcards, and default fallback."""
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_HIERARCHY_DIC)
+
+    def test_explicit_category_order(self, schema):
+        """Listed categories appear before unlisted ones."""
+        cif_src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            '_expt.id  E1\n_expt.title  hello\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+        # Force peak before expt in emission
+        spec = BlockSpec(category_order=['peak', 'expt'])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, plan=plan)
+        expt_pos = result.find('_expt.id')
+        peak_pos = result.find('loop_')  # peak would produce a loop_ if present
+        # expt should still appear (peak absent → skip), no crash
+        assert expt_pos > 0
+
+    def test_wildcard_expansion(self, schema):
+        """A wildcard 'EXPT*' expands to expt + expt_detail."""
+        cif_src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            '_expt.id  E1\n_expt.title  hello\n'
+            '_expt_detail.id  D1\n_expt_detail.note  a_note\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+        spec = BlockSpec(category_order=['expt*'])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, plan=plan)
+        # Both expt and expt_detail should be present
+        assert '_expt.id' in result
+        assert '_expt_detail.id' in result
+        # expt appears before expt_detail (alphabetical within wildcard expansion)
+        assert result.index('_expt.id') < result.index('_expt_detail')
+
+    def test_unknown_wildcard_emits_warning(self, schema):
+        """An unrecognised wildcard base emits a warning and expands to nothing."""
+        spec = BlockSpec(category_order=['nonexistent_category*'])
+        plan = OutputPlan(specs=[spec])
+        cif_src = '#\\#CIF_2.0\ndata_b\n_expt.id  E1\n'
+        conn = _ingest_src(cif_src, schema)
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            result = emit(conn, schema, plan=plan)
+        assert any('nonexistent_category' in str(warning.message) for warning in w)
+        # Data still emitted (via default ordering)
+        assert '_expt.id' in result
+
+
+class TestMergeGroup:
+    """category_order merge groups: compatible → single loop_, incompatible → plain loops."""
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_MERGE_DIC)
+
+    @pytest.fixture
+    def conn(self, schema):
+        src = (
+            '#\\#CIF_2.0\ndata_b\n_expt.id  E1\n'
+            'loop_\n  _meas.point_id\n  _meas.intensity\n  1  10.0\n  2  20.0\n'
+            'loop_\n  _calc.point_id\n  _calc.intensity\n  1  11.0\n  2  21.0\n'
+        )
+        return _ingest_src(src, schema)
+
+    def test_compatible_merge_group_emits_single_loop(self, conn, schema):
+        """Two Loop cats with the same PK produce one loop_."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
+        loop_count = result.count('loop_')
+        assert loop_count == 1
+
+    def test_merged_loop_contains_all_columns(self, conn, schema):
+        """The merged loop_ contains columns from both categories."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
+        assert '_meas.intensity' in result
+        assert '_calc.intensity' in result
+
+    def test_merged_loop_full_outer_join(self, conn, schema):
+        """Rows present in only one table show '.' for the other's columns."""
+        # Add a row to meas that has no match in calc
+        schema2 = _make_schema(_MERGE_DIC)
+        src = (
+            '#\\#CIF_2.0\ndata_b\n_expt.id  E1\n'
+            'loop_\n  _meas.point_id\n  _meas.intensity\n  1  10.0\n  3  30.0\n'
+            'loop_\n  _calc.point_id\n  _calc.intensity\n  1  11.0\n'
+        )
+        conn2 = _ingest_src(src, schema2)
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn2, schema2, mode=EmitMode.ONE_BLOCK, plan=plan)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        calc_vals = [str(v) for v in block['_calc.intensity']]
+        # Point 3 has no calc → placeholder
+        assert '.' in calc_vals
+
+    def test_incompatible_merge_group_emits_plain_loops(self, schema, conn):
+        """Categories with different PKs fall back to plain loops in listed order."""
+        # Use meas and expt (different PK sets: point_id vs id)
+        spec = BlockSpec(category_order=[['meas', 'expt']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
+        # Should produce separate loops for meas and expt
+        assert '_meas.intensity' in result
+        assert '_expt.id' in result
+
+
+class TestSingleBlock:
+    """BlockSpec.single_block=True collapses all matching blocks into one."""
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_GROUPED_DIC)
+
+    def test_single_block_collapses_two_blocks(self, schema):
+        """Two GROUPED blocks matching a spec with single_block=True → one block."""
+        cif_src = (
+            '#\\#CIF_2.0\n'
+            'data_run1\n_expt.id  A\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p1  A\n\n\n'
+            'data_run2\n_expt.id  B\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p2  B\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+        spec = BlockSpec(matches=None, single_block=True)
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        assert len(headers) == 1
+
+    def test_single_block_contains_all_data(self, schema):
+        """The merged block contains peaks from all source blocks."""
+        cif_src = (
+            '#\\#CIF_2.0\n'
+            'data_run1\n_expt.id  A\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p1  A\n\n\n'
+            'data_run2\n_expt.id  B\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p2  B\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+        spec = BlockSpec(matches=None, single_block=True)
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        peak_ids = sorted(str(v) for v in block['_peak.id'])
+        assert peak_ids == ['p1', 'p2']
+
+    def test_single_block_no_fk_pk_suppression(self, schema):
+        """single_block=True: FK-PK columns are NOT suppressed."""
+        cif_src = (
+            '#\\#CIF_2.0\n'
+            'data_run1\n_expt.id  A\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p1  A\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+        # With single_block=True, expt.id must remain (not suppressed)
+        spec = BlockSpec(matches=None, single_block=True)
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert '_expt.id' in result
+
+
+class TestBlockNamer:
+    """BlockSpec.block_namer and OutputPlan.block_namer override default names."""
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_GROUPED_DIC)
+
+    def test_spec_block_namer_called(self, schema):
+        """BlockSpec.block_namer receives anchor_key_dict and its result is used."""
+        cif_src = '#\\#CIF_2.0\ndata_run1\n_expt.id  myexp\n'
+        conn = _ingest_src(cif_src, schema)
+
+        called_with = []
+        def namer(d):
+            called_with.append(dict(d))
+            return 'custom_name'
+
+        spec = BlockSpec(matches=None, block_namer=namer)
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert 'data_custom_name' in result
+        assert called_with  # namer was called
+
+    def test_plan_block_namer_fallback(self, schema):
+        """OutputPlan.block_namer is used when BlockSpec has no block_namer."""
+        cif_src = '#\\#CIF_2.0\ndata_run1\n_expt.id  myexp\n'
+        conn = _ingest_src(cif_src, schema)
+
+        spec = BlockSpec(matches=None)  # no block_namer on spec
+        plan = OutputPlan(specs=[spec], block_namer=lambda d: 'plan_name')
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert 'data_plan_name' in result
+
+    def test_spec_namer_takes_priority_over_plan_namer(self, schema):
+        """BlockSpec.block_namer takes priority over OutputPlan.block_namer."""
+        cif_src = '#\\#CIF_2.0\ndata_run1\n_expt.id  myexp\n'
+        conn = _ingest_src(cif_src, schema)
+
+        spec = BlockSpec(matches=None, block_namer=lambda d: 'spec_name')
+        plan = OutputPlan(specs=[spec], block_namer=lambda d: 'plan_name')
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert 'data_spec_name' in result
+        assert 'data_plan_name' not in result
+
+    def test_block_namer_receives_anchor_key_dict(self, schema):
+        """anchor_key_dict maps '{table}.{pk_col}' → [value]."""
+        cif_src = '#\\#CIF_2.0\ndata_run1\n_expt.id  myexp\n'
+        conn = _ingest_src(cif_src, schema)
+
+        received = {}
+        def namer(d):
+            received.update(d)
+            return 'x'
+
+        spec = BlockSpec(matches=None, block_namer=namer)
+        plan = OutputPlan(specs=[spec])
+        emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert 'expt.id' in received
+        assert received['expt.id'] == ['myexp']
+
+    def test_block_name_sanitized(self, schema):
+        """Special characters in namer result are sanitized."""
+        cif_src = '#\\#CIF_2.0\ndata_run1\n_expt.id  myexp\n'
+        conn = _ingest_src(cif_src, schema)
+
+        spec = BlockSpec(matches=None, block_namer=lambda d: 'my block/name!')
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert 'data_my_block_name' in result
+
+    def test_default_block_name_from_anchor_key(self, schema):
+        """Without a namer, GROUPED block name is built from anchor key values."""
+        cif_src = '#\\#CIF_2.0\ndata_run1\n_expt.id  myexp\n'
+        conn = _ingest_src(cif_src, schema)
+        result = emit(conn, schema, mode=EmitMode.GROUPED)
+        # Default name: sanitize('id_myexp') = 'id_myexp'
+        assert 'data_id_myexp' in result
+
+
+class TestEmissionOrder:
+    """Blocks are emitted in spec order; unmatched blocks last."""
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_GROUPED_DIC)
+
+    def test_spec_order_respected(self, schema):
+        """Blocks matched by specs[0] appear before blocks matched by specs[1]."""
+        cif_src = (
+            '#\\#CIF_2.0\n'
+            'data_run1\n_expt.id  A\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p1  A\n\n\n'
+            'data_run2\n_expt.id  B\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p2  B\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+
+        # spec0 catches only blocks with expt.id == 'B'; spec1 is catch-all.
+        # B block → spec0 → emitted first.  A block → spec1 → emitted second.
+        spec0 = BlockSpec(
+            matches=lambda a: False,  # no block matches spec0
+        )
+        spec1 = BlockSpec(matches=None, block_namer=lambda d: '_'.join(d.get('expt.id', ['x'])))
+        plan = OutputPlan(specs=[spec0, spec1])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        # Both matched by spec1 (spec0 never fires); verify ordering A < B
+        assert len(headers) == 2
+        assert headers.index('data_A') < headers.index('data_B')

@@ -81,6 +81,7 @@ from pycifparse import (
     OutputPlan,
     BlockSpec,
 )
+from pycifparse.fidelity import check_fidelity
 from pycifparse.types import CifVersion
 
 print('=== Step 1: Load dictionary ===')
@@ -411,7 +412,7 @@ ONE_BLOCK_CIF_FILE = ROOT / 'output_one_block.cif'
 # then Loop-class alphabetical).
 # Within each category: PK column(s) first, then remaining columns alphabetically.
 spec = BlockSpec(
-    categories=['audit_dataset', 'structure', 'cell', 'atom_site'],
+    category_order=['audit_dataset', 'structure', 'cell', 'atom_site'],
     column_order={
         'cell': ['structure_id',
                  'angle_alpha', 'angle_beta', 'angle_gamma',
@@ -422,7 +423,7 @@ spec = BlockSpec(
     },
 )
 plan = OutputPlan(
-    blocks=[spec],   # single spec reused for all blocks (only one in ONE_BLOCK mode)
+    specs=[spec],   # single spec reused for all blocks (only one in ONE_BLOCK mode)
 )
 
 cif_one_block = emit(
@@ -454,14 +455,15 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# Step 11 — Emit CIF: ALL_BLOCKS mode (one block per non-empty category)
+# Step 11 — Emit CIF: ALL_BLOCKS mode (one block per Set-anchor key)
 # ---------------------------------------------------------------------------
-# ALL_BLOCKS emits one data_ block per structured table (plus one block per
-# original _block_id for any tags that ended up in _cif_fallback).
-# In CIF 2.0, _audit_dataset.id is injected into every block so that a reader
-# can identify all blocks as belonging to the same dataset.  The dataset UUID
-# is reused from the ingestion record when available, otherwise a fresh one
-# is generated for this emit session.
+# ALL_BLOCKS mirrors GROUPED block partitioning: one output block per
+# distinct Set-anchor key combination.  Set categories produce one block per
+# row; Loop categories are grouped by the domain PK of the nearest Set
+# ancestor.  Tables with no Set ancestor are grouped by _block_id.
+# In CIF 2.0, _audit_dataset.id is injected into every block using a shared
+# UUID so that a reader can identify all blocks as belonging to the same
+# dataset.
 
 print('\n=== Step 11: Emit CIF (ALL_BLOCKS mode) ===')
 
@@ -528,6 +530,49 @@ else:
 
 
 # ---------------------------------------------------------------------------
+# Step 13 — Fidelity checks: original CIF vs each emitted output
+# ---------------------------------------------------------------------------
+# check_fidelity compares two CIF sources for semantic equivalence.
+# It ingests both into fresh in-memory databases using the same schema and
+# compares all structured tables and the fallback tier.
+# ONE_BLOCK and ALL_BLOCKS combine data from all blocks into one or more
+# output blocks, so they are not expected to be fully fidelity-equivalent
+# to the original (different block structure).  ORIGINAL and GROUPED are
+# expected to be equivalent when all data is dictionary-mapped.
+
+print('\n=== Step 13: Fidelity checks ===')
+
+fidelity_cases = [
+    ('ORIGINAL',   cif_original,   ORIGINAL_CIF_FILE.with_suffix('.fidelity.txt')),
+    ('GROUPED',    cif_grouped,    GROUPED_CIF_FILE.with_suffix('.fidelity.txt')),
+    ('ONE_BLOCK',  cif_one_block,  ONE_BLOCK_CIF_FILE.with_suffix('.fidelity.txt')),
+    ('ALL_BLOCKS', cif_all_blocks, ALL_BLOCKS_CIF_FILE.with_suffix('.fidelity.txt')),
+]
+
+for mode_name, emitted_cif, report_path in fidelity_cases:
+    report = check_fidelity(
+        CIF_FILE,            # source A: original CIF file
+        emitted_cif,         # source B: emitted CIF string
+        schema,              # SchemaSpec for structured comparison
+        report_file=report_path,
+    )
+    status = 'PASS' if report.passed else 'FAIL'
+    n_mismatches = len(report.mismatches)
+    print(f'  {mode_name:<12s}  {status}  '
+          f'({n_mismatches} mismatch(es))  -> {report_path.name}')
+    if not report.passed:
+        by_kind: dict[str, list] = {}
+        for m in report.mismatches:
+            by_kind.setdefault(m.kind, []).append(m)
+        for kind, items in sorted(by_kind.items()):
+            print(f'    [{kind}]  {len(items)} mismatch(es)')
+            for m in items[:3]:
+                print(f'      {m.description}')
+            if len(items) > 3:
+                print(f'      ... and {len(items) - 3} more')
+
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 
@@ -539,3 +584,4 @@ print(f'  {ORIGINAL_CIF_FILE.name}   — CIF (ORIGINAL mode)')
 print(f'  {GROUPED_CIF_FILE.name}    — CIF (GROUPED mode)')
 print(f'  {ONE_BLOCK_CIF_FILE.name}  — CIF (ONE_BLOCK mode)')
 print(f'  {ALL_BLOCKS_CIF_FILE.name} — CIF (ALL_BLOCKS mode)')
+print(f'  *.fidelity.txt              — fidelity reports for each mode')
