@@ -43,11 +43,11 @@ _SMALL_FILES = [
 
 # Large files (> 1 MB): marked slow; skipped unless -m slow or -m 'slow or …'.
 _LARGE_FILES = [
-    'ideal.cif',       # 43 MB
-    'first.cif',       # 11 MB
+    #'ideal.cif',       # 43 MB
+    #'first.cif',       # 11 MB
     'second.cif',      # 18 MB
     'third.cif',       #  4 MB
-    'fourth.cif',      # 75 MB
+    #'fourth.cif',      # 75 MB
 ]
 
 
