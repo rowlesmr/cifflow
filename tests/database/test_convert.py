@@ -20,7 +20,8 @@ from pycifparse.dictionary.schema_apply import apply_fallback_schema, apply_sche
 # ---------------------------------------------------------------------------
 
 def _item(definition_id, category_id, object_id, *,
-          type_purpose=None, type_contents=None, linked_item_id=None):
+          type_purpose=None, type_contents=None, type_container='Single',
+          linked_item_id=None):
     return DdlmItem(
         definition_id=definition_id,
         scope='Item',
@@ -29,7 +30,7 @@ def _item(definition_id, category_id, object_id, *,
         object_id=object_id,
         type_purpose=type_purpose,
         type_source=None,
-        type_container='Single',
+        type_container=type_container,
         type_contents=type_contents,
         linked_item_id=linked_item_id,
         units_code=None,
@@ -82,9 +83,9 @@ def _schema_typed():
     """
     One Loop table 'vals' with columns:
       label (Key / Code / TEXT)
-      count (Integer)
-      length (Real)
-      name (Text)
+      count (Integer / Single)
+      length (Real / Single)
+      name (Text / Single)
     """
     cats = [_cat('vals', 'Loop', ['_vals.label'])]
     items = [
@@ -93,6 +94,25 @@ def _schema_typed():
         _item('_vals.count',  'vals', 'count',  type_contents='Integer'),
         _item('_vals.length', 'vals', 'length', type_contents='Real'),
         _item('_vals.name',   'vals', 'name',   type_contents='Text'),
+    ]
+    return generate_schema(_make_dict(cats, items))
+
+
+def _schema_matrix():
+    """
+    One Loop table 'mat' with columns:
+      label (Key / Code / TEXT)
+      hkl   (Integer / Matrix — stored as JSON list)
+      xyz   (Real / List — stored as JSON list)
+    """
+    cats = [_cat('mat', 'Loop', ['_mat.label'])]
+    items = [
+        _item('_mat.label', 'mat', 'label', type_purpose='Key',
+              type_contents='Code'),
+        _item('_mat.hkl',   'mat', 'hkl',   type_contents='Integer',
+              type_container='Matrix'),
+        _item('_mat.xyz',   'mat', 'xyz',   type_contents='Real',
+              type_container='List'),
     ]
     return generate_schema(_make_dict(cats, items))
 
@@ -345,3 +365,81 @@ class TestFallbackTables:
         assert rows == [('42',)]
         # Must still be TEXT (no casting)
         assert isinstance(rows[0][0], str)
+
+
+# ===========================================================================
+# TestContainerColumns — non-Single containers: JSON preserved, leaves cast
+# ===========================================================================
+
+def _src_matrix(schema, rows):
+    """Populate the 'mat' table with (blk, row_id, label, hkl, xyz) rows."""
+    c = sqlite3.connect(':memory:')
+    c.isolation_level = None
+    apply_schema(c, schema)
+    apply_fallback_schema(c)
+    c.execute('PRAGMA foreign_keys = OFF')
+    c.execute('BEGIN')
+    for blk, row_id, label, hkl, xyz in rows:
+        c.execute(
+            'INSERT INTO "mat" ("_block_id","_row_id","label","hkl","xyz") '
+            'VALUES (?,?,?,?,?)',
+            (blk, row_id, label, hkl, xyz),
+        )
+    c.execute('COMMIT')
+    return c
+
+
+class TestContainerColumns:
+    def test_matrix_column_stays_text(self):
+        """A Matrix/Integer column has TEXT affinity in the destination."""
+        schema = _schema_matrix()
+        src = _src_matrix(schema, [('B', 1, 'x', '["1","2","3"]', '[1.0,2.0]')])
+        dst = _dst()
+        convert_database(src, dst, schema)
+        assert _col_type(dst, 'mat', 'hkl') == 'TEXT'
+
+    def test_matrix_integer_leaves_cast(self):
+        """Integer leaves inside a JSON list are cast to Python int."""
+        import json
+        schema = _schema_matrix()
+        src = _src_matrix(schema, [('B', 1, 'x', '["1","2","3"]', '[1.0]')])
+        dst = _dst()
+        convert_database(src, dst, schema)
+        rows = _fetch(dst, 'mat', ['hkl'])
+        decoded = json.loads(rows[0][0])
+        assert decoded == [1, 2, 3]
+        assert all(isinstance(v, int) for v in decoded)
+
+    def test_list_real_leaves_cast(self):
+        """Real leaves inside a JSON list are cast to Python float."""
+        import json
+        schema = _schema_matrix()
+        src = _src_matrix(schema, [('B', 1, 'x', '["1"]', '["1.5","2.25"]')])
+        dst = _dst()
+        convert_database(src, dst, schema)
+        rows = _fetch(dst, 'mat', ['xyz'])
+        decoded = json.loads(rows[0][0])
+        assert decoded == [1.5, 2.25]
+        assert all(isinstance(v, float) for v in decoded)
+
+    def test_matrix_su_leaves_stripped(self):
+        """SU suffixes on integer leaves inside JSON are stripped with warning."""
+        import json
+        schema = _schema_matrix()
+        src = _src_matrix(schema, [('B', 1, 'x', '["1(1)","2(1)"]', '[1.0]')])
+        dst = _dst()
+        msgs = convert_database(src, dst, schema)
+        rows = _fetch(dst, 'mat', ['hkl'])
+        decoded = json.loads(rows[0][0])
+        assert decoded == [1, 2]
+        assert sum(1 for m in msgs if 'SU dropped' in m) == 2
+
+    def test_matrix_no_spurious_coercion_warning(self):
+        """A JSON value in an Integer/Matrix column does not produce a
+        'coercion failed' warning — it is handled by JSON parsing, not
+        by the single-scalar cast path."""
+        schema = _schema_matrix()
+        src = _src_matrix(schema, [('B', 1, 'x', '["1","2","3"]', '[1.0]')])
+        dst = _dst()
+        msgs = convert_database(src, dst, schema)
+        assert not any('coercion failed' in m for m in msgs)

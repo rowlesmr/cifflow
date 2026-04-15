@@ -13,6 +13,7 @@ Output files are written to the current directory:
     cif_core_cache.json     — serialised dictionary (avoids re-parsing on reuse)
     output.db               — SQLite database ready for DB Browser for SQLite
     output_compact.db       — compacted copy (empty tables / all-NULL columns removed)
+    output_typed.db         — typed copy (INTEGER/REAL columns; sentinels → NULL)
     output_original.cif     — CIF re-emitted in ORIGINAL mode (one block per source block)
     output_grouped.cif      — CIF re-emitted in GROUPED mode (grouped by Set anchor keys)
     output_one_block.cif    — CIF re-emitted in ONE_BLOCK mode (everything in one block)
@@ -76,6 +77,7 @@ from pycifparse import (
     IngestionError,
     resolve_tag,
     compactify_database,
+    convert_database,
     emit,
     EmitMode,
     OutputPlan,
@@ -497,36 +499,42 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# Step 12 — convert_database (not yet available; shown for future reference)
+# Step 12 — convert_database: copy TEXT-storage DB to typed-column DB
 # ---------------------------------------------------------------------------
-# convert_database() copies a TEXT-storage database to a new file and casts
-# each column to the type indicated by ColumnDef.type_contents.
-# CIF sentinels '.' and '?' are converted to NULL.
+# convert_database() re-creates every structured table with proper INTEGER /
+# REAL / TEXT column affinities based on ColumnDef.type_contents.
+# CIF sentinels '.' and '?' become NULL.
+# SU suffixes (e.g. '1.23(5)') are stripped before casting, with a warning.
+# Unlike compactify_database, all tables and columns are preserved.
 
-# Uncomment when available:
-#
-# from pycifparse import convert_database
-#
-# CONVERTED_DB_FILE = ROOT / 'output_typed.db'
-# if CONVERTED_DB_FILE.exists():
-#     CONVERTED_DB_FILE.unlink()
-#
-# dst_conn = sqlite3.connect(str(CONVERTED_DB_FILE))
-# dst_conn.isolation_level = None
-#
-# coercion_warnings = convert_database(
-#     src=conn,                        # source TEXT-storage connection
-#     dst=dst_conn,                    # destination connection (empty)
-#     schema=schema,                   # SchemaSpec for type information
-#     on_coercion_failure='null',      # 'null'  -> failed cast -> NULL (default)
-#                                      # 'keep'  -> leave TEXT value unchanged
-#                                      # 'error' -> raise on first failure
-# )
-# dst_conn.close()
-#
-# if coercion_warnings:
-#     print(f'  {len(coercion_warnings)} coercion warning(s) in typed database')
-# print(f'  Typed database saved to: {CONVERTED_DB_FILE}')
+print('=== Step 12: convert_database ===')
+
+TYPED_DB_FILE = ROOT / 'output_typed.db'
+if TYPED_DB_FILE.exists():
+    TYPED_DB_FILE.unlink()
+
+typed_conn = sqlite3.connect(str(TYPED_DB_FILE))
+typed_conn.isolation_level = None
+
+coercion_warnings = convert_database(
+    src=conn,                        # source TEXT-storage connection
+    dst=typed_conn,                  # destination connection (must be empty)
+    schema=schema,                   # SchemaSpec for type information
+    on_coercion_failure='null',      # 'null'  -> failed cast -> NULL (default)
+                                     # 'keep'  -> leave TEXT value unchanged
+                                     # 'error' -> raise on first failure
+)
+typed_conn.close()
+
+if coercion_warnings:
+    print(f'  {len(coercion_warnings)} coercion warning(s):')
+    for w in coercion_warnings[:5]:
+        print(f'    {w}')
+    if len(coercion_warnings) > 5:
+        print(f'    … and {len(coercion_warnings) - 5} more')
+else:
+    print('  No coercion warnings.')
+print(f'  Typed database saved to: {TYPED_DB_FILE}')
 
 
 # ---------------------------------------------------------------------------

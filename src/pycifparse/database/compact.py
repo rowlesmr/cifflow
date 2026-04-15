@@ -281,10 +281,17 @@ def compactify_database(
 # ---------------------------------------------------------------------------
 
 def _sql_type_for(col: 'ColumnDef') -> str:  # type: ignore[name-defined]
-    """Return the SQLite affinity keyword for *col*."""
+    """Return the SQLite affinity keyword for *col*.
+
+    Non-Single containers (List, Matrix, Array, …) are always TEXT because
+    the value is stored as JSON; the leaf types inside the JSON are handled
+    separately by ``_leaf_sql_type``.
+    """
     if col.name == '_row_id':
         return 'INTEGER'
     if col.is_synthetic:
+        return 'TEXT'
+    if col.type_container and col.type_container.lower() != 'single':
         return 'TEXT'
     tc = (col.type_contents or '').strip()
     if tc == 'Integer':
@@ -294,30 +301,36 @@ def _sql_type_for(col: 'ColumnDef') -> str:  # type: ignore[name-defined]
     return 'TEXT'
 
 
-def _cast_value(
+def _leaf_sql_type(col: 'ColumnDef') -> str:  # type: ignore[name-defined]
+    """Return the cast type for scalar leaves inside a JSON container column."""
+    tc = (col.type_contents or '').strip()
+    if tc == 'Integer':
+        return 'INTEGER'
+    if tc in ('Real', 'Float'):
+        return 'REAL'
+    return 'TEXT'
+
+
+def _cast_scalar(
     raw: str,
-    sql_type: str,
+    leaf_type: str,
     tbl: str,
     col_name: str,
     on_failure: str,
     messages: list[str],
 ) -> object:
-    """Cast *raw* to the Python type matching *sql_type*.
+    """Cast a single scalar *raw* string to *leaf_type* (INTEGER / REAL / TEXT).
 
-    CIF sentinels ``'.'`` and ``'?'`` always become ``None``.
-    SU suffixes are stripped before numeric casts (with a warning).
-    Failed casts are handled according to *on_failure*.
+    Sentinels ``'.'`` / ``'?'`` → ``None``.
+    SU suffixes are stripped with a warning before numeric coercion.
+    Failed casts are handled by *on_failure*.
     """
-    if not isinstance(raw, str):
-        return raw  # already typed (e.g. _row_id fetched as int from source)
-
     if raw in ('.', '?'):
         return None
 
-    if sql_type == 'TEXT':
+    if leaf_type == 'TEXT':
         return raw
 
-    # Strip SU suffix before numeric coercion.
     stripped = _SU_RE.sub('', raw)
     if stripped != raw:
         messages.append(
@@ -325,21 +338,80 @@ def _cast_value(
         )
 
     try:
-        if sql_type == 'INTEGER':
+        if leaf_type == 'INTEGER':
             return int(stripped)
         else:  # REAL
             return float(stripped)
     except (ValueError, TypeError):
         msg = (
             f"coercion failed: {tbl!r}.{col_name!r} = {raw!r} "
-            f"could not be cast to {sql_type}"
+            f"could not be cast to {leaf_type}"
         )
         if on_failure == 'error':
             raise ValueError(msg) from None
         messages.append(msg)
         if on_failure == 'keep':
-            return raw   # leave original TEXT value
+            return raw
         return None      # 'null'
+
+
+def _cast_json_leaves(obj: object, leaf_type: str, tbl: str, col_name: str,
+                      on_failure: str, messages: list[str]) -> object:
+    """Recursively cast every string leaf in *obj* (a JSON-decoded value)."""
+    if isinstance(obj, list):
+        return [_cast_json_leaves(v, leaf_type, tbl, col_name, on_failure, messages)
+                for v in obj]
+    if isinstance(obj, dict):
+        return {k: _cast_json_leaves(v, leaf_type, tbl, col_name, on_failure, messages)
+                for k, v in obj.items()}
+    if isinstance(obj, str):
+        return _cast_scalar(obj, leaf_type, tbl, col_name, on_failure, messages)
+    # Already a Python number (shouldn't normally happen from TEXT storage).
+    return obj
+
+
+def _cast_value(
+    raw: str,
+    sql_type: str,
+    leaf_type: str,
+    tbl: str,
+    col_name: str,
+    on_failure: str,
+    messages: list[str],
+) -> object:
+    """Cast *raw* to the Python type matching *sql_type*.
+
+    *sql_type* is the column's SQLite affinity (``TEXT`` for non-Single
+    containers); *leaf_type* is the target type for scalar leaves (which may
+    differ when the column is JSON).
+
+    CIF sentinels ``'.'`` and ``'?'`` always become ``None``.
+    JSON containers are parsed and their leaves are cast recursively before
+    re-serialisation as TEXT.
+    SU suffixes are stripped before numeric casts (with a warning).
+    Failed casts are handled according to *on_failure*.
+    """
+    import json as _json
+
+    if not isinstance(raw, str):
+        return raw  # already typed (e.g. _row_id fetched as int from source)
+
+    if raw in ('.', '?'):
+        return None
+
+    # Non-Single container: value is JSON — cast leaves and re-serialise.
+    if sql_type == 'TEXT' and leaf_type != 'TEXT' and raw and raw[0] in ('[', '{'):
+        try:
+            decoded = _json.loads(raw)
+        except _json.JSONDecodeError:
+            return raw  # not valid JSON — leave unchanged
+        casted = _cast_json_leaves(decoded, leaf_type, tbl, col_name, on_failure, messages)
+        return _json.dumps(casted, separators=(',', ':'))
+
+    if sql_type == 'TEXT':
+        return raw
+
+    return _cast_scalar(raw, sql_type, tbl, col_name, on_failure, messages)
 
 
 def convert_database(
@@ -456,7 +528,8 @@ def convert_database(
             table = schema.tables[tbl_name]
             cols = table.columns
             col_names = [c.name for c in cols]
-            sql_types = {c.name: _sql_type_for(c) for c in cols}
+            sql_types  = {c.name: _sql_type_for(c)  for c in cols}
+            leaf_types = {c.name: _leaf_sql_type(c) for c in cols}
 
             # Column definitions with proper type affinities
             col_defs: list[str] = []
@@ -511,6 +584,7 @@ def convert_database(
                         _cast_value(
                             raw,
                             sql_types[col_names[i]],
+                            leaf_types[col_names[i]],
                             tbl_name,
                             col_names[i],
                             on_coercion_failure,

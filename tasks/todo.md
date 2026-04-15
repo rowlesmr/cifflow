@@ -103,13 +103,18 @@
    - 13 tests in `TestDecimalAlign`; `_CELL_DIC` fixture added (Set, 6 Real columns).
 4. ~~**`convert_database(src, dst, schema)`**~~ — **DONE** (2026-04-15).
    - Type map: `"Integer"` → `INTEGER`, `"Real"`/`"Float"` → `REAL`, else `TEXT`.
+   - Non-Single containers (`type_container != 'Single'`): column stays `TEXT`; JSON is
+     parsed and each string leaf is cast to the leaf type, then re-serialised.
+     `["1","2","3"]` (Integer/Matrix) → `[1,2,3]` stored as JSON text.
+   - `ColumnDef.type_container` added (optional, default `None`); populated from
+     `DdlmItem.type_container` in `generate_schema`.
    - Sentinels `'.'`/`'?'` → `NULL`, no warning.
-   - SU suffixes stripped before numeric cast, always with warning.
+   - SU suffixes stripped before numeric cast (including inside JSON leaves), always with warning.
    - `on_coercion_failure`: `'null'` (default), `'keep'`, `'error'`.
    - Non-string raw values (e.g. `_row_id` fetched as Python `int`) passed through as-is.
    - Fallback-tier tables copied verbatim (`TEXT` storage).
    - All tables preserved (no empty-table or NULL-column dropping).
-   - 19 tests in `tests/database/test_convert.py`.
+   - 24 tests in `tests/database/test_convert.py` (5 new for container columns).
    - Exported from `pycifparse.database` and `pycifparse`.
 5. ~~**Ingest stub promotion / emit round-trip bugs**~~ — **DONE** (2026-04-12).  See Lesson 58.
 6. ~~**OutputPlan full spec**~~ — **DONE** (2026-04-14).  See Lessons 65–68.

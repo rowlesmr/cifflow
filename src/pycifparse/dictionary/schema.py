@@ -94,6 +94,12 @@ class ColumnDef:
         ``"Real"``, ``"List"``); ``None`` if absent from the dictionary or for
         synthetic columns.  Informational only — DDL always emits ``TEXT`` for
         all value columns; ``_row_id`` always emits ``INTEGER``.
+    type_container:
+        DDLm ``_type.container`` value (e.g. ``"Single"``, ``"List"``,
+        ``"Matrix"``); ``None`` for synthetic columns, ``"Single"`` as the
+        DDLm default for domain columns when the attribute is absent.
+        Non-``"Single"`` containers store JSON text in SQLite regardless of
+        ``type_contents``.
     nullable:
         ``False`` for synthetic and primary-key columns; ``True`` for all
         other domain columns.
@@ -117,6 +123,7 @@ class ColumnDef:
     is_primary_key: bool
     is_synthetic: bool
     linked_item_id: str | None
+    type_container: str | None = None
 
 
 @dataclass
@@ -410,6 +417,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             name='_block_id',
             definition_id='',
             type_contents=None,
+            type_container=None,
             nullable=False,
             is_primary_key=block_id_is_pk,
             is_synthetic=True,
@@ -422,6 +430,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 name='_pycifparse_id',
                 definition_id='',
                 type_contents=None,
+                type_container=None,
                 nullable=False,
                 is_primary_key=True,
                 is_synthetic=True,
@@ -434,6 +443,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             name='_row_id',
             definition_id='',
             type_contents=None,
+            type_container=None,
             nullable=False,
             is_primary_key=row_id_is_pk,
             is_synthetic=True,
@@ -452,6 +462,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                     name=obj_id,
                     definition_id='',
                     type_contents=None,
+                    type_container=None,
                     nullable=False,
                     is_primary_key=True,
                     is_synthetic=False,
@@ -462,6 +473,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                     name=obj_id,
                     definition_id=item.definition_id,
                     type_contents=item.type_contents,
+                    type_container=item.type_container,
                     nullable=False,
                     is_primary_key=True,
                     is_synthetic=False,
@@ -481,6 +493,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 name=obj_id,
                 definition_id=item.definition_id,
                 type_contents=item.type_contents,
+                type_container=item.type_container,
                 nullable=True,
                 is_primary_key=False,
                 is_synthetic=False,
@@ -608,6 +621,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                         name=missing_pk_col,
                         definition_id='',
                         type_contents=None,
+                        type_container=None,
                         nullable=True,
                         is_primary_key=False,
                         is_synthetic=True,  # transitive bridge — no CIF tag
