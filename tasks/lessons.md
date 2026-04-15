@@ -1,5 +1,65 @@
 # pycifparse — Lessons Learned
 
+## Lesson 72 — `_fold_content_lines` breaks before the space, keeping it in the next segment (2026-04-15)
+
+**Context:** `_fold_content_lines` in `output/quote.py`.
+
+**Decision:** When breaking at a whitespace character at position `break_at`, the first segment
+is `line[:break_at]` (space not included) and the next segment starts at `line[break_at:]`
+(space is the first character of the continuation).  Fold reconstruction removes `\<newline>`
+— nothing is inserted — so the space is preserved in the reconstructed string.  This is
+correct for round-trip fidelity.
+
+**Alternative considered:** Including the space in the first segment (`line[:break_at+1]`)
+would also be correct, but the chosen form is slightly more natural (break point = where
+content splits, not where whitespace ends up).
+
+---
+
+## Lesson 71 — `make_text_field` dispatches all four semicolon formats (2026-04-15)
+
+**Context:** `output/quote.py`; `emit.py` callers.
+
+The four formats share a single public entry point `make_text_field(s, line_limit=None)`.
+The dispatch logic is:
+
+| `'\n;' in s` | content line > limit? | format                    |
+|--------------|-----------------------|---------------------------|
+| No           | No                    | plain `_make_semicolon`   |
+| Yes          | No                    | `_make_prefixed_semicolon`|
+| No           | Yes                   | `_make_folded_semicolon`  |
+| Yes          | Yes                   | `_make_prefixed_folded_semicolon` |
+
+`needs_fold` threshold differs by format: prefix case checks `len(line) > line_limit -
+len(_PREFIX)` (physical line = `>{content}`); fold-only case checks `len(line) > line_limit`
+(physical line = `{content}`).  This asymmetry is intentional and correct.
+
+**Rule:** Always call `make_text_field` from the emit layer rather than `_make_semicolon`
+or `_make_prefixed_semicolon` directly when `line_limit` is in play.
+
+---
+
+## Lesson 70 — Set-category re-quoting requires two passes over the tag–value pairs (2026-04-15)
+
+**Context:** `_render_set_category` in `output/emit.py`.
+
+**Problem:** `tag_width` (used for alignment) is computed from inline tokens.  If re-quoting
+converts some inline tokens to multiline (because `tag + sep + token > line_limit`), then
+`tag_width` was computed with those tags included — it may be wider than needed.
+
+**Fix:** Two-pass approach:
+1. Build `(tag, value, token)` triples; apply folding to any already-multiline tokens.
+2. Compute `tag_width` from inline tokens.
+3. Re-quote inline tokens where `len(f'{tag:<{tag_width}}  {token}') > line_limit`.
+4. **Recompute** `tag_width` from the remaining inline tokens.
+
+Step 4 is necessary: without it, some tags would be padded to a width driven by a tag
+that now has a multiline value (and thus doesn't participate in inline alignment).
+
+**Rule:** Always recompute `tag_width` after any step that may convert inline → multiline.
+
+---
+
 ## Lesson 69 — ALL_BLOCKS delegates to GROUPED and strips audit_dataset for UUID consistency (2026-04-14)
 
 **Context:** `_collect_all_blocks` in `output/emit.py`.

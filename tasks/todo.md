@@ -6,10 +6,10 @@
 
 **Current stage:** Stage 6 — OutputPlan fully implemented. Output layer complete and stable.
 
-**Test suite state (2026-04-14):**
-- ~1310 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+**Test suite state (2026-04-15):**
+- ~1334 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
 - 58 slow tests pass: `pytest -m slow`
-- Total: ~1362 passing, 0 xfail
+- Total: ~1392 passing, 0 xfail
 
 **What was completed in recent sessions:**
 - `quote.py`: CIF 2.0 and 1.1 quoting decision trees; 95 tests in `tests/output/test_quote.py`.
@@ -70,7 +70,7 @@
   extending the lines list.  6 new tests in `TestLineEnding`.
 
 **Next targets (in priority order):**
-2. ~~**Pretty-print output**~~ — **DONE**.  `pretty: bool = True` flag on `emit()`.
+1. ~~**Pretty-print output**~~ — **DONE** (2026-04-14).  `pretty: bool = True` flag on `emit()`.
    - Set categories: tag names padded to the longest tag in the category (f-string `:<width>`).
    - Loop categories: token matrix built first (one `quote()` call per cell), column widths
      computed via `_col_widths()`, then `_format_row(tokens, col_widths)` pads each token.
@@ -78,6 +78,19 @@
    - Fallback scalar tags aligned the same way as Set categories.
    - `pretty=False` skips all alignment (compact two-space separator mode).
    - 9 new tests in `TestPretty`.  Default is `True`; profile on large files if needed.
+2. ~~**Line-length enforcement and folding**~~ — **DONE** (2026-04-15).
+   - `line_limit: int | None = 2048` added to `emit()`.
+   - `quote.py`: new `_fold_content_lines`, `_make_folded_semicolon`, `_make_prefixed_folded_semicolon`,
+     and public `make_text_field(s, line_limit)` covering all four format combinations (plain /
+     prefix-only / fold-only / prefix+fold).
+   - `emit.py`: `_apply_line_limit(value, token, line_limit)` re-quotes inline tokens that are
+     too long and re-folds existing multiline tokens whose content lines exceed the limit.
+     `_pack_tokens(padded, line_limit)` greedy-packs loop data tokens across physical lines.
+     `_format_row` accepts `line_limit` and delegates to `_pack_tokens` when set.
+   - Set and fallback renderers: re-quote inline tokens whose full `tag + sep + token` line
+     exceeds `line_limit`; recompute `tag_width` after re-quoting.
+   - CIF 1.1: block code > 75 chars → `ValueError` in `_render_block`.
+   - 15 new tests in `TestLineLimit`.
 3. **Decimal-aligned pretty-print** — for loop columns (and Set scalar values) whose
    `ColumnDef.type_contents` is `"Real"` or `"Float"`, align values on the decimal point
    rather than left-justifying.  Rules:
@@ -94,18 +107,7 @@
      into `_col_widths()` or a new `_numeric_col_widths()` variant.
    - Only applies to unquoted bare-word tokens (ValueType STRING); quoted strings and
      placeholders are always left-justified regardless of column type.
-4. **Line length checks for output** — both CIF 1.1 and CIF 2.0 impose a 2048-character line
-   length limit, excluding the OS line-termination character(s).  CIF 1.1 additionally limits
-   data names, block codes, and frame codes to 75 characters; CIF 2.0 has no such identifier
-   limit.  The emitter must:
-   - Detect lines exceeding 2048 characters and either wrap them (loop data rows can be split
-     across lines) or escalate to a semicolon-delimited text field where inline wrapping is not
-     possible (e.g. a very long unquoted value).
-   - For CIF 1.1 output, validate that all data names, block codes, and frame codes are at most
-     75 characters; raise on violation.
-   - Implement as a post-render validation pass, version-aware, that warns or raises on
-     violations before the final string is returned from `emit()`.
-6. **`convert_database(src, dst, schema)`** — copy a TEXT-storage database to a new file,
+4. **`convert_database(src, dst, schema)`** — copy a TEXT-storage database to a new file,
    casting each column to the SQLite type indicated by `ColumnDef.type_contents`:
    `"Integer"` → `INTEGER`, `"Real"` / `"Float"` → `REAL`, everything else stays `TEXT`.
    CIF sentinels `'.'` and `'?'` convert to `NULL`.  Failed casts produce `NULL`, a kept

@@ -1949,3 +1949,235 @@ class TestEmissionOrder:
         # Both matched by spec1 (spec0 never fires); verify ordering A < B
         assert len(headers) == 2
         assert headers.index('data_A') < headers.index('data_B')
+
+
+# ---------------------------------------------------------------------------
+# Line-length enforcement
+# ---------------------------------------------------------------------------
+
+class TestLineLimit:
+    """line_limit= controls maximum physical line length in output."""
+
+    # A Set-category CIF with one long value (> 60 chars) and one short value.
+    SET_CIF_LONG = (
+        '#\\#CIF_2.0\ndata_b\n'
+        '_cell.length_a  ' + 'A' * 70 + '\n'
+        '_cell.length_c  5.4\n'
+    )
+
+    # A loop CIF where a value is very long (> 60 chars).
+    LOOP_CIF_LONG = (
+        '#\\#CIF_2.0\ndata_b\n'
+        'loop_\n'
+        '_atom_site.id\n'
+        '_atom_site.type_symbol\n'
+        '_atom_site.fract_x\n'
+        'Se  Se  0.1234\n'
+        'C   C   0.5\n'
+    )
+
+    @pytest.fixture
+    def mini_schema(self):
+        return _make_schema(_MINI_DIC)
+
+    @pytest.fixture
+    def loop_schema(self):
+        return _make_schema(_LOOP_DIC)
+
+    # --- no limit (default) ---
+
+    def test_default_limit_is_2048(self, mini_schema):
+        """Default line_limit=2048: very long lines are still within limit."""
+        src = '#\\#CIF_2.0\ndata_b\n_cell.length_a  ' + 'A' * 70 + '\n'
+        conn = _ingest_src(src, mini_schema)
+        result = emit(conn, mini_schema)
+        # Default limit is 2048 — a 70-char value should not be folded.
+        assert '\\\n' not in result
+
+    def test_none_disables_limit(self, mini_schema):
+        """line_limit=None: no limit applied, no folding."""
+        src = '#\\#CIF_2.0\ndata_b\n_cell.length_a  ' + 'A' * 100 + '\n'
+        conn = _ingest_src(src, mini_schema)
+        result = emit(conn, mini_schema, line_limit=None)
+        assert '\\\n' not in result
+
+    # --- inline → multiline conversion ---
+
+    def test_long_set_value_becomes_text_field(self, mini_schema):
+        """An inline value that makes the tag-value line too long is re-quoted."""
+        long_val = 'A' * 70
+        src = f'#\\#CIF_2.0\ndata_b\n_cell.length_a  {long_val}\n'
+        conn = _ingest_src(src, mini_schema)
+        result = emit(conn, mini_schema, line_limit=60)
+        # The value must appear inside a semicolon field.
+        assert '\n;' in result
+        # The value must round-trip correctly (fold reconstruction).
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_cell.length_a'][0]) == long_val
+
+    def test_short_values_not_folded(self, mini_schema):
+        """Short values that fit within line_limit remain inline."""
+        src = '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n_cell.length_c  13.2\n'
+        conn = _ingest_src(src, mini_schema)
+        result = emit(conn, mini_schema, line_limit=80)
+        # No semicolon fields for short values.
+        assert '\n;' not in result
+
+    # --- text-field content-line folding ---
+
+    def test_multiline_content_folded(self):
+        """A multiline value with long content lines is folded."""
+        long_line = 'X' * 80
+        src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            '_cell.length_a\n'
+            f';{long_line}\n'
+            'short line\n'
+            ';\n'
+        )
+        schema = _empty_schema()
+        conn = _ingest_src(src, schema)
+        result = emit(conn, schema, line_limit=60)
+        lines = result.splitlines()
+        # Every physical line must be ≤ 60 chars.
+        for line in lines:
+            assert len(line) <= 60, f'line exceeds limit: {line!r}'
+
+    def test_folded_field_round_trips(self):
+        """Folded text fields must round-trip correctly."""
+        long_line = 'Hello World ' * 7  # 84 chars, spaces for fold-break preference
+        src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            '_cell.length_a\n'
+            f';{long_line.rstrip()}\n'
+            ';\n'
+        )
+        schema = _empty_schema()
+        conn = _ingest_src(src, schema)
+        result = emit(conn, schema, line_limit=60)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert long_line.rstrip() in str(block['_cell.length_a'][0])
+
+    # --- loop greedy packing ---
+
+    def test_loop_row_wraps_when_too_long(self, loop_schema):
+        """Loop data rows exceeding line_limit are wrapped across multiple lines."""
+        # id=22 chars, type_symbol=22 chars, fract_x=3 chars.
+        # Un-wrapped row = '  ' + 22 + '  ' + 22 + '  ' + 3 = 53 chars > 40.
+        long_id = 'A' * 22
+        long_sym = 'B' * 22
+        src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            'loop_\n'
+            '  _atom_site.id\n'
+            '  _atom_site.type_symbol\n'
+            '  _atom_site.fract_x\n'
+            f'  {long_id}  {long_sym}  0.5\n'
+        )
+        conn = _ingest_src(src, loop_schema)
+        result = emit(conn, loop_schema, line_limit=40, pretty=False)
+        data_lines = [
+            ln for ln in result.splitlines()
+            if ln.startswith('  ') and not ln.startswith('  _')
+        ]
+        assert len(data_lines) > 1, 'row not wrapped despite exceeding limit'
+        for ln in data_lines:
+            assert len(ln) <= 40, f'wrapped line still too long: {ln!r}'
+
+    # --- all-lines ≤ limit ---
+
+    def test_all_output_lines_within_limit(self):
+        """All physical lines in the output are ≤ line_limit chars."""
+        src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            '_cell.length_a  ' + 'B' * 90 + '\n'
+            'loop_\n'
+            '  _atom_site.id\n'
+            '  _atom_site.type_symbol\n'
+            '  Se  Selenium\n'
+        )
+        schema = _empty_schema()
+        conn = _ingest_src(src, schema)
+        result = emit(conn, schema, line_limit=72)
+        for line in result.splitlines():
+            assert len(line) <= 72, f'line exceeds limit: {line!r}'
+
+    # --- warning for small limit ---
+
+    def test_small_limit_warning(self, mini_schema):
+        """line_limit < 40 emits UserWarning."""
+        src = '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n'
+        conn = _ingest_src(src, mini_schema)
+        with pytest.warns(UserWarning, match='line_limit=10'):
+            emit(conn, mini_schema, line_limit=10)
+
+    # --- CIF 1.1 block name length check ---
+
+    def test_cif11_long_block_name_raises(self):
+        """CIF 1.1 block code > 75 chars raises ValueError."""
+        long_name = 'x' * 76
+        src = f'#\\#CIF_2.0\ndata_{long_name}\n_cell.length_a  5.4\n'
+        schema = _empty_schema()
+        conn = _ingest_src(src, schema)
+        with pytest.raises(ValueError, match='75-character'):
+            emit(conn, schema, version=CIF11)
+
+    def test_cif20_long_block_name_allowed(self):
+        """CIF 2.0 does not enforce block name length."""
+        long_name = 'x' * 76
+        src = f'#\\#CIF_2.0\ndata_{long_name}\n_cell.length_a  5.4\n'
+        schema = _empty_schema()
+        conn = _ingest_src(src, schema)
+        result = emit(conn, schema, version=CIF20, line_limit=None)
+        assert f'data_{long_name}' in result
+
+    # --- make_text_field unit tests ---
+
+    def test_make_text_field_plain(self):
+        """Plain value → plain semicolon field."""
+        from pycifparse.output.quote import make_text_field
+        result = make_text_field('hello world')
+        assert result == '\n;hello world\n;'
+
+    def test_make_text_field_needs_prefix(self):
+        """Value containing '\\n;' → prefix protocol."""
+        from pycifparse.output.quote import make_text_field
+        s = 'line1\n;bad\nline3'
+        result = make_text_field(s)
+        # Opening: newline + ';>' + backslash (prefix-only sentinel).
+        assert result.startswith('\n;>\\')
+        lines = result.split('\n')
+        # lines[1] = ';>' + backslash = prefix-only sentinel line.
+        assert lines[1] == ';>\\'
+        # Content lines are prefixed with '>'.
+        assert '>line1' in result
+        assert '>;bad' in result  # ';bad' is escaped by the '>' prefix
+        # Field closes on its own ';' line.
+        assert result.endswith('\n;')
+
+    def test_make_text_field_fold(self):
+        """Long content lines → fold protocol."""
+        from pycifparse.output.quote import make_text_field
+        long_line = 'W' * 80
+        result = make_text_field(long_line, line_limit=40)
+        lines = result.split('\n')
+        # Every physical line must be ≤ 40 chars.
+        for ln in lines:
+            assert len(ln) <= 40, f'fold line too long: {ln!r}'
+        # lines[0]='' (before first \n), lines[1]=';\\' (fold sentinel: ';' + backslash).
+        assert lines[1] == ';\\', f'fold sentinel wrong: {lines[1]!r}'
+
+    def test_make_text_field_prefix_and_fold(self):
+        """Value containing '\\n;' AND long lines → prefix+fold."""
+        from pycifparse.output.quote import make_text_field
+        s = 'W' * 80 + '\n;bad'
+        result = make_text_field(s, line_limit=40)
+        lines = result.split('\n')
+        # lines[1] = ';>' + two backslashes (prefix + fold mode header).
+        assert lines[1] == ';>\\\\', f'bad opening line: {lines[1]!r}'
+        for ln in lines:
+            assert len(ln) <= 40, f'line too long: {ln!r}'

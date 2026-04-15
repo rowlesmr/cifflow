@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 from pycifparse.dictionary.schema import ForeignKeyDef, SchemaSpec, TableDef
 from pycifparse.output.plan import BlockSpec, EmitMode, OutputPlan
-from pycifparse.output.quote import quote
+from pycifparse.output.quote import make_text_field, quote
 from pycifparse.types import CifVersion
 
 # Synthetic infrastructure columns — never emitted as CIF tags.
@@ -97,6 +97,7 @@ def emit(
     emit_defaults: bool = True,
     line_ending: str = '\n',
     pretty: bool = True,
+    line_limit: int | None = 2048,
 ) -> str:
     """Emit CIF text from a populated SQLite database.
 
@@ -133,12 +134,39 @@ def emit(
         value in that column.  When ``False``, output is compact (two spaces
         between tag and value / between tokens) — recommended for very large
         loop tables where the alignment pass would be expensive.
+    line_limit:
+        Maximum physical line length (in characters, before line endings are
+        applied).  Default ``2048``.  Use ``None`` to disable.  Values below
+        ``40`` are accepted but emit a ``UserWarning``; very small limits may
+        produce degenerate output for long tokens.
+
+        When a content line inside a semicolon-delimited text field exceeds
+        *line_limit*, the CIF 2.0 line-folding protocol (§5.3) is applied.
+        When ``'\\n;'`` is also present in the value, the text-prefix protocol
+        (§5.2) is combined with folding.
+
+        Inline scalar values whose formatted line (tag + separator + token)
+        would exceed *line_limit* are converted to semicolon-delimited fields.
+
+        Loop data rows that exceed *line_limit* are wrapped across multiple
+        physical lines using greedy token packing (tokens cannot be split).
+
+        CIF 1.1 block codes, data names, and frame codes are independently
+        limited to 75 characters by the CIF 1.1 specification; an exception
+        is raised if this limit would be violated.
 
     Returns
     -------
     str
         Complete CIF text including magic line, terminated with ``line_ending``.
     """
+    if line_limit is not None and line_limit < 40:
+        _warnings.warn(
+            f'line_limit={line_limit} is very small; output may be degenerate for long tokens',
+            UserWarning,
+            stacklevel=2,
+        )
+
     magic = '#\\#CIF_2.0' if version == CifVersion.CIF_2_0 else '#\\#CIF_1.1'
 
     if mode == EmitMode.ONE_BLOCK:
@@ -164,7 +192,7 @@ def emit(
         if i > 0:
             lines.append('')
             lines.append('')
-        lines.extend(_render_block(name, data, schema, version, spec, reconstruct_su, pretty))
+        lines.extend(_render_block(name, data, schema, version, spec, reconstruct_su, pretty, line_limit))
 
     return line_ending.join(lines) + line_ending
 
@@ -544,8 +572,14 @@ def _render_block(
     spec: BlockSpec | None,
     reconstruct_su: bool,
     pretty: bool,
+    line_limit: int | None = None,
 ) -> list[str]:
     """Render a single CIF block as a flat list of output lines."""
+    if version == CifVersion.CIF_1_1 and len(block_name) > 75:
+        raise ValueError(
+            f"CIF 1.1 block code {block_name!r} exceeds the 75-character identifier "
+            f"limit (length {len(block_name)})"
+        )
     lines: list[str] = [f'data_{block_name}']
     first_category = True
 
@@ -564,7 +598,7 @@ def _render_block(
     for item in _ordered_categories(schema, spec, data.table_rows):
         if isinstance(item, list):
             # Merge group
-            cat_lines = _render_merge_group(item, data.table_rows, schema, version, spec, reconstruct_su, pretty)
+            cat_lines = _render_merge_group(item, data.table_rows, schema, version, spec, reconstruct_su, pretty, line_limit)
             if cat_lines:
                 if not first_category:
                     lines.append('')
@@ -591,14 +625,14 @@ def _render_block(
             first_category = False
 
             if table_def.category_class == 'Set' and len(rows) == 1:
-                lines.extend(_render_set_category(rows[0], cols, table_name, schema, version, table_def, reconstruct_su, pretty))
+                lines.extend(_render_set_category(rows[0], cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit))
             else:
-                lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su, pretty))
+                lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit))
 
     if data.fallback_rows:
         if not first_category:
             lines.append('')
-        lines.extend(_render_fallback(data.fallback_rows, version, pretty))
+        lines.extend(_render_fallback(data.fallback_rows, version, pretty, line_limit))
 
     return lines
 
@@ -705,6 +739,7 @@ def _render_merge_group(
     spec: BlockSpec | None,
     reconstruct_su: bool,
     pretty: bool,
+    line_limit: int | None = None,
 ) -> list[str]:
     """Render a merge group as a single loop_ or as plain loops.
 
@@ -741,7 +776,7 @@ def _render_merge_group(
             if not first:
                 lines.append('')
             first = False
-            lines.extend(_render_loop_category(rows, cols, cat, schema, version, tdef, reconstruct_su, pretty))
+            lines.extend(_render_loop_category(rows, cols, cat, schema, version, tdef, reconstruct_su, pretty, line_limit))
         return lines
 
     # Key-compatible: FULL OUTER JOIN in Python.
@@ -809,13 +844,15 @@ def _render_merge_group(
                     if su_val is not None:
                         value = _merge_su(value, su_val)
                 token = quote(value, version)
+                if line_limit is not None:
+                    token = _apply_line_limit(value, token, line_limit)
             tokens.append(token)
         matrix.append(tokens)
 
     col_widths = _col_widths(matrix) if pretty else None
 
     for tokens in matrix:
-        lines.extend(_format_row(tokens, col_widths))
+        lines.extend(_format_row(tokens, col_widths, line_limit))
 
     return lines
 
@@ -833,13 +870,14 @@ def _render_set_category(
     table_def: TableDef,
     reconstruct_su: bool,
     pretty: bool,
+    line_limit: int | None = None,
 ) -> list[str]:
     """Emit a Set-class category as scalar tag–value pairs."""
     lines = []
     su_map = _su_col_map(table_def) if reconstruct_su else {}
 
-    # Build (tag, token) pairs first so we can measure tag widths for alignment.
-    pairs: list[tuple[str, str]] = []
+    # Build (tag, value, token) triples; apply folding to any multiline tokens.
+    triples: list[tuple[str, str, str]] = []
     for col in cols:
         tag = _col_tag(table_name, col, schema)
         value = row.get(col)
@@ -850,18 +888,37 @@ def _render_set_category(
             su_val = row.get(su_col)
             if su_val is not None:
                 value = _merge_su(value, su_val)
-        pairs.append((tag, quote(value, version)))
+        token = quote(value, version)
+        if line_limit is not None and token.startswith('\n'):
+            token = make_text_field(value, line_limit)
+        triples.append((tag, value, token))
 
     if pretty:
-        # Width = longest tag among tags whose value fits on one line.
         tag_width = max(
-            (len(tag) for tag, token in pairs if not token.startswith('\n')),
+            (len(tag) for tag, _v, token in triples if not token.startswith('\n')),
             default=0,
         )
     else:
         tag_width = 0
 
-    for tag, token in pairs:
+    # Re-quote inline tokens whose formatted line would exceed line_limit.
+    if line_limit is not None:
+        new_triples: list[tuple[str, str, str]] = []
+        for tag, value, token in triples:
+            if not token.startswith('\n'):
+                line_str = f'{tag:<{tag_width}}  {token}' if pretty else f'{tag}  {token}'
+                if len(line_str) > line_limit:
+                    token = make_text_field(value, line_limit)
+            new_triples.append((tag, value, token))
+        triples = new_triples
+        # Recompute tag_width now that some inline tokens may have become multiline.
+        if pretty:
+            tag_width = max(
+                (len(tag) for tag, _v, token in triples if not token.startswith('\n')),
+                default=0,
+            )
+
+    for tag, _value, token in triples:
         if token.startswith('\n'):
             lines.append(tag)
             lines.extend(token.split('\n')[1:])
@@ -882,6 +939,7 @@ def _render_loop_category(
     table_def: TableDef,
     reconstruct_su: bool,
     pretty: bool,
+    line_limit: int | None = None,
 ) -> list[str]:
     """Emit a Loop-class category as a ``loop_`` construct."""
     su_map = _su_col_map(table_def) if reconstruct_su else {}
@@ -906,18 +964,25 @@ def _render_loop_category(
                     if su_val is not None:
                         value = _merge_su(value, su_val)
                 token = quote(value, version)
+                if line_limit is not None:
+                    token = _apply_line_limit(value, token, line_limit)
             tokens.append(token)
         matrix.append(tokens)
 
     col_widths = _col_widths(matrix) if pretty else None
 
     for tokens in matrix:
-        lines.extend(_format_row(tokens, col_widths))
+        lines.extend(_format_row(tokens, col_widths, line_limit))
 
     return lines
 
 
-def _render_fallback(rows: list[dict], version: CifVersion, pretty: bool = False) -> list[str]:
+def _render_fallback(
+    rows: list[dict],
+    version: CifVersion,
+    pretty: bool = False,
+    line_limit: int | None = None,
+) -> list[str]:
     """Emit ``_cif_fallback`` rows as tag–value pairs or single-column loops."""
     tag_values: dict[str, list[tuple[str, str]]] = {}
     for row in sorted(rows, key=lambda r: (r.get('tag', ''), r.get('_row_id', 0))):
@@ -926,25 +991,43 @@ def _render_fallback(rows: list[dict], version: CifVersion, pretty: bool = False
         vtype = row.get('value_type', '')
         tag_values.setdefault(tag, []).append((value, vtype))
 
-    # Scalar tags: build (tag, token) pairs first for alignment.
-    scalar_pairs: list[tuple[str, str]] = []
+    # Scalar tags: build (tag, value, vtype, token) tuples first for alignment.
+    scalar_tuples: list[tuple[str, str, str, str]] = []
     for tag in sorted(tag_values):
         entries = tag_values[tag]
         if len(entries) == 1:
             value, vtype = entries[0]
             token = _fallback_token(value, vtype, version)
-            scalar_pairs.append((tag, token))
+            if line_limit is not None and token.startswith('\n') and vtype != 'placeholder':
+                token = make_text_field(value, line_limit)
+            scalar_tuples.append((tag, value, vtype, token))
 
-    if pretty and scalar_pairs:
+    if pretty and scalar_tuples:
         tag_width = max(
-            (len(tag) for tag, token in scalar_pairs if not token.startswith('\n')),
+            (len(tag) for tag, _v, _vt, token in scalar_tuples if not token.startswith('\n')),
             default=0,
         )
     else:
         tag_width = 0
 
+    # Re-quote inline tokens whose formatted line would exceed line_limit.
+    if line_limit is not None:
+        new_tuples: list[tuple[str, str, str, str]] = []
+        for tag, value, vtype, token in scalar_tuples:
+            if not token.startswith('\n') and vtype != 'placeholder':
+                line_str = f'{tag:<{tag_width}}  {token}' if pretty else f'{tag}  {token}'
+                if len(line_str) > line_limit:
+                    token = make_text_field(value, line_limit)
+            new_tuples.append((tag, value, vtype, token))
+        scalar_tuples = new_tuples
+        if pretty:
+            tag_width = max(
+                (len(tag) for tag, _v, _vt, token in scalar_tuples if not token.startswith('\n')),
+                default=0,
+            )
+
     lines = []
-    scalar_map = dict(scalar_pairs)
+    scalar_map = {tag: token for tag, _v, _vt, token in scalar_tuples}
 
     for tag in sorted(tag_values):
         entries = tag_values[tag]
@@ -962,7 +1045,9 @@ def _render_fallback(rows: list[dict], version: CifVersion, pretty: bool = False
             lines.append(f'  {tag}')
             for value, vtype in entries:
                 token = _fallback_token(value, vtype, version)
-                lines.extend(_format_row([token], None))
+                if line_limit is not None and token.startswith('\n') and vtype != 'placeholder':
+                    token = make_text_field(value, line_limit)
+                lines.extend(_format_row([token], None, line_limit))
 
     return lines
 
@@ -990,12 +1075,67 @@ def _col_widths(matrix: list[list[str]]) -> list[int]:
     return widths
 
 
-def _format_row(tokens: list[str], col_widths: list[int] | None) -> list[str]:
+def _pack_tokens(padded: list[str], line_limit: int) -> list[str]:
+    """Pack padded inline tokens of one loop row into lines ≤ *line_limit* chars.
+
+    Uses a greedy left-to-right algorithm: accumulate tokens onto the current
+    physical line; start a new line when adding the next token would cause the
+    line to exceed *line_limit* (measured after ``.rstrip()`` to ignore trailing
+    column-padding spaces).  A single token that exceeds *line_limit* by itself
+    is placed on its own line regardless.
+    """
+    if not padded:
+        return []
+    result: list[str] = []
+    current: list[str] = []
+    for token in padded:
+        if not current:
+            current.append(token)
+        else:
+            trial = ('  ' + '  '.join(current + [token])).rstrip()
+            if len(trial) > line_limit:
+                result.append(('  ' + '  '.join(current)).rstrip())
+                current = [token]
+            else:
+                current.append(token)
+    if current:
+        result.append(('  ' + '  '.join(current)).rstrip())
+    return result
+
+
+def _apply_line_limit(value: str, token: str, line_limit: int) -> str:
+    """Re-quote *token* when its content or token length would exceed *line_limit*.
+
+    For multiline tokens (already semicolon-delimited): re-produce with folding
+    if any content line of *value* is longer than *line_limit*.
+
+    For inline tokens: switch to a semicolon field when the token itself
+    (not including loop row indentation) is longer than *line_limit* − 2
+    characters (the ``'  '`` prefix reserved for loop data indentation).
+    """
+    if token.startswith('\n'):
+        if any(len(line) > line_limit for line in value.split('\n')):
+            return make_text_field(value, line_limit)
+    else:
+        if len(token) > line_limit - 2:
+            return make_text_field(value, line_limit)
+    return token
+
+
+def _format_row(
+    tokens: list[str],
+    col_widths: list[int] | None,
+    line_limit: int | None = None,
+) -> list[str]:
     """Format one loop data row as a list of output lines.
 
     When ``col_widths`` is provided (pretty mode), each inline token is
     left-padded to the column width.  Multiline tokens (col_width == 0) are
     never padded.
+
+    When ``line_limit`` is given, inline tokens are packed greedily: a new
+    physical line is started whenever adding the next token would cause the
+    line to exceed *line_limit* characters.
     """
     def _pad(token: str, j: int) -> str:
         if col_widths and col_widths[j]:
@@ -1004,24 +1144,29 @@ def _format_row(tokens: list[str], col_widths: list[int] | None) -> list[str]:
 
     if not any(t.startswith('\n') for t in tokens):
         padded = [_pad(t, j) for j, t in enumerate(tokens)]
-        row_line = '  ' + '  '.join(padded)
-        return [row_line.rstrip()]
+        if line_limit is None:
+            return [('  ' + '  '.join(padded)).rstrip()]
+        return _pack_tokens(padded, line_limit)
 
     result: list[str] = []
     inline_buf: list[str] = []
 
+    def _flush() -> None:
+        if inline_buf:
+            if line_limit is not None:
+                result.extend(_pack_tokens(inline_buf, line_limit))
+            else:
+                result.append(('  ' + '  '.join(inline_buf)).rstrip())
+            inline_buf.clear()
+
     for j, t in enumerate(tokens):
         if t.startswith('\n'):
-            if inline_buf:
-                result.append(('  ' + '  '.join(inline_buf)).rstrip())
-                inline_buf = []
+            _flush()
             result.extend(t.split('\n')[1:])
         else:
             inline_buf.append(_pad(t, j))
 
-    if inline_buf:
-        result.append(('  ' + '  '.join(inline_buf)).rstrip())
-
+    _flush()
     return result
 
 
