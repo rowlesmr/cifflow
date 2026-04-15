@@ -7,7 +7,7 @@
 **Current stage:** Stage 6 — OutputPlan fully implemented. Output layer complete and stable.
 
 **Test suite state (2026-04-15):**
-- ~1334 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+- ~1366 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
 - 58 slow tests pass: `pytest -m slow`
 - Total: ~1392 passing, 0 xfail
 
@@ -91,28 +91,26 @@
      exceeds `line_limit`; recompute `tag_width` after re-quoting.
    - CIF 1.1: block code > 75 chars → `ValueError` in `_render_block`.
    - 15 new tests in `TestLineLimit`.
-3. **Decimal-aligned pretty-print** — for loop columns (and Set scalar values) whose
-   `ColumnDef.type_contents` is `"Real"` or `"Float"`, align values on the decimal point
-   rather than left-justifying.  Rules:
-   - Determine integer-part width = max digits before `.` across all values in the column.
-   - Determine fractional-part width = max digits after `.` (0 if no value has a `.`).
-   - Right-pad each value with spaces after the last digit so all decimal points line up.
-   - Values without a decimal point are treated as having zero fractional digits and are
-     right-padded to the fractional-part width.
-   - SU suffixes (e.g. `0.1234(5)`) count as part of the fractional field; align on `.` first,
-     then right-pad the remainder.
-   - Non-numeric tokens in a nominally-Real column (e.g. `.`, `?`, quoted strings) fall back
-     to plain left-justify for that value; do not break the column alignment.
-   - Gated by `pretty=True`; requires `SchemaSpec` column type information to be threaded
-     into `_col_widths()` or a new `_numeric_col_widths()` variant.
-   - Only applies to unquoted bare-word tokens (ValueType STRING); quoted strings and
-     placeholders are always left-justified regardless of column type.
-4. **`convert_database(src, dst, schema)`** — copy a TEXT-storage database to a new file,
-   casting each column to the SQLite type indicated by `ColumnDef.type_contents`:
-   `"Integer"` → `INTEGER`, `"Real"` / `"Float"` → `REAL`, everything else stays `TEXT`.
-   CIF sentinels `'.'` and `'?'` convert to `NULL`.  Failed casts produce `NULL`, a kept
-   TEXT value, or raise — controlled by an `on_coercion_failure` parameter (`'null'` /
-   `'keep'` / `'error'`).  Stub is already shown in `example_workflow.py` Step 12.
+3. ~~**Decimal-aligned pretty-print**~~ — **DONE** (2026-04-15).
+   - `_parse_numeric(token)` splits on `.` first, then `e`/`E`; returns `(int_part, frac_part)` or `None`.
+   - `_decimal_align_column(tokens)` computes `int_width`/`frac_width` and applies right-pad.
+   - `_apply_decimal_align(matrix, real_indices)` applies per-column alignment in loop renderer.
+   - `_real_col_indices` / `_real_col_indices_merged` find Real/Float cols from schema.
+   - Set renderer carries `(tag, col, value, token)` quads so col type can be looked up; decimal
+     alignment is applied to all Real/Float quads collectively within a Set category.
+   - Scientific notation: `1.234e2` splits on `.` (int='1', frac='234e2'); `1234e-2` splits on
+     first `e` (int='1234', frac='e-2'); `e` position aligns correctly in both cases.
+   - 13 tests in `TestDecimalAlign`; `_CELL_DIC` fixture added (Set, 6 Real columns).
+4. ~~**`convert_database(src, dst, schema)`**~~ — **DONE** (2026-04-15).
+   - Type map: `"Integer"` → `INTEGER`, `"Real"`/`"Float"` → `REAL`, else `TEXT`.
+   - Sentinels `'.'`/`'?'` → `NULL`, no warning.
+   - SU suffixes stripped before numeric cast, always with warning.
+   - `on_coercion_failure`: `'null'` (default), `'keep'`, `'error'`.
+   - Non-string raw values (e.g. `_row_id` fetched as Python `int`) passed through as-is.
+   - Fallback-tier tables copied verbatim (`TEXT` storage).
+   - All tables preserved (no empty-table or NULL-column dropping).
+   - 19 tests in `tests/database/test_convert.py`.
+   - Exported from `pycifparse.database` and `pycifparse`.
 5. ~~**Ingest stub promotion / emit round-trip bugs**~~ — **DONE** (2026-04-12).  See Lesson 58.
 6. ~~**OutputPlan full spec**~~ — **DONE** (2026-04-14).  See Lessons 65–68.
 

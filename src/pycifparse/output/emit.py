@@ -849,6 +849,11 @@ def _render_merge_group(
             tokens.append(token)
         matrix.append(tokens)
 
+    if pretty:
+        real_idx = _real_col_indices_merged(merged_cols, schema)
+        if real_idx:
+            matrix = _apply_decimal_align(matrix, real_idx)
+
     col_widths = _col_widths(matrix) if pretty else None
 
     for tokens in matrix:
@@ -876,8 +881,8 @@ def _render_set_category(
     lines = []
     su_map = _su_col_map(table_def) if reconstruct_su else {}
 
-    # Build (tag, value, token) triples; apply folding to any multiline tokens.
-    triples: list[tuple[str, str, str]] = []
+    # Build (tag, col, value, token) quads; apply folding to any multiline tokens.
+    quads: list[tuple[str, str, str, str]] = []
     for col in cols:
         tag = _col_tag(table_name, col, schema)
         value = row.get(col)
@@ -891,11 +896,11 @@ def _render_set_category(
         token = quote(value, version)
         if line_limit is not None and token.startswith('\n'):
             token = make_text_field(value, line_limit)
-        triples.append((tag, value, token))
+        quads.append((tag, col, value, token))
 
     if pretty:
         tag_width = max(
-            (len(tag) for tag, _v, token in triples if not token.startswith('\n')),
+            (len(tag) for tag, _c, _v, token in quads if not token.startswith('\n')),
             default=0,
         )
     else:
@@ -903,22 +908,37 @@ def _render_set_category(
 
     # Re-quote inline tokens whose formatted line would exceed line_limit.
     if line_limit is not None:
-        new_triples: list[tuple[str, str, str]] = []
-        for tag, value, token in triples:
+        new_quads: list[tuple[str, str, str, str]] = []
+        for tag, col, value, token in quads:
             if not token.startswith('\n'):
                 line_str = f'{tag:<{tag_width}}  {token}' if pretty else f'{tag}  {token}'
                 if len(line_str) > line_limit:
                     token = make_text_field(value, line_limit)
-            new_triples.append((tag, value, token))
-        triples = new_triples
+            new_quads.append((tag, col, value, token))
+        quads = new_quads
         # Recompute tag_width now that some inline tokens may have become multiline.
         if pretty:
             tag_width = max(
-                (len(tag) for tag, _v, token in triples if not token.startswith('\n')),
+                (len(tag) for tag, _c, _v, token in quads if not token.startswith('\n')),
                 default=0,
             )
 
-    for tag, _value, token in triples:
+    # Decimal-align all inline Real/Float tokens within this Set category.
+    if pretty:
+        col_type = {c.name: c.type_contents for c in table_def.columns}
+        real_positions = [
+            i for i, (tag, col, _v, token) in enumerate(quads)
+            if col_type.get(col) in ('Real', 'Float') and not token.startswith('\n')
+        ]
+        if real_positions:
+            real_tokens = [quads[i][3] for i in real_positions]
+            aligned = _decimal_align_column(real_tokens)
+            quads = list(quads)
+            for pos, new_tok in zip(real_positions, aligned):
+                tag, col, val, _old = quads[pos]
+                quads[pos] = (tag, col, val, new_tok)
+
+    for tag, _col, _value, token in quads:
         if token.startswith('\n'):
             lines.append(tag)
             lines.extend(token.split('\n')[1:])
@@ -968,6 +988,11 @@ def _render_loop_category(
                     token = _apply_line_limit(value, token, line_limit)
             tokens.append(token)
         matrix.append(tokens)
+
+    if pretty:
+        real_idx = _real_col_indices(cols, table_def)
+        if real_idx:
+            matrix = _apply_decimal_align(matrix, real_idx)
 
     col_widths = _col_widths(matrix) if pretty else None
 
@@ -1120,6 +1145,130 @@ def _apply_line_limit(value: str, token: str, line_limit: int) -> str:
         if len(token) > line_limit - 2:
             return make_text_field(value, line_limit)
     return token
+
+
+# ---------------------------------------------------------------------------
+# Decimal-alignment helpers
+# ---------------------------------------------------------------------------
+
+_NUMERIC_RE = re.compile(
+    r'^[+-]?'                  # optional sign
+    r'(?:\d+\.?\d*|\.\d+)'    # digits with optional '.', or '.digits'
+    r'(?:\(\d+\))?'           # optional SU  e.g. (5)
+    r'(?:[eE][+-]?\d+)?$'     # optional exponent
+)
+
+
+def _parse_numeric(token: str) -> tuple[str, str] | None:
+    """Classify *token* as a numeric bare word and return ``(int_part, frac_part)``.
+
+    Split priority:
+
+    1. If ``.`` is present → split on first ``.``; *int_part* = before, *frac_part* = after
+       (including any SU suffix and exponent).
+    2. If no ``.`` but ``e``/``E`` is present → split before first ``e``/``E``; *int_part* =
+       before the exponent letter, *frac_part* = ``e``/``E`` + remainder.
+    3. Otherwise (pure integer, possibly with SU) → *int_part* = whole token,
+       *frac_part* = ``''``.
+
+    Returns ``None`` for: multiline tokens, placeholders (``.`` / ``?``), quoted tokens,
+    or bare words that do not match the numeric pattern.
+    """
+    if token.startswith(('\n', "'", '"')) or token in ('.', '?'):
+        return None
+    if not _NUMERIC_RE.match(token):
+        return None
+    dot = token.find('.')
+    if dot >= 0:
+        return token[:dot], token[dot + 1:]
+    e_pos = next((i for i, c in enumerate(token) if c in ('e', 'E')), -1)
+    if e_pos > 0:
+        return token[:e_pos], token[e_pos:]
+    return token, ''
+
+
+def _decimal_align_column(tokens: list[str]) -> list[str]:
+    """Return *tokens* with numeric values aligned on the decimal (or exponent) point.
+
+    Each token is classified by :func:`_parse_numeric`.  From the numeric tokens,
+    ``int_width`` (max chars before the separator) and ``frac_width`` (max chars
+    after the separator) are computed.  Numeric tokens are formatted as:
+
+    - with separator: ``f'{int_part:>{int_width}}.{frac_part:<{frac_width}}'``
+    - without separator (``frac_part == ''``) in a column that *has* a separator:
+      ``f'{int_part:>{int_width}}' + ' ' * (1 + frac_width)``
+    - without separator in a column with no separator at all:
+      ``f'{int_part:>{int_width}}'``
+
+    Non-numeric tokens are returned unchanged; :func:`_col_widths` and
+    :func:`_format_row` handle left-justification to the column max width.
+    """
+    parsed = [_parse_numeric(t) for t in tokens]
+    numeric = [(p, i) for i, p in enumerate(parsed) if p is not None]
+    if not numeric:
+        return list(tokens)
+
+    int_width = max(len(p[0]) for p, _ in numeric)
+    frac_width = max(len(p[1]) for p, _ in numeric)
+    has_sep = any(p[1] for p, _ in numeric)
+
+    result = list(tokens)
+    for (int_part, frac_part), idx in numeric:
+        if has_sep:
+            if frac_part:
+                result[idx] = f'{int_part:>{int_width}}.{frac_part:<{frac_width}}'
+            else:
+                result[idx] = f'{int_part:>{int_width}}' + ' ' * (1 + frac_width)
+        else:
+            result[idx] = f'{int_part:>{int_width}}'
+    return result
+
+
+def _apply_decimal_align(
+    matrix: list[list[str]],
+    real_indices: set[int],
+) -> list[list[str]]:
+    """Apply decimal alignment to the specified columns of *matrix* in-place.
+
+    Returns a new matrix (rows are new lists; original is not mutated).
+    """
+    if not matrix or not real_indices:
+        return matrix
+    n_cols = len(matrix[0])
+    result = [list(row) for row in matrix]
+    for j in real_indices:
+        if j >= n_cols:
+            continue
+        col_tokens = [row[j] for row in result]
+        aligned = _decimal_align_column(col_tokens)
+        for i, tok in enumerate(aligned):
+            result[i][j] = tok
+    return result
+
+
+def _real_col_indices(cols: list[str], table_def: 'TableDef') -> set[int]:
+    """Return the set of column indices whose ``type_contents`` is Real or Float."""
+    col_type = {c.name: c.type_contents for c in table_def.columns}
+    return {
+        i for i, col in enumerate(cols)
+        if col_type.get(col) in ('Real', 'Float')
+    }
+
+
+def _real_col_indices_merged(
+    merged_cols: list[tuple[str, str]],
+    schema: 'SchemaSpec',
+) -> set[int]:
+    """Return Real/Float column indices for a merge-group ``(table, col)`` list."""
+    result: set[int] = set()
+    for i, (cat, col) in enumerate(merged_cols):
+        tdef = schema.tables.get(cat)
+        if tdef is None:
+            continue
+        col_type = {c.name: c.type_contents for c in tdef.columns}
+        if col_type.get(col) in ('Real', 'Float'):
+            result.add(i)
+    return result
 
 
 def _format_row(

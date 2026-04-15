@@ -164,6 +164,84 @@ save_cell.length_c
 save_
 """
 
+_CELL_DIC = """\
+#\\#CIF_2.0
+data_cell_dic
+
+save_CELL
+  _definition.id        CELL
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     cell
+save_
+
+save_cell.length_a
+  _definition.id        '_cell.length_a'
+  _definition.class     Attribute
+  _name.category_id     cell
+  _name.object_id       length_a
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+
+save_cell.length_b
+  _definition.id        '_cell.length_b'
+  _definition.class     Attribute
+  _name.category_id     cell
+  _name.object_id       length_b
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+
+save_cell.length_c
+  _definition.id        '_cell.length_c'
+  _definition.class     Attribute
+  _name.category_id     cell
+  _name.object_id       length_c
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+
+save_cell.angle_alpha
+  _definition.id        '_cell.angle_alpha'
+  _definition.class     Attribute
+  _name.category_id     cell
+  _name.object_id       angle_alpha
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+
+save_cell.angle_beta
+  _definition.id        '_cell.angle_beta'
+  _definition.class     Attribute
+  _name.category_id     cell
+  _name.object_id       angle_beta
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+
+save_cell.angle_gamma
+  _definition.id        '_cell.angle_gamma'
+  _definition.class     Attribute
+  _name.category_id     cell
+  _name.object_id       angle_gamma
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+"""
+
 
 class TestSetCategory:
     """Emit a Set-class category as scalar tag-value pairs."""
@@ -180,9 +258,17 @@ class TestSetCategory:
 
     def test_tags_emitted_as_scalars(self, conn, schema):
         result = emit(conn, schema)
-        assert '_cell.length_a  5.4' in result
-        assert '_cell.length_b  5.4' in result
-        assert '_cell.length_c  13.2' in result
+        # Values are decimal-aligned: ' 5.4' (space before 5 to match width of 13).
+        # Check tags present and values round-trip correctly rather than exact spacing.
+        assert '_cell.length_a' in result
+        assert '_cell.length_b' in result
+        assert '_cell.length_c' in result
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_cell.length_a'][0]) == '5.4'
+        assert str(block['_cell.length_b'][0]) == '5.4'
+        assert str(block['_cell.length_c'][0]) == '13.2'
 
     def test_no_loop_keyword(self, conn, schema):
         result = emit(conn, schema)
@@ -2181,3 +2267,261 @@ class TestLineLimit:
         assert lines[1] == ';>\\\\', f'bad opening line: {lines[1]!r}'
         for ln in lines:
             assert len(ln) <= 40, f'line too long: {ln!r}'
+
+
+# ---------------------------------------------------------------------------
+# Decimal-aligned pretty-print
+# ---------------------------------------------------------------------------
+
+class TestDecimalAlign:
+    """pretty=True aligns Real/Float values on the decimal point."""
+
+    # Loop with one Real column (fract_x) and non-Real columns.
+    LOOP_CIF = (
+        '#\\#CIF_2.0\ndata_b\n'
+        'loop_\n'
+        '  _atom_site.id\n'
+        '  _atom_site.type_symbol\n'
+        '  _atom_site.fract_x\n'
+        'Se  Se    0.1234\n'
+        'C   C    10.5\n'
+        'O   O   100.25\n'
+    )
+
+    # Set CIF matching user's example (lengths + angles).
+    SET_CIF = (
+        '#\\#CIF_2.0\ndata_b\n'
+        '_cell.length_a    12.345\n'
+        '_cell.length_b     1.245\n'
+        '_cell.length_c   123.45\n'
+        '_cell.angle_alpha   90\n'
+        '_cell.angle_beta    90\n'
+        '_cell.angle_gamma  120\n'
+    )
+
+    @pytest.fixture
+    def loop_schema(self):
+        return _make_schema(_LOOP_DIC)
+
+    @pytest.fixture
+    def cell_schema(self):
+        return _make_schema(_CELL_DIC)
+
+    # --- loop decimal alignment ---
+
+    def test_loop_real_column_dot_aligned(self, loop_schema):
+        """fract_x values are aligned on the decimal point."""
+        conn = _ingest_src(self.LOOP_CIF, loop_schema)
+        result = emit(conn, loop_schema, pretty=True)
+        data_lines = [
+            ln for ln in result.splitlines()
+            if ln.startswith('  ') and not ln.startswith('  _')
+        ]
+        assert len(data_lines) == 3
+        # The decimal point should be at the same character offset in every row.
+        # Use the full-line position (not token-internal) because decimal alignment
+        # right-pads the integer part within the column, shifting where '.' falls
+        # inside the stripped token.
+        dot_positions = set()
+        for ln in data_lines:
+            if '.' in ln:
+                dot_positions.add(ln.index('.'))
+        assert len(dot_positions) == 1, f'dots not aligned: {dot_positions}'
+
+    def test_loop_real_values_round_trip(self, loop_schema):
+        """Decimal alignment must not corrupt values."""
+        conn = _ingest_src(self.LOOP_CIF, loop_schema)
+        result = emit(conn, loop_schema, pretty=True)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        vals = [str(v) for v in block['_atom_site.fract_x']]
+        assert vals == ['0.1234', '10.5', '100.25']
+
+    def test_loop_non_real_columns_unaffected(self, loop_schema):
+        """Non-Real columns are not decimal-aligned."""
+        conn = _ingest_src(self.LOOP_CIF, loop_schema)
+        result = emit(conn, loop_schema, pretty=True)
+        data_lines = [
+            ln for ln in result.splitlines()
+            if ln.startswith('  ') and not ln.startswith('  _')
+        ]
+        # id column (Code type): 'Se' and 'C' should be left-justified to 2 chars.
+        # Check that 'Se' and 'C ' appear in their column position.
+        se_row = next(ln for ln in data_lines if ln.strip().startswith('Se'))
+        c_row  = next(ln for ln in data_lines if ln.strip().startswith('C'))
+        # id column starts at offset 2; 'Se' is at [2:4], 'C' is at [2:3].
+        assert se_row[2:4] == 'Se'
+        assert c_row[2] == 'C'
+
+    def test_loop_placeholders_in_real_column(self, loop_schema):
+        """Placeholder '.' in a Real column falls back to left-justify."""
+        src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            'loop_\n'
+            '  _atom_site.id\n'
+            '  _atom_site.type_symbol\n'
+            '  _atom_site.fract_x\n'
+            'Se  Se  0.1234\n'
+            'C   C   .\n'
+        )
+        conn = _ingest_src(src, loop_schema)
+        result = emit(conn, loop_schema, pretty=True)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_atom_site.fract_x'][0]) == '0.1234'
+        assert str(block['_atom_site.fract_x'][1]) == '.'
+
+    def test_loop_pretty_false_no_decimal_align(self, loop_schema):
+        """pretty=False suppresses decimal alignment."""
+        conn = _ingest_src(self.LOOP_CIF, loop_schema)
+        result_pretty = emit(conn, loop_schema, pretty=True)
+        result_compact = emit(conn, loop_schema, pretty=False)
+        # Compact mode: values are not decimal-padded, so dot positions in the
+        # loop data rows are NOT all at the same column.
+        assert '0.1234' in result_compact
+        compact_data = [
+            ln for ln in result_compact.splitlines()
+            if ln.startswith('  ') and not ln.startswith('  _')
+        ]
+        compact_dot_positions = {ln.index('.') for ln in compact_data if '.' in ln}
+        assert len(compact_dot_positions) > 1, (
+            f'compact mode should not decimal-align: {compact_dot_positions}'
+        )
+
+    # --- Set category decimal alignment ---
+
+    def test_set_real_values_dot_aligned(self, cell_schema):
+        """Real values in a Set category are aligned on the decimal point."""
+        conn = _ingest_src(self.SET_CIF, cell_schema)
+        result = emit(conn, cell_schema, pretty=True)
+        # Collect value tokens from lines that have Real columns.
+        real_tags = {'_cell.length_a', '_cell.length_b', '_cell.length_c',
+                     '_cell.angle_alpha', '_cell.angle_beta', '_cell.angle_gamma'}
+        dot_cols: set[int] = set()
+        for ln in result.splitlines():
+            tag = ln.split()[0] if ln.split() else ''
+            if tag not in real_tags:
+                continue
+            value_str = ln[ln.index(ln.split()[1]):]  # everything from value start
+            if '.' in value_str:
+                # Column position of '.' relative to line start
+                dot_cols.add(ln.index('.'))
+        assert len(dot_cols) == 1, f'Set decimal points not aligned: {dot_cols}'
+
+    def test_set_integer_angles_right_justified(self, cell_schema):
+        """Integer angle values are right-justified to match length int_width."""
+        conn = _ingest_src(self.SET_CIF, cell_schema)
+        result = emit(conn, cell_schema, pretty=True)
+        lines = {
+            ln.split()[0]: ln
+            for ln in result.splitlines()
+            if ln.startswith('_cell.')
+        }
+        # '120' is the widest integer (3 chars = int_width).
+        # '90' must be right-padded so that '0' of '90' lands at the same
+        # column as '0' of '120'.
+        gamma_line = lines.get('_cell.angle_gamma', '')
+        beta_line  = lines.get('_cell.angle_beta', '')
+        # Both values are right-justified in the same field width (3 chars).
+        # '120' and ' 90' (with its leading space) must start at the same column.
+        gamma_val_start = gamma_line.index('120')
+        beta_val_start  = beta_line.index(' 90')  # leading space is part of the padded token
+        assert gamma_val_start == beta_val_start, (
+            f'integers not right-aligned: gamma={gamma_val_start}, beta={beta_val_start}'
+        )
+
+    def test_set_values_round_trip(self, cell_schema):
+        """Decimal alignment must not corrupt Set values."""
+        conn = _ingest_src(self.SET_CIF, cell_schema)
+        result = emit(conn, cell_schema, pretty=True)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_cell.length_a'][0]) == '12.345'
+        assert str(block['_cell.length_b'][0]) == '1.245'
+        assert str(block['_cell.length_c'][0]) == '123.45'
+        assert str(block['_cell.angle_alpha'][0]) == '90'
+        assert str(block['_cell.angle_gamma'][0]) == '120'
+
+    # --- scientific notation ---
+
+    def test_scientific_dot_form_aligned(self, loop_schema):
+        """Values like '1.234e2' split on '.' and align correctly."""
+        src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            'loop_\n'
+            '  _atom_site.id\n'
+            '  _atom_site.type_symbol\n'
+            '  _atom_site.fract_x\n'
+            'A  A  1.234e2\n'
+            'B  B  10.5e1\n'
+        )
+        conn = _ingest_src(src, loop_schema)
+        result = emit(conn, loop_schema, pretty=True)
+        data_lines = [
+            ln for ln in result.splitlines()
+            if ln.startswith('  ') and not ln.startswith('  _')
+        ]
+        assert len(data_lines) == 2
+        # Both values have '.'; the decimal point should be at the same line offset.
+        dot_positions = set()
+        for ln in data_lines:
+            if '.' in ln:
+                dot_positions.add(ln.index('.'))
+        assert len(dot_positions) == 1, f'scientific dots not aligned: {dot_positions}'
+        # Values must survive round-trip.
+        cif2, errors = build(result)
+        assert not errors
+
+    def test_scientific_no_dot_aligned(self, loop_schema):
+        """Values like '1234e-2' (no dot) split on 'e' and right-justify mantissa."""
+        src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            'loop_\n'
+            '  _atom_site.id\n'
+            '  _atom_site.type_symbol\n'
+            '  _atom_site.fract_x\n'
+            'A  A  12e-2\n'
+            'B  B  5e-2\n'
+        )
+        conn = _ingest_src(src, loop_schema)
+        result = emit(conn, loop_schema, pretty=True)
+        data_lines = [
+            ln for ln in result.splitlines()
+            if ln.startswith('  ') and not ln.startswith('  _')
+        ]
+        assert len(data_lines) == 2
+        # '12e-2' → int_part '12' (width 2), 'e-2' frac.
+        # ' 5e-2' → int_part '5'  right-just to 2 = ' 5'.
+        # Both 'e' positions must align — check line-level position.
+        e_positions = {ln.index('e') for ln in data_lines if 'e' in ln}
+        assert len(e_positions) == 1, f'exponent letters not aligned: {e_positions}'
+
+    # --- _parse_numeric unit tests ---
+
+    def test_parse_numeric_decimal(self):
+        from pycifparse.output.emit import _parse_numeric
+        assert _parse_numeric('1.23') == ('1', '23')
+        assert _parse_numeric('-1.23') == ('-1', '23')
+        assert _parse_numeric('.5') == ('', '5')
+        assert _parse_numeric('1.23(4)') == ('1', '23(4)')
+        assert _parse_numeric('1.23e-4') == ('1', '23e-4')
+        assert _parse_numeric('1.23(4)e-5') == ('1', '23(4)e-5')
+
+    def test_parse_numeric_no_dot(self):
+        from pycifparse.output.emit import _parse_numeric
+        assert _parse_numeric('123') == ('123', '')
+        assert _parse_numeric('123(4)') == ('123(4)', '')
+        assert _parse_numeric('12e-2') == ('12', 'e-2')
+        assert _parse_numeric('1234e2') == ('1234', 'e2')
+
+    def test_parse_numeric_non_numeric(self):
+        from pycifparse.output.emit import _parse_numeric
+        assert _parse_numeric('.') is None      # placeholder
+        assert _parse_numeric('?') is None      # placeholder
+        assert _parse_numeric("'hello'") is None  # quoted
+        assert _parse_numeric('\n;text\n;') is None  # multiline
+        assert _parse_numeric('abc') is None    # code/non-numeric
+        assert _parse_numeric('1.2.3') is None  # two dots

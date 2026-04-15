@@ -1,5 +1,43 @@
 # pycifparse — Lessons Learned
 
+## Lesson 75 — Rows fetched from SQLite may already be typed, not TEXT (2026-04-15)
+
+**Context:** `_cast_value` in `database/compact.py`.
+
+**Mistake:** `_row_id` is declared `INTEGER` in the source schema, so SQLite returns it as
+a Python `int`.  Calling `re.sub(pattern, repl, raw)` on an `int` raises `TypeError`.
+
+**Fix:** Guard at the top of `_cast_value`:
+```python
+if not isinstance(raw, str):
+    return raw  # already typed
+```
+This handles any non-string value that comes back from SQLite without trying to cast it.
+
+## Lesson 74 — Test decimal-alignment with line-level dot position, not token-internal (2026-04-15)
+
+**Context:** `TestDecimalAlign` in `tests/output/test_emit.py`.
+
+**Mistake:** Tests used `ln.split()[N].index('.')` (position of dot inside the stripped token).
+Because `ln.split()` removes leading spaces, the dot position varies per token when integer
+parts differ in width (`0.1234` → index 1, `10.5` → index 2).
+
+**Fix:** Use `ln.index('.')` (position of dot in the full line).  Decimal alignment is a
+line-level property — the dot should land at the same character column in every row.
+
+---
+
+## Lesson 73 — Column ordering in loop emit may differ from source CIF order (2026-04-15)
+
+**Context:** `TestDecimalAlign.test_loop_real_column_dot_aligned` and sibling tests.
+
+**Observation:** The loop renderer outputs columns in schema/table key order, not source-CIF
+insertion order.  Key columns (PK) appear first.  Tests that hard-code a column index
+(e.g. `parts[2]`) are fragile.
+
+**Fix:** Look up the value by searching the line for the expected substring, or use the
+line-level position (`ln.index('.')`) rather than assuming a particular column index.
+
 ## Lesson 72 — `_fold_content_lines` breaks before the space, keeping it in the next segment (2026-04-15)
 
 **Context:** `_fold_content_lines` in `output/quote.py`.
