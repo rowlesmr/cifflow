@@ -79,17 +79,17 @@ from pycifparse.types import CifVersion
 
 # 1. Load dictionary
 loader = DictionaryLoader(resolver=directory_resolver('data/dictionaries'))
-dictionary = loader.load(open('data/dictionaries/cif_core.dic', encoding='utf-8').read(),
-                         base_uri='cif_core.dic')
+dictionary = loader.load(open('data/dictionaries/cif_pow.dic', encoding='utf-8').read(),
+                         base_uri='cif_pow.dic')
 
 # 2. Derive SQLite schema
 schema = generate_schema(dictionary)
 
 # 3. Parse CIF
-cif, errors = build(open('structure.cif', encoding='utf-8').read())
+cif, errors = build(open('all_the_data.cif', encoding='utf-8').read())
 
 # 4. Ingest into SQLite
-conn = sqlite3.connect('output.db')
+conn = sqlite3.connect('output.db')  # this creates the "output.db" file
 conn.isolation_level = None
 apply_schema(conn, schema)
 apply_fallback_schema(conn)

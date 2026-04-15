@@ -1467,6 +1467,7 @@ def visualise_schema(
     highlight_orphans: bool = True,
     highlight_components: bool = False,
     show_orphans: bool = True,
+    show_legend: bool = True,
     layout: str = 'dot',
 ) -> str: ...
 
@@ -1480,6 +1481,7 @@ def visualise_schema_html(
     highlight_orphans: bool = True,
     highlight_components: bool = False,
     show_orphans: bool = True,
+    show_legend: bool = True,
     layout: str = 'dot',
 ) -> str: ...
 ```
@@ -1500,6 +1502,7 @@ and open in any browser.  No network access required.
 | `highlight_orphans` | `True` | Apply `[ORPHAN]` / `[BRIDGE ONLY]` badges and coloured borders |
 | `highlight_components` | `False` | Wrap each connected component in a `subgraph cluster_` box |
 | `show_orphans` | `True` | `False` removes `[ORPHAN]` and `[BRIDGE ONLY]` nodes and their edges |
+| `show_legend` | `True` | Emit a `__legend__` node summarising node colours, connectivity badges, edge styles, and column badges; content adapts to the active flags |
 | `layout` | `'dot'` | Graphviz layout engine (`'fdp'` or `'neato'` for dense schemas) |
 | `title` *(html only)* | `None` | `<title>` text; falls back to `schema.dictionary_name` then `'Schema'` |
 

@@ -246,7 +246,7 @@ class TestColumnDisplay:
 
     def test_no_json_badge_for_single_container(self):
         cols = [_col('val', type_container='Single', is_primary_key=True)]
-        dot = visualise_schema(_schema([_table('t', columns=cols, primary_keys=['val'])]), show_columns='all')
+        dot = visualise_schema(_schema([_table('t', columns=cols, primary_keys=['val'])]), show_columns='all', show_legend=False)
         assert '[JSON]' not in dot
 
     def test_su_badge_for_linked_item_id(self):
@@ -423,7 +423,8 @@ class TestConnectivity:
         child = _table('child', columns=[_col('id', is_primary_key=True), _col('parent_id')],
                        primary_keys=['id'], foreign_keys=[fk])
         parent = _table('parent')
-        dot = visualise_schema(_schema([child, parent]))
+        # show_legend=False so the legend's own Connectivity section doesn't interfere
+        dot = visualise_schema(_schema([child, parent]), show_legend=False)
         assert '[ORPHAN]' not in dot
         assert '[BRIDGE ONLY]' not in dot
 
@@ -431,7 +432,7 @@ class TestConnectivity:
         child = _table('child')
         parent = _table('parent')
         s = _schema([child, parent], category_parent={'child': 'parent'})
-        dot = visualise_schema(s)
+        dot = visualise_schema(s, show_legend=False)
         assert '[ORPHAN]' not in dot
         assert '[BRIDGE ONLY]' not in dot
 
@@ -517,6 +518,108 @@ class TestConnectivity:
                        primary_keys=['id'], foreign_keys=[fk])
         dot = visualise_schema(_schema([child]), highlight_components=True)
         assert 'cluster_missing' in dot
+
+
+# ---------------------------------------------------------------------------
+# Legend
+# ---------------------------------------------------------------------------
+
+class TestLegend:
+    def _simple(self) -> SchemaSpec:
+        return _schema([_table('atom')])
+
+    def test_legend_present_by_default(self):
+        dot = visualise_schema(self._simple())
+        assert '__legend__' in dot
+
+    def test_legend_absent_when_disabled(self):
+        dot = visualise_schema(self._simple(), show_legend=False)
+        assert '__legend__' not in dot
+
+    def test_legend_contains_set_colour(self):
+        dot = visualise_schema(self._simple())
+        # Set header background colour swatch must appear in legend
+        assert '#dce8f5' in dot
+
+    def test_legend_contains_loop_colour(self):
+        dot = visualise_schema(self._simple())
+        assert '#d8f0dc' in dot
+
+    def test_legend_contains_missing_label(self):
+        dot = visualise_schema(self._simple())
+        assert 'Missing' in dot
+
+    def test_legend_has_orphan_section_when_highlight_orphans(self):
+        dot = visualise_schema(self._simple(), highlight_orphans=True)
+        legend_start = dot.find('__legend__')
+        assert legend_start != -1
+        legend_block = dot[legend_start:]
+        assert '[ORPHAN]' in legend_block
+        assert '[BRIDGE ONLY]' in legend_block
+
+    def test_legend_no_orphan_section_when_not_highlight(self):
+        # highlight_orphans=False: legend should omit the connectivity section
+        dot = visualise_schema(self._simple(), highlight_orphans=False)
+        legend_start = dot.find('__legend__')
+        assert legend_start != -1
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        # [ORPHAN] badge may still appear on nodes (it won't since highlight_orphans=False),
+        # but the legend section should not contain the connectivity section header
+        assert 'Connectivity' not in legend_block
+
+    def test_legend_no_bridge_entry_when_show_bridge_false(self):
+        dot = visualise_schema(self._simple(), show_bridge=False)
+        legend_start = dot.find('__legend__')
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        assert 'grey dashed' not in legend_block
+
+    def test_legend_bridge_entry_when_show_bridge_true(self):
+        dot = visualise_schema(self._simple(), show_bridge=True)
+        legend_start = dot.find('__legend__')
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        assert 'grey dashed' in legend_block
+
+    def test_legend_no_parent_entry_when_show_parent_edges_false(self):
+        dot = visualise_schema(self._simple(), show_parent_edges=False)
+        legend_start = dot.find('__legend__')
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        assert 'grey dotted' not in legend_block
+
+    def test_legend_parent_entry_when_show_parent_edges_true(self):
+        dot = visualise_schema(self._simple(), show_parent_edges=True)
+        legend_start = dot.find('__legend__')
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        assert 'grey dotted' in legend_block
+
+    def test_legend_column_section_present_when_show_columns_not_none(self):
+        for mode in ('all', 'sparse'):
+            dot = visualise_schema(self._simple(), show_columns=mode)
+            legend_start = dot.find('__legend__')
+            end = dot.find('>]', legend_start)
+            legend_block = dot[legend_start:end]
+            assert 'Columns' in legend_block, f'Columns section missing for show_columns={mode!r}'
+
+    def test_legend_no_column_section_when_show_columns_none(self):
+        dot = visualise_schema(self._simple(), show_columns='none')
+        legend_start = dot.find('__legend__')
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        assert 'Columns' not in legend_block
+
+    def test_legend_in_html_output(self):
+        s = _schema([_table('x')], dictionary_name='test')
+        h = visualise_schema_html(s)
+        assert '__legend__' in h
+
+    def test_legend_absent_from_html_when_disabled(self):
+        s = _schema([_table('x')])
+        h = visualise_schema_html(s, show_legend=False)
+        assert '__legend__' not in h
 
 
 # ---------------------------------------------------------------------------

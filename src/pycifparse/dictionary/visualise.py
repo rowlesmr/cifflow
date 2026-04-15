@@ -302,6 +302,107 @@ def _visible_columns(tbl: TableDef, schema: SchemaSpec, show_columns: str) -> se
 
 
 # ---------------------------------------------------------------------------
+# Legend
+# ---------------------------------------------------------------------------
+
+def _legend_dot(
+    highlight_orphans: bool,
+    show_bridge: bool,
+    show_parent_edges: bool,
+    show_columns: Literal['all', 'sparse', 'none'],
+) -> list[str]:
+    """Return DOT lines for a ``__legend__`` node."""
+    inner: list[str] = []
+
+    # Header
+    inner.append('        <TR><TD BGCOLOR="#cccccc"><B>Legend</B></TD></TR>')
+
+    # --- Node types ---
+    inner.append('        <TR><TD ALIGN="LEFT" BGCOLOR="#eeeeee"><B>Node types</B></TD></TR>')
+    inner.append('        <TR><TD><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">')
+    inner.append(
+        '            <TR>'
+        '<TD BGCOLOR="#dce8f5" BORDER="1" WIDTH="14" HEIGHT="14"> </TD>'
+        '<TD ALIGN="LEFT"> Set category</TD></TR>'
+    )
+    inner.append(
+        '            <TR>'
+        '<TD BGCOLOR="#d8f0dc" BORDER="1" WIDTH="14" HEIGHT="14"> </TD>'
+        '<TD ALIGN="LEFT"> Loop category</TD></TR>'
+    )
+    inner.append(
+        '            <TR>'
+        '<TD BGCOLOR="#e8e8e8" BORDER="1" COLOR="#cc0000" STYLE="dashed" WIDTH="14" HEIGHT="14"> </TD>'
+        '<TD ALIGN="LEFT"> <FONT COLOR="#cc0000">Missing</FONT> (referenced, not defined)</TD></TR>'
+    )
+    inner.append('        </TABLE></TD></TR>')
+
+    # --- Connectivity badges (shown only when highlight_orphans is on) ---
+    if highlight_orphans:
+        inner.append('        <TR><TD ALIGN="LEFT" BGCOLOR="#eeeeee"><B>Connectivity</B></TD></TR>')
+        inner.append('        <TR><TD><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">')
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#ccaa00">[BRIDGE ONLY]</FONT>'
+            ' reachable only via bridge columns</TD></TR>'
+        )
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#cc0000">[ORPHAN]</FONT>'
+            ' no inter-table relationship</TD></TR>'
+        )
+        inner.append('        </TABLE></TD></TR>')
+
+    # --- Edge styles ---
+    inner.append('        <TR><TD ALIGN="LEFT" BGCOLOR="#eeeeee"><B>Edges</B></TD></TR>')
+    inner.append('        <TR><TD><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">')
+    inner.append(
+        '            <TR><TD ALIGN="LEFT">&#x2192; solid black: foreign key</TD></TR>'
+    )
+    if show_bridge:
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#888888">&#x2192; grey dashed: bridge</FONT></TD></TR>'
+        )
+    if show_parent_edges:
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#aaaaaa">&#x2192; grey dotted: category parent</FONT></TD></TR>'
+        )
+    inner.append('        </TABLE></TD></TR>')
+
+    # --- Column badges (shown only when columns are visible) ---
+    if show_columns != 'none':
+        inner.append('        <TR><TD ALIGN="LEFT" BGCOLOR="#eeeeee"><B>Columns</B></TD></TR>')
+        inner.append('        <TR><TD><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">')
+        inner.append('            <TR><TD ALIGN="LEFT"><B>[PK]</B> primary key</TD></TR>')
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#0055aa">[JSON]</FONT> list/table container</TD></TR>'
+        )
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#888888">[SU]</FONT> standard uncertainty link</TD></TR>'
+        )
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#888888"><I>italic grey</I></FONT> synthetic column</TD></TR>'
+        )
+        inner.append('        </TABLE></TD></TR>')
+
+    lines = [
+        '    "__legend__" [shape=none margin=0 label=<',
+        '    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0">',
+    ]
+    lines.extend(inner)
+    lines += [
+        '    </TABLE>',
+        '    >]',
+    ]
+    return lines
+
+
+# ---------------------------------------------------------------------------
 # Cluster helpers
 # ---------------------------------------------------------------------------
 
@@ -323,6 +424,7 @@ def visualise_schema(
     highlight_orphans: bool = True,
     highlight_components: bool = False,
     show_orphans: bool = True,
+    show_legend: bool = True,
     layout: str = 'dot',
 ) -> str:
     """
@@ -347,6 +449,10 @@ def visualise_schema(
     show_orphans:
         When ``False``, ``[ORPHAN]`` and ``[BRIDGE ONLY]`` nodes (and their edges)
         are omitted entirely.
+    show_legend:
+        When ``True`` (default), emit a ``__legend__`` node summarising node
+        colours, connectivity badges, edge styles, and column badges.  The
+        content of the legend adapts to the active flags.
     layout:
         Graphviz layout engine written into ``graph [layout=...]``.  viz.js
         reads this attribute automatically.
@@ -454,6 +560,11 @@ def visualise_schema(
             lines += _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema)
             lines.append('')
 
+    # --- Legend node ---
+    if show_legend:
+        lines += _legend_dot(highlight_orphans, show_bridge, show_parent_edges, show_columns)
+        lines.append('')
+
     # --- Edges ---
     lines.append('')
 
@@ -529,6 +640,7 @@ def visualise_schema_html(
     highlight_orphans: bool = True,
     highlight_components: bool = False,
     show_orphans: bool = True,
+    show_legend: bool = True,
     layout: str = 'dot',
 ) -> str:
     """
@@ -543,6 +655,8 @@ def visualise_schema_html(
     title:
         ``<title>`` element text.  Defaults to ``schema.dictionary_name``
         or ``'Schema'`` when not given.
+    show_legend:
+        Forwarded to :func:`visualise_schema`.
     """
     dot_string = visualise_schema(
         schema,
@@ -552,6 +666,7 @@ def visualise_schema_html(
         highlight_orphans=highlight_orphans,
         highlight_components=highlight_components,
         show_orphans=show_orphans,
+        show_legend=show_legend,
         layout=layout,
     )
 
