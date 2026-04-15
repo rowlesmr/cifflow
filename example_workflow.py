@@ -13,6 +13,7 @@ Output files are written to the current directory:
     cif_core_cache.json     — serialised dictionary (avoids re-parsing on reuse)
     output.db               — SQLite database ready for DB Browser for SQLite
     output_compact.db       — compacted copy (empty tables / all-NULL columns removed)
+    output_typed.db         — typed copy (INTEGER/REAL columns; sentinels → NULL)
     output_original.cif     — CIF re-emitted in ORIGINAL mode (one block per source block)
     output_grouped.cif      — CIF re-emitted in GROUPED mode (grouped by Set anchor keys)
     output_one_block.cif    — CIF re-emitted in ONE_BLOCK mode (everything in one block)
@@ -76,11 +77,13 @@ from pycifparse import (
     IngestionError,
     resolve_tag,
     compactify_database,
+    convert_database,
     emit,
     EmitMode,
     OutputPlan,
     BlockSpec,
 )
+from pycifparse.fidelity import check_fidelity
 from pycifparse.types import CifVersion
 
 print('=== Step 1: Load dictionary ===')
@@ -411,7 +414,7 @@ ONE_BLOCK_CIF_FILE = ROOT / 'output_one_block.cif'
 # then Loop-class alphabetical).
 # Within each category: PK column(s) first, then remaining columns alphabetically.
 spec = BlockSpec(
-    categories=['audit_dataset', 'structure', 'cell', 'atom_site'],
+    category_order=['audit_dataset', 'structure', 'cell', 'atom_site'],
     column_order={
         'cell': ['structure_id',
                  'angle_alpha', 'angle_beta', 'angle_gamma',
@@ -422,7 +425,7 @@ spec = BlockSpec(
     },
 )
 plan = OutputPlan(
-    blocks=[spec],   # single spec reused for all blocks (only one in ONE_BLOCK mode)
+    specs=[spec],   # single spec reused for all blocks (only one in ONE_BLOCK mode)
 )
 
 cif_one_block = emit(
@@ -454,14 +457,15 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# Step 11 — Emit CIF: ALL_BLOCKS mode (one block per non-empty category)
+# Step 11 — Emit CIF: ALL_BLOCKS mode (one block per Set-anchor key)
 # ---------------------------------------------------------------------------
-# ALL_BLOCKS emits one data_ block per structured table (plus one block per
-# original _block_id for any tags that ended up in _cif_fallback).
-# In CIF 2.0, _audit_dataset.id is injected into every block so that a reader
-# can identify all blocks as belonging to the same dataset.  The dataset UUID
-# is reused from the ingestion record when available, otherwise a fresh one
-# is generated for this emit session.
+# ALL_BLOCKS mirrors GROUPED block partitioning: one output block per
+# distinct Set-anchor key combination.  Set categories produce one block per
+# row; Loop categories are grouped by the domain PK of the nearest Set
+# ancestor.  Tables with no Set ancestor are grouped by _block_id.
+# In CIF 2.0, _audit_dataset.id is injected into every block using a shared
+# UUID so that a reader can identify all blocks as belonging to the same
+# dataset.
 
 print('\n=== Step 11: Emit CIF (ALL_BLOCKS mode) ===')
 
@@ -495,36 +499,85 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# Step 12 — convert_database (not yet available; shown for future reference)
+# Step 12 — convert_database: copy TEXT-storage DB to typed-column DB
 # ---------------------------------------------------------------------------
-# convert_database() copies a TEXT-storage database to a new file and casts
-# each column to the type indicated by ColumnDef.type_contents.
-# CIF sentinels '.' and '?' are converted to NULL.
+# convert_database() re-creates every structured table with proper INTEGER /
+# REAL / TEXT column affinities based on ColumnDef.type_contents.
+# CIF sentinels '.' and '?' become NULL.
+# SU suffixes (e.g. '1.23(5)') are stripped before casting, with a warning.
+# Unlike compactify_database, all tables and columns are preserved.
 
-# Uncomment when available:
-#
-# from pycifparse import convert_database
-#
-# CONVERTED_DB_FILE = ROOT / 'output_typed.db'
-# if CONVERTED_DB_FILE.exists():
-#     CONVERTED_DB_FILE.unlink()
-#
-# dst_conn = sqlite3.connect(str(CONVERTED_DB_FILE))
-# dst_conn.isolation_level = None
-#
-# coercion_warnings = convert_database(
-#     src=conn,                        # source TEXT-storage connection
-#     dst=dst_conn,                    # destination connection (empty)
-#     schema=schema,                   # SchemaSpec for type information
-#     on_coercion_failure='null',      # 'null'  -> failed cast -> NULL (default)
-#                                      # 'keep'  -> leave TEXT value unchanged
-#                                      # 'error' -> raise on first failure
-# )
-# dst_conn.close()
-#
-# if coercion_warnings:
-#     print(f'  {len(coercion_warnings)} coercion warning(s) in typed database')
-# print(f'  Typed database saved to: {CONVERTED_DB_FILE}')
+print('=== Step 12: convert_database ===')
+
+TYPED_DB_FILE = ROOT / 'output_typed.db'
+if TYPED_DB_FILE.exists():
+    TYPED_DB_FILE.unlink()
+
+typed_conn = sqlite3.connect(str(TYPED_DB_FILE))
+typed_conn.isolation_level = None
+
+coercion_warnings = convert_database(
+    src=conn,                        # source TEXT-storage connection
+    dst=typed_conn,                  # destination connection (must be empty)
+    schema=schema,                   # SchemaSpec for type information
+    on_coercion_failure='null',      # 'null'  -> failed cast -> NULL (default)
+                                     # 'keep'  -> leave TEXT value unchanged
+                                     # 'error' -> raise on first failure
+)
+typed_conn.close()
+
+if coercion_warnings:
+    print(f'  {len(coercion_warnings)} coercion warning(s):')
+    for w in coercion_warnings[:5]:
+        print(f'    {w}')
+    if len(coercion_warnings) > 5:
+        print(f'    … and {len(coercion_warnings) - 5} more')
+else:
+    print('  No coercion warnings.')
+print(f'  Typed database saved to: {TYPED_DB_FILE}')
+
+
+# ---------------------------------------------------------------------------
+# Step 13 — Fidelity checks: original CIF vs each emitted output
+# ---------------------------------------------------------------------------
+# check_fidelity compares two CIF sources for semantic equivalence.
+# It ingests both into fresh in-memory databases using the same schema and
+# compares all structured tables and the fallback tier.
+# ONE_BLOCK and ALL_BLOCKS combine data from all blocks into one or more
+# output blocks, so they are not expected to be fully fidelity-equivalent
+# to the original (different block structure).  ORIGINAL and GROUPED are
+# expected to be equivalent when all data is dictionary-mapped.
+
+print('\n=== Step 13: Fidelity checks ===')
+
+fidelity_cases = [
+    ('ORIGINAL',   ORIGINAL_CIF_FILE,   ORIGINAL_CIF_FILE.with_suffix('.fidelity.txt')),
+    ('GROUPED',    GROUPED_CIF_FILE,    GROUPED_CIF_FILE.with_suffix('.fidelity.txt')),
+    ('ONE_BLOCK',  ONE_BLOCK_CIF_FILE,  ONE_BLOCK_CIF_FILE.with_suffix('.fidelity.txt')),
+    ('ALL_BLOCKS', ALL_BLOCKS_CIF_FILE, ALL_BLOCKS_CIF_FILE.with_suffix('.fidelity.txt')),
+]
+
+for mode_name, emitted_cif, report_path in fidelity_cases:
+    report = check_fidelity(
+        CIF_FILE,            # source A: original CIF file
+        emitted_cif,         # source B: saved emitted CIF file
+        schema,              # SchemaSpec for structured comparison
+        report_file=report_path,
+    )
+    status = 'PASS' if report.passed else 'FAIL'
+    n_mismatches = len(report.mismatches)
+    print(f'  {mode_name:<12s}  {status}  '
+          f'({n_mismatches} mismatch(es))  -> {report_path.name}')
+    if not report.passed:
+        by_kind: dict[str, list] = {}
+        for m in report.mismatches:
+            by_kind.setdefault(m.kind, []).append(m)
+        for kind, items in sorted(by_kind.items()):
+            print(f'    [{kind}]  {len(items)} mismatch(es)')
+            for m in items[:3]:
+                print(f'      {m.description}')
+            if len(items) > 3:
+                print(f'      ... and {len(items) - 3} more')
 
 
 # ---------------------------------------------------------------------------
@@ -539,3 +592,4 @@ print(f'  {ORIGINAL_CIF_FILE.name}   — CIF (ORIGINAL mode)')
 print(f'  {GROUPED_CIF_FILE.name}    — CIF (GROUPED mode)')
 print(f'  {ONE_BLOCK_CIF_FILE.name}  — CIF (ONE_BLOCK mode)')
 print(f'  {ALL_BLOCKS_CIF_FILE.name} — CIF (ALL_BLOCKS mode)')
+print(f'  *.fidelity.txt              — fidelity reports for each mode')

@@ -1,4 +1,4 @@
-from pycifparse.database import compactify_database
+from pycifparse.database import compactify_database, convert_database
 from pycifparse.cifmodel.model import CifFile, CifBlock, CifSaveFrame
 from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.cifmodel.builder import build, CifBuilder
@@ -24,6 +24,8 @@ from pycifparse.dictionary import (
     resolve_tag,
     save_dictionary,
     load_dictionary,
+    visualise_schema,
+    visualise_schema_html,
 )
 from pycifparse.output import emit, quote, EmitMode, OutputPlan, BlockSpec
 from pycifparse.fidelity import check_fidelity, FidelityReport, FidelityMismatch
@@ -43,7 +45,7 @@ __all__ = [
     # Ingestion
     'ingest', 'IngestionError',
     # Database
-    'compactify_database',
+    'compactify_database', 'convert_database',
     # Dictionary
     'DdlmItem', 'DdlmDictionary',
     'DictionaryLoader', 'SourceResolver', 'directory_resolver', 'directory_path_resolver',
@@ -52,6 +54,7 @@ __all__ = [
     'apply_schema', 'apply_fallback_schema',
     'ResolvedTag', 'resolve_tag',
     'save_dictionary', 'load_dictionary',
+    'visualise_schema', 'visualise_schema_html',
     # Output
     'emit', 'quote', 'EmitMode', 'OutputPlan', 'BlockSpec',
     # Fidelity

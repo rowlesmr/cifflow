@@ -1,5 +1,249 @@
 # pycifparse — Lessons Learned
 
+## Lesson 77 — In sparse column display, apply the qualification check before skipping synthetics (2026-04-15)
+
+**Context:** `_column_rows` in `dictionary/visualise.py`.
+
+**Mistake:** Synthetic columns were skipped with an early `continue` before the
+bridge-qualification check ran.  A synthetic column that is `bc.column_name` (the
+derived composite-FK column) should appear in `show_columns='sparse'` — the spec
+says "synthetic columns are excluded **unless** they qualify via bridge rules".
+Skipping them unconditionally meant the derived column was silently absent from
+sparse display even though it is structurally significant.
+
+**Fix:** Removed the synthetic-specific `continue` in the `sparse` branch entirely.
+The single combined check
+`not (col.is_primary_key or col.name in fk_source_cols or col.name in bridge_cols)`
+now covers all columns uniformly — synthetic columns that qualify via `bridge_cols`
+pass through; others are excluded.
+
+**Rule:** When column display has multiple exclusion criteria, evaluate qualification
+(which columns should be shown) as a single predicate rather than applying independent
+early-exit guards that may shadow later qualification checks.
+
+## Lesson 76 — Non-Single container columns store JSON; coerce leaves, not the whole value (2026-04-15)
+
+**Context:** `convert_database` in `database/compact.py`; `ColumnDef` in `dictionary/schema.py`.
+
+**Mistake:** `convert_database` treated every `INTEGER`-typed column the same way regardless of
+`_type.container`.  A column like `_pd_pref_orient_march_dollase.hkl` has `type_contents="Integer"`
+but `type_container="Matrix"`, so its stored value is a JSON array `["1","2","3"]`.  Trying to cast
+that string to `int` fails (coercion-failure warning), and the JSON is lost.
+
+**Fix:**
+1. Added `type_container: str | None = None` to `ColumnDef` (optional field, default `None`, placed
+   last to avoid breaking existing callers).
+2. `generate_schema` populates it from `DdlmItem.type_container` for all domain columns.
+3. `_sql_type_for(col)` returns `"TEXT"` whenever `type_container` is set and is not `"Single"`.
+4. `_cast_value` detects a JSON array/object (raw starts with `[` or `{`), decodes it, recurses into
+   leaves with `_cast_json_leaves`, casts each string leaf to the leaf type (from `type_contents`
+   alone), then re-serialises with `json.dumps`.
+
+**Rule:** Any column whose `type_container` is not `"Single"` stores structured data as JSON.
+Always check `type_container` before deciding the column's storage affinity or cast strategy.
+
+## Lesson 75 — Rows fetched from SQLite may already be typed, not TEXT (2026-04-15)
+
+**Context:** `_cast_value` in `database/compact.py`.
+
+**Mistake:** `_row_id` is declared `INTEGER` in the source schema, so SQLite returns it as
+a Python `int`.  Calling `re.sub(pattern, repl, raw)` on an `int` raises `TypeError`.
+
+**Fix:** Guard at the top of `_cast_value`:
+```python
+if not isinstance(raw, str):
+    return raw  # already typed
+```
+This handles any non-string value that comes back from SQLite without trying to cast it.
+
+## Lesson 74 — Test decimal-alignment with line-level dot position, not token-internal (2026-04-15)
+
+**Context:** `TestDecimalAlign` in `tests/output/test_emit.py`.
+
+**Mistake:** Tests used `ln.split()[N].index('.')` (position of dot inside the stripped token).
+Because `ln.split()` removes leading spaces, the dot position varies per token when integer
+parts differ in width (`0.1234` → index 1, `10.5` → index 2).
+
+**Fix:** Use `ln.index('.')` (position of dot in the full line).  Decimal alignment is a
+line-level property — the dot should land at the same character column in every row.
+
+---
+
+## Lesson 73 — Column ordering in loop emit may differ from source CIF order (2026-04-15)
+
+**Context:** `TestDecimalAlign.test_loop_real_column_dot_aligned` and sibling tests.
+
+**Observation:** The loop renderer outputs columns in schema/table key order, not source-CIF
+insertion order.  Key columns (PK) appear first.  Tests that hard-code a column index
+(e.g. `parts[2]`) are fragile.
+
+**Fix:** Look up the value by searching the line for the expected substring, or use the
+line-level position (`ln.index('.')`) rather than assuming a particular column index.
+
+## Lesson 72 — `_fold_content_lines` breaks before the space, keeping it in the next segment (2026-04-15)
+
+**Context:** `_fold_content_lines` in `output/quote.py`.
+
+**Decision:** When breaking at a whitespace character at position `break_at`, the first segment
+is `line[:break_at]` (space not included) and the next segment starts at `line[break_at:]`
+(space is the first character of the continuation).  Fold reconstruction removes `\<newline>`
+— nothing is inserted — so the space is preserved in the reconstructed string.  This is
+correct for round-trip fidelity.
+
+**Alternative considered:** Including the space in the first segment (`line[:break_at+1]`)
+would also be correct, but the chosen form is slightly more natural (break point = where
+content splits, not where whitespace ends up).
+
+---
+
+## Lesson 71 — `make_text_field` dispatches all four semicolon formats (2026-04-15)
+
+**Context:** `output/quote.py`; `emit.py` callers.
+
+The four formats share a single public entry point `make_text_field(s, line_limit=None)`.
+The dispatch logic is:
+
+| `'\n;' in s` | content line > limit? | format                    |
+|--------------|-----------------------|---------------------------|
+| No           | No                    | plain `_make_semicolon`   |
+| Yes          | No                    | `_make_prefixed_semicolon`|
+| No           | Yes                   | `_make_folded_semicolon`  |
+| Yes          | Yes                   | `_make_prefixed_folded_semicolon` |
+
+`needs_fold` threshold differs by format: prefix case checks `len(line) > line_limit -
+len(_PREFIX)` (physical line = `>{content}`); fold-only case checks `len(line) > line_limit`
+(physical line = `{content}`).  This asymmetry is intentional and correct.
+
+**Rule:** Always call `make_text_field` from the emit layer rather than `_make_semicolon`
+or `_make_prefixed_semicolon` directly when `line_limit` is in play.
+
+---
+
+## Lesson 70 — Set-category re-quoting requires two passes over the tag–value pairs (2026-04-15)
+
+**Context:** `_render_set_category` in `output/emit.py`.
+
+**Problem:** `tag_width` (used for alignment) is computed from inline tokens.  If re-quoting
+converts some inline tokens to multiline (because `tag + sep + token > line_limit`), then
+`tag_width` was computed with those tags included — it may be wider than needed.
+
+**Fix:** Two-pass approach:
+1. Build `(tag, value, token)` triples; apply folding to any already-multiline tokens.
+2. Compute `tag_width` from inline tokens.
+3. Re-quote inline tokens where `len(f'{tag:<{tag_width}}  {token}') > line_limit`.
+4. **Recompute** `tag_width` from the remaining inline tokens.
+
+Step 4 is necessary: without it, some tags would be padded to a width driven by a tag
+that now has a multiline value (and thus doesn't participate in inline alignment).
+
+**Rule:** Always recompute `tag_width` after any step that may convert inline → multiline.
+
+---
+
+## Lesson 69 — ALL_BLOCKS delegates to GROUPED and strips audit_dataset for UUID consistency (2026-04-14)
+
+**Context:** `_collect_all_blocks` in `output/emit.py`.
+
+**Problem 1 — wrong block granularity:** The old ALL_BLOCKS put all rows from one table into
+one block (one block per non-empty table).  Correct: one block per Set-anchor key combination.
+
+**Fix:** `_collect_all_blocks` now calls `_collect_grouped`, then wraps each result with
+`suppress_fk_pk=False` and a fresh session-scoped `dataset_id` UUID (CIF 2.0 only).
+
+**Problem 2 — inconsistent `_audit_dataset.id`:** The `_render_block` injection skips blocks
+that already have `audit_dataset` in `table_rows` (emitting the stored UUID instead).  When
+GROUPED gives one block an `audit_dataset` row and others nothing, the block with the row
+gets its stored UUID while the rest get the fresh emission UUID — causing a mismatch on
+re-ingest ("no common _audit_dataset.id").
+
+**Fix:** `_collect_all_blocks` strips `'audit_dataset'` from each block's `table_rows`
+before building `_BlockData`.  This guarantees the injection always fires, all blocks
+receive the same emission UUID, and the re-ingested CIF is treated as one coherent dataset.
+
+**Rule:** ALL_BLOCKS and GROUPED share block-partitioning.  Differences: (a) no FK-PK
+suppression; (b) `audit_dataset` stripped → emission UUID injected consistently.
+
+---
+
+## Lesson 68 — GROUPED block names changed from _block_id to anchor-key-derived names (2026-04-14)
+
+**Context:** `_collect_grouped` in `output/emit.py`; `_default_block_name`.
+
+**Change:** GROUPED mode previously used the first anchor row's `_block_id` as the output block
+name.  The spec requires names to be derived from the anchor key tuple
+(`{object_id}_{key_value}` joined with underscores, then sanitised).  Block names are now
+built from the anchor key dict (e.g. `expt.id=['myexp']` → `id_myexp`).
+
+**Impact on tests:** The existing GROUPED tests did not check specific block names (they always
+accessed blocks via `cif2.blocks[0]` or `cif2.blocks` index), so no test changes were needed
+for the naming switch.  New `TestDefaultBlockName` tests explicitly assert the new naming form.
+
+**Rule:** When adding new GROUPED tests, access blocks by index or by iterating `cif2.blocks`,
+not by a hardcoded `_block_id` string — the block name is now the anchor key value, not the
+source block's `data_` header.
+
+---
+
+## Lesson 67 — collect-then-sort architecture is required for spec-matched emission ordering (2026-04-14)
+
+**Context:** `emit()` and `_sort_and_merge()` in `output/emit.py`.
+
+**Problem:** The original emit.py rendered blocks during collection (each mode collector called
+`_render_block` directly and accumulated rendered strings).  This made it impossible to reorder
+blocks by spec index after the fact, because rendering happened before spec matching.
+
+**Fix:** Changed all mode collectors to return `list[_BlockData]` (raw data structures, not
+rendered strings).  `emit()` then passes the full list to `_sort_and_merge()`, which does spec
+matching, `single_block` merging, and alphabetical sorting, before finally rendering each block.
+
+**Rule:** Any future feature that requires post-collection reordering or grouping of blocks must
+operate on `_BlockData` objects, not rendered strings.  Do not render until the final emission
+order is known.
+
+---
+
+## Lesson 66 — Merge group key-compatibility check uses non-synthetic PK column sets (2026-04-14)
+
+**Context:** `_render_merge_group()` in `output/emit.py`.
+
+**Rule:** Two categories are key-compatible for merge group purposes when they share the
+*same frozenset of non-synthetic primary key column names*.  Synthetic columns (`_block_id`,
+`_row_id`, `_pycifparse_id`) are excluded from the comparison — every table has `_block_id`
+and `_row_id`, so including them would make all tables appear compatible.
+
+**Fallback:** When categories are not key-compatible (different non-synthetic PK sets), emit
+them as plain loops in the listed order — no warning, no error.
+
+**FULL OUTER JOIN implementation:** Done in Python (not SQL) by indexing each table's rows by
+PK tuple, collecting all unique PK tuples in encounter order, then iterating the union and
+looking up each table's row for that PK (substituting `'.'` for missing rows).  SQLite has no
+native FULL OUTER JOIN, and the Python approach avoids query complexity.
+
+---
+
+## Lesson 65 — category_parent self-references must be excluded (2026-04-14)
+
+**Context:** `generate_schema` in `dictionary/schema.py`; `SchemaSpec.category_parent`.
+
+**Problem:** In DDLm, top-level categories often have `_name.category_id` pointing to themselves
+(e.g. `CELL` has `_name.category_id = cell`).  Without a self-reference guard, `category_parent`
+would map `'cell' → 'cell'`, making `cell` appear as its own child.  Wildcard BFS would still
+terminate (the `found` set prevents revisiting), but the `children` map would contain
+`{'cell': ['cell', ...]}`, which is semantically wrong and misleading.
+
+**Fix:** Added `parent_tbl != tbl_name` guard:
+```python
+category_parent[tbl_name] = (
+    parent_tbl if parent_tbl in tables and parent_tbl != tbl_name else None
+)
+```
+
+**Rule:** When building a parent-child hierarchy from DDLm `_name.category_id`, always exclude
+self-references.  Top-level categories (with no parent in the schema) should have
+`category_parent[tbl] = None`.
+
+---
+
 ## Lesson 62 — CIF placeholder '.' and '?' must be treated as NULL in structured-table fidelity comparison (2026-04-13)
 
 **Context:** `_normalised_rows()` and `_fingerprint_uuid()` in `fidelity/check.py`.

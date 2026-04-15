@@ -101,13 +101,131 @@ def _make_prefixed_semicolon(s: str) -> str:
         >line 2 which might start with ;
         ;
 
-    The ``\\`` on the opening line is the fold indicator from the CIF 2.0
-    spec.  Un-prefixing: strip prefix from every line; discard the first
-    line (which reduces to ``\\``, not ``\\\\``).
+    The single ``\\`` on the opening line signals prefix-only mode (no folding).
+    Un-prefixing: strip prefix from every line; discard the first line (which
+    reduces to ``\\``, the prefix-mode sentinel).
     """
     lines = s.split('\n')
     body = '\n'.join(f'{_PREFIX}{line}' for line in lines)
     return f'\n;{_PREFIX}\\\n{body}\n;'
+
+
+def _fold_content_lines(logical_lines: list[str], max_width: int) -> list[str]:
+    """Split each logical line into physical segments of at most *max_width* chars.
+
+    Segments that require continuation (not the last for a given logical line)
+    have ``'\\'`` appended — the CIF 2.0 line-folding continuation marker.
+
+    Prefers breaking at the last space within the window; falls back to a hard
+    break at *max_width* if no space is found.  The space itself is kept at the
+    start of the following segment so that fold reconstruction (removing
+    ``'\\\\<newline>'``) reproduces the original string exactly.
+    """
+    result: list[str] = []
+    for line in logical_lines:
+        while len(line) > max_width:
+            break_at = line.rfind(' ', 0, max_width)
+            if break_at <= 0:
+                break_at = max_width
+            result.append(line[:break_at] + '\\')
+            line = line[break_at:]
+        result.append(line)
+    return result
+
+
+def _make_folded_semicolon(s: str, line_limit: int) -> str:
+    """Semicolon field with line-folding but no prefix.  Result begins with '\\n'.
+
+    Wire format::
+
+        ;\\
+        line 1 content that may be folded\\
+        continuation of line 1
+        line 2 content
+        ;
+
+    The first content line ``\\`` activates fold mode.  A backslash at the end
+    of any subsequent content line joins it to the next with no inserted char.
+
+    Each physical content line is guaranteed to be at most *line_limit* chars.
+    """
+    max_width = line_limit - 1  # leave room for the '\\' fold marker on non-final segments
+    physical = _fold_content_lines(s.split('\n'), max_width)
+    body = '\n'.join(physical)
+    return f'\n;\\\n{body}\n;'
+
+
+def _make_prefixed_folded_semicolon(s: str, line_limit: int) -> str:
+    """Semicolon field with both prefix and line-folding.  Result begins with '\\n'.
+
+    Wire format (prefix ``>``)::
+
+        ;>\\\\
+        >line 1 content that may be folded\\
+        >continuation of line 1
+        >line 2 content
+        ;
+
+    The opening ``>\\\\`` (two backslashes after stripping the prefix) signals
+    prefix + fold mode.  Each content line has ``>`` prepended; lines ending
+    with ``\\`` are folded (continuation character removed on parse).
+
+    Each physical content line is guaranteed to be at most *line_limit* chars.
+    """
+    # Each physical line is '{_PREFIX}{segment}[\\]', so the segment budget is
+    # line_limit - len(_PREFIX) - 1 (the -1 reserves space for the fold marker).
+    max_width = max(line_limit - len(_PREFIX) - 1, 1)
+    physical = _fold_content_lines(s.split('\n'), max_width)
+    body = '\n'.join(f'{_PREFIX}{seg}' for seg in physical)
+    return f'\n;{_PREFIX}\\\\\n{body}\n;'
+
+
+# ---------------------------------------------------------------------------
+# Public text-field factory (used by emit layer for line-limit enforcement)
+# ---------------------------------------------------------------------------
+
+def make_text_field(s: str, line_limit: int | None = None) -> str:
+    """Produce a semicolon-delimited CIF text field for *s*.
+
+    Selects the correct wire format based on content requirements:
+
+    +--------------+-------------+-----------------------------+
+    | needs_prefix | needs_fold  | format used                 |
+    +==============+=============+=============================+
+    | False        | False       | plain semicolon             |
+    | True         | False       | prefix-only semicolon       |
+    | False        | True        | fold-only semicolon         |
+    | True         | True        | prefix + fold semicolon     |
+    +--------------+-------------+-----------------------------+
+
+    *needs_prefix* is ``True`` when *s* contains ``'\\n;'``, which would
+    otherwise prematurely terminate the field.
+
+    *needs_fold* is ``True`` when *line_limit* is given and at least one
+    content line in the text field would produce a physical line exceeding
+    *line_limit* characters.
+
+    Valid for both CIF 1.1 and CIF 2.0 (semicolon fields exist in both).
+    """
+    needs_prefix = '\n;' in s
+    needs_fold = False
+    if line_limit is not None:
+        if needs_prefix:
+            # Physical line = '{_PREFIX}{content}', so content must fit in
+            # line_limit - len(_PREFIX) chars.
+            needs_fold = any(
+                len(line) > line_limit - len(_PREFIX) for line in s.split('\n')
+            )
+        else:
+            needs_fold = any(len(line) > line_limit for line in s.split('\n'))
+
+    if needs_prefix and needs_fold:
+        return _make_prefixed_folded_semicolon(s, line_limit)
+    if needs_prefix:
+        return _make_prefixed_semicolon(s)
+    if needs_fold:
+        return _make_folded_semicolon(s, line_limit)
+    return _make_semicolon(s)
 
 
 def _quote_string(s: str, version: CifVersion) -> str:

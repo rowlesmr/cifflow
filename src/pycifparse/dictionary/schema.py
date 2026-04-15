@@ -94,6 +94,12 @@ class ColumnDef:
         ``"Real"``, ``"List"``); ``None`` if absent from the dictionary or for
         synthetic columns.  Informational only — DDL always emits ``TEXT`` for
         all value columns; ``_row_id`` always emits ``INTEGER``.
+    type_container:
+        DDLm ``_type.container`` value (e.g. ``"Single"``, ``"List"``,
+        ``"Matrix"``); ``None`` for synthetic columns, ``"Single"`` as the
+        DDLm default for domain columns when the attribute is absent.
+        Non-``"Single"`` containers store JSON text in SQLite regardless of
+        ``type_contents``.
     nullable:
         ``False`` for synthetic and primary-key columns; ``True`` for all
         other domain columns.
@@ -117,6 +123,7 @@ class ColumnDef:
     is_primary_key: bool
     is_synthetic: bool
     linked_item_id: str | None
+    type_container: str | None = None
 
 
 @dataclass
@@ -193,6 +200,7 @@ class SchemaSpec:
     propagation_links: dict[str, list[tuple[str, str, str | None]]] = field(default_factory=dict)
     dictionary_name: str | None = None
     source_files: list[str] = field(default_factory=list)
+    category_parent: dict[str, str | None] = field(default_factory=dict)
     """Mapping from table name to ``[(column_name, target_def_id, default), ...]``.
 
     For PK columns that are DDLm ``Link`` items but whose ``FOREIGN KEY``
@@ -409,6 +417,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             name='_block_id',
             definition_id='',
             type_contents=None,
+            type_container=None,
             nullable=False,
             is_primary_key=block_id_is_pk,
             is_synthetic=True,
@@ -421,6 +430,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 name='_pycifparse_id',
                 definition_id='',
                 type_contents=None,
+                type_container=None,
                 nullable=False,
                 is_primary_key=True,
                 is_synthetic=True,
@@ -433,6 +443,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             name='_row_id',
             definition_id='',
             type_contents=None,
+            type_container=None,
             nullable=False,
             is_primary_key=row_id_is_pk,
             is_synthetic=True,
@@ -451,6 +462,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                     name=obj_id,
                     definition_id='',
                     type_contents=None,
+                    type_container=None,
                     nullable=False,
                     is_primary_key=True,
                     is_synthetic=False,
@@ -461,6 +473,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                     name=obj_id,
                     definition_id=item.definition_id,
                     type_contents=item.type_contents,
+                    type_container=item.type_container,
                     nullable=False,
                     is_primary_key=True,
                     is_synthetic=False,
@@ -480,6 +493,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 name=obj_id,
                 definition_id=item.definition_id,
                 type_contents=item.type_contents,
+                type_container=item.type_container,
                 nullable=True,
                 is_primary_key=False,
                 is_synthetic=False,
@@ -607,6 +621,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                         name=missing_pk_col,
                         definition_id='',
                         type_contents=None,
+                        type_container=None,
                         nullable=True,
                         is_primary_key=False,
                         is_synthetic=True,  # transitive bridge — no CIF tag
@@ -726,6 +741,26 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         # Make the column nullable: FK was skipped, so NULL is valid here.
         src_col_def.nullable = True
 
+    # Build category parent map: table_name → parent table_name (or None).
+    # Used by the output layer for wildcard category expansion.
+    category_parent: dict[str, str | None] = {}
+    for cat_id, cat_item in dictionary.categories.items():
+        if cat_item.definition_class not in ('Set', 'Loop'):
+            continue
+        tbl_name = _table_name(cat_item.definition_id)
+        if tbl_name not in tables:
+            continue
+        parent_id = cat_item.category_id
+        if parent_id:
+            parent_tbl = _table_name(parent_id)
+            # Exclude self-references (top-level categories often have
+            # _name.category_id pointing to themselves).
+            category_parent[tbl_name] = (
+                parent_tbl if parent_tbl in tables and parent_tbl != tbl_name else None
+            )
+        else:
+            category_parent[tbl_name] = None
+
     return SchemaSpec(
         tables=tables,
         column_to_tag=column_to_tag,
@@ -736,6 +771,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         propagation_links=propagation_links,
         dictionary_name=dictionary.name or None,
         source_files=list(dictionary.source_files),
+        category_parent=category_parent,
     )
 
 

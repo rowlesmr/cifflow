@@ -18,6 +18,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"pycifparse.dictionary" = ["js/*.js", "js/LICENSES.txt"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

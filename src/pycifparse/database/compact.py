@@ -1,14 +1,19 @@
 """
 compactify_database — one-way export that removes empty tables and columns.
+convert_database    — one-way export that casts columns to typed SQLite storage.
 """
 
 from __future__ import annotations
 
+import re
 import sqlite3
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from pycifparse.dictionary.schema import SchemaSpec
+
+# Matches a trailing SU suffix of the form (digits), e.g. '1.23(5)' or '100(3)'.
+_SU_RE = re.compile(r'\(\d+\)$')
 
 # Fallback-tier table names that are always copied, never dropped.
 _FALLBACK_TABLES = ('_cif_fallback', '_block_dataset_membership', '_validation_result')
@@ -234,6 +239,368 @@ def compactify_database(
 
         # ------------------------------------------------------------------
         # 5. Copy fallback-tier tables (always, full schema)
+        # ------------------------------------------------------------------
+        for ddl in _FALLBACK_DDL:
+            dst.execute(ddl)
+
+        for tbl in _FALLBACK_TABLES:
+            try:
+                cols_info = src.execute(
+                    f'PRAGMA table_info("{tbl}")'
+                ).fetchall()
+            except sqlite3.Error:
+                continue
+            if not cols_info:
+                continue
+            cols = [row[1] for row in cols_info]
+            col_list_sql = ', '.join(f'"{c}"' for c in cols)
+            rows = src.execute(
+                f'SELECT {col_list_sql} FROM "{tbl}"'
+            ).fetchall()
+            if rows:
+                placeholders = ', '.join('?' * len(cols))
+                dst.executemany(
+                    f'INSERT INTO "{tbl}" ({col_list_sql}) '
+                    f'VALUES ({placeholders})',
+                    rows,
+                )
+
+        dst.execute('COMMIT')
+
+    except Exception:
+        dst.execute('ROLLBACK')
+        raise
+    finally:
+        dst.isolation_level = old_isolation
+
+    return messages
+
+
+# ---------------------------------------------------------------------------
+# Helpers for convert_database
+# ---------------------------------------------------------------------------
+
+def _sql_type_for(col: 'ColumnDef') -> str:  # type: ignore[name-defined]
+    """Return the SQLite affinity keyword for *col*.
+
+    Non-Single containers (List, Matrix, Array, …) are always TEXT because
+    the value is stored as JSON; the leaf types inside the JSON are handled
+    separately by ``_leaf_sql_type``.
+    """
+    if col.name == '_row_id':
+        return 'INTEGER'
+    if col.is_synthetic:
+        return 'TEXT'
+    if col.type_container and col.type_container.lower() != 'single':
+        return 'TEXT'
+    tc = (col.type_contents or '').strip()
+    if tc == 'Integer':
+        return 'INTEGER'
+    if tc in ('Real', 'Float'):
+        return 'REAL'
+    return 'TEXT'
+
+
+def _leaf_sql_type(col: 'ColumnDef') -> str:  # type: ignore[name-defined]
+    """Return the cast type for scalar leaves inside a JSON container column."""
+    tc = (col.type_contents or '').strip()
+    if tc == 'Integer':
+        return 'INTEGER'
+    if tc in ('Real', 'Float'):
+        return 'REAL'
+    return 'TEXT'
+
+
+def _cast_scalar(
+    raw: str,
+    leaf_type: str,
+    tbl: str,
+    col_name: str,
+    on_failure: str,
+    messages: list[str],
+) -> object:
+    """Cast a single scalar *raw* string to *leaf_type* (INTEGER / REAL / TEXT).
+
+    Sentinels ``'.'`` / ``'?'`` → ``None``.
+    SU suffixes are stripped with a warning before numeric coercion.
+    Failed casts are handled by *on_failure*.
+    """
+    if raw in ('.', '?'):
+        return None
+
+    if leaf_type == 'TEXT':
+        return raw
+
+    stripped = _SU_RE.sub('', raw)
+    if stripped != raw:
+        messages.append(
+            f"SU dropped: {tbl!r}.{col_name!r} = {raw!r} -> {stripped!r}"
+        )
+
+    try:
+        if leaf_type == 'INTEGER':
+            return int(stripped)
+        else:  # REAL
+            return float(stripped)
+    except (ValueError, TypeError):
+        msg = (
+            f"coercion failed: {tbl!r}.{col_name!r} = {raw!r} "
+            f"could not be cast to {leaf_type}"
+        )
+        if on_failure == 'error':
+            raise ValueError(msg) from None
+        messages.append(msg)
+        if on_failure == 'keep':
+            return raw
+        return None      # 'null'
+
+
+def _cast_json_leaves(obj: object, leaf_type: str, tbl: str, col_name: str,
+                      on_failure: str, messages: list[str]) -> object:
+    """Recursively cast every string leaf in *obj* (a JSON-decoded value)."""
+    if isinstance(obj, list):
+        return [_cast_json_leaves(v, leaf_type, tbl, col_name, on_failure, messages)
+                for v in obj]
+    if isinstance(obj, dict):
+        return {k: _cast_json_leaves(v, leaf_type, tbl, col_name, on_failure, messages)
+                for k, v in obj.items()}
+    if isinstance(obj, str):
+        return _cast_scalar(obj, leaf_type, tbl, col_name, on_failure, messages)
+    # Already a Python number (shouldn't normally happen from TEXT storage).
+    return obj
+
+
+def _cast_value(
+    raw: str,
+    sql_type: str,
+    leaf_type: str,
+    tbl: str,
+    col_name: str,
+    on_failure: str,
+    messages: list[str],
+) -> object:
+    """Cast *raw* to the Python type matching *sql_type*.
+
+    *sql_type* is the column's SQLite affinity (``TEXT`` for non-Single
+    containers); *leaf_type* is the target type for scalar leaves (which may
+    differ when the column is JSON).
+
+    CIF sentinels ``'.'`` and ``'?'`` always become ``None``.
+    JSON containers are parsed and their leaves are cast recursively before
+    re-serialisation as TEXT.
+    SU suffixes are stripped before numeric casts (with a warning).
+    Failed casts are handled according to *on_failure*.
+    """
+    import json as _json
+
+    if not isinstance(raw, str):
+        return raw  # already typed (e.g. _row_id fetched as int from source)
+
+    if raw in ('.', '?'):
+        return None
+
+    # Non-Single container: value is JSON — cast leaves and re-serialise.
+    if sql_type == 'TEXT' and leaf_type != 'TEXT' and raw and raw[0] in ('[', '{'):
+        try:
+            decoded = _json.loads(raw)
+        except _json.JSONDecodeError:
+            return raw  # not valid JSON — leave unchanged
+        casted = _cast_json_leaves(decoded, leaf_type, tbl, col_name, on_failure, messages)
+        return _json.dumps(casted, separators=(',', ':'))
+
+    if sql_type == 'TEXT':
+        return raw
+
+    return _cast_scalar(raw, sql_type, tbl, col_name, on_failure, messages)
+
+
+def convert_database(
+    src: sqlite3.Connection,
+    dst: sqlite3.Connection,
+    schema: 'SchemaSpec',
+    on_coercion_failure: Literal['null', 'keep', 'error'] = 'null',
+) -> list[str]:
+    """Copy *src* into *dst*, casting columns to typed SQLite storage.
+
+    All columns in the source database are stored as ``TEXT`` (the ingest
+    layer never writes typed values).  This function creates the destination
+    tables with proper ``INTEGER`` / ``REAL`` / ``TEXT`` affinities and casts
+    each value on the way across.
+
+    **Type mapping** (from ``ColumnDef.type_contents``):
+
+    +-----------------+------------------+
+    | type_contents   | SQLite affinity  |
+    +=================+==================+
+    | ``"Integer"``   | ``INTEGER``      |
+    | ``"Real"``      | ``REAL``         |
+    | ``"Float"``     | ``REAL``         |
+    | anything else   | ``TEXT``         |
+    +-----------------+------------------+
+
+    The synthetic ``_row_id`` column is always ``INTEGER``; ``_block_id`` and
+    ``_pycifparse_id`` are always ``TEXT``.
+
+    **Special values:**
+
+    - CIF sentinels ``'.'`` and ``'?'`` are always converted to ``NULL``
+      regardless of column type, without a warning.
+    - SU suffixes (e.g. ``'1.23(5)'``) are stripped before numeric casting
+      and a warning is appended.  The stripped value is then cast normally;
+      if that cast also fails, *on_coercion_failure* applies.
+
+    **Coercion failures** (non-sentinel, non-castable values):
+
+    - ``'null'`` (default): store ``NULL``, append a warning message.
+    - ``'keep'``: leave the original ``TEXT`` value, append a warning message.
+    - ``'error'``: raise ``ValueError`` immediately.
+
+    Unlike ``compactify_database``, this function preserves all tables and
+    columns (including empty tables and all-NULL columns).  The two functions
+    may be chained: compact first to remove empties, then convert for typing.
+
+    The fallback-tier tables (``_cif_fallback``, ``_block_dataset_membership``,
+    ``_validation_result``) are always copied verbatim with ``TEXT`` storage;
+    they carry no schema-defined type information.
+
+    Parameters
+    ----------
+    src:
+        Source connection populated by ``ingest()``.
+    dst:
+        Destination connection (must be empty).
+    schema:
+        ``SchemaSpec`` used when *src* was populated.
+    on_coercion_failure:
+        Policy for non-castable values: ``'null'``, ``'keep'``, or
+        ``'error'``.
+
+    Returns
+    -------
+    list[str]
+        Warning messages: SU-dropped values and coercion failures (when
+        policy is ``'null'`` or ``'keep'``).
+    """
+    messages: list[str] = []
+
+    # ------------------------------------------------------------------
+    # 1. Topological sort (FK parents before children, same as compactify)
+    # ------------------------------------------------------------------
+    all_tables = set(schema.tables)
+
+    def _topo_order(names: set[str]) -> list[str]:
+        deps: dict[str, set[str]] = {t: set() for t in names}
+        for t in names:
+            for fk in schema.tables[t].foreign_keys:
+                if fk.target_table in names:
+                    deps[t].add(fk.target_table)
+        order: list[str] = []
+        seen: set[str] = set()
+
+        def _visit(name: str) -> None:
+            if name in seen:
+                return
+            seen.add(name)
+            for parent in sorted(deps[name]):
+                _visit(parent)
+            order.append(name)
+
+        for name in sorted(names):
+            _visit(name)
+        return order
+
+    ordered_tables = _topo_order(all_tables)
+
+    # ------------------------------------------------------------------
+    # 2. Apply pragmas and begin transaction on dst
+    # ------------------------------------------------------------------
+    old_isolation = dst.isolation_level
+    dst.isolation_level = None
+    dst.execute('PRAGMA foreign_keys = ON')
+    dst.execute('PRAGMA journal_mode = WAL')
+    dst.execute('BEGIN')
+
+    try:
+        # ------------------------------------------------------------------
+        # 3. Create and populate structured tables with typed DDL
+        # ------------------------------------------------------------------
+        for tbl_name in ordered_tables:
+            table = schema.tables[tbl_name]
+            cols = table.columns
+            col_names = [c.name for c in cols]
+            sql_types  = {c.name: _sql_type_for(c)  for c in cols}
+            leaf_types = {c.name: _leaf_sql_type(c) for c in cols}
+
+            # Column definitions with proper type affinities
+            col_defs: list[str] = []
+            for col in cols:
+                sql_type = sql_types[col.name]
+                null_clause = '' if col.nullable else ' NOT NULL'
+                col_defs.append(f'    "{col.name}"  {sql_type}{null_clause}')
+
+            # Primary key
+            pk_cols = table.primary_keys
+            if pk_cols:
+                col_defs.append(
+                    '    PRIMARY KEY ('
+                    + ', '.join(f'"{c}"' for c in pk_cols)
+                    + ')'
+                )
+
+            # FK constraints
+            col_name_set = set(col_names)
+            for fk in table.foreign_keys:
+                if not all(c in col_name_set for c in fk.source_columns):
+                    continue
+                if fk.target_table not in all_tables:
+                    continue
+                src_cols = ', '.join(f'"{c}"' for c in fk.source_columns)
+                tgt_cols = ', '.join(f'"{c}"' for c in fk.target_columns)
+                col_defs.append(
+                    f'    FOREIGN KEY ({src_cols}) '
+                    f'REFERENCES "{fk.target_table}" ({tgt_cols}) '
+                    f'DEFERRABLE INITIALLY DEFERRED'
+                )
+
+            # UNIQUE(_block_id, _row_id) when _row_id not already in PK
+            if '_row_id' in col_name_set and '_row_id' not in table.primary_keys:
+                col_defs.append('    UNIQUE ("_block_id", "_row_id")')
+
+            dst.execute(
+                f'CREATE TABLE "{tbl_name}" (\n'
+                + ',\n'.join(col_defs)
+                + '\n)'
+            )
+
+            # Fetch and cast rows
+            col_list_sql = ', '.join(f'"{c}"' for c in col_names)
+            rows = src.execute(
+                f'SELECT {col_list_sql} FROM "{tbl_name}"'
+            ).fetchall()
+            if rows:
+                casted: list[tuple] = []
+                for row in rows:
+                    casted.append(tuple(
+                        _cast_value(
+                            raw,
+                            sql_types[col_names[i]],
+                            leaf_types[col_names[i]],
+                            tbl_name,
+                            col_names[i],
+                            on_coercion_failure,
+                            messages,
+                        ) if raw is not None else None
+                        for i, raw in enumerate(row)
+                    ))
+                placeholders = ', '.join('?' * len(col_names))
+                dst.executemany(
+                    f'INSERT INTO "{tbl_name}" ({col_list_sql}) '
+                    f'VALUES ({placeholders})',
+                    casted,
+                )
+
+        # ------------------------------------------------------------------
+        # 4. Copy fallback-tier tables verbatim (TEXT storage)
         # ------------------------------------------------------------------
         for ddl in _FALLBACK_DDL:
             dst.execute(ddl)

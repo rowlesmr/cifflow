@@ -3,6 +3,10 @@ CIF emission from a populated SQLite database.
 
 ``emit(conn, schema, ...)`` reads structured tables and the ``_cif_fallback``
 table and produces a valid CIF string.
+
+Assumption: by emission time, all data in the database is assumed to belong to
+a single coherent dataset.  Namespace conflicts (e.g. short identifiers from
+unrelated sources) are not detected or resolved by the output layer.
 """
 
 from __future__ import annotations
@@ -10,11 +14,13 @@ from __future__ import annotations
 import re
 import sqlite3
 import uuid
+import warnings as _warnings
 from collections import deque
+from dataclasses import dataclass
 
 from pycifparse.dictionary.schema import ForeignKeyDef, SchemaSpec, TableDef
 from pycifparse.output.plan import BlockSpec, EmitMode, OutputPlan
-from pycifparse.output.quote import quote
+from pycifparse.output.quote import make_text_field, quote
 from pycifparse.types import CifVersion
 
 # Synthetic infrastructure columns — never emitted as CIF tags.
@@ -24,6 +30,56 @@ _SYNTHETIC = frozenset({'_block_id', '_row_id', '_pycifparse_id'})
 _SU_RE = re.compile(
     r'^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\((\d+)\)$'
 )
+
+
+# ---------------------------------------------------------------------------
+# Internal block representation
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _BlockData:
+    """All data needed to render one output CIF block."""
+    name: str
+    table_rows: dict[str, list[dict]]
+    fallback_rows: list[dict]
+    anchor_frozenset: frozenset[str]
+    anchor_key_dict: dict[str, list[str]]
+    suppress_fk_pk: bool
+    dataset_id: str | None = None
+
+
+def _make_block_data(
+    name: str,
+    table_rows: dict[str, list[dict]],
+    fallback_rows: list[dict],
+    schema: SchemaSpec,
+    suppress_fk_pk: bool,
+    dataset_id: str | None = None,
+) -> _BlockData:
+    anchor_fs = frozenset(
+        t for t in table_rows
+        if schema.tables.get(t) and schema.tables[t].category_class == 'Set'
+    )
+    anchor_kd: dict[str, list[str]] = {}
+    for tbl_name, rows in table_rows.items():
+        tdef = schema.tables.get(tbl_name)
+        if tdef is None or tdef.category_class != 'Set':
+            continue
+        domain_pks = [pk for pk in tdef.primary_keys if pk not in _SYNTHETIC]
+        for pk_col in domain_pks:
+            key = f'{tbl_name}.{pk_col}'
+            values = [str(r[pk_col]) for r in rows if r.get(pk_col) is not None]
+            if values:
+                anchor_kd[key] = values
+    return _BlockData(
+        name=name,
+        table_rows=table_rows,
+        fallback_rows=fallback_rows,
+        anchor_frozenset=anchor_fs,
+        anchor_key_dict=anchor_kd,
+        suppress_fk_pk=suppress_fk_pk,
+        dataset_id=dataset_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +95,9 @@ def emit(
     plan: OutputPlan | None = None,
     reconstruct_su: bool = False,
     emit_defaults: bool = True,
+    line_ending: str = '\n',
+    pretty: bool = True,
+    line_limit: int | None = 2048,
 ) -> str:
     """Emit CIF text from a populated SQLite database.
 
@@ -54,7 +113,8 @@ def emit(
     version:
         CIF version to emit.  Controls quoting strategy.
     plan:
-        Optional ordering specification.  ``None`` uses default ordering.
+        Optional ordering and grouping specification.  ``None`` uses default
+        ordering.
     reconstruct_su:
         When ``True``, paired ``(col, col_su)`` columns are merged into a
         single ``value(su)`` token.  Default ``False``.
@@ -63,89 +123,241 @@ def emit(
         are emitted normally.  When ``False``, they would be suppressed; this
         requires per-value provenance tracking which is not yet implemented,
         so the flag is currently accepted but has no effect.
+    line_ending:
+        Line terminator sequence written between every line and at the end of
+        the output.  Use ``'\\n'`` (default, Unix LF), ``'\\r\\n'`` (Windows
+        CRLF), or ``'\\r'`` (legacy CR).  The 2048-character line-length limit
+        is measured on content before line endings are applied.
+    pretty:
+        When ``True`` (default), tag–value pairs are column-aligned within
+        each Set category and loop column values are padded to the widest
+        value in that column.  When ``False``, output is compact (two spaces
+        between tag and value / between tokens) — recommended for very large
+        loop tables where the alignment pass would be expensive.
+    line_limit:
+        Maximum physical line length (in characters, before line endings are
+        applied).  Default ``2048``.  Use ``None`` to disable.  Values below
+        ``40`` are accepted but emit a ``UserWarning``; very small limits may
+        produce degenerate output for long tokens.
+
+        When a content line inside a semicolon-delimited text field exceeds
+        *line_limit*, the CIF 2.0 line-folding protocol (§5.3) is applied.
+        When ``'\\n;'`` is also present in the value, the text-prefix protocol
+        (§5.2) is combined with folding.
+
+        Inline scalar values whose formatted line (tag + separator + token)
+        would exceed *line_limit* are converted to semicolon-delimited fields.
+
+        Loop data rows that exceed *line_limit* are wrapped across multiple
+        physical lines using greedy token packing (tokens cannot be split).
+
+        CIF 1.1 block codes, data names, and frame codes are independently
+        limited to 75 characters by the CIF 1.1 specification; an exception
+        is raised if this limit would be violated.
 
     Returns
     -------
     str
-        Complete CIF text including magic line, terminated with a newline.
+        Complete CIF text including magic line, terminated with ``line_ending``.
     """
+    if line_limit is not None and line_limit < 40:
+        _warnings.warn(
+            f'line_limit={line_limit} is very small; output may be degenerate for long tokens',
+            UserWarning,
+            stacklevel=2,
+        )
+
     magic = '#\\#CIF_2.0' if version == CifVersion.CIF_2_0 else '#\\#CIF_1.1'
 
     if mode == EmitMode.ONE_BLOCK:
-        blocks = _collect_one_block(conn, schema, version, plan, reconstruct_su)
+        raw_blocks = _collect_one_block(conn, schema)
     elif mode == EmitMode.ALL_BLOCKS:
-        blocks = _collect_all_blocks(conn, schema, version, plan, reconstruct_su)
+        raw_blocks = _collect_all_blocks(conn, schema, version)
     elif mode == EmitMode.GROUPED:
-        blocks = _collect_grouped(conn, schema, version, plan, reconstruct_su)
+        raw_blocks = _collect_grouped(conn, schema)
     else:  # ORIGINAL
-        blocks = _collect_original(conn, schema, version, plan, reconstruct_su)
+        raw_blocks = _collect_original(conn, schema)
 
-    parts = [magic]
-    for i, block_text in enumerate(blocks):
+    ordered = _sort_and_merge(raw_blocks, plan)
+
+    # Disambiguate block names; collect all output lines flat.
+    used_names: dict[str, int] = {}
+    lines = [magic]
+    for i, (data, spec) in enumerate(ordered):
+        base = data.name
+        count = used_names.get(base, 0) + 1
+        used_names[base] = count
+        name = f'{base}_{count}' if count > 1 else base
+
         if i > 0:
-            parts.append('')
-            parts.append('')
-        parts.append(block_text)
+            lines.append('')
+            lines.append('')
+        lines.extend(_render_block(name, data, schema, version, spec, reconstruct_su, pretty, line_limit))
 
-    return '\n'.join(parts) + '\n'
+    return line_ending.join(lines) + line_ending
 
 
 # ---------------------------------------------------------------------------
-# Mode collectors — each returns list[str] of rendered block texts
+# Sorting, merging, and block naming
+# ---------------------------------------------------------------------------
+
+def _sort_and_merge(
+    blocks: list[_BlockData],
+    plan: OutputPlan | None,
+) -> list[tuple[_BlockData, BlockSpec | None]]:
+    """Match blocks to specs, merge single_block groups, sort for emission."""
+    if not plan or not plan.specs:
+        return [(b, None) for b in blocks]
+
+    matched: dict[int, list[_BlockData]] = {}
+    unmatched: list[_BlockData] = []
+
+    for block in blocks:
+        spec_idx, _spec = plan.match(block.anchor_frozenset)
+        if spec_idx is None:
+            unmatched.append(block)
+        else:
+            matched.setdefault(spec_idx, []).append(block)
+
+    result: list[tuple[_BlockData, BlockSpec | None]] = []
+
+    for spec_idx in sorted(matched.keys()):
+        spec = plan.specs[spec_idx]
+        group = matched[spec_idx]
+
+        if spec.single_block:
+            merged = _merge_blocks(group, spec, plan)
+            result.append((merged, spec))
+        else:
+            for block in sorted(group, key=lambda b: b.name):
+                name = _resolve_block_name(block.anchor_key_dict, spec, plan, block.name)
+                result.append((_replace_name(block, name), spec))
+
+    for block in sorted(unmatched, key=lambda b: b.name):
+        result.append((block, None))
+
+    return result
+
+
+def _merge_blocks(
+    blocks: list[_BlockData],
+    spec: BlockSpec,
+    plan: OutputPlan,
+) -> _BlockData:
+    """Merge multiple blocks into one for ``single_block=True`` specs."""
+    merged_table_rows: dict[str, list[dict]] = {}
+    merged_fallback: list[dict] = []
+    merged_anchor_kd: dict[str, list[str]] = {}
+    anchor_fs: frozenset[str] = frozenset()
+
+    for block in blocks:
+        for tbl, rows in block.table_rows.items():
+            merged_table_rows.setdefault(tbl, []).extend(rows)
+        merged_fallback.extend(block.fallback_rows)
+        for k, vals in block.anchor_key_dict.items():
+            existing = merged_anchor_kd.setdefault(k, [])
+            for v in vals:
+                if v not in existing:
+                    existing.append(v)
+        anchor_fs = anchor_fs | block.anchor_frozenset
+
+    name = _resolve_block_name(merged_anchor_kd, spec, plan, 'block')
+    dataset_id = blocks[0].dataset_id if blocks else None
+
+    return _BlockData(
+        name=name,
+        table_rows=merged_table_rows,
+        fallback_rows=merged_fallback,
+        anchor_frozenset=anchor_fs,
+        anchor_key_dict=merged_anchor_kd,
+        suppress_fk_pk=False,  # spec says no FK-PK suppression for single_block
+        dataset_id=dataset_id,
+    )
+
+
+def _resolve_block_name(
+    anchor_key_dict: dict[str, list[str]],
+    spec: BlockSpec | None,
+    plan: OutputPlan | None,
+    fallback: str,
+) -> str:
+    namer = None
+    if spec is not None:
+        namer = spec.block_namer
+    if namer is None and plan is not None:
+        namer = plan.block_namer
+
+    if namer is not None:
+        raw = namer(anchor_key_dict) or ''
+    elif anchor_key_dict:
+        raw = _default_block_name(anchor_key_dict)
+    else:
+        raw = fallback
+
+    name = _sanitize_block_name(raw)
+    return name if name else 'block'
+
+
+def _default_block_name(anchor_key_dict: dict[str, list[str]]) -> str:
+    parts = []
+    for key, values in sorted(anchor_key_dict.items()):
+        obj_id = key.split('.', 1)[-1]
+        for val in values:
+            parts.append(f'{obj_id}_{val}')
+    return '_'.join(parts)
+
+
+def _sanitize_block_name(name: str) -> str:
+    name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    name = re.sub(r'_+', '_', name)
+    return name.strip('_')
+
+
+def _replace_name(block: _BlockData, name: str) -> _BlockData:
+    return _BlockData(
+        name=name,
+        table_rows=block.table_rows,
+        fallback_rows=block.fallback_rows,
+        anchor_frozenset=block.anchor_frozenset,
+        anchor_key_dict=block.anchor_key_dict,
+        suppress_fk_pk=block.suppress_fk_pk,
+        dataset_id=block.dataset_id,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mode collectors — each returns list[_BlockData]
 # ---------------------------------------------------------------------------
 
 def _collect_original(
     conn: sqlite3.Connection,
     schema: SchemaSpec,
-    version: CifVersion,
-    plan: OutputPlan | None,
-    reconstruct_su: bool,
-) -> list[str]:
+) -> list[_BlockData]:
     """ORIGINAL: one output block per distinct ``_block_id``."""
     block_ids = _all_block_ids(conn, schema)
     result = []
-    for i, bid in enumerate(block_ids):
+    for bid in block_ids:
         table_rows = {}
         for table_name in schema.tables:
             rows = _fetch_rows(conn, table_name, '"_block_id" = ?', (bid,))
             if rows:
                 table_rows[table_name] = rows
         fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
-        spec = plan.spec_for(i) if plan else None
-        result.append(_render_block(bid, table_rows, fallback, schema, version, spec, reconstruct_su, suppress_fk_pk=True))
+        result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True))
     return result
 
 
 def _collect_grouped(
     conn: sqlite3.Connection,
     schema: SchemaSpec,
-    version: CifVersion,
-    plan: OutputPlan | None,
-    reconstruct_su: bool,
-) -> list[str]:
-    """GROUPED: one block per distinct Set-anchor key combination.
-
-    For each table, the FK chain is followed transitively until a Set-class
-    table is reached.  Tables that share the same Set anchor are placed in the
-    same output block when their anchor row's domain primary-key values match.
-    This merges rows from multiple original ``_block_id``\\s that share the
-    same Set-level identity.
-
-    Tables with no Set ancestor in their FK chain fall back to ``_block_id``
-    grouping (equivalent to ORIGINAL for those tables).
-    """
-    # Map each table to its Set anchor (None if no Set ancestor)
+) -> list[_BlockData]:
+    """GROUPED: one block per distinct Set-anchor key combination."""
     table_to_anchor: dict[str, str | None] = {
         t: _find_set_anchor(t, schema) for t in schema.tables
     }
 
-    # Separate keyed Set anchors (have domain PK → can merge across blocks)
-    # from everything else (no-anchor tables and keyless Set categories).
-    # Keyless Sets use _pycifparse_id as their PK — a unique UUID with no
-    # cross-block identity — so they are grouped by _block_id just like
-    # Loop-only tables.
     keyed_anchor_to_tables: dict[str, list[str]] = {}
-    block_id_tables: list[str] = []  # keyless Set anchors + no-anchor tables
+    block_id_tables: list[str] = []
 
     for t, anchor in table_to_anchor.items():
         if anchor is not None:
@@ -156,13 +368,7 @@ def _collect_grouped(
                 continue
         block_id_tables.append(t)
 
-    # Exclusive-target anchors: anchor tables that are FK-referenced from
-    # exactly one other anchor group AND have no FK going out to any other
-    # keyed anchor.  For example, space_group is referenced by structure (in
-    # pd_phase group) with no FK back.  Such anchors carry no independent
-    # grouping value — their rows co-occur in the same original blocks as the
-    # referencing tables — so they fall back to _block_id grouping and are
-    # absorbed by whichever keyed block covers those block IDs.
+    # Exclusive-target anchors fall back to _block_id grouping.
     keyed_anchor_set = set(keyed_anchor_to_tables.keys())
     for anchor in list(keyed_anchor_to_tables.keys()):
         referencing_groups: set[str] = {
@@ -181,12 +387,7 @@ def _collect_grouped(
         if len(referencing_groups) == 1 and not anchor_fks_out:
             block_id_tables.extend(keyed_anchor_to_tables.pop(anchor))
 
-    result: list[str] = []
-    block_idx = 0
-    # absorbed_primary: anchor-row block_ids claimed by a keyed anchor — used
-    #   to skip duplicate pk groups in later anchor iterations.
-    # absorbed_all: all block_ids swept (anchor rows + FK-chained rows +
-    #   block_id_tables) — used to suppress remaining-block emission.
+    result: list[_BlockData] = []
     absorbed_primary: set[str] = set()
     absorbed_all: set[str] = set()
 
@@ -195,32 +396,21 @@ def _collect_grouped(
         domain_pks = [pk for pk in anchor_def.primary_keys if pk not in _SYNTHETIC]
         anchor_rows = _fetch_rows(conn, anchor_name)
 
-        # If the anchor table itself has no rows its FK group cannot be keyed
-        # (no PK values to pivot on).  Fall back all tables in the group to
-        # _block_id grouping so they are not silently dropped.
         if not anchor_rows:
             block_id_tables.extend(keyed_anchor_to_tables[anchor_name])
             continue
 
-        # Group anchor rows by domain PK values (merging across _block_ids).
         pk_groups: dict[tuple, list[dict]] = {}
         for row in anchor_rows:
             key = tuple(row.get(pk) for pk in domain_pks)
             pk_groups.setdefault(key, []).append(row)
 
         for pk_vals, grouped_anchor_rows in sorted(pk_groups.items()):
-            block_name = grouped_anchor_rows[0].get('_block_id', 'output')
-            # Seed covered_block_ids from anchor rows; extended below as
-            # FK-chained table rows are fetched (they may carry additional
-            # _block_id values when the anchor's PK prevented duplicate rows).
             primary_block_ids: set[str] = {
                 r.get('_block_id') for r in grouped_anchor_rows if r.get('_block_id')
             }
             covered_block_ids: set[str] = set(primary_block_ids)
 
-            # Skip if this anchor's primary block_ids are already claimed by a
-            # prior keyed-anchor group.  (Using primary only avoids false skips
-            # caused by FK-extended block_ids from unrelated anchor domains.)
             if primary_block_ids and primary_block_ids <= absorbed_primary:
                 continue
 
@@ -231,22 +421,15 @@ def _collect_grouped(
                     continue
                 fk_path = _fk_chain(table_name, anchor_name, schema)
                 if fk_path is None:
-                    # No FK path found; fall back to _block_id filtering.
-                    # covered_block_ids may grow below, so defer this table.
                     rows = []
                 else:
                     rows = _fetch_rows_via_fk_path(conn, table_name, fk_path, domain_pks, pk_vals)
-                    # Extend covered_block_ids: FK-chained rows may span more
-                    # block_ids than the anchor table (e.g. when a Set PK
-                    # conflict suppressed a duplicate anchor row).
                     for r in rows:
                         if r.get('_block_id'):
                             covered_block_ids.add(r.get('_block_id'))
                 if rows:
                     table_rows[table_name] = rows
 
-            # Second pass for tables whose FK path was None: now covered_block_ids
-            # is fully expanded so _block_id filtering is correct.
             for table_name in keyed_anchor_to_tables[anchor_name]:
                 if table_name == anchor_name or table_name in table_rows:
                     continue
@@ -256,16 +439,9 @@ def _collect_grouped(
                 if rows:
                     table_rows[table_name] = rows
 
-            # Claim primary block_ids for this anchor group.
             absorbed_primary |= primary_block_ids
-            # Record all swept block_ids (primary + FK-extended) so that
-            # block_id_tables rows from the same original blocks are not
-            # re-emitted in the remaining-blocks section below.
             absorbed_all |= covered_block_ids
 
-            # Include block_id_tables (pure-cluster Sets, keyless Sets,
-            # Loop-only tables) from all covered block IDs.  This absorbs
-            # e.g. space_group rows that share the FK-extended block_ids.
             for t in block_id_tables:
                 rows = []
                 for bid in sorted(covered_block_ids):
@@ -277,27 +453,27 @@ def _collect_grouped(
             for bid in sorted(covered_block_ids):
                 fallback.extend(_fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,)))
 
-            spec = plan.spec_for(block_idx) if plan else None
-            result.append(_render_block(block_name, table_rows, fallback, schema, version, spec, reconstruct_su, suppress_fk_pk=True))
-            block_idx += 1
+            # Block name: from anchor key dict (default rule), falling back to _block_id.
+            anchor_kd: dict[str, list[str]] = {
+                f'{anchor_name}.{pk}': [str(v) for v in pk_vals if v is not None]
+                for pk in domain_pks
+                for v in [pk_vals[domain_pks.index(pk)]]
+                if v is not None
+            }
+            default_name = _default_block_name(anchor_kd) if anchor_kd else (
+                grouped_anchor_rows[0].get('_block_id', 'output')
+            )
+            fallback_name = _sanitize_block_name(default_name) or 'block'
 
-    # Keyless Set categories, Loop-only tables, and any fallback data whose
-    # block IDs were not absorbed by a keyed-anchor group: one block per
-    # distinct _block_id.
-    #
-    # Also sweep all keyed-anchor-group tables: a table whose rows have NULL
-    # FK values for the anchor chain (e.g. diffrn_radiation_wavelength with
-    # phase_id=NULL) is not reachable via _fetch_rows_via_fk_path and is also
-    # not picked up by the covered_block_ids second-pass, so its rows would
-    # otherwise be silently dropped.  Including all schema tables here is safe
-    # because remaining_block_ids is already filtered to block_ids that were
-    # never absorbed by any keyed-anchor group.
+            block = _make_block_data(fallback_name, table_rows, fallback, schema, suppress_fk_pk=True)
+            result.append(block)
+
+    # Remaining blocks (keyless Sets, Loop-only, unabsorbed).
     all_table_names = list(schema.tables.keys())
     remaining_block_ids = [
         bid for bid in _all_block_ids_for_tables(conn, all_table_names)
         if bid not in absorbed_all
     ]
-    # Also pick up any _cif_fallback block_ids not yet covered
     for bid_row in _fetch_rows(conn, '_cif_fallback'):
         bid = bid_row.get('_block_id')
         if bid and bid not in absorbed_all and bid not in remaining_block_ids:
@@ -312,9 +488,7 @@ def _collect_grouped(
                 table_rows[t] = rows
         fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
         if table_rows or fallback:
-            spec = plan.spec_for(block_idx) if plan else None
-            result.append(_render_block(bid, table_rows, fallback, schema, version, spec, reconstruct_su, suppress_fk_pk=True))
-            block_idx += 1
+            result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True))
 
     return result
 
@@ -322,102 +496,67 @@ def _collect_grouped(
 def _collect_one_block(
     conn: sqlite3.Connection,
     schema: SchemaSpec,
-    version: CifVersion,
-    plan: OutputPlan | None,
-    reconstruct_su: bool,
-) -> list[str]:
-    """ONE_BLOCK: all data in a single block named 'output'."""
+) -> list[_BlockData]:
+    """ONE_BLOCK: all data in a single block.
+
+    The anchor_key_dict is intentionally empty: the block name is not derived
+    from key values (which would concatenate every anchor key from the entire
+    database).  The name is resolved by block_namer if provided, otherwise
+    falls back to ``'output'``.
+    """
     table_rows = {}
     for table_name in schema.tables:
         rows = _fetch_rows(conn, table_name)
         if rows:
             table_rows[table_name] = rows
     fallback = _fetch_rows(conn, '_cif_fallback')
-    spec = plan.spec_for(0) if plan else None
-    return [_render_block('output', table_rows, fallback, schema, version, spec, reconstruct_su)]
+    return [_BlockData(
+        name='output',
+        table_rows=table_rows,
+        fallback_rows=fallback,
+        anchor_frozenset=frozenset(),
+        anchor_key_dict={},
+        suppress_fk_pk=False,
+    )]
 
 
 def _collect_all_blocks(
     conn: sqlite3.Connection,
     schema: SchemaSpec,
     version: CifVersion,
-    plan: OutputPlan | None,
-    reconstruct_su: bool,
-) -> list[str]:
-    """ALL_BLOCKS: one block per category, plus one per fallback ``_block_id``.
+) -> list[_BlockData]:
+    """ALL_BLOCKS: one block per Set-anchor key combination.
 
-    .. todo::
-        Block granularity is currently one block per non-empty table, which is
-        wrong when a table has rows from multiple original blocks.  The correct
-        behaviour is:
+    Set categories: one output block per row (each row is a distinct instance).
+    Loop categories: grouped by the domain PK of the nearest Set ancestor via FK
+    chain.  Tables with no Set ancestor are grouped by ``_block_id``.
 
-        * **Set categories** — one output block *per row* (each row is a
-          distinct Set instance that originated from a different ``_block_id``).
-        * **Loop categories** — group rows by their Set-anchor key (domain PK
-          of the nearest Set ancestor via FK chain).  Rows sharing the same
-          anchor key values belong to the same output block.  Tables with no
-          Set ancestor remain one block per table.
-
-        When this is fixed, re-examine the ``_audit_dataset.id`` injection
-        logic so the UUID is derived from the contributing ``_block_id``\\s
-        rather than a single global session UUID.
+    Mirrors ``_collect_grouped`` logic.  In CIF 2.0, each block receives a
+    shared ``_audit_dataset.id`` UUID that links all blocks to the one dataset
+    produced by this ``emit()`` call.
     """
-    # CIF 2.0: inject a shared _audit_dataset.id into every block so that a
-    # reader can recognise that all blocks belong to the same dataset.
-    # Reuse the existing dataset UUID when the source file declared one;
-    # otherwise generate a fresh one for this emit session.
     dataset_id: str | None = None
     if version == CifVersion.CIF_2_0:
-        mem_rows = _fetch_rows(conn, '_block_dataset_membership')
-        real_ids = {
-            r['_audit_dataset_id']
-            for r in mem_rows
-            if r.get('id_regime') == 'dataset' and r.get('_audit_dataset_id')
-        }
-        dataset_id = real_ids.pop() if len(real_ids) == 1 else str(uuid.uuid4())
+        dataset_id = str(uuid.uuid4())
+
+    grouped = _collect_grouped(conn, schema)
 
     result = []
-    i = 0
-    for table_name, table_def in schema.tables.items():
-        rows = _fetch_rows(conn, table_name)
-        if not rows:
-            continue
-        spec = plan.spec_for(i) if plan else None
-        block_name = table_name
-        rendered = _render_block(
-            block_name,
-            {table_name: rows},
-            [],
-            schema,
-            version,
-            spec,
-            reconstruct_su,
+    for block in grouped:
+        # Drop `audit_dataset` from table_rows so the emission UUID is always
+        # injected as `_audit_dataset.id` for every block.  This ensures all
+        # output blocks share the same dataset identifier when re-ingested.
+        table_rows = {k: v for k, v in block.table_rows.items()
+                      if k != 'audit_dataset'}
+        result.append(_BlockData(
+            name=block.name,
+            table_rows=table_rows,
+            fallback_rows=block.fallback_rows,
+            anchor_frozenset=block.anchor_frozenset,
+            anchor_key_dict=block.anchor_key_dict,
+            suppress_fk_pk=False,
             dataset_id=dataset_id,
-        )
-        result.append(rendered)
-        i += 1
-
-    # Fallback blocks grouped by _block_id
-    fallback_by_block: dict[str, list[dict]] = {}
-    for row in _fetch_rows(conn, '_cif_fallback'):
-        bid = row.get('_block_id', 'fallback')
-        fallback_by_block.setdefault(bid, []).append(row)
-
-    for bid, fb_rows in sorted(fallback_by_block.items()):
-        spec = plan.spec_for(i) if plan else None
-        rendered = _render_block(
-            f'{bid}_fallback',
-            {},
-            fb_rows,
-            schema,
-            version,
-            spec,
-            reconstruct_su,
-            dataset_id=dataset_id,
-        )
-        result.append(rendered)
-        i += 1
-
+        ))
     return result
 
 
@@ -427,66 +566,300 @@ def _collect_all_blocks(
 
 def _render_block(
     block_name: str,
-    table_rows: dict[str, list[dict]],
-    fallback_rows: list[dict],
+    data: _BlockData,
     schema: SchemaSpec,
     version: CifVersion,
     spec: BlockSpec | None,
     reconstruct_su: bool,
-    *,
-    suppress_fk_pk: bool = False,
-    dataset_id: str | None = None,
-) -> str:
-    """Render a single CIF block to a string."""
+    pretty: bool,
+    line_limit: int | None = None,
+) -> list[str]:
+    """Render a single CIF block as a flat list of output lines."""
+    if version == CifVersion.CIF_1_1 and len(block_name) > 75:
+        raise ValueError(
+            f"CIF 1.1 block code {block_name!r} exceeds the 75-character identifier "
+            f"limit (length {len(block_name)})"
+        )
     lines: list[str] = [f'data_{block_name}']
     first_category = True
 
-    # Inject _audit_dataset.id when requested, unless this block already carries
-    # it via the audit_dataset structured table or _cif_fallback rows.
-    if dataset_id is not None:
-        audit_in_table = 'audit_dataset' in table_rows
+    # Inject _audit_dataset.id when requested.
+    if data.dataset_id is not None:
+        audit_in_table = 'audit_dataset' in data.table_rows
         audit_in_fallback = any(
             (r.get('tag') or '').lower() == '_audit_dataset.id'
-            for r in fallback_rows
+            for r in data.fallback_rows
         )
         if not audit_in_table and not audit_in_fallback:
             audit_tag = schema.column_to_tag.get(('audit_dataset', 'id'), '_audit_dataset.id')
-            lines.append(f'{audit_tag}  {quote(dataset_id, version)}')
+            lines.append(f'{audit_tag}  {quote(data.dataset_id, version)}')
             first_category = False
 
-    for table_name in _ordered_categories(schema, spec):
-        rows = table_rows.get(table_name)
-        if not rows:
-            continue
-        table_def = schema.tables[table_name]
-        cols = _active_cols(table_def, rows, spec, reconstruct_su)
-        if not cols:
-            continue
-
-        # FK-PK suppression only applies to Set categories rendered as scalar
-        # tag-value pairs.  Loop categories must emit all PK columns explicitly;
-        # a reader cannot recover a suppressed composite-key column from block scope.
-        if suppress_fk_pk and table_def.category_class == 'Set' and len(rows) == 1:
-            suppressed = _suppressed_fk_pk_cols(table_def, rows, table_rows, schema)
-            cols = [c for c in cols if c not in suppressed]
-        if not cols:
-            continue
-
-        if not first_category:
-            lines.append('')
-        first_category = False
-
-        if table_def.category_class == 'Set' and len(rows) == 1:
-            lines.extend(_render_set_category(rows[0], cols, table_name, schema, version, table_def, reconstruct_su))
+    for item in _ordered_categories(schema, spec, data.table_rows):
+        if isinstance(item, list):
+            # Merge group
+            cat_lines = _render_merge_group(item, data.table_rows, schema, version, spec, reconstruct_su, pretty, line_limit)
+            if cat_lines:
+                if not first_category:
+                    lines.append('')
+                first_category = False
+                lines.extend(cat_lines)
         else:
-            lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su))
+            table_name = item
+            rows = data.table_rows.get(table_name)
+            if not rows:
+                continue
+            table_def = schema.tables[table_name]
+            cols = _active_cols(table_def, rows, spec, reconstruct_su)
+            if not cols:
+                continue
 
-    if fallback_rows:
+            if data.suppress_fk_pk and table_def.category_class == 'Set' and len(rows) == 1:
+                suppressed = _suppressed_fk_pk_cols(table_def, rows, data.table_rows, schema)
+                cols = [c for c in cols if c not in suppressed]
+            if not cols:
+                continue
+
+            if not first_category:
+                lines.append('')
+            first_category = False
+
+            if table_def.category_class == 'Set' and len(rows) == 1:
+                lines.extend(_render_set_category(rows[0], cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit))
+            else:
+                lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit))
+
+    if data.fallback_rows:
         if not first_category:
             lines.append('')
-        lines.extend(_render_fallback(fallback_rows, version))
+        lines.extend(_render_fallback(data.fallback_rows, version, pretty, line_limit))
 
-    return '\n'.join(lines)
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Category ordering and wildcard expansion
+# ---------------------------------------------------------------------------
+
+def _ordered_categories(
+    schema: SchemaSpec,
+    spec: BlockSpec | None,
+    table_rows: dict[str, list[dict]],
+) -> list[str | list[str]]:
+    """Return table names (and merge groups) in emission order.
+
+    Plain ``str`` entries are single categories; ``list[str]`` entries are
+    merge groups to be emitted as a single ``loop_`` (if compatible).
+    """
+    all_tables = set(schema.tables.keys())
+    result: list[str | list[str]] = []
+    listed: set[str] = set()
+
+    if spec and spec.category_order:
+        for item in spec.category_order:
+            if isinstance(item, list):
+                # Merge group: expand wildcards within group members
+                expanded: list[str] = []
+                for name in item:
+                    if name.endswith('*'):
+                        for t in _expand_wildcard(name, schema):
+                            if t in all_tables and t not in listed:
+                                expanded.append(t)
+                                listed.add(t)
+                    else:
+                        if name in all_tables and name not in listed:
+                            expanded.append(name)
+                            listed.add(name)
+                if expanded:
+                    result.append(expanded)
+            else:
+                # Plain string or wildcard
+                if item.endswith('*'):
+                    for t in _expand_wildcard(item, schema):
+                        if t in all_tables and t not in listed:
+                            result.append(t)
+                            listed.add(t)
+                else:
+                    if item in all_tables and item not in listed:
+                        result.append(item)
+                        listed.add(item)
+
+    # Append remaining: Set-class first (alphabetical), then Loop-class (alphabetical).
+    set_rem = sorted(t for t in all_tables if t not in listed and schema.tables[t].category_class == 'Set')
+    loop_rem = sorted(t for t in all_tables if t not in listed and schema.tables[t].category_class != 'Set')
+    result.extend(set_rem)
+    result.extend(loop_rem)
+
+    return result
+
+
+def _expand_wildcard(pattern: str, schema: SchemaSpec) -> list[str]:
+    """Expand ``'CATEGORY*'`` to the base category plus all schema descendants.
+
+    The base name is the pattern with the trailing ``'*'`` stripped (lowercased).
+    If the base is not in the schema, emits a warning and returns an empty list.
+    Descendants are found by BFS over ``schema.category_parent`` and returned
+    sorted alphabetically (including the base category itself).
+    """
+    base = pattern[:-1].lower()
+    if base not in schema.tables:
+        _warnings.warn(
+            f"OutputPlan wildcard {pattern!r}: base category {base!r} not in schema — skipped"
+        )
+        return []
+
+    # Build children map from category_parent.
+    children: dict[str, list[str]] = {}
+    for tbl, parent in schema.category_parent.items():
+        if parent is not None:
+            children.setdefault(parent, []).append(tbl)
+
+    # BFS to collect base + all descendants.
+    found: set[str] = {base}
+    queue = [base]
+    while queue:
+        current = queue.pop(0)
+        for child in children.get(current, []):
+            if child not in found:
+                found.add(child)
+                queue.append(child)
+
+    return sorted(found)
+
+
+# ---------------------------------------------------------------------------
+# Merge group renderer
+# ---------------------------------------------------------------------------
+
+def _render_merge_group(
+    group: list[str],
+    table_rows: dict[str, list[dict]],
+    schema: SchemaSpec,
+    version: CifVersion,
+    spec: BlockSpec | None,
+    reconstruct_su: bool,
+    pretty: bool,
+    line_limit: int | None = None,
+) -> list[str]:
+    """Render a merge group as a single loop_ or as plain loops.
+
+    Categories sharing identical non-synthetic PK columns are joined via a
+    FULL OUTER JOIN (implemented in Python) and emitted as one ``loop_``.
+    Categories that are not key-compatible are emitted as plain loops in the
+    listed order.
+    """
+    # Collect tables present in this block.
+    present = [cat for cat in group if table_rows.get(cat)]
+    if not present:
+        return []
+
+    # Determine PK sets for key-compatibility check.
+    pk_sets: list[frozenset[str]] = []
+    for cat in present:
+        tdef = schema.tables[cat]
+        domain_pks = frozenset(pk for pk in tdef.primary_keys if pk not in _SYNTHETIC)
+        pk_sets.append(domain_pks)
+
+    # All present categories must share the same non-synthetic PK column set.
+    compatible = len(set(pk_sets)) <= 1 and pk_sets
+
+    if not compatible:
+        # Fall back to plain loops in listed order.
+        lines: list[str] = []
+        first = True
+        for cat in present:
+            rows = table_rows[cat]
+            tdef = schema.tables[cat]
+            cols = _active_cols(tdef, rows, spec, reconstruct_su)
+            if not cols:
+                continue
+            if not first:
+                lines.append('')
+            first = False
+            lines.extend(_render_loop_category(rows, cols, cat, schema, version, tdef, reconstruct_su, pretty, line_limit))
+        return lines
+
+    # Key-compatible: FULL OUTER JOIN in Python.
+    shared_pks = sorted(pk_sets[0])
+
+    # Index each table by PK tuple; collect all unique PK tuples in encounter order.
+    all_pk_vals: list[tuple] = []
+    seen_pk: set[tuple] = set()
+    table_index: dict[str, dict[tuple, dict]] = {}
+    for cat in present:
+        table_index[cat] = {}
+        for row in table_rows[cat]:
+            pk_tuple = tuple(row.get(pk) for pk in shared_pks)
+            if pk_tuple not in seen_pk:
+                seen_pk.add(pk_tuple)
+                all_pk_vals.append(pk_tuple)
+            table_index[cat][pk_tuple] = row
+
+    # Determine active (non-PK) columns per table.
+    cat_active: dict[str, list[str]] = {}
+    for cat in present:
+        tdef = schema.tables[cat]
+        all_rows = list(table_index[cat].values())
+        cols = _active_cols(tdef, all_rows, spec, reconstruct_su)
+        # Exclude shared PKs; they appear once at the start.
+        non_pk_cols = [c for c in cols if c not in pk_sets[0]]
+        if non_pk_cols or cols:
+            cat_active[cat] = non_pk_cols
+
+    # Build merged column list: shared PKs (from first present cat), then each table's non-PK cols.
+    first_cat = present[0]
+    first_tdef = schema.tables[first_cat]
+    first_active = _active_cols(first_tdef, list(table_index[first_cat].values()), spec, reconstruct_su)
+    pk_in_first = [pk for pk in shared_pks if pk in set(first_active)]
+
+    merged_cols: list[tuple[str, str]] = [(first_cat, pk) for pk in pk_in_first]
+    pk_set = set(shared_pks)
+    for cat in present:
+        for col in cat_active.get(cat, []):
+            if col not in pk_set:
+                merged_cols.append((cat, col))
+
+    if not merged_cols:
+        return []
+
+    lines = ['loop_']
+    for cat, col in merged_cols:
+        lines.append(f'  {_col_tag(cat, col, schema)}')
+
+    su_maps = {cat: (_su_col_map(schema.tables[cat]) if reconstruct_su else {}) for cat in present}
+
+    # Build token matrix.
+    matrix: list[list[str]] = []
+    for pk_vals in all_pk_vals:
+        tokens = []
+        for cat, col in merged_cols:
+            row = table_index[cat].get(pk_vals, {})
+            value = row.get(col)
+            if value is None:
+                token = '.'
+            else:
+                su_map = su_maps[cat]
+                if reconstruct_su and col in su_map:
+                    su_val = row.get(su_map[col])
+                    if su_val is not None:
+                        value = _merge_su(value, su_val)
+                token = quote(value, version)
+                if line_limit is not None:
+                    token = _apply_line_limit(value, token, line_limit)
+            tokens.append(token)
+        matrix.append(tokens)
+
+    if pretty:
+        real_idx = _real_col_indices_merged(merged_cols, schema)
+        if real_idx:
+            matrix = _apply_decimal_align(matrix, real_idx)
+
+    col_widths = _col_widths(matrix) if pretty else None
+
+    for tokens in matrix:
+        lines.extend(_format_row(tokens, col_widths, line_limit))
+
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -501,28 +874,76 @@ def _render_set_category(
     version: CifVersion,
     table_def: TableDef,
     reconstruct_su: bool,
+    pretty: bool,
+    line_limit: int | None = None,
 ) -> list[str]:
     """Emit a Set-class category as scalar tag–value pairs."""
     lines = []
     su_map = _su_col_map(table_def) if reconstruct_su else {}
 
+    # Build (tag, col, value, token) quads; apply folding to any multiline tokens.
+    quads: list[tuple[str, str, str, str]] = []
     for col in cols:
         tag = _col_tag(table_name, col, schema)
         value = row.get(col)
         if value is None:
             continue
-
         if reconstruct_su and col in su_map:
-            # This is a measurand; merge with its SU column
             su_col = su_map[col]
             su_val = row.get(su_col)
             if su_val is not None:
                 value = _merge_su(value, su_val)
-
         token = quote(value, version)
+        if line_limit is not None and token.startswith('\n'):
+            token = make_text_field(value, line_limit)
+        quads.append((tag, col, value, token))
+
+    if pretty:
+        tag_width = max(
+            (len(tag) for tag, _c, _v, token in quads if not token.startswith('\n')),
+            default=0,
+        )
+    else:
+        tag_width = 0
+
+    # Re-quote inline tokens whose formatted line would exceed line_limit.
+    if line_limit is not None:
+        new_quads: list[tuple[str, str, str, str]] = []
+        for tag, col, value, token in quads:
+            if not token.startswith('\n'):
+                line_str = f'{tag:<{tag_width}}  {token}' if pretty else f'{tag}  {token}'
+                if len(line_str) > line_limit:
+                    token = make_text_field(value, line_limit)
+            new_quads.append((tag, col, value, token))
+        quads = new_quads
+        # Recompute tag_width now that some inline tokens may have become multiline.
+        if pretty:
+            tag_width = max(
+                (len(tag) for tag, _c, _v, token in quads if not token.startswith('\n')),
+                default=0,
+            )
+
+    # Decimal-align all inline Real/Float tokens within this Set category.
+    if pretty:
+        col_type = {c.name: c.type_contents for c in table_def.columns}
+        real_positions = [
+            i for i, (tag, col, _v, token) in enumerate(quads)
+            if col_type.get(col) in ('Real', 'Float') and not token.startswith('\n')
+        ]
+        if real_positions:
+            real_tokens = [quads[i][3] for i in real_positions]
+            aligned = _decimal_align_column(real_tokens)
+            quads = list(quads)
+            for pos, new_tok in zip(real_positions, aligned):
+                tag, col, val, _old = quads[pos]
+                quads[pos] = (tag, col, val, new_tok)
+
+    for tag, _col, _value, token in quads:
         if token.startswith('\n'):
             lines.append(tag)
             lines.extend(token.split('\n')[1:])
+        elif pretty:
+            lines.append(f'{tag:<{tag_width}}  {token}')
         else:
             lines.append(f'{tag}  {token}')
 
@@ -537,6 +958,8 @@ def _render_loop_category(
     version: CifVersion,
     table_def: TableDef,
     reconstruct_su: bool,
+    pretty: bool,
+    line_limit: int | None = None,
 ) -> list[str]:
     """Emit a Loop-class category as a ``loop_`` construct."""
     su_map = _su_col_map(table_def) if reconstruct_su else {}
@@ -546,6 +969,8 @@ def _render_loop_category(
         tag = _col_tag(table_name, col, schema)
         lines.append(f'  {tag}')
 
+    # Build token matrix: one quote() call per cell.
+    matrix: list[list[str]] = []
     for row in rows:
         tokens = []
         for col in cols:
@@ -559,21 +984,31 @@ def _render_loop_category(
                     if su_val is not None:
                         value = _merge_su(value, su_val)
                 token = quote(value, version)
+                if line_limit is not None:
+                    token = _apply_line_limit(value, token, line_limit)
             tokens.append(token)
-        lines.extend(_format_row(tokens))
+        matrix.append(tokens)
+
+    if pretty:
+        real_idx = _real_col_indices(cols, table_def)
+        if real_idx:
+            matrix = _apply_decimal_align(matrix, real_idx)
+
+    col_widths = _col_widths(matrix) if pretty else None
+
+    for tokens in matrix:
+        lines.extend(_format_row(tokens, col_widths, line_limit))
 
     return lines
 
 
-def _render_fallback(rows: list[dict], version: CifVersion) -> list[str]:
-    """Emit ``_cif_fallback`` rows as tag–value pairs or single-column loops.
-
-    Tags are grouped and emitted in alphabetical order.  Tags with a single
-    value are emitted as scalar pairs; tags with multiple values (i.e. from
-    a loop in the original CIF) are emitted as single-column ``loop_``
-    constructs.
-    """
-    # Group by tag, preserving row_id order within each tag
+def _render_fallback(
+    rows: list[dict],
+    version: CifVersion,
+    pretty: bool = False,
+    line_limit: int | None = None,
+) -> list[str]:
+    """Emit ``_cif_fallback`` rows as tag–value pairs or single-column loops."""
     tag_values: dict[str, list[tuple[str, str]]] = {}
     for row in sorted(rows, key=lambda r: (r.get('tag', ''), r.get('_row_id', 0))):
         tag = row.get('tag', '')
@@ -581,15 +1016,53 @@ def _render_fallback(rows: list[dict], version: CifVersion) -> list[str]:
         vtype = row.get('value_type', '')
         tag_values.setdefault(tag, []).append((value, vtype))
 
-    lines = []
+    # Scalar tags: build (tag, value, vtype, token) tuples first for alignment.
+    scalar_tuples: list[tuple[str, str, str, str]] = []
     for tag in sorted(tag_values):
         entries = tag_values[tag]
         if len(entries) == 1:
             value, vtype = entries[0]
             token = _fallback_token(value, vtype, version)
+            if line_limit is not None and token.startswith('\n') and vtype != 'placeholder':
+                token = make_text_field(value, line_limit)
+            scalar_tuples.append((tag, value, vtype, token))
+
+    if pretty and scalar_tuples:
+        tag_width = max(
+            (len(tag) for tag, _v, _vt, token in scalar_tuples if not token.startswith('\n')),
+            default=0,
+        )
+    else:
+        tag_width = 0
+
+    # Re-quote inline tokens whose formatted line would exceed line_limit.
+    if line_limit is not None:
+        new_tuples: list[tuple[str, str, str, str]] = []
+        for tag, value, vtype, token in scalar_tuples:
+            if not token.startswith('\n') and vtype != 'placeholder':
+                line_str = f'{tag:<{tag_width}}  {token}' if pretty else f'{tag}  {token}'
+                if len(line_str) > line_limit:
+                    token = make_text_field(value, line_limit)
+            new_tuples.append((tag, value, vtype, token))
+        scalar_tuples = new_tuples
+        if pretty:
+            tag_width = max(
+                (len(tag) for tag, _v, _vt, token in scalar_tuples if not token.startswith('\n')),
+                default=0,
+            )
+
+    lines = []
+    scalar_map = {tag: token for tag, _v, _vt, token in scalar_tuples}
+
+    for tag in sorted(tag_values):
+        entries = tag_values[tag]
+        if len(entries) == 1:
+            token = scalar_map[tag]
             if token.startswith('\n'):
                 lines.append(tag)
                 lines.extend(token.split('\n')[1:])
+            elif pretty:
+                lines.append(f'{tag:<{tag_width}}  {token}')
             else:
                 lines.append(f'{tag}  {token}')
         else:
@@ -597,7 +1070,9 @@ def _render_fallback(rows: list[dict], version: CifVersion) -> list[str]:
             lines.append(f'  {tag}')
             for value, vtype in entries:
                 token = _fallback_token(value, vtype, version)
-                lines.extend(_format_row([token]))
+                if line_limit is not None and token.startswith('\n') and vtype != 'placeholder':
+                    token = make_text_field(value, line_limit)
+                lines.extend(_format_row([token], None, line_limit))
 
     return lines
 
@@ -606,32 +1081,241 @@ def _render_fallback(rows: list[dict], version: CifVersion) -> list[str]:
 # Formatting helpers
 # ---------------------------------------------------------------------------
 
-def _format_row(tokens: list[str]) -> list[str]:
+def _col_widths(matrix: list[list[str]]) -> list[int]:
+    """Compute per-column max token width for pretty-printing.
+
+    Columns that contain any multiline token (``token.startswith('\\n')``)
+    are given width 0 — they cannot be padded inline.
+    """
+    if not matrix:
+        return []
+    n_cols = len(matrix[0])
+    widths = [0] * n_cols
+    for j in range(n_cols):
+        col = [row[j] for row in matrix]
+        if any(t.startswith('\n') for t in col):
+            widths[j] = 0  # unaligned: multiline values present
+        else:
+            widths[j] = max(len(t) for t in col)
+    return widths
+
+
+def _pack_tokens(padded: list[str], line_limit: int) -> list[str]:
+    """Pack padded inline tokens of one loop row into lines ≤ *line_limit* chars.
+
+    Uses a greedy left-to-right algorithm: accumulate tokens onto the current
+    physical line; start a new line when adding the next token would cause the
+    line to exceed *line_limit* (measured after ``.rstrip()`` to ignore trailing
+    column-padding spaces).  A single token that exceeds *line_limit* by itself
+    is placed on its own line regardless.
+    """
+    if not padded:
+        return []
+    result: list[str] = []
+    current: list[str] = []
+    for token in padded:
+        if not current:
+            current.append(token)
+        else:
+            trial = ('  ' + '  '.join(current + [token])).rstrip()
+            if len(trial) > line_limit:
+                result.append(('  ' + '  '.join(current)).rstrip())
+                current = [token]
+            else:
+                current.append(token)
+    if current:
+        result.append(('  ' + '  '.join(current)).rstrip())
+    return result
+
+
+def _apply_line_limit(value: str, token: str, line_limit: int) -> str:
+    """Re-quote *token* when its content or token length would exceed *line_limit*.
+
+    For multiline tokens (already semicolon-delimited): re-produce with folding
+    if any content line of *value* is longer than *line_limit*.
+
+    For inline tokens: switch to a semicolon field when the token itself
+    (not including loop row indentation) is longer than *line_limit* − 2
+    characters (the ``'  '`` prefix reserved for loop data indentation).
+    """
+    if token.startswith('\n'):
+        if any(len(line) > line_limit for line in value.split('\n')):
+            return make_text_field(value, line_limit)
+    else:
+        if len(token) > line_limit - 2:
+            return make_text_field(value, line_limit)
+    return token
+
+
+# ---------------------------------------------------------------------------
+# Decimal-alignment helpers
+# ---------------------------------------------------------------------------
+
+_NUMERIC_RE = re.compile(
+    r'^[+-]?'                  # optional sign
+    r'(?:\d+\.?\d*|\.\d+)'    # digits with optional '.', or '.digits'
+    r'(?:\(\d+\))?'           # optional SU  e.g. (5)
+    r'(?:[eE][+-]?\d+)?$'     # optional exponent
+)
+
+
+def _parse_numeric(token: str) -> tuple[str, str] | None:
+    """Classify *token* as a numeric bare word and return ``(int_part, frac_part)``.
+
+    Split priority:
+
+    1. If ``.`` is present → split on first ``.``; *int_part* = before, *frac_part* = after
+       (including any SU suffix and exponent).
+    2. If no ``.`` but ``e``/``E`` is present → split before first ``e``/``E``; *int_part* =
+       before the exponent letter, *frac_part* = ``e``/``E`` + remainder.
+    3. Otherwise (pure integer, possibly with SU) → *int_part* = whole token,
+       *frac_part* = ``''``.
+
+    Returns ``None`` for: multiline tokens, placeholders (``.`` / ``?``), quoted tokens,
+    or bare words that do not match the numeric pattern.
+    """
+    if token.startswith(('\n', "'", '"')) or token in ('.', '?'):
+        return None
+    if not _NUMERIC_RE.match(token):
+        return None
+    dot = token.find('.')
+    if dot >= 0:
+        return token[:dot], token[dot + 1:]
+    e_pos = next((i for i, c in enumerate(token) if c in ('e', 'E')), -1)
+    if e_pos > 0:
+        return token[:e_pos], token[e_pos:]
+    return token, ''
+
+
+def _decimal_align_column(tokens: list[str]) -> list[str]:
+    """Return *tokens* with numeric values aligned on the decimal (or exponent) point.
+
+    Each token is classified by :func:`_parse_numeric`.  From the numeric tokens,
+    ``int_width`` (max chars before the separator) and ``frac_width`` (max chars
+    after the separator) are computed.  Numeric tokens are formatted as:
+
+    - with separator: ``f'{int_part:>{int_width}}.{frac_part:<{frac_width}}'``
+    - without separator (``frac_part == ''``) in a column that *has* a separator:
+      ``f'{int_part:>{int_width}}' + ' ' * (1 + frac_width)``
+    - without separator in a column with no separator at all:
+      ``f'{int_part:>{int_width}}'``
+
+    Non-numeric tokens are returned unchanged; :func:`_col_widths` and
+    :func:`_format_row` handle left-justification to the column max width.
+    """
+    parsed = [_parse_numeric(t) for t in tokens]
+    numeric = [(p, i) for i, p in enumerate(parsed) if p is not None]
+    if not numeric:
+        return list(tokens)
+
+    int_width = max(len(p[0]) for p, _ in numeric)
+    frac_width = max(len(p[1]) for p, _ in numeric)
+    has_sep = any(p[1] for p, _ in numeric)
+
+    result = list(tokens)
+    for (int_part, frac_part), idx in numeric:
+        if has_sep:
+            if frac_part:
+                result[idx] = f'{int_part:>{int_width}}.{frac_part:<{frac_width}}'
+            else:
+                result[idx] = f'{int_part:>{int_width}}' + ' ' * (1 + frac_width)
+        else:
+            result[idx] = f'{int_part:>{int_width}}'
+    return result
+
+
+def _apply_decimal_align(
+    matrix: list[list[str]],
+    real_indices: set[int],
+) -> list[list[str]]:
+    """Apply decimal alignment to the specified columns of *matrix* in-place.
+
+    Returns a new matrix (rows are new lists; original is not mutated).
+    """
+    if not matrix or not real_indices:
+        return matrix
+    n_cols = len(matrix[0])
+    result = [list(row) for row in matrix]
+    for j in real_indices:
+        if j >= n_cols:
+            continue
+        col_tokens = [row[j] for row in result]
+        aligned = _decimal_align_column(col_tokens)
+        for i, tok in enumerate(aligned):
+            result[i][j] = tok
+    return result
+
+
+def _real_col_indices(cols: list[str], table_def: 'TableDef') -> set[int]:
+    """Return the set of column indices whose ``type_contents`` is Real or Float."""
+    col_type = {c.name: c.type_contents for c in table_def.columns}
+    return {
+        i for i, col in enumerate(cols)
+        if col_type.get(col) in ('Real', 'Float')
+    }
+
+
+def _real_col_indices_merged(
+    merged_cols: list[tuple[str, str]],
+    schema: 'SchemaSpec',
+) -> set[int]:
+    """Return Real/Float column indices for a merge-group ``(table, col)`` list."""
+    result: set[int] = set()
+    for i, (cat, col) in enumerate(merged_cols):
+        tdef = schema.tables.get(cat)
+        if tdef is None:
+            continue
+        col_type = {c.name: c.type_contents for c in tdef.columns}
+        if col_type.get(col) in ('Real', 'Float'):
+            result.add(i)
+    return result
+
+
+def _format_row(
+    tokens: list[str],
+    col_widths: list[int] | None,
+    line_limit: int | None = None,
+) -> list[str]:
     """Format one loop data row as a list of output lines.
 
-    If all tokens are inline (no semicolon delimiters), produce one line.
-    If any token is semicolon-delimited (starts with ``'\\n'``), each token
-    is placed on its own line or set of lines.
+    When ``col_widths`` is provided (pretty mode), each inline token is
+    left-padded to the column width.  Multiline tokens (col_width == 0) are
+    never padded.
+
+    When ``line_limit`` is given, inline tokens are packed greedily: a new
+    physical line is started whenever adding the next token would cause the
+    line to exceed *line_limit* characters.
     """
+    def _pad(token: str, j: int) -> str:
+        if col_widths and col_widths[j]:
+            return f'{token:<{col_widths[j]}}'
+        return token
+
     if not any(t.startswith('\n') for t in tokens):
-        row_line = '  ' + '  '.join(tokens)
-        return [row_line.rstrip()]
+        padded = [_pad(t, j) for j, t in enumerate(tokens)]
+        if line_limit is None:
+            return [('  ' + '  '.join(padded)).rstrip()]
+        return _pack_tokens(padded, line_limit)
 
     result: list[str] = []
     inline_buf: list[str] = []
 
-    for t in tokens:
-        if t.startswith('\n'):
-            if inline_buf:
+    def _flush() -> None:
+        if inline_buf:
+            if line_limit is not None:
+                result.extend(_pack_tokens(inline_buf, line_limit))
+            else:
                 result.append(('  ' + '  '.join(inline_buf)).rstrip())
-                inline_buf = []
+            inline_buf.clear()
+
+    for j, t in enumerate(tokens):
+        if t.startswith('\n'):
+            _flush()
             result.extend(t.split('\n')[1:])
         else:
-            inline_buf.append(t)
+            inline_buf.append(_pad(t, j))
 
-    if inline_buf:
-        result.append(('  ' + '  '.join(inline_buf)).rstrip())
-
+    _flush()
     return result
 
 
@@ -639,40 +1323,19 @@ def _format_row(tokens: list[str]) -> list[str]:
 # Column and tag helpers
 # ---------------------------------------------------------------------------
 
-def _ordered_categories(schema: SchemaSpec, spec: BlockSpec | None) -> list[str]:
-    """Return table names in emission order."""
-    all_tables = list(schema.tables.keys())
-
-    if spec and spec.categories:
-        listed = [c for c in spec.categories if c in schema.tables]
-        listed_set = set(listed)
-        remaining = sorted(t for t in all_tables if t not in listed_set)
-        return listed + remaining
-
-    # Default: Set-class first (alphabetical), then Loop-class (alphabetical)
-    set_tables = sorted(t for t, td in schema.tables.items() if td.category_class == 'Set')
-    loop_tables = sorted(t for t, td in schema.tables.items() if td.category_class != 'Set')
-    return set_tables + loop_tables
-
-
 def _active_cols(
     table_def: TableDef,
     rows: list[dict],
     spec: BlockSpec | None,
     reconstruct_su: bool,
 ) -> list[str]:
-    """Return columns with at least one non-NULL value, in emission order.
-
-    Synthetic columns and (when ``reconstruct_su=True``) SU columns are
-    excluded.  SU column values are merged into their measurand column.
-    """
+    """Return columns with at least one non-NULL value, in emission order."""
     su_col_names: set[str] = set()
     if reconstruct_su:
         for col in table_def.columns:
             if col.linked_item_id is not None:
                 su_col_names.add(col.name)
 
-    # Columns with at least one non-NULL value, excluding synthetic and SU
     active_set = {
         col.name for col in table_def.columns
         if not col.is_synthetic
@@ -683,14 +1346,12 @@ def _active_cols(
     if not active_set:
         return []
 
-    # Apply custom column ordering from plan
     if spec and table_def.name in spec.column_order:
         listed = [c for c in spec.column_order[table_def.name] if c in active_set]
         listed_set = set(listed)
         rest = sorted(c for c in active_set if c not in listed_set)
         return listed + rest
 
-    # Default: PK columns first (non-synthetic), then alphabetical
     pk_non_syn = [pk for pk in table_def.primary_keys if pk not in _SYNTHETIC and pk in active_set]
     other = sorted(c for c in active_set if c not in set(table_def.primary_keys))
     return pk_non_syn + other
@@ -702,24 +1363,7 @@ def _suppressed_fk_pk_cols(
     table_rows: dict[str, list[dict]],
     schema: SchemaSpec,
 ) -> set[str]:
-    """Return FK-PK columns that are implicit from a co-emitted Set category.
-
-    Only called for Set categories rendered as scalar tag-value pairs (single
-    row).  Loop categories must always emit all PK columns explicitly; a reader
-    cannot recover a suppressed composite-key column from block scope.
-
-    A column can be suppressed when ALL of the following hold:
-
-    1. It is part of the table's domain primary key.
-    2. It is part of a FK that targets a Set-class table.
-    3. That Set table is present in *table_rows* (being emitted in the same
-       block) with exactly one row.
-    4. Every row in *rows* carries the same FK value, and that value equals
-       the target Set's PK value.
-
-    In CIF, the block scope makes such FK-PK values implicit: a reader can
-    derive ``_cell.diffrn_id`` from ``_diffrn.id`` in the same block.
-    """
+    """Return FK-PK columns that are implicit from a co-emitted Set category."""
     pk_cols: set[str] = set(table_def.primary_keys) - _SYNTHETIC
     suppressed: set[str] = set()
 
@@ -732,14 +1376,12 @@ def _suppressed_fk_pk_cols(
         if not target_table_rows or len(target_table_rows) != 1:
             continue
 
-        # FK source columns must all be domain PK columns of this table.
         if not all(c in pk_cols for c in fk.source_columns):
             continue
 
         target_row = target_table_rows[0]
         expected = tuple(target_row.get(c) for c in fk.target_columns)
 
-        # All rows must carry the same FK value matching the target's PK.
         if all(tuple(row.get(c) for c in fk.source_columns) == expected for row in rows):
             suppressed.update(fk.source_columns)
 
@@ -747,13 +1389,12 @@ def _suppressed_fk_pk_cols(
 
 
 def _col_tag(table_name: str, col_name: str, schema: SchemaSpec) -> str:
-    """Return the CIF tag name (``_definition.id``) for a column."""
+    """Return the CIF tag name for a column."""
     return schema.column_to_tag.get((table_name, col_name), f'_{table_name}.{col_name}')
 
 
 def _su_col_map(table_def: TableDef) -> dict[str, str]:
     """Return ``{measurand_col_name: su_col_name}`` for this table."""
-    # Build definition_id → col_name for non-SU columns
     def_to_col: dict[str, str] = {
         col.definition_id: col.name
         for col in table_def.columns
@@ -775,23 +1416,19 @@ def _su_col_map(table_def: TableDef) -> dict[str, str]:
 def _fallback_token(value: str, vtype: str, version: CifVersion) -> str:
     """Produce a CIF token for a ``_cif_fallback`` value."""
     if vtype == 'placeholder':
-        return value  # '.' or '?' — unquoted
+        return value
     return quote(value, version)
 
 
 def _merge_su(measurand: str, scaled_su: str) -> str:
-    """Reconstruct ``value(su)`` from stored measurand and scaled SU strings.
-
-    This is the inverse of ``split_su`` in ``ingest.py``.  If the conversion
-    fails for any reason, the unmodified measurand is returned.
-    """
+    """Reconstruct ``value(su)`` from stored measurand and scaled SU strings."""
     try:
         e_match = re.search(r'[eE]([+-]?\d+)$', measurand)
         exponent = int(e_match.group(1)) if e_match else 0
         mantissa = measurand[:e_match.start()] if e_match else measurand
         dot_idx = mantissa.find('.')
         decimal_places = (len(mantissa) - dot_idx - 1) if dot_idx >= 0 else 0
-        total_power = exponent - decimal_places  # power of 10 for the last decimal place
+        total_power = exponent - decimal_places
         su_float = float(scaled_su)
         if total_power >= 0:
             su_int = round(su_float / (10 ** total_power))
@@ -825,23 +1462,7 @@ def _fetch_rows(
 
 
 def _find_set_anchor(table_name: str, schema: SchemaSpec) -> str | None:
-    """Find the root Set-class ancestor reachable from *table_name* via FK links.
-
-    Traverses the full FK graph (BFS) and collects every reachable Set-class
-    table.  The *root* Set is the one that has no FK pointing to another
-    reachable Set — i.e. the topmost node in the Set-level hierarchy.
-
-    This ensures that intermediate Set categories (e.g. a ``CELL`` Set that
-    FKs to a ``STRUCTURE`` Set) are not returned as the anchor; the shared
-    root (``STRUCTURE``) is returned instead, so all tables that ultimately
-    reduce to the same root are placed in the same output block.
-
-    Tables with composite FK keys where only some paths lead to a Set are
-    handled correctly: BFS explores all FK targets at each level.
-
-    Returns ``None`` if no Set-class table is reachable (pure Loop chains).
-    """
-    # BFS over all FK-reachable tables; collect every reachable Set.
+    """Find the root Set-class ancestor reachable from *table_name* via FK links."""
     visited: set[str] = {table_name}
     queue: deque[str] = deque([table_name])
     reachable_sets: list[str] = []
@@ -869,7 +1490,6 @@ def _find_set_anchor(table_name: str, schema: SchemaSpec) -> str | None:
     if not reachable_sets:
         return None
 
-    # Root Set: a reachable Set with no FK to another reachable Set.
     reachable_set_names = set(reachable_sets)
     for s in reachable_sets:
         td = schema.tables[s]
@@ -880,16 +1500,11 @@ def _find_set_anchor(table_name: str, schema: SchemaSpec) -> str | None:
         if not has_set_parent:
             return s
 
-    # Fallback (e.g. circular FK graph): return the last Set found.
     return reachable_sets[-1]
 
 
 def _fk_chain(from_table: str, to_table: str, schema: SchemaSpec) -> list[ForeignKeyDef] | None:
-    """BFS to find the FK-hop path from *from_table* to *to_table*.
-
-    Returns the ordered list of :class:`ForeignKeyDef` hops, or ``None`` if
-    *to_table* is not reachable.  Returns ``[]`` when ``from_table == to_table``.
-    """
+    """BFS to find the FK-hop path from *from_table* to *to_table*."""
     if from_table == to_table:
         return []
     visited: set[str] = {from_table}
@@ -916,17 +1531,11 @@ def _fetch_rows_via_fk_path(
     anchor_pk_cols: list[str],
     anchor_pk_vals: tuple,
 ) -> list[dict]:
-    """Fetch rows from *from_table* that transitively FK-link to the given anchor row.
-
-    *fk_path* is the ordered list of FK hops from *from_table* to the anchor.
-    *anchor_pk_cols* / *anchor_pk_vals* identify the anchor row.
-    """
+    """Fetch rows from *from_table* that transitively FK-link to the anchor row."""
     if not fk_path or not anchor_pk_cols:
         return _fetch_rows(conn, from_table)
 
-    # t0 = from_table alias, t1 = first hop target, ...
     aliases = [f't{i}' for i in range(len(fk_path) + 1)]
-
     sql = f'SELECT {aliases[0]}.* FROM "{from_table}" AS {aliases[0]}'
     for i, fk in enumerate(fk_path):
         src_alias = aliases[i]
