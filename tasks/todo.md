@@ -7,11 +7,25 @@
 **Current stage:** Stage 6 — OutputPlan fully implemented. Output layer complete and stable.
 
 **Test suite state (2026-04-15):**
-- ~1366 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+- ~1391 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
 - 58 slow tests pass: `pytest -m slow`
-- Total: ~1392 passing, 0 xfail
+- Total: ~1417 passing, 0 xfail
 
 **What was completed in recent sessions:**
+- **`visualise_schema` / `visualise_schema_html`** (2026-04-15):
+  - `src/pycifparse/dictionary/visualise.py`: two public functions, two-pass connectivity
+    analysis (BFS FK+parent / bridge), ghost node detection, three-tier badge system
+    ([BRIDGE ONLY] / [ORPHAN] / none), `highlight_components` subgraph clustering,
+    `show_columns` ('all'/'sparse'/'none') with TOOLTIP, all three edge types (FK solid,
+    bridge dashed, parent dotted).
+  - `visualise_schema_html`: self-contained HTML; viz.js 2.1.2 + svg-pan-zoom 3.6.1
+    bundled as package data in `src/pycifparse/dictionary/js/`.
+  - `pyproject.toml`: `[tool.setuptools.package-data]` added.
+  - Exported from `pycifparse.dictionary.__init__` and `pycifparse.__init__`.
+  - 25 tests in `tests/dictionary/test_visualise.py`.
+  - Lesson 77 added (sparse synthetic column qualification order).
+
+
 - `quote.py`: CIF 2.0 and 1.1 quoting decision trees; 95 tests in `tests/output/test_quote.py`.
 - `plan.py`: `EmitMode` (`ONE_BLOCK`, `ALL_BLOCKS`, `ORIGINAL`, `GROUPED`), `BlockSpec`, `OutputPlan`.
 - `emit.py`: `emit(conn, schema, *, mode, version, plan, reconstruct_su, emit_defaults)`.
@@ -388,30 +402,9 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 
 ### Planned features (inspect layer)
 
-- **`visualise_schema(schema) -> str`** — Graphviz DOT output alongside `inspect_schema`.
-  Lives in `src/pycifparse/inspect/` (new file `_schema_viz.py`), exported from
-  `pycifparse.inspect` and `pycifparse`.  Should show:
-  - **Parent–child category relationships** (from `SchemaSpec.category_parent`): directed
-    edges from parent to child, visually grouping the category hierarchy.
-  - **Set vs Loop class**: node shape or fill distinguishes Set categories (e.g. box) from
-    Loop categories (e.g. ellipse).
-  - **PK/FK relationships**: directed FK edges labelled with the source and target column
-    names; highlight whether the FK target is a terminal Set category that carries a
-    `_category_key.name` keyword (i.e. a keyed anchor) vs a keyless Set (PK is
-    `_pycifparse_id`).
-  - **Non-key linked data names**: edges or annotations for columns whose `linked_item_id` 
-    points to another key column in a different table (eg `_model.structure_id`). SU links are excluded.
-  - Highlight orphaned categories.
-  - Show category connectivity: it should be possible to travel from one category to any other
-    via PK/FK relations, or by using a non-key linked data name.
-  - Output is a plain DOT string; caller renders with Graphviz or pastes into an online
-    viewer. 
-     - Alternatively: output is a self-contained HTML file generated from the dictionary 
-                      would be ideal: no installation, no server, just open in a browser. 
-                      Graphviz can export SVG which embeds directly into HTML, and you can 
-                      layer interactivity on top with plain JavaScript. Clickable nodes 
-                      showing full category definition: description, data names, types, units...
-                      Highlight FK chains: click a FK and highlight the PK it resolves to.
+- ~~**`visualise_schema(schema) -> str`**~~ — **DONE** (2026-04-15).
+  `src/pycifparse/dictionary/visualise.py`, exported from `pycifparse.dictionary` and
+  `pycifparse`.  Spec: `prompts/stage 6 visualise schema.md`.  25 tests.
 
 ### Refactors
 

@@ -24,6 +24,8 @@ from pycifparse.dictionary import (
     resolve_tag,
     save_dictionary,
     load_dictionary,
+    visualise_schema,
+    visualise_schema_html,
 )
 from pycifparse.output import emit, quote, EmitMode, OutputPlan, BlockSpec
 from pycifparse.fidelity import check_fidelity, FidelityReport, FidelityMismatch
@@ -52,6 +54,7 @@ __all__ = [
     'apply_schema', 'apply_fallback_schema',
     'ResolvedTag', 'resolve_tag',
     'save_dictionary', 'load_dictionary',
+    'visualise_schema', 'visualise_schema_html',
     # Output
     'emit', 'quote', 'EmitMode', 'OutputPlan', 'BlockSpec',
     # Fidelity

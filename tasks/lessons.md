@@ -1,5 +1,47 @@
 # pycifparse — Lessons Learned
 
+## Lesson 77 — In sparse column display, apply the qualification check before skipping synthetics (2026-04-15)
+
+**Context:** `_column_rows` in `dictionary/visualise.py`.
+
+**Mistake:** Synthetic columns were skipped with an early `continue` before the
+bridge-qualification check ran.  A synthetic column that is `bc.column_name` (the
+derived composite-FK column) should appear in `show_columns='sparse'` — the spec
+says "synthetic columns are excluded **unless** they qualify via bridge rules".
+Skipping them unconditionally meant the derived column was silently absent from
+sparse display even though it is structurally significant.
+
+**Fix:** Removed the synthetic-specific `continue` in the `sparse` branch entirely.
+The single combined check
+`not (col.is_primary_key or col.name in fk_source_cols or col.name in bridge_cols)`
+now covers all columns uniformly — synthetic columns that qualify via `bridge_cols`
+pass through; others are excluded.
+
+**Rule:** When column display has multiple exclusion criteria, evaluate qualification
+(which columns should be shown) as a single predicate rather than applying independent
+early-exit guards that may shadow later qualification checks.
+
+## Lesson 76 — Non-Single container columns store JSON; coerce leaves, not the whole value (2026-04-15)
+
+**Context:** `convert_database` in `database/compact.py`; `ColumnDef` in `dictionary/schema.py`.
+
+**Mistake:** `convert_database` treated every `INTEGER`-typed column the same way regardless of
+`_type.container`.  A column like `_pd_pref_orient_march_dollase.hkl` has `type_contents="Integer"`
+but `type_container="Matrix"`, so its stored value is a JSON array `["1","2","3"]`.  Trying to cast
+that string to `int` fails (coercion-failure warning), and the JSON is lost.
+
+**Fix:**
+1. Added `type_container: str | None = None` to `ColumnDef` (optional field, default `None`, placed
+   last to avoid breaking existing callers).
+2. `generate_schema` populates it from `DdlmItem.type_container` for all domain columns.
+3. `_sql_type_for(col)` returns `"TEXT"` whenever `type_container` is set and is not `"Single"`.
+4. `_cast_value` detects a JSON array/object (raw starts with `[` or `{`), decodes it, recurses into
+   leaves with `_cast_json_leaves`, casts each string leaf to the leaf type (from `type_contents`
+   alone), then re-serialises with `json.dumps`.
+
+**Rule:** Any column whose `type_container` is not `"Single"` stores structured data as JSON.
+Always check `type_container` before deciding the column's storage affinity or cast strategy.
+
 ## Lesson 75 — Rows fetched from SQLite may already be typed, not TEXT (2026-04-15)
 
 **Context:** `_cast_value` in `database/compact.py`.
