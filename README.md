@@ -1,8 +1,8 @@
 # pycifparse
 
-A Python library for parsing, storing, and outputting Crystallographic Information Files (CIF).
+A Python library for parsing, storing, and outputting Crystallographic Information Freamework (CIF) files.
 
-**Python ≥ 3.10 · Apache 2.0 · v0.0.1 · pre-release (not yet on PyPI)**
+**Python ≥ 3.10 · Apache 2.0 · v0.1.0 · pre-release (not yet on PyPI)**
 
 ---
 
@@ -10,6 +10,7 @@ A Python library for parsing, storing, and outputting Crystallographic Informati
 
 - Parses CIF 1.1 and CIF 2.0 files, including all string types (triple-quoted, multiline text fields, embedded quotes) and save frames
 - Loads DDLm dictionaries with full `_import.get` resolution, producing a typed schema
+- Majority of functionality focussed on dealing with multi-block powder CIF files.
 - Ingests parsed CIF data into SQLite using the dictionary-derived schema: one table per category, foreign keys enforced, unknown tags routed to a fallback tier
 - Emits valid CIF from a populated database in four modes: ORIGINAL, GROUPED, ONE_BLOCK, ALL_BLOCKS
 - Trusts the user. If you pass in multiple blocks, the program assumes they all belong together, and, failing key value clashes, can be interpreted as a single database/experiment.
