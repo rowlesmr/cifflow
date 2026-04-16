@@ -2,7 +2,7 @@
 SQLite schema generation from a loaded DDLm dictionary.
 """
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 
 from pycifparse.dictionary.ddlm_item import DdlmItem
@@ -16,12 +16,23 @@ from pycifparse.dictionary.ddlm_parser import DdlmDictionary
 @dataclass
 class BridgeColumnDef:
     """
-    A column whose value is derived transitively through another table.
+    A column whose value is derived transitively through one or more tables.
 
     When populating ``table_name``, the column ``column_name`` has no direct
-    CIF source.  Its value must be fetched from
-    ``bridge_table.bridge_value_column`` by looking up the row where
-    ``bridge_table.bridge_pk_column = row[via_column]``.
+    CIF source.  Its value is resolved by following a chain of single-column
+    FK lookups described by ``hops``, then reading ``bridge_value_column``
+    from the final table in the chain.
+
+    Each hop is a 3-tuple ``(via_column, bridge_table, bridge_pk_column)``:
+
+    - ``via_column``: column in the *previous* table (or in ``table_name``
+      for the first hop) whose value is used as the lookup key.
+    - ``bridge_table``: the table to look up in.
+    - ``bridge_pk_column``: the PK column of ``bridge_table`` matched
+      against ``via_column``.
+
+    For a single-hop bridge the chain has length 1 and the semantics are
+    identical to the legacy four-field form.
 
     Attributes
     ----------
@@ -29,23 +40,44 @@ class BridgeColumnDef:
         Table that gains the derived column (e.g. ``'geom_angle'``).
     column_name:
         Name of the derived column (e.g. ``'structure_id'``).
-    via_column:
-        Column in *table_name* used as the lookup key (e.g. ``'model_id'``).
-    bridge_table:
-        Intermediate table to query (e.g. ``'model'``).
-    bridge_pk_column:
-        PK column of *bridge_table* matched against *via_column*
-        (e.g. ``'id'``).
+    hops:
+        Ordered list of ``(via_column, bridge_table, bridge_pk_column)``
+        tuples, one per lookup step.  Must contain at least one entry.
     bridge_value_column:
-        Column in *bridge_table* whose value is copied (e.g. ``'structure_id'``).
+        Column in the *last* hop's ``bridge_table`` whose value is copied
+        into ``column_name`` (e.g. ``'structure_id'``).
     """
 
     table_name: str
     column_name: str
-    via_column: str
-    bridge_table: str
-    bridge_pk_column: str
+    hops: list[tuple[str, str, str]]
     bridge_value_column: str
+    fallback_chains: 'list[tuple[list[tuple[str, str, str]], str]]' = field(default_factory=list)
+    """Alternative resolution chains tried in order when the primary chain
+    yields ``None`` for a given row.  Each entry is a
+    ``(hops, bridge_value_column)`` pair with the same structure as the
+    primary ``hops`` / ``bridge_value_column`` fields.
+    """
+
+    # ------------------------------------------------------------------
+    # Backward-compat properties (single-hop case; also useful for
+    # visualisation which only needs the first and last table).
+    # ------------------------------------------------------------------
+
+    @property
+    def via_column(self) -> str:
+        """Via-column of the first hop (column in ``table_name``)."""
+        return self.hops[0][0]
+
+    @property
+    def bridge_table(self) -> str:
+        """Bridge table of the last hop (the table holding the value)."""
+        return self.hops[-1][1]
+
+    @property
+    def bridge_pk_column(self) -> str:
+        """PK column of the last hop's bridge table."""
+        return self.hops[-1][2]
 
 
 @dataclass
@@ -249,23 +281,25 @@ def _find_transitive_bridge(
     tables: dict,
     dictionary: 'DdlmDictionary',
     link_groups: dict,
-) -> 'tuple[str, str, str, str] | None':
-    """Return ``(src_bridge_col, bridge_tbl, bridge_pk_col, bridge_val_col)`` or None.
+) -> 'list[list[tuple[str, str, str, str]]] | None':
+    """BFS over valid single-column-to-sole-PK hops from *src_tbl*.
 
-    Searches for an intermediate table *bridge_tbl* such that:
+    Returns **all** shortest paths, each expressed as a list of
+    ``(via_column, bridge_table, bridge_pk_col, bridge_val_col)`` tuples —
+    one entry per hop.  Intermediate entries carry ``None`` as
+    ``bridge_val_col``; only the final entry of each path carries the real
+    column name.
 
-    - *src_tbl* has a clean single-column Link to the sole PK of *bridge_tbl*
-      via column *src_bridge_col*.
-    - *bridge_tbl* has a column *bridge_val_col* whose ``linked_item_id``
-      equals that of *tgt_tbl*.*missing_pk_col* — meaning both columns draw
-      their values from the same parent item (e.g. both link to
-      ``_structure.id``).
+    Returns ``None`` if the anchor is unreachable.
 
-    When such a bridge exists, the value of *missing_pk_col* in a *src_tbl*
-    row can be derived by looking up
-    ``bridge_tbl[bridge_pk_col = row[src_bridge_col]].bridge_val_col``.
+    A hop is valid when a single source column maps 1-to-1 onto the sole
+    non-synthetic PK column of the candidate bridge table.
+
+    The *visited* set memoises every table already placed on the queue,
+    preventing re-expansion of nodes reached by a shorter path and
+    guaranteeing O(N + E) termination on any graph topology including cycles.
     """
-    # Find the anchor: what definition_id does tgt_tbl.missing_pk_col link to?
+    # Resolve the anchor: what does tgt_tbl.missing_pk_col link to?
     tgt_col_def = next(
         (c for c in tables[tgt_tbl].columns if c.name == missing_pk_col), None
     )
@@ -274,43 +308,63 @@ def _find_transitive_bridge(
     tgt_item = dictionary.tag_to_item.get(tgt_col_def.definition_id)
     if tgt_item is None or tgt_item.linked_item_id is None:
         return None
-    anchor = tgt_item.linked_item_id  # e.g. '_structure.id'
+    anchor = str(tgt_item.linked_item_id)
 
-    # Scan all Link groups from src_tbl for a viable bridge table
-    for (s, bridge_tbl), b_pairs in sorted(link_groups.items()):
-        if s != src_tbl or bridge_tbl == tgt_tbl or bridge_tbl not in tables:
+    # Precompute valid-hop adjacency from link_groups (O(E), done once per call).
+    # hop_adj[tbl] = [(via_col, next_tbl, next_pk_col), ...]
+    hop_adj: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
+    for (s, bridge_tbl), b_pairs in link_groups.items():
+        if bridge_tbl == tgt_tbl or bridge_tbl not in tables:
             continue
-
-        # Bridge table must have exactly one non-synthetic PK column
         bridge_ns_pks = [
             pk for pk in tables[bridge_tbl].primary_keys
             if pk not in _SYNTHETIC_NAMES
         ]
         if len(bridge_ns_pks) != 1:
             continue
-        bridge_pk_col = bridge_ns_pks[0]
-
-        # The link group must cleanly map one src column → bridge_pk_col (1:1)
+        bridge_pk = bridge_ns_pks[0]
         b_tgt_to_srcs: dict[str, list[str]] = defaultdict(list)
         for sc, tc, _ in b_pairs:
             b_tgt_to_srcs[tc].append(sc)
-        if bridge_pk_col not in b_tgt_to_srcs:
+        if bridge_pk not in b_tgt_to_srcs or len(b_tgt_to_srcs[bridge_pk]) != 1:
             continue
-        if len(b_tgt_to_srcs[bridge_pk_col]) != 1:
+        hop_adj[s].append((b_tgt_to_srcs[bridge_pk][0], bridge_tbl, bridge_pk))
+
+    # BFS — each queue entry: (current_table, path_of_hops_taken_so_far)
+    # A hop in the path: (via_col, bridge_tbl, bridge_pk_col, val_col_or_None)
+    queue: deque[tuple[str, list]] = deque([(src_tbl, [])])
+    visited: set[str] = {src_tbl}   # memoisation: tables already enqueued
+    results: list[list] = []
+    result_depth: int | None = None
+
+    while queue:
+        tbl, path = queue.popleft()
+
+        # Once results exist, stop expanding nodes deeper than result_depth.
+        # All nodes already at result_depth are already on the queue and will
+        # be drained, collecting every equal-length path before we return.
+        if result_depth is not None and len(path) >= result_depth:
             continue
-        src_bridge_col = b_tgt_to_srcs[bridge_pk_col][0]
 
-        # Bridge table must have a column sharing the same linked_item_id as anchor
-        for col in tables[bridge_tbl].columns:
-            if col.is_synthetic or not col.definition_id:
-                continue
-            b_item = dictionary.tag_to_item.get(col.definition_id)
-            if (b_item is not None
-                    and b_item.type_purpose == 'Link'
-                    and b_item.linked_item_id == anchor):
-                return (src_bridge_col, bridge_tbl, bridge_pk_col, col.name)
+        for via_col, bridge_tbl, bridge_pk in hop_adj.get(tbl, []):
+            # Check whether bridge_tbl carries a column with linked_item_id == anchor
+            for col in tables[bridge_tbl].columns:
+                if col.is_synthetic or not col.definition_id:
+                    continue
+                b_item = dictionary.tag_to_item.get(col.definition_id)
+                if (b_item is not None
+                        and b_item.type_purpose == 'Link'
+                        and str(b_item.linked_item_id) == anchor):
+                    results.append(path + [(via_col, bridge_tbl, bridge_pk, col.name)])
+                    result_depth = len(path) + 1
+                    break
 
-    return None
+            # Enqueue only if not yet seen (memoise at enqueue time)
+            if bridge_tbl not in visited:
+                visited.add(bridge_tbl)
+                queue.append((bridge_tbl, path + [(via_col, bridge_tbl, bridge_pk, None)]))
+
+    return results if results else None
 
 
 # ---------------------------------------------------------------------------
@@ -615,7 +669,19 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                     tables, dictionary, _link_groups,
                 )
                 if found is not None:
-                    src_bridge_col, bridge_tbl, bridge_pk_col, bridge_val_col = found
+                    # found is a list of paths; each path is a list of
+                    # (via_col, bridge_tbl, bridge_pk, val_col_or_None) tuples.
+                    # Intermediate entries carry None; the last entry carries
+                    # the real value column.  Use the first path as primary and
+                    # carry the rest as fallback chains so ingest can try them
+                    # in order when the primary yields None for a given row.
+                    primary = found[0]
+                    hops = [(vc, bt, bp) for vc, bt, bp, _ in primary]
+                    bridge_val_col = primary[-1][3]
+                    fallback_chains = [
+                        ([(vc, bt, bp) for vc, bt, bp, _ in alt], alt[-1][3])
+                        for alt in found[1:]
+                    ]
                     # Add derived column once per (src_tbl, col) pair
                     tables[src_tbl].columns.append(ColumnDef(
                         name=missing_pk_col,
@@ -630,10 +696,9 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                     bridge_columns.append(BridgeColumnDef(
                         table_name=src_tbl,
                         column_name=missing_pk_col,
-                        via_column=src_bridge_col,
-                        bridge_table=bridge_tbl,
-                        bridge_pk_column=bridge_pk_col,
+                        hops=hops,
                         bridge_value_column=bridge_val_col,
+                        fallback_chains=fallback_chains,
                     ))
                     bridge_col_in_src = missing_pk_col
 
@@ -669,9 +734,9 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 for src_col, tgt_col, item in pairs:
                     warnings.append(
                         f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
-                        f"partial FK to '{tgt_tbl}' — covers "
+                        f"partial FK to '{tgt_tbl}' -- covers "
                         f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}, "
-                        f"no transitive bridge found — skipping FK constraint"
+                        f"no transitive bridge found -- skipping FK constraint"
                     )
         elif non_pk_tgt_cols or missing_pk_cols or has_conflicts:
             # Cannot form a complete, unambiguous (composite) FK.
@@ -679,7 +744,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             for src_col, tgt_col, item in pairs:
                 if len(tgt_to_srcs.get(tgt_col, [])) > 1:
                     msg = (
-                        f"ambiguous composite FK — multiple source columns "
+                        f"ambiguous composite FK -- multiple source columns "
                         f"link to '{tgt_tbl}'.'{tgt_col}'"
                     )
                 elif tgt_col not in tgt_pks_set:
@@ -689,12 +754,12 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                     )
                 else:
                     msg = (
-                        f"partial FK to '{tgt_tbl}' — covers "
+                        f"partial FK to '{tgt_tbl}' -- covers "
                         f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}"
                     )
                 warnings.append(
                     f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
-                    f"{msg} — skipping FK constraint"
+                    f"{msg} -- skipping FK constraint"
                 )
         else:
             # All PKs covered, no non-PK targets, no duplicate targets.

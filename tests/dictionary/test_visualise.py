@@ -380,8 +380,8 @@ class TestColumnDisplay:
     def test_sparse_includes_bridge_columns(self):
         bc = BridgeColumnDef(
             table_name='geom', column_name='structure_id',
-            via_column='model_id', bridge_table='model',
-            bridge_pk_column='id', bridge_value_column='structure_id',
+            hops=[('model_id', 'model', 'id')],
+            bridge_value_column='structure_id',
         )
         cols = [
             _col('id', is_primary_key=True),
@@ -406,8 +406,8 @@ class TestBridgeEdges:
     def _bridge_schema(self) -> tuple[SchemaSpec, BridgeColumnDef]:
         bc = BridgeColumnDef(
             table_name='geom', column_name='structure_id',
-            via_column='model_id', bridge_table='model',
-            bridge_pk_column='id', bridge_value_column='structure_id',
+            hops=[('model_id', 'model', 'id')],
+            bridge_value_column='structure_id',
         )
         geom = _table('geom')
         model = _table('model')
@@ -422,7 +422,7 @@ class TestBridgeEdges:
     def test_bridge_edge_absent_when_show_bridge_false_for_connected_table(self):
         # geom is connected via FK to something else — bridge edge suppressed
         fk = ForeignKeyDef('geom', ['ref_id'], 'other', ['id'])
-        bc = BridgeColumnDef('geom', 'structure_id', 'model_id', 'model', 'id', 'structure_id')
+        bc = BridgeColumnDef('geom', 'structure_id', [('model_id', 'model', 'id')], 'structure_id')
         geom = _table('geom', columns=[_col('id', is_primary_key=True), _col('ref_id')],
                       primary_keys=['id'], foreign_keys=[fk])
         other = _table('other')
@@ -475,7 +475,7 @@ class TestGhostNodes:
         assert '[MISSING]' in dot
 
     def test_bridge_target_missing_creates_ghost(self):
-        bc = BridgeColumnDef('t', 'x', 'y', 'ghost_bridge', 'id', 'x')
+        bc = BridgeColumnDef('t', 'x', [('y', 'ghost_bridge', 'id')], 'x')
         tbl = _table('t')
         dot = visualise_schema(_schema([tbl], bridge_columns=[bc]))
         assert 'ghost_bridge' in dot
@@ -501,7 +501,7 @@ class TestGhostNodes:
         assert '[PK]' not in ghost_block
 
     def test_edge_to_ghost_present_even_when_show_bridge_false(self):
-        bc = BridgeColumnDef('t', 'x', 'y', 'ghost_bridge', 'id', 'x')
+        bc = BridgeColumnDef('t', 'x', [('y', 'ghost_bridge', 'id')], 'x')
         tbl = _table('t')
         dot = visualise_schema(_schema([tbl], bridge_columns=[bc]), show_bridge=False)
         assert '"t" -> "ghost_bridge"' in dot
@@ -560,7 +560,7 @@ class TestConnectivity:
         assert '[BRIDGE ONLY]' not in dot
 
     def test_bridge_only_table_gets_badge(self):
-        bc = BridgeColumnDef('isolated', 'x', 'y', 'model', 'id', 'x')
+        bc = BridgeColumnDef('isolated', 'x', [('y', 'model', 'id')], 'x')
         isolated = _table('isolated')
         model = _table('model')
         s = _schema([isolated, model], bridge_columns=[bc])
@@ -580,7 +580,7 @@ class TestConnectivity:
         assert '[ORPHAN]' in dot
 
     def test_bridge_only_edge_shown_even_when_show_bridge_false(self):
-        bc = BridgeColumnDef('isolated', 'x', 'y', 'model', 'id', 'x')
+        bc = BridgeColumnDef('isolated', 'x', [('y', 'model', 'id')], 'x')
         isolated = _table('isolated')
         model = _table('model')
         s = _schema([isolated, model], bridge_columns=[bc])
@@ -598,7 +598,7 @@ class TestConnectivity:
         assert 'lone_orphan' not in dot
 
     def test_show_orphans_false_removes_orphan_edges(self):
-        bc = BridgeColumnDef('bridge_only_tbl', 'x', 'y', 'model', 'id', 'x')
+        bc = BridgeColumnDef('bridge_only_tbl', 'x', [('y', 'model', 'id')], 'x')
         bridge_tbl = _table('bridge_only_tbl')
         model = _table('model')
         s = _schema([bridge_tbl, model], bridge_columns=[bc])

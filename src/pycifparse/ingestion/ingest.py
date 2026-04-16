@@ -491,37 +491,103 @@ def _apply_fk(
 # Bridge column fill
 # ---------------------------------------------------------------------------
 
+def _build_chain_lookups(
+    hops: list[tuple[str, str, str]],
+    bridge_value_column: str,
+    merged_rows: dict[str, dict[tuple, dict]],
+) -> list[dict[str, str]]:
+    """Build one lookup dict per hop for a single resolution chain.
+
+    For hop *i* (not the last), the value column is the ``via_col`` of hop
+    *i+1*, so each lookup's output feeds into the next lookup's key.  For the
+    final hop the value column is *bridge_value_column*.
+
+    The lookup key is the bridge table's PK value only (no ``_block_id``
+    prefix).  ``merged_rows`` is already scoped to a single dataset, so
+    cross-dataset contamination cannot occur, and omitting ``_block_id``
+    allows resolution to work correctly when source and target rows originate
+    from different CIF data blocks within the same dataset.
+    """
+    hop_lookups: list[dict[str, str]] = []
+    for i, (via_col, bridge_tbl, bridge_pk) in enumerate(hops):
+        bridge_rows = merged_rows.get(bridge_tbl, {})
+        is_last = (i == len(hops) - 1)
+        val_col = bridge_value_column if is_last else hops[i + 1][0]
+        lookup: dict[str, str] = {}
+        for row in bridge_rows.values():
+            pk_val = row.get(bridge_pk)
+            val = row.get(val_col)
+            if pk_val is not None and val is not None:
+                lookup[pk_val] = val
+        hop_lookups.append(lookup)
+    return hop_lookups
+
+
+def _resolve_chain(
+    hop_lookups: list[dict[str, str]],
+    first_via_col: str,
+    row: dict,
+) -> 'str | None':
+    """Follow *hop_lookups* from the row's *first_via_col* value.
+
+    Returns the resolved value, or ``None`` if any lookup in the chain misses.
+    """
+    current: str | None = row.get(first_via_col)
+    if current is None:
+        return None
+    for hop_lookup in hop_lookups:
+        current = hop_lookup.get(current)
+        if current is None:
+            return None
+    return current
+
+
 def _fill_bridge_columns(
     merged_rows: dict[str, dict[tuple, dict]],
     bridge_columns: list[BridgeColumnDef],
+    emit: 'Callable[[str], None] | None' = None,
 ) -> None:
     """Populate bridge-derived columns in *merged_rows* in place.
 
-    For each :class:`BridgeColumnDef`, builds a lookup from the bridge table
-    and fills any NULL values in the target table.  Must be called after all
-    blocks have been processed and before :py:meth:`_Ingester._flush`.
+    For each :class:`BridgeColumnDef`, resolves the derived column value by
+    trying all chains (primary + fallbacks) and collecting every non-None
+    result.  If all chains agree the common value is used.  If chains disagree,
+    *emit* is called with a warning and the first non-None result is used.
+    Must be called after all blocks have been processed and before
+    :py:meth:`_Ingester._flush`.
     """
     for bd in bridge_columns:
         if bd.table_name not in merged_rows:
             continue
-        bridge_rows = merged_rows.get(bd.bridge_table, {})
-        # Build (block_id, bridge_pk_val) → bridge_val lookup
-        lookup: dict[tuple[str | None, str], str] = {}
-        for row in bridge_rows.values():
-            pk_val = row.get(bd.bridge_pk_column)
-            val = row.get(bd.bridge_value_column)
-            if pk_val is not None and val is not None:
-                lookup[(row.get('_block_id'), pk_val)] = val
+
+        # Pre-build lookup dicts for every chain (primary + fallbacks).
+        all_chains: list[tuple[list, str]] = (
+            [(bd.hops, bd.bridge_value_column)] + list(bd.fallback_chains)
+        )
+        chain_lookups = [
+            _build_chain_lookups(hops, val_col, merged_rows)
+            for hops, val_col in all_chains
+        ]
+        chain_via_cols = [hops[0][0] for hops, _ in all_chains]
 
         for row in merged_rows[bd.table_name].values():
             if row.get(bd.column_name) is not None:
                 continue
-            via_val = row.get(bd.via_column)
-            if via_val is None:
+            resolved: list[str] = []
+            for hop_lookups, via_col in zip(chain_lookups, chain_via_cols):
+                result = _resolve_chain(hop_lookups, via_col, row)
+                if result is not None:
+                    resolved.append(result)
+            if not resolved:
                 continue
-            derived = lookup.get((row.get('_block_id'), via_val))
-            if derived is not None:
-                row[bd.column_name] = derived
+            if len(set(resolved)) > 1 and emit is not None:
+                pk_vals = {k: row.get(k) for k in ['id', '_block_id'] if row.get(k)}
+                emit(
+                    f"bridge column '{bd.table_name}'.'{bd.column_name}': "
+                    f"chains disagree on value {resolved!r} for row {pk_vals}; "
+                    f"using first resolved value {resolved[0]!r}"
+                )
+            row[bd.column_name] = resolved[0]
 
 
 # ---------------------------------------------------------------------------
@@ -602,7 +668,10 @@ class _Ingester:
             if self._semantic_errors:
                 raise IngestionError(self._semantic_errors)
             if self.schema and self.schema.bridge_columns:
-                _fill_bridge_columns(self.merged_rows, self.schema.bridge_columns)
+                _fill_bridge_columns(
+                    self.merged_rows, self.schema.bridge_columns,
+                    emit=self.errors.append,
+                )
             self._post_validate()
             self._flush()
             if _pre_commit_hook is not None:

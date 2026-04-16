@@ -1558,3 +1558,179 @@ class TestFKKeyAbsentTargetNotInSchema:
         sid = row.get('structure_id')
         assert sid is None  # No UUID generated when target_def_id is missing
         assert any('NULL' in m or 'not in structured' in m for m in msgs)
+
+
+# ===========================================================================
+# TestFillBridgeColumns — fallback chain resolution
+# ===========================================================================
+
+class TestFillBridgeColumns:
+    """Unit tests for _fill_bridge_columns with multiple resolution chains."""
+
+    def test_primary_chain_used_when_populated(self):
+        from pycifparse.dictionary.schema import BridgeColumnDef
+        from pycifparse.ingestion.ingest import _fill_bridge_columns
+
+        # Two chains: primary goes A→B (via col1→pk→val_primary),
+        # fallback goes A→C (via col2→pk→val_fallback).
+        # Primary chain is populated — it should be used.
+        merged_rows = {
+            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
+            'b': {(None, 1): {'_block_id': 'blk', 'pk': 'k1', 'val_primary': 'PRIMARY'}},
+            'c': {(None, 1): {'_block_id': 'blk', 'pk': 'k2', 'val_fallback': 'FALLBACK'}},
+        }
+        bd = BridgeColumnDef(
+            table_name='a',
+            column_name='derived',
+            hops=[('col1', 'b', 'pk')],
+            bridge_value_column='val_primary',
+            fallback_chains=[([('col2', 'c', 'pk')], 'val_fallback')],
+        )
+        _fill_bridge_columns(merged_rows, [bd])
+        assert merged_rows['a'][(None, 1)]['derived'] == 'PRIMARY'
+
+    def test_fallback_chain_used_when_primary_misses(self):
+        from pycifparse.dictionary.schema import BridgeColumnDef
+        from pycifparse.ingestion.ingest import _fill_bridge_columns
+
+        # Primary chain lookup returns nothing (b has no matching row).
+        # Fallback chain should be used instead.
+        merged_rows = {
+            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
+            'b': {},   # primary bridge table empty
+            'c': {(None, 1): {'_block_id': 'blk', 'pk': 'k2', 'val_fallback': 'FALLBACK'}},
+        }
+        bd = BridgeColumnDef(
+            table_name='a',
+            column_name='derived',
+            hops=[('col1', 'b', 'pk')],
+            bridge_value_column='val_primary',
+            fallback_chains=[([('col2', 'c', 'pk')], 'val_fallback')],
+        )
+        _fill_bridge_columns(merged_rows, [bd])
+        assert merged_rows['a'][(None, 1)]['derived'] == 'FALLBACK'
+
+    def test_null_when_all_chains_miss(self):
+        from pycifparse.dictionary.schema import BridgeColumnDef
+        from pycifparse.ingestion.ingest import _fill_bridge_columns
+
+        merged_rows = {
+            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
+            'b': {},
+            'c': {},
+        }
+        bd = BridgeColumnDef(
+            table_name='a',
+            column_name='derived',
+            hops=[('col1', 'b', 'pk')],
+            bridge_value_column='val_primary',
+            fallback_chains=[([('col2', 'c', 'pk')], 'val_fallback')],
+        )
+        _fill_bridge_columns(merged_rows, [bd])
+        assert merged_rows['a'][(None, 1)].get('derived') is None
+
+    def test_chains_agree_no_warning_emitted(self):
+        from pycifparse.dictionary.schema import BridgeColumnDef
+        from pycifparse.ingestion.ingest import _fill_bridge_columns
+
+        # Both chains resolve to the same value — no warning should be emitted.
+        merged_rows = {
+            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
+            'b': {(None, 1): {'pk': 'k1', 'val': 'SAME'}},
+            'c': {(None, 1): {'pk': 'k2', 'val': 'SAME'}},
+        }
+        bd = BridgeColumnDef(
+            table_name='a',
+            column_name='derived',
+            hops=[('col1', 'b', 'pk')],
+            bridge_value_column='val',
+            fallback_chains=[([('col2', 'c', 'pk')], 'val')],
+        )
+        warnings = []
+        _fill_bridge_columns(merged_rows, [bd], emit=warnings.append)
+        assert merged_rows['a'][(None, 1)]['derived'] == 'SAME'
+        assert warnings == []
+
+    def test_chains_disagree_warning_emitted_first_value_used(self):
+        from pycifparse.dictionary.schema import BridgeColumnDef
+        from pycifparse.ingestion.ingest import _fill_bridge_columns
+
+        # Chains resolve to different values — warning emitted, first value used.
+        merged_rows = {
+            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
+            'b': {(None, 1): {'pk': 'k1', 'val': 'FIRST'}},
+            'c': {(None, 1): {'pk': 'k2', 'val': 'SECOND'}},
+        }
+        bd = BridgeColumnDef(
+            table_name='a',
+            column_name='derived',
+            hops=[('col1', 'b', 'pk')],
+            bridge_value_column='val',
+            fallback_chains=[([('col2', 'c', 'pk')], 'val')],
+        )
+        warnings = []
+        _fill_bridge_columns(merged_rows, [bd], emit=warnings.append)
+        assert merged_rows['a'][(None, 1)]['derived'] == 'FIRST'
+        assert len(warnings) == 1
+        assert 'disagree' in warnings[0]
+        assert 'FIRST' in warnings[0]
+        assert 'SECOND' in warnings[0]
+
+
+def _cif_pow_schema():
+    """Load cif_pow.dic and return a generated SchemaSpec (cached per process)."""
+    from pathlib import Path
+    from pycifparse.dictionary.loader import DictionaryLoader, directory_resolver
+    from pycifparse.dictionary.schema import generate_schema
+    dic_path = Path('data/dictionaries/cif_pow.dic')
+    loader = DictionaryLoader(resolver=directory_resolver(dic_path.parent))
+    return generate_schema(loader.load(dic_path.read_text(encoding='utf-8')))
+
+
+def _ingest_cif_file(cif_path_str, schema):
+    """Parse *cif_path_str*, ingest into an in-memory DB, return (conn, errors)."""
+    from pathlib import Path
+    from pycifparse import build, ingest
+    from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
+    cif, _ = build(Path(cif_path_str).read_text(encoding='utf-8'))
+    conn = sqlite3.connect(':memory:')
+    conn.execute('PRAGMA foreign_keys = OFF')
+    apply_schema(conn, schema)
+    apply_fallback_schema(conn)
+    errors = ingest(cif, conn, schema)
+    return conn, errors
+
+
+class TestTransitiveBridgeFallback:
+    """Integration tests: bridge column resolution across alternative paths."""
+
+    def test_radiation_id_resolved_via_instr_path(self):
+        # transitive_01.cif: diffrn.diffrn_radiation_id absent; pd_instr path used.
+        schema = _cif_pow_schema()
+        conn, _ = _ingest_cif_file('tests/cif_files/transitive_01.cif', schema)
+
+        rows = conn.execute(
+            'SELECT "radiation_id" FROM "pd_peak" WHERE "radiation_id" IS NOT NULL'
+        ).fetchall()
+        assert rows, "radiation_id was not resolved for any pd_peak row"
+        assert all(r[0] == 'CR_RAD' for r in rows)
+
+    def test_two_patterns_each_use_different_bridge_path(self):
+        # transitive_02.cif: pattern_1 resolves via pd_instr (no diffrn_radiation_id),
+        # pattern_2 resolves via diffrn (no pd_instr.radiation_id).
+        # Both should resolve correctly with no disagreement warning.
+        schema = _cif_pow_schema()
+        conn, errors = _ingest_cif_file('tests/cif_files/transitive_02.cif', schema)
+
+        disagree_warnings = [e for e in errors if 'disagree' in e]
+        assert disagree_warnings == [], f"unexpected disagreement warnings: {disagree_warnings}"
+
+        peak_radiation = dict(conn.execute(
+            'SELECT "diffractogram_id", "radiation_id" FROM "pd_peak"'
+            ' WHERE "radiation_id" IS NOT NULL'
+        ).fetchall())
+
+        assert peak_radiation.get('pattern_1') == 'CR_RAD', \
+            "pattern_1 peaks should resolve radiation_id via pd_instr path"
+        assert peak_radiation.get('pattern_2') == 'copper', \
+            "pattern_2 peaks should resolve radiation_id via diffrn path"
