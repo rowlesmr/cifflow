@@ -112,6 +112,129 @@ class TestDotBasic:
         dot = visualise_schema(_schema([_table('a')]))
         assert 'layout="dot"' in dot
 
+    def test_concentrate_true_sets_attribute(self):
+        dot = visualise_schema(_schema([_table('a')]), concentrate=True)
+        assert 'concentrate=true' in dot
+
+    def test_concentrate_false_omits_attribute(self):
+        dot = visualise_schema(_schema([_table('a')]), concentrate=False)
+        assert 'concentrate' not in dot
+
+
+# ---------------------------------------------------------------------------
+# Deprecated item filtering
+# ---------------------------------------------------------------------------
+
+class TestHideDeprecated:
+    def _depr_schema(self) -> SchemaSpec:
+        """Schema with two tables: 'active' has one live column, 'stale' has only deprecated ones."""
+        active_cols = [
+            _col('id', definition_id='_active.id', is_primary_key=True),
+            _col('value', definition_id='_active.value'),
+        ]
+        stale_cols = [
+            _col('id', definition_id='_stale.id', is_primary_key=True),
+            _col('old_val', definition_id='_stale.old_val'),
+        ]
+        active = _table('active', columns=active_cols, primary_keys=['id'])
+        stale = _table('stale', columns=stale_cols, primary_keys=['id'])
+        s = _schema([active, stale])
+        s = SchemaSpec(
+            tables=s.tables,
+            column_to_tag=s.column_to_tag,
+            bridge_columns=s.bridge_columns,
+            category_parent=s.category_parent,
+            dictionary_name=s.dictionary_name,
+            deprecated_ids={'_stale.id', '_stale.old_val'},
+        )
+        return s
+
+    def _mixed_schema(self) -> SchemaSpec:
+        """One table with one deprecated and one live column."""
+        cols = [
+            _col('id', definition_id='_t.id', is_primary_key=True),
+            _col('live', definition_id='_t.live'),
+            _col('gone', definition_id='_t.gone'),
+        ]
+        tbl = _table('t', columns=cols, primary_keys=['id'])
+        s = _schema([tbl])
+        return SchemaSpec(
+            tables=s.tables,
+            column_to_tag=s.column_to_tag,
+            bridge_columns=s.bridge_columns,
+            category_parent=s.category_parent,
+            dictionary_name=s.dictionary_name,
+            deprecated_ids={'_t.gone'},
+        )
+
+    def test_hide_deprecated_false_keeps_stale_table(self):
+        dot = visualise_schema(self._depr_schema(), hide_deprecated=False)
+        assert 'stale' in dot
+
+    def test_hide_deprecated_true_removes_all_deprecated_table(self):
+        dot = visualise_schema(self._depr_schema(), hide_deprecated=True)
+        assert 'stale' not in dot
+
+    def test_hide_deprecated_true_keeps_active_table(self):
+        dot = visualise_schema(self._depr_schema(), hide_deprecated=True)
+        assert 'active' in dot
+
+    def test_hide_deprecated_hides_only_deprecated_column(self):
+        dot = visualise_schema(self._mixed_schema(), hide_deprecated=True, show_columns='all')
+        assert 'live' in dot
+        assert 'gone' not in dot
+
+    def test_hide_deprecated_false_shows_deprecated_column(self):
+        dot = visualise_schema(self._mixed_schema(), hide_deprecated=False, show_columns='all')
+        assert 'gone' in dot
+
+    def test_hide_deprecated_table_not_a_ghost(self):
+        # A removed deprecated table should not become a [MISSING] ghost node
+        dot = visualise_schema(self._depr_schema(), hide_deprecated=True)
+        assert '[MISSING]' not in dot
+
+    def test_hide_deprecated_table_suppresses_incoming_fk_edge(self):
+        """FK from 'child' → 'stale' (all-deprecated) must disappear when hide_deprecated=True."""
+        fk = ForeignKeyDef('child', ['stale_id'], 'stale', ['id'])
+        child_cols = [
+            _col('id', definition_id='_child.id', is_primary_key=True),
+            _col('stale_id', definition_id='_child.stale_id'),
+        ]
+        stale_cols = [
+            _col('id', definition_id='_stale.id', is_primary_key=True),
+        ]
+        child = _table('child', columns=child_cols, primary_keys=['id'], foreign_keys=[fk])
+        stale = _table('stale', columns=stale_cols, primary_keys=['id'])
+        s = _schema([child, stale])
+        s = SchemaSpec(
+            tables=s.tables, column_to_tag=s.column_to_tag,
+            bridge_columns=s.bridge_columns, category_parent=s.category_parent,
+            deprecated_ids={'_stale.id'},
+        )
+        dot = visualise_schema(s, hide_deprecated=True)
+        assert '"child" -> "stale"' not in dot
+        assert '[MISSING]' not in dot
+
+    def test_table_with_only_synthetic_cols_not_hidden(self):
+        # A table with no non-synthetic columns cannot have all non-synthetic cols deprecated
+        synth_col = ColumnDef(
+            name='_block_id', definition_id='', type_contents=None,
+            type_container=None, is_primary_key=True, is_synthetic=True,
+            linked_item_id=None, nullable=False,
+        )
+        tbl = TableDef(
+            name='infra', definition_id='_infra', category_class='Set',
+            columns=[synth_col], primary_keys=['_block_id'], foreign_keys=[],
+        )
+        s = _schema([tbl])
+        s = SchemaSpec(
+            tables=s.tables, column_to_tag=s.column_to_tag,
+            bridge_columns=s.bridge_columns, category_parent=s.category_parent,
+            deprecated_ids={''},   # even if '' is somehow in the set
+        )
+        dot = visualise_schema(s, hide_deprecated=True)
+        assert 'infra' in dot
+
 
 # ---------------------------------------------------------------------------
 # DOT output — FK edges
@@ -246,7 +369,7 @@ class TestColumnDisplay:
 
     def test_no_json_badge_for_single_container(self):
         cols = [_col('val', type_container='Single', is_primary_key=True)]
-        dot = visualise_schema(_schema([_table('t', columns=cols, primary_keys=['val'])]), show_columns='all')
+        dot = visualise_schema(_schema([_table('t', columns=cols, primary_keys=['val'])]), show_columns='all', show_legend=False)
         assert '[JSON]' not in dot
 
     def test_su_badge_for_linked_item_id(self):
@@ -423,7 +546,8 @@ class TestConnectivity:
         child = _table('child', columns=[_col('id', is_primary_key=True), _col('parent_id')],
                        primary_keys=['id'], foreign_keys=[fk])
         parent = _table('parent')
-        dot = visualise_schema(_schema([child, parent]))
+        # show_legend=False so the legend's own Connectivity section doesn't interfere
+        dot = visualise_schema(_schema([child, parent]), show_legend=False)
         assert '[ORPHAN]' not in dot
         assert '[BRIDGE ONLY]' not in dot
 
@@ -431,7 +555,7 @@ class TestConnectivity:
         child = _table('child')
         parent = _table('parent')
         s = _schema([child, parent], category_parent={'child': 'parent'})
-        dot = visualise_schema(s)
+        dot = visualise_schema(s, show_legend=False)
         assert '[ORPHAN]' not in dot
         assert '[BRIDGE ONLY]' not in dot
 
@@ -517,6 +641,108 @@ class TestConnectivity:
                        primary_keys=['id'], foreign_keys=[fk])
         dot = visualise_schema(_schema([child]), highlight_components=True)
         assert 'cluster_missing' in dot
+
+
+# ---------------------------------------------------------------------------
+# Legend
+# ---------------------------------------------------------------------------
+
+class TestLegend:
+    def _simple(self) -> SchemaSpec:
+        return _schema([_table('atom')])
+
+    def test_legend_present_by_default(self):
+        dot = visualise_schema(self._simple())
+        assert '__legend__' in dot
+
+    def test_legend_absent_when_disabled(self):
+        dot = visualise_schema(self._simple(), show_legend=False)
+        assert '__legend__' not in dot
+
+    def test_legend_contains_set_colour(self):
+        dot = visualise_schema(self._simple())
+        # Set header background colour swatch must appear in legend
+        assert '#dce8f5' in dot
+
+    def test_legend_contains_loop_colour(self):
+        dot = visualise_schema(self._simple())
+        assert '#d8f0dc' in dot
+
+    def test_legend_contains_missing_label(self):
+        dot = visualise_schema(self._simple())
+        assert 'Missing' in dot
+
+    def test_legend_has_orphan_section_when_highlight_orphans(self):
+        dot = visualise_schema(self._simple(), highlight_orphans=True)
+        legend_start = dot.find('__legend__')
+        assert legend_start != -1
+        legend_block = dot[legend_start:]
+        assert '[ORPHAN]' in legend_block
+        assert '[BRIDGE ONLY]' in legend_block
+
+    def test_legend_no_orphan_section_when_not_highlight(self):
+        # highlight_orphans=False: legend should omit the connectivity section
+        dot = visualise_schema(self._simple(), highlight_orphans=False)
+        legend_start = dot.find('__legend__')
+        assert legend_start != -1
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        # [ORPHAN] badge may still appear on nodes (it won't since highlight_orphans=False),
+        # but the legend section should not contain the connectivity section header
+        assert 'Connectivity' not in legend_block
+
+    def test_legend_no_bridge_entry_when_show_bridge_false(self):
+        dot = visualise_schema(self._simple(), show_bridge=False)
+        legend_start = dot.find('__legend__')
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        assert 'grey dashed' not in legend_block
+
+    def test_legend_bridge_entry_when_show_bridge_true(self):
+        dot = visualise_schema(self._simple(), show_bridge=True)
+        legend_start = dot.find('__legend__')
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        assert 'grey dashed' in legend_block
+
+    def test_legend_no_parent_entry_when_show_parent_edges_false(self):
+        dot = visualise_schema(self._simple(), show_parent_edges=False)
+        legend_start = dot.find('__legend__')
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        assert 'grey dotted' not in legend_block
+
+    def test_legend_parent_entry_when_show_parent_edges_true(self):
+        dot = visualise_schema(self._simple(), show_parent_edges=True)
+        legend_start = dot.find('__legend__')
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        assert 'grey dotted' in legend_block
+
+    def test_legend_column_section_present_when_show_columns_not_none(self):
+        for mode in ('all', 'sparse'):
+            dot = visualise_schema(self._simple(), show_columns=mode)
+            legend_start = dot.find('__legend__')
+            end = dot.find('>]', legend_start)
+            legend_block = dot[legend_start:end]
+            assert 'Columns' in legend_block, f'Columns section missing for show_columns={mode!r}'
+
+    def test_legend_no_column_section_when_show_columns_none(self):
+        dot = visualise_schema(self._simple(), show_columns='none')
+        legend_start = dot.find('__legend__')
+        end = dot.find('>]', legend_start)
+        legend_block = dot[legend_start:end]
+        assert 'Columns' not in legend_block
+
+    def test_legend_in_html_output(self):
+        s = _schema([_table('x')], dictionary_name='test')
+        h = visualise_schema_html(s)
+        assert '__legend__' in h
+
+    def test_legend_absent_from_html_when_disabled(self):
+        s = _schema([_table('x')])
+        h = visualise_schema_html(s, show_legend=False)
+        assert '__legend__' not in h
 
 
 # ---------------------------------------------------------------------------

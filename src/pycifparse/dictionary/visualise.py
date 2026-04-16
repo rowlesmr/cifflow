@@ -93,6 +93,22 @@ def _classify_tables(
     return bridge_only, orphans, pass1_components
 
 
+def _deprecated_table_names(schema: SchemaSpec) -> set[str]:
+    """
+    Return the set of table names where every non-synthetic column is deprecated.
+
+    A table is included only when it has at least one non-synthetic column and
+    all of them appear in ``schema.deprecated_ids``.  Tables that consist
+    entirely of synthetic infrastructure columns are never included.
+    """
+    result: set[str] = set()
+    for name, tbl in schema.tables.items():
+        non_synthetic = [c for c in tbl.columns if not c.is_synthetic]
+        if non_synthetic and all(c.definition_id in schema.deprecated_ids for c in non_synthetic):
+            result.add(name)
+    return result
+
+
 def _collect_ghost_tables(schema: SchemaSpec) -> set[str]:
     referenced: set[str] = set()
     for tbl in schema.tables.values():
@@ -134,6 +150,7 @@ def _column_rows(
     tbl: TableDef,
     schema: SchemaSpec,
     show_columns: Literal['all', 'sparse', 'none'],
+    deprecated_ids: frozenset[str],
 ) -> list[str]:
     """Return a list of DOT HTML-like <TR> strings for the column rows."""
     if show_columns == 'none':
@@ -155,6 +172,8 @@ def _column_rows(
             # Synthetic columns are excluded unless they qualify via bridge rules
             if not (col.is_primary_key or col.name in fk_source_cols or col.name in bridge_cols):
                 continue
+        if col.definition_id in deprecated_ids:
+            continue
 
         parts: list[str] = []
 
@@ -236,9 +255,10 @@ def _table_node_dot(
     highlight_orphans: bool,
     show_columns: Literal['all', 'sparse', 'none'],
     schema: SchemaSpec,
+    deprecated_ids: frozenset[str],
 ) -> list[str]:
     header = _header_row(tbl, connectivity, highlight_orphans)
-    col_rows = _column_rows(tbl, schema, show_columns)
+    col_rows = _column_rows(tbl, schema, show_columns, deprecated_ids)
 
     border_attr = ''
     if highlight_orphans:
@@ -283,12 +303,17 @@ def _fk_label(fk, visible_columns: set[str], show_columns: str) -> str:
     return pairs
 
 
-def _visible_columns(tbl: TableDef, schema: SchemaSpec, show_columns: str) -> set[str]:
+def _visible_columns(
+    tbl: TableDef,
+    schema: SchemaSpec,
+    show_columns: str,
+    deprecated_ids: frozenset[str],
+) -> set[str]:
     """Return the set of column names that would be rendered as rows."""
     if show_columns == 'none':
         return set()
     if show_columns == 'all':
-        return {c.name for c in tbl.columns}
+        return {c.name for c in tbl.columns if c.definition_id not in deprecated_ids}
     # sparse
     fk_src: set[str] = set()
     for fk in tbl.foreign_keys:
@@ -298,7 +323,112 @@ def _visible_columns(tbl: TableDef, schema: SchemaSpec, show_columns: str) -> se
         if bc.table_name == tbl.name:
             bridge.add(bc.via_column)
             bridge.add(bc.column_name)
-    return {c.name for c in tbl.columns if c.is_primary_key or c.name in fk_src or c.name in bridge}
+    return {
+        c.name for c in tbl.columns
+        if (c.is_primary_key or c.name in fk_src or c.name in bridge)
+        and c.definition_id not in deprecated_ids
+    }
+
+
+# ---------------------------------------------------------------------------
+# Legend
+# ---------------------------------------------------------------------------
+
+def _legend_dot(
+    highlight_orphans: bool,
+    show_bridge: bool,
+    show_parent_edges: bool,
+    show_columns: Literal['all', 'sparse', 'none'],
+) -> list[str]:
+    """Return DOT lines for a ``__legend__`` node."""
+    inner: list[str] = []
+
+    # Header
+    inner.append('        <TR><TD BGCOLOR="#cccccc"><B>Legend</B></TD></TR>')
+
+    # --- Node types ---
+    inner.append('        <TR><TD ALIGN="LEFT" BGCOLOR="#eeeeee"><B>Node types</B></TD></TR>')
+    inner.append('        <TR><TD><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">')
+    inner.append(
+        '            <TR>'
+        '<TD BGCOLOR="#dce8f5" BORDER="1" WIDTH="14" HEIGHT="14"> </TD>'
+        '<TD ALIGN="LEFT"> Set category</TD></TR>'
+    )
+    inner.append(
+        '            <TR>'
+        '<TD BGCOLOR="#d8f0dc" BORDER="1" WIDTH="14" HEIGHT="14"> </TD>'
+        '<TD ALIGN="LEFT"> Loop category</TD></TR>'
+    )
+    inner.append(
+        '            <TR>'
+        '<TD BGCOLOR="#e8e8e8" BORDER="1" COLOR="#cc0000" STYLE="dashed" WIDTH="14" HEIGHT="14"> </TD>'
+        '<TD ALIGN="LEFT"> <FONT COLOR="#cc0000">Missing</FONT>  (referenced, not defined)</TD></TR>'
+    )
+    inner.append('        </TABLE></TD></TR>')
+
+    # --- Connectivity badges (shown only when highlight_orphans is on) ---
+    if highlight_orphans:
+        inner.append('        <TR><TD ALIGN="LEFT" BGCOLOR="#eeeeee"><B>Connectivity</B></TD></TR>')
+        inner.append('        <TR><TD><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">')
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#ccaa00">[BRIDGE ONLY]</FONT>'
+            '  reachable only via bridge columns</TD></TR>'
+        )
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#cc0000">[ORPHAN]</FONT>'
+            '  no inter-table relationship</TD></TR>'
+        )
+        inner.append('        </TABLE></TD></TR>')
+
+    # --- Edge styles ---
+    inner.append('        <TR><TD ALIGN="LEFT" BGCOLOR="#eeeeee"><B>Edges</B></TD></TR>')
+    inner.append('        <TR><TD><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">')
+    inner.append(
+        '            <TR><TD ALIGN="LEFT">&#x2192; solid black: foreign key</TD></TR>'
+    )
+    if show_bridge:
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#888888">&#x2192; grey dashed: bridge</FONT></TD></TR>'
+        )
+    if show_parent_edges:
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#aaaaaa">&#x2192; grey dotted: category parent</FONT></TD></TR>'
+        )
+    inner.append('        </TABLE></TD></TR>')
+
+    # --- Column badges (shown only when columns are visible) ---
+    if show_columns != 'none':
+        inner.append('        <TR><TD ALIGN="LEFT" BGCOLOR="#eeeeee"><B>Columns</B></TD></TR>')
+        inner.append('        <TR><TD><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">')
+        inner.append('            <TR><TD ALIGN="LEFT"><B>[PK]</B>  primary key</TD></TR>')
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#0055aa">[JSON]</FONT>  list/table container</TD></TR>'
+        )
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#888888">[SU]</FONT>  standard uncertainty link</TD></TR>'
+        )
+        inner.append(
+            '            <TR><TD ALIGN="LEFT">'
+            '<FONT COLOR="#888888"><I>italic grey</I></FONT>  synthetic column</TD></TR>'
+        )
+        inner.append('        </TABLE></TD></TR>')
+
+    lines = [
+        '    "__legend__" [shape=none margin=0 label=<',
+        '    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0">',
+    ]
+    lines.extend(inner)
+    lines += [
+        '    </TABLE>',
+        '    >]',
+    ]
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -323,6 +453,9 @@ def visualise_schema(
     highlight_orphans: bool = True,
     highlight_components: bool = False,
     show_orphans: bool = True,
+    show_legend: bool = True,
+    concentrate: bool = False,
+    hide_deprecated: bool = False,
     layout: str = 'dot',
 ) -> str:
     """
@@ -347,6 +480,19 @@ def visualise_schema(
     show_orphans:
         When ``False``, ``[ORPHAN]`` and ``[BRIDGE ONLY]`` nodes (and their edges)
         are omitted entirely.
+    show_legend:
+        When ``True`` (default), emit a ``__legend__`` node summarising node
+        colours, connectivity badges, edge styles, and column badges.  The
+        content of the legend adapts to the active flags.
+    concentrate:
+        When ``True``, set ``concentrate=true`` in the graph attributes.
+        Graphviz merges parallel edges that share a common endpoint into a
+        shared spine, reducing visual clutter in dense schemas.
+    hide_deprecated:
+        When ``True``, deprecated columns (those whose ``definition_id``
+        appears in ``schema.deprecated_ids``) are omitted from column rows.
+        Any table where every non-synthetic column is deprecated is removed
+        from the graph entirely — no node, no ghost, no edges.
     layout:
         Graphviz layout engine written into ``graph [layout=...]``.  viz.js
         reads this attribute automatically.
@@ -354,15 +500,27 @@ def visualise_schema(
     ghost_tables = _collect_ghost_tables(schema)
     bridge_only, orphans, pass1_components = _classify_tables(schema)
 
+    # Deprecated filtering
+    deprecated_ids: frozenset[str] = (
+        frozenset(schema.deprecated_ids) if hide_deprecated else frozenset()
+    )
+    hidden_deprecated: set[str] = (
+        _deprecated_table_names(schema) if hide_deprecated else set()
+    )
+
     # Determine which real tables to emit
     if show_orphans:
-        real_tables = set(schema.tables)
+        real_tables = set(schema.tables) - hidden_deprecated
     else:
-        real_tables = set(schema.tables) - bridge_only - orphans
+        real_tables = set(schema.tables) - bridge_only - orphans - hidden_deprecated
 
+    # Ghost tables must not include tables we deliberately hid as deprecated
+    ghost_tables -= hidden_deprecated
+
+    concentrate_attr = ' concentrate=true' if concentrate else ''
     lines: list[str] = [
         'digraph schema {',
-        f'    graph [rankdir=LR layout="{_escape(layout)}" fontname="Helvetica" fontsize=11]',
+        f'    graph [rankdir=LR layout="{_escape(layout)}" fontname="Helvetica" fontsize=11{concentrate_attr}]',
         '    node  [fontname="Helvetica" fontsize=10]',
         '    edge  [fontname="Helvetica" fontsize=9]',
         '',
@@ -408,7 +566,7 @@ def visualise_schema(
             lines.append(f'        label="{_escape(rep)}" style=filled fillcolor="#f5f5f5"')
             for tbl_name in visible_members:
                 tbl = schema.tables[tbl_name]
-                for node_line in _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema):
+                for node_line in _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema, deprecated_ids):
                     lines.append('    ' + node_line)
             lines.append('    }')
             lines.append('')
@@ -423,7 +581,7 @@ def visualise_schema(
                 if tbl_name not in real_tables:
                     continue
                 tbl = schema.tables[tbl_name]
-                for node_line in _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema):
+                for node_line in _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema, deprecated_ids):
                     lines.append('    ' + node_line)
             lines.append('    }')
             lines.append('')
@@ -446,13 +604,18 @@ def visualise_schema(
         placed.update(bridge_only)
         for tbl_name in sorted(real_tables - placed):
             tbl = schema.tables[tbl_name]
-            lines += _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema)
+            lines += _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema, deprecated_ids)
             lines.append('')
     else:
         for tbl_name in sorted(real_tables):
             tbl = schema.tables[tbl_name]
-            lines += _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema)
+            lines += _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema, deprecated_ids)
             lines.append('')
+
+    # --- Legend node ---
+    if show_legend:
+        lines += _legend_dot(highlight_orphans, show_bridge, show_parent_edges, show_columns)
+        lines.append('')
 
     # --- Edges ---
     lines.append('')
@@ -460,7 +623,7 @@ def visualise_schema(
     # FK edges
     for tbl_name in sorted(real_tables):
         tbl = schema.tables[tbl_name]
-        vis_cols = _visible_columns(tbl, schema, show_columns)
+        vis_cols = _visible_columns(tbl, schema, show_columns, deprecated_ids)
         for fk in tbl.foreign_keys:
             target = fk.target_table
             # Skip if target is a real table that's been hidden
@@ -529,6 +692,9 @@ def visualise_schema_html(
     highlight_orphans: bool = True,
     highlight_components: bool = False,
     show_orphans: bool = True,
+    show_legend: bool = True,
+    concentrate: bool = False,
+    hide_deprecated: bool = False,
     layout: str = 'dot',
 ) -> str:
     """
@@ -543,6 +709,12 @@ def visualise_schema_html(
     title:
         ``<title>`` element text.  Defaults to ``schema.dictionary_name``
         or ``'Schema'`` when not given.
+    show_legend:
+        Forwarded to :func:`visualise_schema`.
+    concentrate:
+        Forwarded to :func:`visualise_schema`.
+    hide_deprecated:
+        Forwarded to :func:`visualise_schema`.
     """
     dot_string = visualise_schema(
         schema,
@@ -552,6 +724,9 @@ def visualise_schema_html(
         highlight_orphans=highlight_orphans,
         highlight_components=highlight_components,
         show_orphans=show_orphans,
+        show_legend=show_legend,
+        concentrate=concentrate,
+        hide_deprecated=hide_deprecated,
         layout=layout,
     )
 
