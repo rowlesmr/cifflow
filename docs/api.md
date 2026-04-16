@@ -1468,6 +1468,8 @@ def visualise_schema(
     highlight_components: bool = False,
     show_orphans: bool = True,
     show_legend: bool = True,
+    concentrate: bool = False,
+    hide_deprecated: bool = False,
     layout: str = 'dot',
 ) -> str: ...
 
@@ -1482,6 +1484,8 @@ def visualise_schema_html(
     highlight_components: bool = False,
     show_orphans: bool = True,
     show_legend: bool = True,
+    concentrate: bool = False,
+    hide_deprecated: bool = False,
     layout: str = 'dot',
 ) -> str: ...
 ```
@@ -1503,6 +1507,8 @@ and open in any browser.  No network access required.
 | `highlight_components` | `False` | Wrap each connected component in a `subgraph cluster_` box |
 | `show_orphans` | `True` | `False` removes `[ORPHAN]` and `[BRIDGE ONLY]` nodes and their edges |
 | `show_legend` | `True` | Emit a `__legend__` node summarising node colours, connectivity badges, edge styles, and column badges; content adapts to the active flags |
+| `concentrate` | `False` | Set `concentrate=true` in the DOT graph attributes; Graphviz merges parallel edges sharing a common endpoint into a shared spine, reducing clutter |
+| `hide_deprecated` | `False` | Omit deprecated columns from column rows; remove any table where every non-synthetic column is deprecated (no ghost node, no edges) |
 | `layout` | `'dot'` | Graphviz layout engine (`'fdp'` or `'neato'` for dense schemas) |
 | `title` *(html only)* | `None` | `<title>` text; falls back to `schema.dictionary_name` then `'Schema'` |
 

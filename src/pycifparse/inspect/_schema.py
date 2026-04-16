@@ -162,3 +162,10 @@ def inspect_schema(
         for w in schema.warnings:
             print(f'  {c("!", YELLOW, file=file)}  {w}', file=file)
         print(file=file)
+
+
+
+if __name__ == '__main__':
+    from pathlib import Path
+    p = Path(r"C:\Users\User\Documents\github\pycifparse\data\dictionaries\cif_pow.dic")
+    inspect_schema(p)

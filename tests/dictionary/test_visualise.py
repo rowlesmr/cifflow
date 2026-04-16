@@ -112,6 +112,129 @@ class TestDotBasic:
         dot = visualise_schema(_schema([_table('a')]))
         assert 'layout="dot"' in dot
 
+    def test_concentrate_true_sets_attribute(self):
+        dot = visualise_schema(_schema([_table('a')]), concentrate=True)
+        assert 'concentrate=true' in dot
+
+    def test_concentrate_false_omits_attribute(self):
+        dot = visualise_schema(_schema([_table('a')]), concentrate=False)
+        assert 'concentrate' not in dot
+
+
+# ---------------------------------------------------------------------------
+# Deprecated item filtering
+# ---------------------------------------------------------------------------
+
+class TestHideDeprecated:
+    def _depr_schema(self) -> SchemaSpec:
+        """Schema with two tables: 'active' has one live column, 'stale' has only deprecated ones."""
+        active_cols = [
+            _col('id', definition_id='_active.id', is_primary_key=True),
+            _col('value', definition_id='_active.value'),
+        ]
+        stale_cols = [
+            _col('id', definition_id='_stale.id', is_primary_key=True),
+            _col('old_val', definition_id='_stale.old_val'),
+        ]
+        active = _table('active', columns=active_cols, primary_keys=['id'])
+        stale = _table('stale', columns=stale_cols, primary_keys=['id'])
+        s = _schema([active, stale])
+        s = SchemaSpec(
+            tables=s.tables,
+            column_to_tag=s.column_to_tag,
+            bridge_columns=s.bridge_columns,
+            category_parent=s.category_parent,
+            dictionary_name=s.dictionary_name,
+            deprecated_ids={'_stale.id', '_stale.old_val'},
+        )
+        return s
+
+    def _mixed_schema(self) -> SchemaSpec:
+        """One table with one deprecated and one live column."""
+        cols = [
+            _col('id', definition_id='_t.id', is_primary_key=True),
+            _col('live', definition_id='_t.live'),
+            _col('gone', definition_id='_t.gone'),
+        ]
+        tbl = _table('t', columns=cols, primary_keys=['id'])
+        s = _schema([tbl])
+        return SchemaSpec(
+            tables=s.tables,
+            column_to_tag=s.column_to_tag,
+            bridge_columns=s.bridge_columns,
+            category_parent=s.category_parent,
+            dictionary_name=s.dictionary_name,
+            deprecated_ids={'_t.gone'},
+        )
+
+    def test_hide_deprecated_false_keeps_stale_table(self):
+        dot = visualise_schema(self._depr_schema(), hide_deprecated=False)
+        assert 'stale' in dot
+
+    def test_hide_deprecated_true_removes_all_deprecated_table(self):
+        dot = visualise_schema(self._depr_schema(), hide_deprecated=True)
+        assert 'stale' not in dot
+
+    def test_hide_deprecated_true_keeps_active_table(self):
+        dot = visualise_schema(self._depr_schema(), hide_deprecated=True)
+        assert 'active' in dot
+
+    def test_hide_deprecated_hides_only_deprecated_column(self):
+        dot = visualise_schema(self._mixed_schema(), hide_deprecated=True, show_columns='all')
+        assert 'live' in dot
+        assert 'gone' not in dot
+
+    def test_hide_deprecated_false_shows_deprecated_column(self):
+        dot = visualise_schema(self._mixed_schema(), hide_deprecated=False, show_columns='all')
+        assert 'gone' in dot
+
+    def test_hide_deprecated_table_not_a_ghost(self):
+        # A removed deprecated table should not become a [MISSING] ghost node
+        dot = visualise_schema(self._depr_schema(), hide_deprecated=True)
+        assert '[MISSING]' not in dot
+
+    def test_hide_deprecated_table_suppresses_incoming_fk_edge(self):
+        """FK from 'child' → 'stale' (all-deprecated) must disappear when hide_deprecated=True."""
+        fk = ForeignKeyDef('child', ['stale_id'], 'stale', ['id'])
+        child_cols = [
+            _col('id', definition_id='_child.id', is_primary_key=True),
+            _col('stale_id', definition_id='_child.stale_id'),
+        ]
+        stale_cols = [
+            _col('id', definition_id='_stale.id', is_primary_key=True),
+        ]
+        child = _table('child', columns=child_cols, primary_keys=['id'], foreign_keys=[fk])
+        stale = _table('stale', columns=stale_cols, primary_keys=['id'])
+        s = _schema([child, stale])
+        s = SchemaSpec(
+            tables=s.tables, column_to_tag=s.column_to_tag,
+            bridge_columns=s.bridge_columns, category_parent=s.category_parent,
+            deprecated_ids={'_stale.id'},
+        )
+        dot = visualise_schema(s, hide_deprecated=True)
+        assert '"child" -> "stale"' not in dot
+        assert '[MISSING]' not in dot
+
+    def test_table_with_only_synthetic_cols_not_hidden(self):
+        # A table with no non-synthetic columns cannot have all non-synthetic cols deprecated
+        synth_col = ColumnDef(
+            name='_block_id', definition_id='', type_contents=None,
+            type_container=None, is_primary_key=True, is_synthetic=True,
+            linked_item_id=None, nullable=False,
+        )
+        tbl = TableDef(
+            name='infra', definition_id='_infra', category_class='Set',
+            columns=[synth_col], primary_keys=['_block_id'], foreign_keys=[],
+        )
+        s = _schema([tbl])
+        s = SchemaSpec(
+            tables=s.tables, column_to_tag=s.column_to_tag,
+            bridge_columns=s.bridge_columns, category_parent=s.category_parent,
+            deprecated_ids={''},   # even if '' is somehow in the set
+        )
+        dot = visualise_schema(s, hide_deprecated=True)
+        assert 'infra' in dot
+
 
 # ---------------------------------------------------------------------------
 # DOT output — FK edges
