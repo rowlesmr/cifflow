@@ -168,6 +168,8 @@ def _column_rows(
 
     rows: list[str] = []
     for col in tbl.columns:
+        if col.name == '_pycifparse_id':
+            continue
         if show_columns == 'sparse':
             # Synthetic columns are excluded unless they qualify via bridge rules
             if not (col.is_primary_key or col.name in fk_source_cols or col.name in bridge_cols):
@@ -457,6 +459,9 @@ def visualise_schema(
     concentrate: bool = False,
     hide_deprecated: bool = False,
     layout: str = 'dot',
+    splines: str = 'curved',
+    ranksep: float = 1.0,
+    nodesep: float = 0.4,
 ) -> str:
     """
     Return a Graphviz DOT string visualising *schema*.
@@ -496,6 +501,20 @@ def visualise_schema(
     layout:
         Graphviz layout engine written into ``graph [layout=...]``.  viz.js
         reads this attribute automatically.
+    splines:
+        Graphviz ``splines`` attribute controlling edge routing.  ``'curved'``
+        (default) draws smooth distinct arcs and handles edge labels correctly,
+        including edges that run backwards in the layout.  ``'ortho'`` routes
+        edges as right-angle lines but has known issues with label placement
+        and backwards edges.  Other values: ``'polyline'``, ``'spline'``,
+        ``'none'``.
+    ranksep:
+        Minimum separation in inches between ranks (layout rows/columns).
+        Larger values spread the graph out vertically (or horizontally with
+        ``rankdir=LR``) and give edge routing more room.  Default ``1.0``.
+    nodesep:
+        Minimum separation in inches between adjacent nodes in the same rank.
+        Default ``0.4``.
     """
     ghost_tables = _collect_ghost_tables(schema)
     bridge_only, orphans, pass1_components = _classify_tables(schema)
@@ -520,9 +539,11 @@ def visualise_schema(
     concentrate_attr = ' concentrate=true' if concentrate else ''
     lines: list[str] = [
         'digraph schema {',
-        f'    graph [rankdir=LR layout="{_escape(layout)}" fontname="Helvetica" fontsize=11{concentrate_attr}]',
+        f'    graph [rankdir=LR layout="{_escape(layout)}" splines="{_escape(splines)}"'
+        f' ranksep={ranksep} nodesep={nodesep}'
+        f' fontname="Helvetica" fontsize=11{concentrate_attr}]',
         '    node  [fontname="Helvetica" fontsize=10]',
-        '    edge  [fontname="Helvetica" fontsize=9]',
+        '    edge  [fontname="Helvetica" fontsize=9 decorate=true]',
         '',
     ]
 
@@ -650,7 +671,7 @@ def visualise_schema(
                 continue
             # Show bridge edge if: show_bridge is True, OR the node is bridge_only, OR target is ghost
             if show_bridge or is_bridge_only_node or target_is_ghost:
-                label = _escape(f'via {bc.via_column}')
+                label = _escape(f'{bc.column_name} via {bc.via_column}')
                 lines.append(
                     f'    {_dot_id(tbl_name)} -> {_dot_id(bridge_target)}'
                     f' [label="{label}" style=dashed color="#888888"]'
@@ -696,6 +717,9 @@ def visualise_schema_html(
     concentrate: bool = False,
     hide_deprecated: bool = False,
     layout: str = 'dot',
+    splines: str = 'curved',
+    ranksep: float = 1.0,
+    nodesep: float = 0.4,
 ) -> str:
     """
     Return a self-contained HTML string that renders *schema* interactively.
@@ -728,6 +752,9 @@ def visualise_schema_html(
         concentrate=concentrate,
         hide_deprecated=hide_deprecated,
         layout=layout,
+        splines=splines,
+        ranksep=ranksep,
+        nodesep=nodesep,
     )
 
     page_title = title or schema.dictionary_name or 'Schema'
