@@ -1,0 +1,66 @@
+#\#CIF_2.0
+
+# example of _pd_peak.wavelength_id ->
+#            _pd_peak.diffractogram_id ->
+#            _pd_diffractogram.id ->
+#            _pd_diffractogram.instr_id ->
+#            _pd_instr.id  ->
+#            _pd_instr.radiation_id
+
+# A single transitive look up
+
+data_wavelength_1
+_audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
+_diffrn_radiation.id	CR_RAD
+_diffrn_radiation.probe	x-ray
+loop_
+_diffrn_radiation_wavelength.id
+_diffrn_radiation_wavelength.wt
+_diffrn_radiation_wavelength.value
+0	  0.3780000	  2.2896977
+1	  0.1320000	  2.2900254
+2	  0.0840000	  2.2905983
+3	  0.0730000	  2.2915136
+4	  0.0090000	  2.2882482
+5	  0.2710000	  2.2936467
+6	  0.0540000	  2.2943110
+
+
+data_powder_1
+_audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
+_pd_diffractogram.id	pattern_1
+_diffrn.id	STP
+_pd_instr.id	chrome_dome
+_pd_instr.radiation_id	CR_RAD
+_pd_diffractogram.diffrn_id	STP
+_pd_diffractogram.instr_id	chrome_dome
+_diffrn.ambient_temperature	293
+loop_
+	_pd_data.point_id
+	_pd_meas.2theta_scan
+	_pd_proc.2theta_corrected
+	_pd_proc.intensity_total
+	_pd_proc.ls_weight
+	_pd_calc.intensity_total
+	_pd_calc.intensity_bkg
+        0    10.000000    10.000000     1.000000     1.000000     2.000000     2.000000
+        1    15.000000    15.000000     1.000000     1.000000     0.500000     0.500000
+        2    20.000000    20.000000     1.000000     1.000000    -0.666667    -0.666667
+        3    25.000000    25.000000     1.000000     1.000000    -1.500000    -1.500000
+        4    30.000000    30.000000     1.000000     1.000000    -2.000000    -2.000000
+
+
+data_peak
+_audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
+_pd_diffractogram.id	pattern_1
+loop_
+_pd_peak.id
+_pd_peak.2theta_centroid
+_pd_peak.width_2theta
+_pd_peak.intensity
+_pd_peak.intensity_su
+_pd_peak.wavelength_id
+A   12.35   0.26   1023    7  0
+B   24.74   0.56   2318   15  0
+C   37.79   0.61    506    2  0
+

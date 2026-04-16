@@ -1,5 +1,53 @@
 # pycifparse — Lessons Learned
 
+## Lesson 86 — When multiple bridge chains resolve, check them all for agreement (2026-04-16)
+
+**Context:** `_fill_bridge_columns` in `ingestion/ingest.py`.
+
+**Situation:** After adding fallback chains, the code tried chains in order and stopped at the first non-None result.  This silently ignores disagreements: if two chains both resolve but give different values, the fallback value is used without any indication that the data is inconsistent.
+
+**Fix:** All chains are now evaluated; non-None results are collected and compared.  If they all agree, the common value is used silently.  If they disagree, a warning is emitted (via the `emit` callback) naming all resolved values and the row, and the first resolved value is still used.
+
+**Rule:** When multiple independent paths can provide the same derived value, always check them all and warn on disagreement.  Stopping early at the first non-None result hides data quality issues that would otherwise go undetected.
+
+---
+
+## Lesson 83 — A partial FK is only safe when the dictionary is wrong, not when the data happens to be sparse (2026-04-16)
+
+**Context:** Fix A — emitting a partial `FOREIGN KEY` when a composite-PK target has one component with `enumeration_default = '.'`.
+
+**Mistake:** The code tried to infer from `enumeration_default = '.'` that a column would always be inapplicable, and on that basis added a `UNIQUE` constraint to the target table and emitted a partial FK.  The user correctly identified that `enumeration_default` is only the value used when the item is *absent* — it does not prevent a CIF file from supplying a real value.  A file that legitimately populates that column would violate the synthetic `UNIQUE` constraint and be rejected by SQLite.
+
+**Fix:** Reverted Fix A entirely.  A partial FK targeting a composite-PK table is a dictionary-level authoring problem: the referring category is simply missing a Link item for the extra PK column.  The correct resolution is to fix the dictionary, not to paper over it in code.
+
+**Rule:** Do not add database constraints that encode assumptions about what values CIF files *will* supply.  Only encode what the dictionary says they *must* supply.
+
+---
+
+## Lesson 84 — BFS for transitive bridges must return all shortest paths, not just the first (2026-04-16)
+
+**Context:** `_find_transitive_bridge` in `dictionary/schema.py`; `_fill_bridge_columns` in `ingestion/ingest.py`.
+
+**Mistake:** The BFS correctly collected all paths at the minimum depth but then returned only `results[0]`.  In the cif_pow case, two equally-short paths exist for `pd_peak.radiation_id`: one through `diffrn` and one through `pd_instr`.  Different CIF authors populate different paths — files that omit `_diffrn.diffrn_radiation_id` but provide `_pd_instr.radiation_id` silently produced `NULL` for the bridge column.
+
+**Fix:** `_find_transitive_bridge` now returns the full `results` list.  `BridgeColumnDef` carries `fallback_chains` for the alternatives.  `_fill_bridge_columns` tries each chain in order per row and uses the first non-NULL result.
+
+**Rule:** When multiple bridge paths of equal length exist, all of them are valid — different data files will use different paths.  Always preserve and attempt all candidates at ingest time rather than picking one arbitrarily at schema-generation time.
+
+---
+
+## Lesson 85 — Bridge column lookups must not be keyed by `_block_id` (2026-04-16)
+
+**Context:** `_build_chain_lookups` and `_resolve_chain` in `ingestion/ingest.py`.
+
+**Mistake:** Bridge lookups were keyed by `(block_id, pk_val)` where `block_id` was the `_block_id` of the *source* row.  In a multi-block dataset (e.g. `data_peak`, `data_powder_1`, `data_wavelength_1` all sharing one `_audit_dataset.id`), the source table (`pd_peak`) and the bridge table (`pd_diffractogram`) come from different CIF data blocks and therefore have different `_block_id` values.  The lookup always missed, leaving the derived column NULL.
+
+**Fix:** Changed lookup key to just `pk_val`.  `merged_rows` is already scoped to a single dataset ingest call, so cross-dataset contamination cannot occur — the `_block_id` discrimination was unnecessary and actively harmful.
+
+**Rule:** Bridge lookups operate within `merged_rows` which is already dataset-scoped.  Do not add `_block_id` as a discriminator inside that lookup — it will break any multi-block dataset where source and target rows originate from different CIF data blocks.
+
+---
+
 ## Lesson 77 — In sparse column display, apply the qualification check before skipping synthetics (2026-04-15)
 
 **Context:** `_column_rows` in `dictionary/visualise.py`.
