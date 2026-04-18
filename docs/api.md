@@ -20,6 +20,8 @@ pycifparse/
 │   ├── model.py          # CifFile, CifBlock, CifSaveFrame, CifValue
 │   ├── scalar.py         # CifScalar
 │   ├── builder.py        # CifBuilder, build()
+│   ├── writer.py         # CifWriter, BlockWriter, SaveFrameWriter, CifInput
+│   ├── clean.py          # clean, CleanWarning
 │   └── textfield.py      # transform_multiline (internal)
 ├── dictionary/
 │   ├── ddlm_item.py      # DdlmItem
@@ -300,7 +302,9 @@ Top-level container for a parsed CIF file.
 cif["block_name"]      # → CifBlock  (KeyError if absent)
 "block_name" in cif    # → bool
 cif.blocks             # → list[str]  block names in file order
+cif.version            # → CifVersion  (set by build(); default CIF_2_0)
 cif.get_all(name)      # → list[CifBlock]  all blocks with that name
+cif.deepcopy()         # → CifFile  independent deep copy
 ```
 
 **Duplicate block names:**
@@ -381,6 +385,202 @@ for block_name in cif.blocks:
         columns = {t: block[t] for t in loop_tags}
     for frame_name in block.save_frames:
         frame = block[frame_name]    # CifSaveFrame
+```
+
+---
+
+## CIF model — construction and editing (`pycifparse.cifmodel.writer`)
+
+All symbols are importable from `pycifparse.cifmodel.writer` or the top-level `pycifparse` package.
+
+### `CifInput`
+
+```python
+CifInput = Union[int, float, str, bool, CifScalar, list, dict]
+```
+
+Accepted input type for all value-setting methods.  Conversion rules:
+- `CifScalar` — used as-is; `value_type` preserved
+- `bool` → `CifScalar("true"/"false", STRING)`
+- `int` / `float` → `CifScalar(str(v), STRING)`
+- `'.'` or `'?'` (unquoted) → `CifScalar(v, PLACEHOLDER)`
+- other `str` → `CifScalar(v, STRING)`
+- `list` / `dict` → recursively converted (CIF 2.0 containers)
+
+---
+
+### `SaveFrameWriter`
+
+Wraps a `CifSaveFrame` (or `CifBlock`) and exposes mutation methods.  All methods return `self` for chaining.
+
+```python
+class SaveFrameWriter:
+    def set_tag(self, tag: str, value: CifInput) -> 'SaveFrameWriter': ...
+    def add_loop(self, columns: dict[str, list[CifInput]]) -> 'SaveFrameWriter': ...
+    def add_loop_column(self, loop_tag: str, new_tag: str,
+                        values: list[CifInput]) -> 'SaveFrameWriter': ...
+    def reorder_loop_tags(self, loop_tag: str,
+                          new_order: list[str]) -> 'SaveFrameWriter': ...
+    def get_loop_tags(self, loop_tag: str) -> list[str]: ...
+    def add_loop_row(self, loop_tag: str,
+                     row: list[CifInput]) -> 'SaveFrameWriter': ...
+    def reassign_tag(self, tag: str,
+                     value: 'CifInput | list[CifInput]') -> 'SaveFrameWriter': ...
+    def delete_tag(self, tag: str) -> 'SaveFrameWriter': ...
+    def remove_loop_tag(self, loop_tag: str,
+                        tag_to_remove: str) -> 'SaveFrameWriter': ...
+```
+
+**Method summaries:**
+
+| Method | Effect |
+|---|---|
+| `set_tag(tag, value)` | Append a scalar tag–value pair |
+| `add_loop(columns)` | Add a new loop; `columns` is `{tag: [values...]}` in insertion order |
+| `add_loop_column(loop_tag, new_tag, values)` | Append a column to the loop containing `loop_tag` |
+| `reorder_loop_tags(loop_tag, new_order)` | Reorder columns within the loop containing `loop_tag` |
+| `get_loop_tags(loop_tag)` | Return the ordered tag list for the loop containing `loop_tag` |
+| `add_loop_row(loop_tag, row)` | Append one row of values to the loop containing `loop_tag` |
+| `reassign_tag(tag, value)` | Replace all stored values for `tag` with a new single value (or list) |
+| `delete_tag(tag)` | Remove `tag` and its values; if a loop column, removes the column |
+| `remove_loop_tag(loop_tag, tag_to_remove)` | Remove one column from the loop containing `loop_tag` |
+
+`loop_tag` is any tag already in the target loop — used to identify which loop to operate on.
+`set_tag` appends; use `reassign_tag` to overwrite an existing value.
+
+---
+
+### `BlockWriter`
+
+Extends `SaveFrameWriter` with save frame management.
+
+```python
+class BlockWriter(SaveFrameWriter):
+    def add_save_frame(self, name: str) -> 'SaveFrameWriter': ...
+    def get_save_frame(self, name: str, index: int = 0) -> 'SaveFrameWriter': ...
+    def remove_save_frame(self, name: str, *,
+                          from_end: bool = False) -> 'BlockWriter': ...
+    def rename_save_frame(self, old_name: str,
+                          new_name: str) -> 'BlockWriter': ...
+```
+
+`get_save_frame(name, index=0)` collects all save frames with that name in file order and returns the one at `index`.  `KeyError` if none; `IndexError` if out of range.
+
+`remove_save_frame(name, from_end=False)` removes one frame: from the start when `from_end=False` (keeps last), from the end when `from_end=True` (keeps first).
+
+---
+
+### `CifWriter`
+
+Top-level writer.  Wraps an existing `CifFile` or creates a new one.
+
+```python
+class CifWriter:
+    def __init__(self, version: CifVersion,
+                 cif: CifFile | None = None) -> None: ...
+    def add_block(self, name: str) -> 'BlockWriter': ...
+    def get_block(self, name: str, index: int = 0) -> 'BlockWriter': ...
+    def remove_block(self, name: str, *,
+                     from_end: bool = False) -> 'CifWriter': ...
+    def rename_block(self, old_name: str,
+                     new_name: str) -> 'CifWriter': ...
+    def build(self) -> CifFile: ...
+```
+
+`build()` validates the accumulated `CifFile` and returns it.  Validation checks:
+- All loop columns within each loop have equal length.
+- No zero-row loops.
+- No scalar tag has more than one value.
+- CIF 1.1: no container (`list`/`dict`) values present.
+
+When `cif` is supplied, `CifWriter` wraps the existing object in place; `build()` returns the same object.  When a CIF 2.0 file is wrapped with `version=CIF_1_1`, a `UserWarning` is emitted.
+
+`get_block(name, index=0)` and `remove_block`/`rename_block` follow the same semantics as the corresponding save-frame methods.
+
+**Example:**
+
+```python
+from pycifparse import CifWriter, CifVersion
+
+w = CifWriter(version=CifVersion.CIF_2_0)
+bw = w.add_block('my_data')
+bw.set_tag('_cell.length_a', '5.43')
+bw.add_loop({
+    '_atom_site.label':   ['C1', 'O1'],
+    '_atom_site.fract_x': ['0.1', '0.4'],
+    '_atom_site.fract_y': ['0.2', '0.5'],
+})
+cif = w.build()
+```
+
+---
+
+## CIF model — cleaning (`pycifparse.cifmodel.clean`)
+
+`clean()` targets artefacts that the parser introduces automatically.  For structural edits to CIF content — reassigning values, reordering, renaming, adding or removing tags and loops — use `CifWriter`.
+
+### `CleanWarning`
+
+```python
+@dataclass
+class CleanWarning:
+    category:   str        # step name (see table below)
+    block:      str | None
+    save_frame: str | None
+    message:    str
+```
+
+One warning per removal action.  `category` values:
+
+| Category | Step |
+|---|---|
+| `'remove_error_values'` | Orphan `_pycifparse_error_value` tags removed |
+| `'deduplicate_blocks'` | Duplicate data block removed |
+| `'deduplicate_save_frames'` | Duplicate save frame removed |
+| `'deduplicate_tags'` | Duplicate scalar tag deduplicated |
+| `'strip_loop_padding'` | Trailing PLACEHOLDER row(s) stripped from a loop |
+
+---
+
+### `clean()`
+
+```python
+def clean(
+    cif: CifFile,
+    *,
+    copy: bool = True,
+    remove_error_values: bool = True,
+    deduplicate_blocks: Literal['first', 'last'] | Literal[False] = 'first',
+    deduplicate_save_frames: Literal['first', 'last'] | Literal[False] = 'first',
+    deduplicate_tags: Literal['first', 'last'] | Literal[False] = 'first',
+    strip_loop_padding: bool = True,
+) -> tuple[CifFile, list[CleanWarning]]:
+```
+
+Removes well-known parse-time artefacts from a `CifFile`.  Returns `(cleaned_cif, warnings)`.
+
+- `copy=True` (default): operates on a deep copy; input is not modified.
+- `copy=False`: mutates in place; returns the same object.
+
+**Steps (in order):**
+
+1. **`remove_error_values`** — removes the synthetic `_pycifparse_error_value` tag that the parser inserts for orphan values with no preceding tag.
+2. **`deduplicate_blocks`** — when multiple blocks share the same name, keeps `'first'` or `'last'`; `False` disables.
+3. **`deduplicate_save_frames`** — same as above, applied per block.
+4. **`deduplicate_tags`** — when a scalar tag has multiple values (non-loop duplicates), keeps `'first'` or `'last'`; loop columns are never touched.
+5. **`strip_loop_padding`** — strips trailing rows where every column value is `PLACEHOLDER` (`'?'`), capped at `n − 1` rows.  Only fires when all columns simultaneously have trailing PLACEHOLDERs.
+
+Every removal produces a `CleanWarning`; nothing is silently discarded.
+
+**Example:**
+
+```python
+from pycifparse import build, clean
+
+cif, parse_errors = build(source)
+cif, warnings = clean(cif)
+for w in warnings:
+    print(f'[{w.category}] block={w.block}: {w.message}')
 ```
 
 ---
@@ -1564,7 +1764,5 @@ with open('schema.html', 'w', encoding='utf-8') as f:
 ## Known limitations
 
 - `emit_defaults=False` in `emit()` — suppressing default-fill values requires per-value provenance tracking (not yet implemented)
-- `CifFile` editing API (`block.set()`, `block.set_loop_value()`, etc.) — not yet implemented
-- Programmatic `CifFile` construction from native Python types — not yet implemented
 - `uuid_reference_check` post-ingestion validation — stubbed; no rows written
 - `inspect_ingest` full per-tag routing trace (tag → table.column) — currently captures warnings, errors, and FK violations only

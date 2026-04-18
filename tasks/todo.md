@@ -4,154 +4,88 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 6 — OutputPlan fully implemented. Output layer complete and stable.
+**Current stage:** Stage 6 complete. `CifWriter` + `clean` API implemented.
 
-**Test suite state (2026-04-15):**
-- ~1391 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+**Test suite state (2026-04-18):**
+- ~1555 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
 - 58 slow tests pass: `pytest -m slow`
-- Total: ~1417 passing, 0 xfail
+- Total: ~1613 passing, 0 xfail
+- 2 pre-existing failures: missing `ideal_condensed.cif` test file (unrelated)
 
-**What was completed in recent sessions:**
-- **`visualise_schema` / `visualise_schema_html`** (2026-04-15):
-  - `src/pycifparse/dictionary/visualise.py`: two public functions, two-pass connectivity
-    analysis (BFS FK+parent / bridge), ghost node detection, three-tier badge system
-    ([BRIDGE ONLY] / [ORPHAN] / none), `highlight_components` subgraph clustering,
-    `show_columns` ('all'/'sparse'/'none') with TOOLTIP, all three edge types (FK solid,
-    bridge dashed, parent dotted).
-  - `visualise_schema_html`: self-contained HTML; viz.js 2.1.2 + svg-pan-zoom 3.6.1
-    bundled as package data in `src/pycifparse/dictionary/js/`.
-  - `pyproject.toml`: `[tool.setuptools.package-data]` added.
-  - Exported from `pycifparse.dictionary.__init__` and `pycifparse.__init__`.
-  - 25 tests in `tests/dictionary/test_visualise.py`.
-  - Lesson 77 added (sparse synthetic column qualification order).
+---
 
+### Active task: pending items from `CifWriter` + `clean` implementation
 
-- `quote.py`: CIF 2.0 and 1.1 quoting decision trees; 95 tests in `tests/output/test_quote.py`.
-- `plan.py`: `EmitMode` (`ONE_BLOCK`, `ALL_BLOCKS`, `ORIGINAL`, `GROUPED`), `BlockSpec`, `OutputPlan`.
-- `emit.py`: `emit(conn, schema, *, mode, version, plan, reconstruct_su, emit_defaults)`.
-  Four mode collectors. Set/Loop/fallback renderers. SU reconstruction. GROUPED BFS anchor search.
-- All symbols exported from `pycifparse.output.__init__` and `pycifparse.__init__`.
-- **FK-PK suppression** (ORIGINAL and GROUPED): Set-category FK-PK columns redundant from block
-  scope are suppressed.  `_suppressed_fk_pk_cols()` in `emit.py`.
-- **`_audit_dataset.id` injection** (ALL_BLOCKS, CIF 2.0 only): links blocks to one dataset UUID.
-- **`example_workflow.py` Step 11**: ALL_BLOCKS emit added with round-trip parse check.
-- **Bug fix — `_flush` slim-row column loss** (`ingest.py`): INSERT column list now uses union of
-  all row keys, not just `rows[0].keys()`.  Fixes NULL columns after re-ingest of emitted CIF.
-- **Bug fix — GROUPED remaining-blocks scope** (`emit.py`): remaining-blocks pass now sweeps all
-  schema tables, not just `block_id_tables`.  Fixes keyed-anchor tables with NULL FK values being
-  silently dropped (e.g. `diffrn_radiation_wavelength`).
-- Both `test_multi_one_original` and `test_multi_one_grouped` xfail decorators removed.
-- **`check_fidelity`** (`src/pycifparse/fidelity/`): complete. 21 tests. See below.
-- **`directory_path_resolver`**: new companion to `directory_resolver`; passes full paths into
-  `DdlmDictionary.source_files` and therefore `SchemaSpec.source_files` for report use.
-- **`DdlmDictionary.source_files`** / **`SchemaSpec.source_files`** / **`SchemaSpec.dictionary_name`**:
-  populated during loading; serialised in JSON cache.
-- **OutputPlan full spec implemented** (2026-04-14):
-  - `BlockSpec`: `matches` predicate, `category_order` (with wildcard `*` and merge groups),
-    `single_block`, `block_namer`.
-  - `OutputPlan`: `specs` (renamed from `blocks`), `block_namer`, `match()`.
-  - `emit.py` refactored: collectors return `list[_BlockData]`; `_sort_and_merge()` does
-    first-match spec assignment, `single_block` merging, and emission ordering.
-  - `_expand_wildcard()`: BFS over `SchemaSpec.category_parent` children map.
-  - `_render_merge_group()`: key-compatible → FULL OUTER JOIN in Python → single `loop_`;
-    incompatible → plain loops in listed order.
-  - GROUPED block names now derived from anchor key dict (e.g. `id_myexp`), not `_block_id`.
-  - `SchemaSpec.category_parent` added to `schema.py`; built in `generate_schema`.
-  - 19 new tests in `test_emit.py`. API Reference updated. Lessons 65–68 added.
+#### Rename `_error_value` → `_pycifparse_error_value`
 
-**What was completed in recent sessions (continued):**
-- **ALL_BLOCKS block granularity fixed** (2026-04-14): `_collect_all_blocks` now delegates to
-  `_collect_grouped` (mirrors GROUPED logic: one block per Set-anchor key combination).
-  `dataset_id` is a fresh UUID per `emit()` call (CIF 2.0 only), shared across all output blocks.
-  FK-PK suppression disabled (`suppress_fk_pk=False`).  `_block_dataset_membership` lookup
-  removed (dataset UUID now always fresh).  `audit_dataset` stripped from GROUPED block
-  table_rows so emission UUID is injected consistently into every block.  6 new tests.
-- **`example_workflow.py` updated**: `BlockSpec.categories` → `category_order`;
-  `OutputPlan.blocks` → `specs`; Step 11 comment corrected; Step 13 added (fidelity checks
-  for all four emit modes).  Validated on `multi_one.cif` + `cif_pow.dic`: all four modes
-  pass fidelity (0 mismatches).
+The synthetic tag `_error_value` (used by the parser to store orphan values with no preceding
+tag) could clash with a legitimately defined tag in a real CIF file. It should be renamed to
+`_pycifparse_error_value` to use a clearly library-specific namespace.
 
-**Open questions / things to revisit:**
-- ~~**ONE_BLOCK block naming**~~ — **FIXED**.  `_collect_one_block` now constructs
-  `_BlockData` directly with `anchor_key_dict={}`, so `_resolve_block_name` falls
-  through to the `fallback` string (`'output'`) instead of calling `_default_block_name`
-  and concatenating every anchor key value from the entire database into one monster name.
+Action required:
+- Rename `'_error_value'` → `'_pycifparse_error_value'` everywhere it appears:
+  `src/pycifparse/cifmodel/builder.py`, any tests that reference it, and
+  `prompts/construct_cif.md`.
+- Rename `'_block_id'` → `'_pycifparse_block_id'` and `'_row_id'` → `'_pycifparse_row_id'`
+  everywhere they appear: schema generation, ingestion, output, compactification, fidelity,
+  inspect layers, all tests, all prompts, and `docs/api.md`. This is a pervasive rename —
+  do it in one pass with a global search-and-replace, then verify no plain `_block_id` or
+  `_row_id` strings remain (grep for both before closing).
+- `_pycifparse_id` is already correctly named; no change needed there.
+- Register all four `_pycifparse_*` synthetic tags (`_pycifparse_block_id`,
+  `_pycifparse_row_id`, `_pycifparse_id`, `_pycifparse_error_value`) with the IUCr so the
+  namespace is formally reserved and cannot be assigned to a real dictionary item.
 
-- **Line ending option** (2026-04-14): `line_ending: str = '\n'` parameter added to `emit()`.
-  `_render_block` changed to return `list[str]` (was `str`); all lines collected flat in
-  `emit()` and joined once with `line_ending`.  Multiline text fields handled correctly
-  because `_render_set_category` / `_format_row` already split tokens on `\n` before
-  extending the lines list.  6 new tests in `TestLineEnding`.
+---
 
-**Next targets (in priority order):**
-1. ~~**Pretty-print output**~~ — **DONE** (2026-04-14).  `pretty: bool = True` flag on `emit()`.
-   - Set categories: tag names padded to the longest tag in the category (f-string `:<width>`).
-   - Loop categories: token matrix built first (one `quote()` call per cell), column widths
-     computed via `_col_widths()`, then `_format_row(tokens, col_widths)` pads each token.
-   - Columns containing any multiline token are excluded from padding (width 0).
-   - Fallback scalar tags aligned the same way as Set categories.
-   - `pretty=False` skips all alignment (compact two-space separator mode).
-   - 9 new tests in `TestPretty`.  Default is `True`; profile on large files if needed.
-2. ~~**Line-length enforcement and folding**~~ — **DONE** (2026-04-15).
-   - `line_limit: int | None = 2048` added to `emit()`.
-   - `quote.py`: new `_fold_content_lines`, `_make_folded_semicolon`, `_make_prefixed_folded_semicolon`,
-     and public `make_text_field(s, line_limit)` covering all four format combinations (plain /
-     prefix-only / fold-only / prefix+fold).
-   - `emit.py`: `_apply_line_limit(value, token, line_limit)` re-quotes inline tokens that are
-     too long and re-folds existing multiline tokens whose content lines exceed the limit.
-     `_pack_tokens(padded, line_limit)` greedy-packs loop data tokens across physical lines.
-     `_format_row` accepts `line_limit` and delegates to `_pack_tokens` when set.
-   - Set and fallback renderers: re-quote inline tokens whose full `tag + sep + token` line
-     exceeds `line_limit`; recompute `tag_width` after re-quoting.
-   - CIF 1.1: block code > 75 chars → `ValueError` in `_render_block`.
-   - 15 new tests in `TestLineLimit`.
-3. ~~**Decimal-aligned pretty-print**~~ — **DONE** (2026-04-15).
-   - `_parse_numeric(token)` splits on `.` first, then `e`/`E`; returns `(int_part, frac_part)` or `None`.
-   - `_decimal_align_column(tokens)` computes `int_width`/`frac_width` and applies right-pad.
-   - `_apply_decimal_align(matrix, real_indices)` applies per-column alignment in loop renderer.
-   - `_real_col_indices` / `_real_col_indices_merged` find Real/Float cols from schema.
-   - Set renderer carries `(tag, col, value, token)` quads so col type can be looked up; decimal
-     alignment is applied to all Real/Float quads collectively within a Set category.
-   - Scientific notation: `1.234e2` splits on `.` (int='1', frac='234e2'); `1234e-2` splits on
-     first `e` (int='1234', frac='e-2'); `e` position aligns correctly in both cases.
-   - 13 tests in `TestDecimalAlign`; `_CELL_DIC` fixture added (Set, 6 Real columns).
-4. ~~**`convert_database(src, dst, schema)`**~~ — **DONE** (2026-04-15).
-   - Type map: `"Integer"` → `INTEGER`, `"Real"`/`"Float"` → `REAL`, else `TEXT`.
-   - Non-Single containers (`type_container != 'Single'`): column stays `TEXT`; JSON is
-     parsed and each string leaf is cast to the leaf type, then re-serialised.
-     `["1","2","3"]` (Integer/Matrix) → `[1,2,3]` stored as JSON text.
-   - `ColumnDef.type_container` added (optional, default `None`); populated from
-     `DdlmItem.type_container` in `generate_schema`.
-   - Sentinels `'.'`/`'?'` → `NULL`, no warning.
-   - SU suffixes stripped before numeric cast (including inside JSON leaves), always with warning.
-   - `on_coercion_failure`: `'null'` (default), `'keep'`, `'error'`.
-   - Non-string raw values (e.g. `_row_id` fetched as Python `int`) passed through as-is.
-   - Fallback-tier tables copied verbatim (`TEXT` storage).
-   - All tables preserved (no empty-table or NULL-column dropping).
-   - 24 tests in `tests/database/test_convert.py` (5 new for container columns).
-   - Exported from `pycifparse.database` and `pycifparse`.
-5. ~~**Ingest stub promotion / emit round-trip bugs**~~ — **DONE** (2026-04-12).  See Lesson 58.
-6. ~~**OutputPlan full spec**~~ — **DONE** (2026-04-14).  See Lessons 65–68.
+#### Known gap to fix in `CifBuilder` (before or after implementing writer/clean)
 
-**Open decisions / known limitations:**
-- **`inspect_ingest` routing trace**: currently captures warnings, errors, FK violations only.
-  Full per-tag routing events (tag → table.column) would require hooks into `_Ingester` internals;
-  deferred until a `filter=` parameter is added.
-- **`inspect_ingest` filter parameter**: unfiltered trace first; leave open for later.
-- **SQLite trace output for `inspect_ingest`**: out of scope; leave open.
-- **`_pycifparse_id` scoping**: block-category-scoped (current). Revisit with real-world evidence.
-- `uuid_reference_check` is a stub — no rows written in Stage 4. Implement in a later stage.
-- Looped keyless Set: error is supposed to be emitted and UUID assigned per row, but this path is
-  not explicitly tested. Covered implicitly by the `_pycifparse_id` test but no error-emission test.
-- `_process_scalar` for the no-schema path uses `_row_id=1` for all scalars. In a block with
-  duplicate scalar tags, the fallback PK (`_block_id, _row_id, tag`) will cause a DB-level error
-  on the second occurrence. The spec says duplicate tags are undefined behaviour — caller must
-  consolidate before `ingest()`. Documented in the Assumptions section of Stage4 prompt.
-- **`emit_defaults` flag**: accepted but has no effect. Suppressing default-fill values requires
-  per-value provenance tracking not yet implemented.
-- **CIF 2.0 bare-word `'`/`"` legality** (Lesson 49): Rule 2 in `quote.py` defensively excludes
-  values containing `'` or `"` from bare-word emission. Check `references/CIF2-ENBF.txt`; if they
-  are legal mid-word, fix the lexer and relax the guard.
+**Cross-type duplicate tags: scalar vs loop column in the same namespace.**
+
+`CifBuilder` does not detect the case where a tag appears both as a scalar and as a loop column
+in the same namespace. Two failure modes:
+
+- **Scalar first, then loop**: `_add_loop` (model.py) unconditionally overwrites `_tags[tag]`
+  with loop values. The scalar value is silently lost — violates the "no silent data loss"
+  constraint. No error is emitted.
+
+- **Loop first, then scalar**: `_append_value` appends the scalar to the loop column's value
+  list, leaving that column one value longer than all other columns in the loop. No error
+  is emitted. The loop is structurally inconsistent.
+
+Fix required in `CifBuilder` (`src/pycifparse/cifmodel/builder.py`):
+- In `on_loop_start`: check if any incoming loop tag already exists as a scalar in the current
+  namespace (`tag in ns._tags and tag not in any existing loop`). If so, emit a semantic error.
+- In `add_tag`: check if the tag already exists as a loop column in the current namespace
+  (`tag in ns._tags and tag in any loop in ns._loops`). If so, emit a semantic error.
+
+In both cases the builder should continue (consistent with its error-tolerant design) but the
+error must be recorded. Recovery action for scalar-then-loop: the scalar value is lost (note
+this in the error). Recovery for loop-then-scalar: the extra value is appended (the inconsistent
+loop will be visible in the model).
+
+---
+
+### Remaining items
+
+#### Update `docs/api.md`
+
+- Add `cifmodel/writer.py` and `cifmodel/clean.py` to the module layout table.
+- Add API sections for `CifWriter`, `BlockWriter`, `SaveFrameWriter`, `CifInput`, `clean`, `CleanWarning`.
+- Mark `CifVersion` as now exported from top-level `pycifparse`.
+
+---
+
+## Previously completed (2026-04-15 to 2026-04-18)
+
+- **`CifWriter` + `clean` API**: `writer.py`, `clean.py`, model prerequisites (`version`,
+  `deepcopy()`), builder version-stamping, `__init__.py` exports. 134 tests. Lessons 87–90.
+- **`visualise_schema` / `visualise_schema_html`**: two-pass BFS connectivity, ghost nodes,
+  three-tier badge system, `highlight_components`, `show_columns`, self-contained HTML with
+  bundled viz.js + svg-pan-zoom. 25 tests. Lesson 77.
+- **`prompts/propose_keys.md`**: complete DDLm FK/PK proposal prompt. See file.
+- **`prompts/proposed_keys.output`**: mechanical analysis (33 Set + 74 Part B + 8 semantic
+  isolated-deprecated categories). All 9 components connected after proposals.
 
 ---
 
@@ -351,41 +285,12 @@ Tests: `tests/dictionary/test_fallback_schema.py`
   either way. Affects `CifBuilder` (Stage 2 layer). Decide whether deduplication applies to loop
   columns as well, or only to scalar tags.
 
-- **`convert_database(src, dst, schema, *, on_coercion_failure='null') -> list[str]`** —
-  copies a TEXT-storage database to a new connection with value columns cast to the
-  type indicated by `ColumnDef.type_contents`. Round-trip fidelity is explicitly
-  sacrificed. Rules:
-  - Always a copy; original is never modified.
-  - SU values are already split at ingestion (measurand column holds bare numeric).
-  - CIF sentinels `'.'` and `'?'` → `NULL` silently (not a coercion failure).
-  - `'"."'` and `'"?"'` (quoted strings) → subject to `on_coercion_failure` if the
-    column is numeric.
-  - `_cif_fallback`: best-effort CAST on `value` guided by `value_type`; `NULL` on
-    failure per `on_coercion_failure`.
-  - `on_coercion_failure`: `'null'` (default) — failed cast → NULL; `'keep'` — leave
-    TEXT value; `'error'` — raise.
-  - Returns list of warnings (one per coercion failure in `'null'`/`'keep'` modes).
-  - Stage 5+ output layer.
+- ~~**Programmatic `CifFile` construction**~~ — **IN PROGRESS** (`prompts/construct_cif.md`).
+  `CifWriter` + `clean` API. See "Active task" section above.
 
-- **Programmatic `CifFile` construction** — user-facing builder API accepting native Python
-  types (str, int, float), converting to strings with correct `ValueType` assignment.
-  Stage 5+, tightly coupled to CIF emission.
-
-- **`CifFile` editing API** — mutation methods on `CifBlock` and `CifSaveFrame` allowing
-  the user to modify a parsed `CifFile` in place rather than re-parsing an edited source
-  string. Avoids a full parse/re-emit round-trip for small programmatic edits. Proposed
-  operations:
-  - `block.set(tag, value)` — set or replace a scalar tag value; accepts `str | CifScalar`;
-    assigns appropriate `ValueType` if given a plain `str`.
-  - `block.set_loop_value(loop_index, tag, row_index, value)` — replace one cell in a loop.
-  - `block.delete(tag)` — remove a scalar tag or all values for a loop column.
-  - `block.add_loop(tags, rows)` — append a new loop.
-  - `block.rename_tag(old, new)` — rename a tag in scalars or loops (for alias resolution
-    or deprecation fixes before ingestion).
-  - Save-frame equivalents for the above.
-  - All mutations must preserve the non-negotiable constraints (no silent data loss, file
-    order of untouched tags preserved, `ValueType` provenance maintained).
-  - Stage 5+, design in detail before implementing.
+- ~~**`CifFile` editing API**~~ — **SUPERSEDED** by `CifWriter` mutation methods.
+  `CifWriter` provides `reassign_tag`, `delete_tag`, `remove_loop_tag`, `deconstruct_loop`,
+  `rename_block`, `rename_save_frame`. No separate editing layer needed.
 
 ### Documentation
 
@@ -411,3 +316,23 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 - **`CifBlock`/`CifSaveFrame` inheritance** — `CifBlock extends CifSaveFrame` is a mild LSP
   violation. Refactor to a private `_CifNamespace` base with both as siblings if either class
   is ever passed polymorphically. Mechanical change; all tests pass unchanged.
+
+### Open decisions / known limitations
+- **`inspect_ingest` routing trace**: currently captures warnings, errors, FK violations only.
+  Full per-tag routing events (tag → table.column) would require hooks into `_Ingester` internals;
+  deferred until a `filter=` parameter is added.
+- **`inspect_ingest` filter parameter**: unfiltered trace first; leave open for later.
+- **SQLite trace output for `inspect_ingest`**: out of scope; leave open.
+- **`_pycifparse_id` scoping**: block-category-scoped (current). Revisit with real-world evidence.
+- `uuid_reference_check` is a stub — no rows written in Stage 4. Implement in a later stage.
+- Looped keyless Set: error is supposed to be emitted and UUID assigned per row, but this path is
+  not explicitly tested. Covered implicitly by the `_pycifparse_id` test but no error-emission test.
+- `_process_scalar` for the no-schema path uses `_row_id=1` for all scalars. In a block with
+  duplicate scalar tags, the fallback PK (`_block_id, _row_id, tag`) will cause a DB-level error
+  on the second occurrence. The spec says duplicate tags are undefined behaviour — caller must
+  consolidate before `ingest()`. Documented in the Assumptions section of Stage4 prompt.
+- **`emit_defaults` flag**: accepted but has no effect. Suppressing default-fill values requires
+  per-value provenance tracking not yet implemented.
+- **CIF 2.0 bare-word `'`/`"` legality** (Lesson 49): Rule 2 in `quote.py` defensively excludes
+  values containing `'` or `"` from bare-word emission. Check `references/CIF2-ENBF.txt`; if they
+  are legal mid-word, fix the lexer and relax the guard.

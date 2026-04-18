@@ -1,5 +1,51 @@
 # pycifparse — Lessons Learned
 
+## Lesson 90 — strip_loop_padding k=0 unless ALL columns have trailing PLACEHOLDERs (2026-04-18)
+
+**Context:** `_strip_padding_in_ns` in `cifmodel/clean.py`; test for `strip_loop_padding`.
+
+**Situation:** Initial test used a real-parsed padded loop (3 tags, 5 values, 1 padded). The algorithm computes `k = min(trailing PLACEHOLDER count per column)`. Because the parser only pads the missing columns in the incomplete final row, the non-padded columns have `k=0`, so `min=0` — nothing is stripped. The test expected 1 row but got 2.
+
+**Fix:** Test directly constructs a `CifFile` with a loop where ALL columns' last values are `CifScalar('?', PLACEHOLDER)`, which is the condition that makes `k > 0`.
+
+**Rule:** `strip_loop_padding` only fires when every column in the loop simultaneously has trailing PLACEHOLDERs. Real-world padding from the parser will only produce this condition if the user's last complete row also happens to end with `?` values. Tests for this step must construct the model state directly, not rely on the parser producing a specific pattern.
+
+---
+
+## Lesson 89 — Python chained comparison `a in b == c` is not `(a in b) == c` (2026-04-18)
+
+**Context:** `test_copy_true_original_unmodified` in `tests/cifmodel/test_clean.py`.
+
+**Mistake:** Wrote `assert "_error_value" in cif["b"]._tags == original_has_tag`. Python evaluates this as `("_error_value" in cif["b"]._tags) and (cif["b"]._tags == original_has_tag)` — a chained comparison. The dict is never equal to a bool, so the assertion failed with a confusing dict-vs-bool message.
+
+**Fix:** Split into two separate assertions.
+
+**Rule:** Never write `a in b == c`. Always use `(a in b) == c` with explicit parentheses, or two separate assertions.
+
+---
+
+## Lesson 88 — A single-column loop reassigned to a different length is still consistent (2026-04-18)
+
+**Context:** `test_reassign_loop_column_different_length_ok` in `tests/cifmodel/test_writer.py`.
+
+**Mistake:** Test asserted that `build()` raises `ValueError` when a single-column loop's column is reassigned to a shorter list. It doesn't — with only one column, all column lengths are trivially equal regardless of length. The build-time inconsistency check only fires when two columns in the same loop have different lengths.
+
+**Fix:** Test uses a two-column loop, reassigns only one column to a different length, and then verifies `build()` raises.
+
+**Rule:** Loop column-length validation requires at least two columns to detect a mismatch. Single-column loops are always structurally valid regardless of length (as long as length ≥ 1 for the zero-row check).
+
+---
+
+## Lesson 87 — Implement without permission after spec review causes wasted work (2026-04-18)
+
+**Context:** Start of `CifWriter` + `clean` implementation session.
+
+**Mistake:** After the previous session ended with "spec is ready", the assistant immediately began implementing (`model.py`, `builder.py`, `writer.py`, `clean.py`) without being asked to. The user had to revert all changes and start over.
+
+**Rule:** A complete spec does not authorise implementation. Wait for explicit instruction ("implement", "go ahead", etc.) before writing any code. "Spec is ready" means the design work is done — nothing more.
+
+---
+
 ## Lesson 86 — When multiple bridge chains resolve, check them all for agreement (2026-04-16)
 
 **Context:** `_fill_bridge_columns` in `ingestion/ingest.py`.

@@ -19,9 +19,18 @@ from __future__ import annotations
 from typing import Union
 
 from pycifparse.cifmodel.scalar import CifScalar
+from pycifparse.types import CifVersion
 
 # A CIF value stored in the model: scalar (CifScalar), or a nested container.
 CifValue = Union[CifScalar, list, dict]
+
+
+def _deepcopy_value(v: CifValue) -> CifValue:
+    if isinstance(v, list):
+        return [_deepcopy_value(e) for e in v]
+    if isinstance(v, dict):
+        return {k: _deepcopy_value(val) for k, val in v.items()}
+    return v  # CifScalar is immutable — share the reference
 
 
 class CifSaveFrame:
@@ -124,7 +133,8 @@ class CifBlock(CifSaveFrame):
 class CifFile:
     """Top-level container for a parsed CIF file."""
 
-    def __init__(self) -> None:
+    def __init__(self, version: CifVersion = CifVersion.CIF_2_0) -> None:
+        self.version = version
         self._blocks: dict[str, CifBlock] = {}      # first match
         self._block_list: list[CifBlock] = []        # all, in file order
 
@@ -154,3 +164,30 @@ class CifFile:
         if not duplicate:
             self._blocks[block.name] = block
         return duplicate
+
+    def deepcopy(self) -> 'CifFile':
+        """Return a fully independent deep copy of this CifFile."""
+        new_file = CifFile(version=self.version)
+        for block in self._block_list:
+            new_block = CifBlock(block.name, block._id)
+            new_block._tags = {
+                tag: [_deepcopy_value(v) for v in vals]
+                for tag, vals in block._tags.items()
+            }
+            new_block._tag_order = list(block._tag_order)
+            new_block._loops = [list(loop) for loop in block._loops]
+            for sf in block._save_frame_list:
+                new_sf = CifSaveFrame(sf.name, sf._id)
+                new_sf._tags = {
+                    tag: [_deepcopy_value(v) for v in vals]
+                    for tag, vals in sf._tags.items()
+                }
+                new_sf._tag_order = list(sf._tag_order)
+                new_sf._loops = [list(loop) for loop in sf._loops]
+                new_block._save_frame_list.append(new_sf)
+                if sf.name not in new_block._save_frames:
+                    new_block._save_frames[sf.name] = new_sf
+            new_file._block_list.append(new_block)
+            if block.name not in new_file._blocks:
+                new_file._blocks[block.name] = new_block
+        return new_file
