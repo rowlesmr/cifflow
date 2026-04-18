@@ -27,6 +27,7 @@ from pycifparse.cifmodel.model import CifBlock, CifFile, CifSaveFrame, CifValue
 from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.cifmodel.textfield import transform_multiline
 from pycifparse.parser.parser import CifParser
+from pycifparse.parser.version import detect_version
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -281,6 +282,8 @@ def build(
     *errors* contains both parser-level and IR-level errors in emission order.
     """
     errors: list[ParseError] = []
+    version = detect_version(source)
     builder = CifBuilder(on_error=errors.append, mode=mode)
     CifParser(builder).parse(source)
+    builder.result.version = version
     return builder.result, errors

@@ -1,7 +1,10 @@
+from pycifparse.types import CifVersion
 from pycifparse.database import compactify_database, convert_database
 from pycifparse.cifmodel.model import CifFile, CifBlock, CifSaveFrame
 from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.cifmodel.builder import build, CifBuilder
+from pycifparse.cifmodel.writer import CifWriter, BlockWriter, SaveFrameWriter, CifInput
+from pycifparse.cifmodel.clean import clean, CleanWarning
 from pycifparse.ingestion import ingest
 from pycifparse.ingestion.ingest import IngestionError
 from pycifparse.dictionary import (
@@ -42,6 +45,12 @@ from pycifparse.inspect import (
 __all__ = [
     # CIF model
     'CifFile', 'CifBlock', 'CifSaveFrame', 'CifScalar', 'CifBuilder', 'build',
+    # Version
+    'CifVersion',
+    # Writer
+    'CifWriter', 'BlockWriter', 'SaveFrameWriter', 'CifInput',
+    # Clean
+    'clean', 'CleanWarning',
     # Ingestion
     'ingest', 'IngestionError',
     # Database
