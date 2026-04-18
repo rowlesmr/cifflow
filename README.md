@@ -1,6 +1,6 @@
 # pycifparse
 
-A Python library for parsing, storing, and outputting Crystallographic Information Freamework (CIF) files.
+A Python library for parsing, storing, and outputting Crystallographic Information Framework (CIF) files.
 
 **Python ≥ 3.10 · Apache 2.0 · v0.1.0 · pre-release (not yet on PyPI)**
 
@@ -14,6 +14,8 @@ A Python library for parsing, storing, and outputting Crystallographic Informati
 - Ingests parsed CIF data into SQLite using the dictionary-derived schema: one table per category, foreign keys enforced, unknown tags routed to a fallback tier
 - Emits valid CIF from a populated database in four modes: ORIGINAL, GROUPED, ONE_BLOCK, ALL_BLOCKS
 - Trusts the user. If you pass in multiple blocks, the program assumes they all belong together, and, failing key value clashes, can be interpreted as a single database/experiment.
+- Constructs `CifFile` objects programmatically from Python values (`CifWriter`), and performs arbitrary edits: add/remove/rename tags, loops, blocks, and save frames
+- Removes common parse-time artefacts automatically (`clean`): orphan error tags, duplicate blocks/save frames/tags, loop padding. For anything beyond these automatic fixes, use `CifWriter`.
 - Visualises a schema as a Graphviz DOT string or a self-contained interactive HTML file
 
 ---
@@ -135,7 +137,7 @@ All stages are complete and tested.
 | 3 | DDLm dictionary loading (`_import.get`, alias resolution, deprecation) |
 | 4 | SQLite schema generation (Set/Loop → tables, PKs, FKs, bridge columns, fallback tier) |
 | 5 | SQLite ingestion: structured tables + fallback tier; FK propagation; error recovery |
-| 6 | CIF emission (ORIGINAL, GROUPED, ONE_BLOCK, ALL_BLOCKS); pretty-print; line-length enforcement; decimal alignment; schema visualisation |
+| 6 | CIF emission (ORIGINAL, GROUPED, ONE_BLOCK, ALL_BLOCKS); pretty-print; line-length enforcement; decimal alignment; schema visualisation; programmatic `CifFile` construction (`CifWriter`); cleaning parser artefacts (`clean`) |
 
 ---
 
