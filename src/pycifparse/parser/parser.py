@@ -447,16 +447,16 @@ class CifParser:
     def _ensure_value_context(self, tok: Token) -> None:
         """
         If there is no enclosing context for a container value, set up a
-        synthetic _error_value tag so the container has somewhere to go.
+        synthetic _pycifparse_error_value tag so the container has somewhere to go.
         """
         if (not self._in_loop
                 and self._active_tag is None
                 and not self._container_stack):
             self._h.on_error(self._err(
                 'syntactic', 'container without preceding tag',
-                tok, 'attached to _error_value'))
-            self._h.add_tag('_error_value')
-            self._active_tag = '_error_value'
+                tok, 'attached to _pycifparse_error_value'))
+            self._h.add_tag('_pycifparse_error_value')
+            self._active_tag = '_pycifparse_error_value'
             self._tag_base_depth = 0
 
     def _notify_parent_table_of_container_open(self, tok: Token) -> None:
@@ -620,8 +620,8 @@ class CifParser:
             self._h.on_error(self._err(
                 'syntactic',
                 f'value {value!r} has no preceding tag',
-                tok, 'attached to _error_value'))
-            self._h.add_tag('_error_value')
+                tok, 'attached to _pycifparse_error_value'))
+            self._h.add_tag('_pycifparse_error_value')
             self._h.add_value(value, vtype)
 
     # ------------------------------------------------------------------

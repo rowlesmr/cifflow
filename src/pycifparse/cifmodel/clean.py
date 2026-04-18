@@ -22,7 +22,7 @@ from pycifparse.types import ValueType
 
 Keep = Literal['first', 'last']
 
-_ERROR_TAG = '_error_value'  # rename to _pycifparse_error_value when parser is updated
+_ERROR_TAG = '_pycifparse_error_value'
 
 
 @dataclass

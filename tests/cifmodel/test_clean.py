@@ -76,7 +76,7 @@ class TestRemoveErrorValues:
                                   deduplicate_save_frames=False,
                                   deduplicate_tags=False,
                                   strip_loop_padding=False)
-        assert "_error_value" not in result["b"]._tags
+        assert "_pycifparse_error_value" not in result["b"]._tags
 
     def test_warning_emitted(self):
         cif = _make_cif_with_error_value()
@@ -94,7 +94,7 @@ class TestRemoveErrorValues:
                                   deduplicate_save_frames=False,
                                   deduplicate_tags=False,
                                   strip_loop_padding=False)
-        assert "_error_value" in result["b"]._tags
+        assert "_pycifparse_error_value" in result["b"]._tags
         assert not warnings
 
 
@@ -294,9 +294,9 @@ class TestStripLoopPadding:
 class TestCopySemantics:
     def test_copy_true_original_unmodified(self):
         cif = _make_cif_with_error_value()
-        assert "_error_value" in cif["b"]._tags
+        assert "_pycifparse_error_value" in cif["b"]._tags
         clean(cif)
-        assert "_error_value" in cif["b"]._tags  # original untouched
+        assert "_pycifparse_error_value" in cif["b"]._tags  # original untouched
 
     def test_copy_false_returns_same_object(self):
         cif = _make_cif_with_error_value()
