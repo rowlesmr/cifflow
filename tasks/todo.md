@@ -14,31 +14,97 @@
 
 ---
 
-### Active task: pending items from `CifWriter` + `clean` implementation
+### Active task: database content validator (scoped 2026-04-18)
 
-#### Rename `_error_value` → `_pycifparse_error_value`
+Spec to be written at `prompts/Stage7_Validator_Prompt.md`.
 
-The synthetic tag `_error_value` (used by the parser to store orphan values with no preceding
-tag) could clash with a legitimately defined tag in a real CIF file. It should be renamed to
-`_pycifparse_error_value` to use a clearly library-specific namespace.
+#### Decisions
 
-Action required:
-- Rename `'_error_value'` → `'_pycifparse_error_value'` everywhere it appears:
-  `src/pycifparse/cifmodel/builder.py`, any tests that reference it, and
-  `prompts/construct_cif.md`.
-- Rename `'_block_id'` → `'_pycifparse_block_id'` and `'_row_id'` → `'_pycifparse_row_id'`
-  everywhere they appear: schema generation, ingestion, output, compactification, fidelity,
-  inspect layers, all tests, all prompts, and `docs/api.md`. This is a pervasive rename —
-  do it in one pass with a global search-and-replace, then verify no plain `_block_id` or
-  `_row_id` strings remain (grep for both before closing).
-- `_pycifparse_id` is already correctly named; no change needed there.
-- Register all four `_pycifparse_*` synthetic tags (`_pycifparse_block_id`,
-  `_pycifparse_row_id`, `_pycifparse_id`, `_pycifparse_error_value`) with the IUCr so the
-  namespace is formally reserved and cannot be assigned to a real dictionary item.
+| Question | Decision |
+|---|---|
+| Include `_enumeration_set.state`? | Yes |
+| Output shape | Report object only (`ValidationResult` / `ValidationReport`); no DB write |
+| Non-Single containers | All three: container type + element count (`_type.dimension`) + leaf values (`_type.contents`) |
+| Sentinels (`NULL`, `'.'`, `'?'`) | Skip all checks |
+| SU columns | Apply all `_type.*` checks to the bare measurand value |
+| `Imag` / `Complex` | Write stubs; clearly marked as no-op |
+| `ByReference` / `Inherited` | Skip |
+| `Uri` / `Iri` | RFC 3986 Appendix B structural regex; `Warning` severity |
+
+#### Prerequisites (extend before implementing validator)
+
+- Add `enumeration_range: str | None` to `DdlmItem`; populate in `loader.py`
+- Add `type_dimension: str | None` to `DdlmItem`; populate in `loader.py`
+- Add `enumeration_states: list[str]`, `enumeration_range: str | None`,
+  `type_dimension: str | None` to `ColumnDef`; populate in `generate_schema()`
+
+#### `_type.contents` validation rules (to implement)
+
+| Value | Check |
+|---|---|
+| `Text` | Always valid |
+| `Word` | No ASCII whitespace |
+| `Code` | No ASCII whitespace |
+| `Name` | `[A-Za-z0-9_]+` |
+| `Tag` | `_\S+` |
+| `Uri` | RFC 3986 Appendix B regex |
+| `Iri` | RFC 3986 regex with Unicode-widened path/query/fragment |
+| `Date` | `\d{4}-\d{2}-\d{2}` |
+| `DateTime` | `datetime.fromisoformat` or RFC 3339 regex |
+| `Version` | `\d+\.\d+\.\d+.*` |
+| `Dimension` | `\[\d*(,\d+)*\]` |
+| `Range` | `(-?\S+)?:(-?\S+)?` with at least one side |
+| `Integer` | `[+-]?\d+` |
+| `Real` | float pattern incl. scientific notation |
+| `Imag` | stub / no-op |
+| `Complex` | stub / no-op |
+| `Symop` | `\d+([_ ]\d{3,})?` |
+| `Implied` / `ByReference` / `Inherited` | Skip |
 
 ---
 
-#### Known gap to fix in `CifBuilder` (before or after implementing writer/clean)
+### Remaining items
+
+#### Scope `_validation_result` table purpose
+
+The `_validation_result` table was created during the ingestion layer for two UUID-regime
+checks (`uuid_regime`, `uuid_reference_check`). Now that the content validator (above) uses
+a report-object approach (Option A) and does not write to the database, the table's ongoing
+role is unclear.
+
+Questions to resolve before writing the validator spec:
+- Are the two existing ingestion checks (`uuid_regime`, `uuid_reference_check`) still
+  the right things to store in the database, or should they also move to a report object?
+- If the table is retained, should it be extended with columns for table/column/tag/value
+  to support future DB-write validation results?
+- If neither ingestion check nor future validation writes to it, should the table be removed?
+
+---
+
+#### Scope: read `ddl.dic` to provide DDLm attribute defaults
+
+DDLm attribute defaults (e.g. `_type.container` defaults to `Single`,
+`_type.contents` may have a default, etc.) are defined in `ddl.dic` itself,
+not hardcoded in pycifparse. Currently defaults are either `None` or
+approximated by ad-hoc `or 'Single'` guards in `generate_schema()`.
+
+Scope what it would mean to load `ddl.dic` at schema-generation time and use
+it as the authoritative source of DDLm attribute defaults, so that `DdlmItem`
+fields reflect true DDLm defaults rather than Python `None`.
+
+Questions to resolve:
+- Which DDLm attributes have declared defaults in `ddl.dic`, and what are they?
+- Where in the pipeline should the defaults be applied — in `loader.py` when
+  populating `DdlmItem`, or in `generate_schema()` when building `ColumnDef`?
+- Does loading `ddl.dic` impose a runtime cost or dependency that conflicts
+  with the "no runtime dependencies" design goal?
+- Are there attributes where `None` is semantically meaningful (i.e. "not
+  declared") distinct from the DDLm default — and if so, how are they
+  distinguished?
+
+---
+
+#### Known gap: `CifBuilder` cross-type duplicate tags
 
 **Cross-type duplicate tags: scalar vs loop column in the same namespace.**
 
@@ -66,13 +132,12 @@ loop will be visible in the model).
 
 ---
 
-### Remaining items
+#### Rename `_block_id` → `_pycifparse_block_id`, `_row_id` → `_pycifparse_row_id`
 
-#### Update `docs/api.md`
-
-- Add `cifmodel/writer.py` and `cifmodel/clean.py` to the module layout table.
-- Add API sections for `CifWriter`, `BlockWriter`, `SaveFrameWriter`, `CifInput`, `clean`, `CleanWarning`.
-- Mark `CifVersion` as now exported from top-level `pycifparse`.
+Pervasive rename across schema generation, ingestion, output, compactification, fidelity,
+inspect layers, all tests, all prompts, and `docs/api.md`. Do in one pass with global
+search-and-replace; grep for both before closing. `_pycifparse_id` and
+`_pycifparse_error_value` are already correctly named.
 
 ---
 
