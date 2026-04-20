@@ -54,10 +54,10 @@ def encode_value(value: CifScalar | list | dict) -> tuple[str | None, str]:
     tables may ignore it.
 
     Applies the Lesson 19 presence-state encoding:
-    - PLACEHOLDER ``.`` / ``?``  →  ``'.'`` / ``'?'``
-    - Quoted ``.`` / ``?``       →  ``'"."'`` / ``'"?"'``
-    - Container                  →  JSON text
-    - Anything else              →  raw string
+    - PLACEHOLDER ``.`` / ``?``  -> ``'.'`` / ``'?'``
+    - Quoted ``.`` / ``?``       -> ``'"."'`` / ``'"?"'``
+    - Container                  -> JSON text
+    - Anything else              -> raw string
     """
     if isinstance(value, list):
         s, vt = encode_container(value)
@@ -105,14 +105,14 @@ _SU_RE = re.compile(
 
 
 def split_su(raw: str) -> tuple[str, str] | None:
-    """Split ``'numeric(su)'`` → ``(measurand, scaled_su)`` or ``None``.
+    """Split ``'numeric(su)'`` ->``(measurand, scaled_su)`` or ``None``.
 
     The SU is scaled to the precision of the measurand so that the stored
     value represents the actual uncertainty:
-      '3.992(4)'   → ('3.992',   '0.004')
-      '1234(5)'    → ('1234',    '5')
-      '12.34(56)'  → ('12.34',   '0.56')
-      '1.23e-4(5)' → ('1.23e-4', '0.000005')
+      '3.992(4)'   ->('3.992',   '0.004')
+      '1234(5)'    ->('1234',    '5')
+      '12.34(56)'  ->('12.34',   '0.56')
+      '1.23e-4(5)' ->('1.23e-4', '0.000005')
     """
     m = _SU_RE.match(raw)
     if not m:
@@ -149,7 +149,7 @@ def split_su(raw: str) -> tuple[str, str] | None:
 # ---------------------------------------------------------------------------
 
 def build_su_map(schema: SchemaSpec) -> dict[str, str]:
-    """Build ``measurand_def_id → su_column_name`` reverse map from *schema*."""
+    """Build ``measurand_def_id ->su_column_name`` reverse map from *schema*."""
     result: dict[str, str] = {}
     for table in schema.tables.values():
         for col in table.columns:
@@ -159,7 +159,7 @@ def build_su_map(schema: SchemaSpec) -> dict[str, str]:
 
 
 def build_tag_to_column(schema: SchemaSpec) -> dict[str, tuple[str, str]]:
-    """Invert ``schema.column_to_tag`` to ``canonical_def_id → (table, col)``."""
+    """Invert ``schema.column_to_tag`` to ``canonical_def_id ->(table, col)``."""
     return {
         def_id: (tbl, col)
         for (tbl, col), def_id in schema.column_to_tag.items()
@@ -410,7 +410,7 @@ def _apply_fk(
                     val = fk_accumulator.get(target_def_id)
                 # Transitive lookup: follow the single-column FK chain from the
                 # target column up to 15 levels.  Covers cases like
-                # pd_calc_component → pd_data.diffractogram_id → pd_diffractogram.id
+                # pd_calc_component ->pd_data.diffractogram_id ->pd_diffractogram.id
                 # where only _pd_diffractogram.id is in the fk_accumulator.
                 if val is None:
                     _cur_table, _cur_col = fk.target_table, tgt_col
@@ -543,10 +543,46 @@ def _resolve_chain(
     return current
 
 
+def _chain_label(hops: list[tuple[str, str, str]], bridge_value_column: str) -> str:
+    """Return a readable path string, e.g. 'diffractogram_id ->pd_diffractogram.diffrn_id ->diffrn.diffrn_radiation_id'."""
+    parts = [hops[0][0]]
+    for i, (_, bridge_tbl, _) in enumerate(hops):
+        val_col = bridge_value_column if i == len(hops) - 1 else hops[i + 1][0]
+        parts.append(f"{bridge_tbl}.{val_col}")
+    return ' -> '.join(parts)
+
+
+def _diagnose_chain(
+    hops: list[tuple[str, str, str]],
+    bridge_value_column: str,
+    merged_rows: dict,
+    start_val: 'str | None',
+) -> str:
+    """Trace a resolution chain and return a description of the first failure point."""
+    if start_val is None:
+        return f"starting column '{hops[0][0]}' is NULL"
+    current = start_val
+    for i, (_, bridge_tbl, bridge_pk) in enumerate(hops):
+        val_col = bridge_value_column if i == len(hops) - 1 else hops[i + 1][0]
+        found_row = next(
+            (r for r in merged_rows.get(bridge_tbl, {}).values()
+             if r.get(bridge_pk) == current),
+            None,
+        )
+        if found_row is None:
+            return f"no row in '{bridge_tbl}' with '{bridge_pk}' = {current!r}"
+        next_val = found_row.get(val_col)
+        if next_val is None:
+            return f"'{bridge_tbl}'.'{val_col}' is NULL ('{bridge_pk}' = {current!r})"
+        current = next_val
+    return "ok"
+
+
 def _fill_bridge_columns(
     merged_rows: dict[str, dict[tuple, dict]],
     bridge_columns: list[BridgeColumnDef],
-    emit: 'Callable[[str], None] | None' = None,
+    emit: 'Callable[..., None] | None' = None,
+    emit_info: 'Callable[..., None] | None' = None,
 ) -> None:
     """Populate bridge-derived columns in *merged_rows* in place.
 
@@ -554,6 +590,7 @@ def _fill_bridge_columns(
     trying all chains (primary + fallbacks) and collecting every non-None
     result.  If all chains agree the common value is used.  If chains disagree,
     *emit* is called with a warning and the first non-None result is used.
+    If no chain resolves a value, *emit_info* is called to report the gap.
     Must be called after all blocks have been processed and before
     :py:meth:`_Ingester._flush`.
     """
@@ -570,6 +607,7 @@ def _fill_bridge_columns(
             for hops, val_col in all_chains
         ]
         chain_via_cols = [hops[0][0] for hops, _ in all_chains]
+        first_via_col = bd.hops[0][0]
 
         for row in merged_rows[bd.table_name].values():
             if row.get(bd.column_name) is not None:
@@ -580,6 +618,25 @@ def _fill_bridge_columns(
                 if result is not None:
                     resolved.append(result)
             if not resolved:
+                if emit_info is not None:
+                    via_val = row.get(first_via_col)
+                    kv: dict[str, str | None] = {
+                        first_via_col: via_val,
+                        '_block_id': row.get('_block_id'),
+                    }
+                    chain_details = '\n'.join(
+                        f"  chain {i + 1} ({_chain_label(hops, val_col)}): "
+                        f"{_diagnose_chain(hops, val_col, merged_rows, row.get(hops[0][0]))}"
+                        for i, (hops, val_col) in enumerate(all_chains)
+                    )
+                    emit_info(
+                        f"bridge column '{bd.table_name}'.'{bd.column_name}': "
+                        f"no value resolved for '{first_via_col}' = {via_val!r}; "
+                        f"column will be NULL\n{chain_details}",
+                        table=bd.table_name,
+                        column=bd.column_name,
+                        key_values=kv,
+                    )
                 continue
             if len(set(resolved)) > 1 and emit is not None:
                 pk_vals = {k: row.get(k) for k in ['id', '_block_id'] if row.get(k)}
@@ -672,7 +729,8 @@ class _Ingester:
             if self.schema and self.schema.bridge_columns:
                 _fill_bridge_columns(
                     self.merged_rows, self.schema.bridge_columns,
-                    emit=self.errors.append,
+                    emit=self._emit,
+                    emit_info=self._emit_info,
                 )
             self._post_validate()
             self._flush()
@@ -690,7 +748,7 @@ class _Ingester:
                     ):
                         messages.append(
                             f"foreign key violation: '{tbl}' rowid={rowid}"
-                            f" → '{parent}' (constraint #{fkid})"
+                            f" ->'{parent}' (constraint #{fkid})"
                         )
                 except sqlite3.Error:
                     pass
@@ -710,7 +768,7 @@ class _Ingester:
     def _emit(self, msg: str, *, table: str | None = None, column: str | None = None, key_values: dict[str, str | None] | None = None) -> None:
         self.errors.append(msg)
         if self._on_error:
-            self._on_error(msg, self._current_block_id, table=table, column=column, key_values=key_values)
+            self._on_error(msg, self._current_block_id, severity='Warning', table=table, column=column, key_values=key_values)
 
     def _emit_error(self, msg: str, *, table: str | None = None, column: str | None = None, key_values: dict[str, str | None] | None = None) -> None:
         """Record a semantic error. After all blocks are processed, any
@@ -719,7 +777,13 @@ class _Ingester:
         self._semantic_errors.append(msg)
         self.errors.append(msg)
         if self._on_error:
-            self._on_error(msg, self._current_block_id, table=table, column=column, key_values=key_values)
+            self._on_error(msg, self._current_block_id, severity='Warning', table=table, column=column, key_values=key_values)
+
+    def _emit_info(self, msg: str, *, table: str | None = None, column: str | None = None, key_values: dict[str, str | None] | None = None) -> None:
+        """Emit an informational notice (not a warning, not an error).
+        Does not append to self.errors and does not cause IngestionError."""
+        if self._on_error:
+            self._on_error(msg, None, severity='Info', table=table, column=column, key_values=key_values)
 
     # ── Block processing ──────────────────────────────────────────────────────
 
@@ -959,7 +1023,7 @@ class _Ingester:
             routing[tag] = (canonical, location)
 
         # Classify: structured tables vs fallback
-        loop_tables: dict[str, list[tuple[str, str, str]]] = {}  # tbl → [(col, tag, canonical)]
+        loop_tables: dict[str, list[tuple[str, str, str]]] = {}  # tbl ->[(col, tag, canonical)]
         fallback_loop_tags: list[tuple[str, str, int]] = []  # (tag, canonical, col_index)
 
         for col_idx, tag in enumerate(loop_tags):

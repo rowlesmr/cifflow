@@ -11,6 +11,7 @@
 
 data_wavelength_1
 _audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
+_diffrn.id	STP
 _diffrn_radiation.id	CR_RAD
 _diffrn_radiation.probe	x-ray
 loop_
@@ -32,7 +33,6 @@ _pd_diffractogram.id	pattern_1
 _diffrn.id	STP
 _pd_instr.id	chrome_dome
 _pd_instr.radiation_id	CR_RAD
-_pd_diffractogram.diffrn_id	STP
 _pd_diffractogram.instr_id	chrome_dome
 _diffrn.ambient_temperature	293
 loop_

@@ -24,7 +24,7 @@ from pycifparse.validation._db_validate import DbValidationResult, validate_data
 @dataclass
 class ValidationIssue:
     stage:      Literal['parse', 'ingest', 'database']
-    severity:   Literal['Error', 'Warning']
+    severity:   Literal['Error', 'Warning', 'Info']
     check:      str
     message:    str
     block:      str | None
@@ -66,7 +66,7 @@ def _parse_error_to_issue(err: ParseError) -> ValidationIssue:
 
 def _ingest_msg_to_issue(
     msg: str,
-    severity: Literal['Error', 'Warning'],
+    severity: Literal['Error', 'Warning', 'Info'],
     block: str | None = None,
     table: str | None = None,
     column: str | None = None,
@@ -186,10 +186,10 @@ def validate(
             database=None,
         )
 
-    collected: list[tuple[str, str | None, str | None, str | None, dict[str, str | None] | None]] = []
+    collected: list[tuple[str, str | None, Literal['Error', 'Warning', 'Info'], str | None, str | None, dict[str, str | None] | None]] = []
 
-    def _collect(msg: str, block_id: str | None = None, *, table: str | None = None, column: str | None = None, key_values: dict[str, str | None] | None = None) -> None:
-        collected.append((msg, block_id, table, column, key_values))
+    def _collect(msg: str, block_id: str | None = None, *, severity: Literal['Error', 'Warning', 'Info'] = 'Warning', table: str | None = None, column: str | None = None, key_values: dict[str, str | None] | None = None) -> None:
+        collected.append((msg, block_id, severity, table, column, key_values))
 
     ingest_ok = False
     try:
@@ -206,40 +206,40 @@ def validate(
         )
         ingest_ok = True
 
-        for msg, blk, tbl, col, kv in collected:
-            issues.append(_ingest_msg_to_issue(msg, 'Warning', blk, tbl, col, kv))
+        for msg, blk, sev, tbl, col, kv in collected:
+            issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
 
     except IngestionError as exc:
         error_set = set(exc.errors)
-        for msg, blk, tbl, col, kv in collected:
-            sev: Literal['Error', 'Warning'] = 'Error' if msg in error_set else 'Warning'
-            issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
+        for msg, blk, sev, tbl, col, kv in collected:
+            effective_sev: Literal['Error', 'Warning', 'Info'] = 'Error' if msg in error_set else sev
+            issues.append(_ingest_msg_to_issue(msg, effective_sev, blk, tbl, col, kv))
         conn = None
 
     except sqlite3.IntegrityError as exc:
         if 'FOREIGN KEY' in str(exc):
-            for msg, blk, tbl, col, kv in collected:
-                issues.append(_ingest_msg_to_issue(msg, 'Warning', blk, tbl, col, kv))
+            for msg, blk, sev, tbl, col, kv in collected:
+                issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
             issues.append(_ingest_exc_to_issue(
                 'fk_violation',
                 "FK constraint violated during ingestion; this likely indicates "
                 "a bug in stub row creation",
             ))
         else:
-            for msg, blk, tbl, col, kv in collected:
-                issues.append(_ingest_msg_to_issue(msg, 'Warning', blk, tbl, col, kv))
+            for msg, blk, sev, tbl, col, kv in collected:
+                issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
             issues.append(_ingest_exc_to_issue('internal_error', str(exc)))
         conn = None
 
     except ValueError as exc:
-        for msg, blk, tbl, col, kv in collected:
-            issues.append(_ingest_msg_to_issue(msg, 'Warning', blk, tbl, col, kv))
+        for msg, blk, sev, tbl, col, kv in collected:
+            issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
         issues.append(_ingest_exc_to_issue('dataset_error', str(exc)))
         conn = None
 
     except Exception as exc:
-        for msg, blk, tbl, col, kv in collected:
-            issues.append(_ingest_msg_to_issue(msg, 'Warning', blk, tbl, col, kv))
+        for msg, blk, sev, tbl, col, kv in collected:
+            issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
         issues.append(_ingest_exc_to_issue('internal_error', str(exc)))
         conn = None
 
