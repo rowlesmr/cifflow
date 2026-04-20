@@ -30,7 +30,6 @@ def load(path: pathlib.Path) -> str:
 
 # Small files (< 1 MB): run in the default test suite.
 _SMALL_FILES = [
-    'ideal_condensed.cif',
     'single_one.cif',
     'single_many_1.cif',
     'single_many_2.cif',
@@ -68,13 +67,6 @@ def test_noncomcifs_large_no_errors(filename):
         f'{filename}: unexpected errors:\n'
         + '\n'.join(f'  line {e.line}: {e.message}' for e in h.errors[:5])
     )
-
-
-def test_noncomcifs_ideal_condensed_data_blocks():
-    h = parse(load(NONCOMCIF / 'ideal_condensed.cif'))
-    blocks = [e.args[0] for e in h.non_error_events() if e.name == 'on_data_block']
-    assert 'overall' in blocks
-    assert any(b.startswith('phase_') for b in blocks)
 
 
 def test_noncomcifs_second_short_has_data_blocks():

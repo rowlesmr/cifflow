@@ -1377,7 +1377,7 @@ class TestOnErrorCallback:
         ]))
         conn = _conn(schema)
         received = []
-        errors = ingest(f, conn, schema, on_error=received.append)
+        errors = ingest(f, conn, schema, on_error=lambda msg, blk=None: received.append(msg))
         assert len(received) == len(errors)
         assert received == errors
 
@@ -1506,7 +1506,7 @@ class TestSqliteInsertError:
         # Drop the structured table so the INSERT fails
         conn.execute('DROP TABLE "structure"')
         errors = []
-        _Ingester(f, conn, schema, False, None, errors.append).run()
+        _Ingester(f, conn, schema, False, None, lambda msg, blk=None: errors.append(msg)).run()
         assert any('sqlite3 error' in e for e in errors)
         conn.close()
 

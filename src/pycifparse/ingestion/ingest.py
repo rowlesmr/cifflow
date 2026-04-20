@@ -628,7 +628,7 @@ class _Ingester:
         schema: SchemaSpec | None,
         propagate_fk: bool,
         dataset_id: str | None,
-        on_error: Callable[[str], None] | None,
+        on_error: Callable[[str, str | None], None] | None,
     ) -> None:
         self.cif = cif
         self.conn = conn
@@ -636,6 +636,7 @@ class _Ingester:
         self.propagate_fk = propagate_fk
         self.dataset_id = dataset_id
         self._on_error = on_error
+        self._current_block_id: str | None = None
         self.errors: list[str] = []
         self._semantic_errors: list[str] = []
 
@@ -708,7 +709,7 @@ class _Ingester:
     def _emit(self, msg: str) -> None:
         self.errors.append(msg)
         if self._on_error:
-            self._on_error(msg)
+            self._on_error(msg, self._current_block_id)
 
     def _emit_error(self, msg: str) -> None:
         """Record a semantic error. After all blocks are processed, any
@@ -717,12 +718,13 @@ class _Ingester:
         self._semantic_errors.append(msg)
         self.errors.append(msg)
         if self._on_error:
-            self._on_error(msg)
+            self._on_error(msg, self._current_block_id)
 
     # ── Block processing ──────────────────────────────────────────────────────
 
     def _process_block(self, block: CifBlock) -> None:
         block_id = block.name
+        self._current_block_id = block_id
 
         # Per-block state
         loop_id_counter = 1
@@ -1331,7 +1333,7 @@ def ingest(
     *,
     propagate_fk: bool = False,
     dataset_id: str | None = None,
-    on_error: Callable[[str], None] | None = None,
+    on_error: Callable[[str, str | None], None] | None = None,
 ) -> list[str]:
     """Ingest a parsed ``CifFile`` into a SQLite database.
 
@@ -1353,7 +1355,10 @@ def ingest(
         auto-detected from the blocks.  Raises ``ValueError`` if specified
         but not found in any dataset block.
     on_error:
-        Optional callback for non-fatal semantic errors/warnings.
+        Optional callback for non-fatal semantic errors/warnings.  Called as
+        ``on_error(message, block_id)`` where ``block_id`` is the name of the
+        data block being processed, or ``None`` for errors raised outside block
+        processing (e.g. bridge-column fill).
 
     Returns
     -------
