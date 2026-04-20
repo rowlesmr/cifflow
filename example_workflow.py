@@ -44,7 +44,7 @@ DIC_FILE  = DIC_DIR / 'cif_pow.dic'
 DIC_CACHE = ROOT / 'cif_pow_cache.json'   # JSON cache; delete to force re-parse
 
 # CIF file to ingest
-CIF_FILE = ROOT / 'tests' / 'cif_files' / 'multi_one.cif'
+CIF_FILE = ROOT / 'tests' / 'cif_files' / 'transitive_03.cif'  #'multi_one.cif'
 
 
 
@@ -72,6 +72,8 @@ from pycifparse import (
     generate_schema,
     apply_schema,
     apply_fallback_schema,
+    visualise_schema,
+    visualise_schema_html,
     build,
     ingest,
     IngestionError,
@@ -82,6 +84,9 @@ from pycifparse import (
     EmitMode,
     OutputPlan,
     BlockSpec,
+    validate,
+    ValidationReport,
+    ValidationIssue,
 )
 from pycifparse.fidelity import check_fidelity
 from pycifparse.types import CifVersion
@@ -176,6 +181,68 @@ for table_name, table in sorted(schema.tables.items()):
     print(f'    {table_name:30s}  PK={table.primary_keys}  '
           f'cols={len(col_names)}  FKs={fk_count}')
 
+
+
+dot = visualise_schema(schema,show_columns='sparse',
+                       show_bridge=True,
+                       show_parent_edges=True,
+                       highlight_orphans=True,
+                       highlight_components=True,
+                       show_orphans=True,
+                       layout='dot')
+with open('schema.dot', 'w', encoding='utf-8') as f:
+    f.write(dot)
+#sys.exit()
+
+html = visualise_schema_html(schema,
+                             title="CIF_POW",
+                             show_columns='sparse',
+                             show_bridge=True,
+                             show_parent_edges=False,
+                             highlight_orphans=True,
+                             highlight_components=False,
+                             show_orphans=True,
+                             show_legend= True,
+                             concentrate=True,
+                             hide_deprecated=True,
+                             splines='ortho',
+                             ranksep=1.0,
+                             nodesep=0.4,
+                             layout='dot')
+with open('schema.html', 'w', encoding='utf-8') as f:
+    f.write(html)
+
+
+
+
+
+report = validate(CIF_FILE, schema=schema, propagate_fk=False)
+
+issues = report.issues
+
+for issue in issues:
+    print(issue)
+
+if report.database:
+
+    db_file = pathlib.Path("output_compact.db")
+
+    if db_file.exists():
+        db_file.unlink()  # start fresh each run
+
+    dest = sqlite3.connect("output_compact.db")
+
+    compactify_database(
+        src=report.database,  # source connection (already populated by ingest)
+        dst=dest,  # destination connection (must be empty)
+        schema=schema,  # SchemaSpec used when src was populated
+    )
+    dest.close()
+
+
+
+
+sys.exit()
 
 # ---------------------------------------------------------------------------
 # Step 4 — Parse the CIF file
