@@ -89,7 +89,7 @@ def inspect_ingest(
 
     events: list[TraceEvent] = []
 
-    def _on_error(message: str, block_id: str | None = None) -> None:
+    def _on_error(message: str, block_id: str | None = None, **kwargs) -> None:
         ev = TraceEvent(kind='warning', detail=message)
         events.append(ev)
 

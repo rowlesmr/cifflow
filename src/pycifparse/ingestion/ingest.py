@@ -253,8 +253,8 @@ def _merge_into(
     row: dict,
     table: TableDef,
     row_id_counters: dict[str, int],
-    emit: Callable[[str], None],
-    emit_error: Callable[[str], None] | None = None,
+    emit: Callable[..., None],
+    emit_error: Callable[..., None] | None = None,
 ) -> int:
     """Merge *row* into *merged_rows[table_name]*.  Returns the row's ``_row_id``.
 
@@ -276,6 +276,7 @@ def _merge_into(
         return row['_row_id']
     else:
         existing = tbl_rows[pk]
+        pk_values = dict(zip(table.primary_keys, pk))
         for col, val in row.items():
             if col in ('_row_id', '_block_id'):
                 continue
@@ -289,9 +290,9 @@ def _merge_into(
                     f"keeping '{existing[col]}', ignoring '{val}'"
                 )
                 if emit_error is not None:
-                    emit_error(msg)
+                    emit_error(msg, table=table_name, column=col, key_values=pk_values)
                 else:
-                    emit(msg)
+                    emit(msg, table=table_name, column=col, key_values=pk_values)
         return existing['_row_id']
 
 
@@ -306,7 +307,7 @@ def _apply_fk(
     loop_row_by_defid: dict[str, str] | None,
     fk_accumulator: dict[str, str],
     propagate_fk: bool,
-    emit: Callable[[str], None],
+    emit: Callable[..., None],
     block_id: str | None = None,
     merged_rows: dict[str, dict[tuple, dict]] | None = None,
     row_id_counters: dict[str, int] | None = None,
@@ -628,7 +629,7 @@ class _Ingester:
         schema: SchemaSpec | None,
         propagate_fk: bool,
         dataset_id: str | None,
-        on_error: Callable[[str, str | None], None] | None,
+        on_error: Callable[..., None] | None,
     ) -> None:
         self.cif = cif
         self.conn = conn
@@ -706,19 +707,19 @@ class _Ingester:
 
         return self.errors
 
-    def _emit(self, msg: str) -> None:
+    def _emit(self, msg: str, *, table: str | None = None, column: str | None = None, key_values: dict[str, str | None] | None = None) -> None:
         self.errors.append(msg)
         if self._on_error:
-            self._on_error(msg, self._current_block_id)
+            self._on_error(msg, self._current_block_id, table=table, column=column, key_values=key_values)
 
-    def _emit_error(self, msg: str) -> None:
+    def _emit_error(self, msg: str, *, table: str | None = None, column: str | None = None, key_values: dict[str, str | None] | None = None) -> None:
         """Record a semantic error. After all blocks are processed, any
         semantic errors will cause :exc:`IngestionError` to be raised and
         the transaction to be rolled back."""
         self._semantic_errors.append(msg)
         self.errors.append(msg)
         if self._on_error:
-            self._on_error(msg, self._current_block_id)
+            self._on_error(msg, self._current_block_id, table=table, column=column, key_values=key_values)
 
     # ── Block processing ──────────────────────────────────────────────────────
 
@@ -788,6 +789,7 @@ class _Ingester:
                 self.merged_rows[tbl_name][pk] = dict(row)
             else:
                 existing = self.merged_rows[tbl_name][pk]
+                pk_values = dict(zip(table.primary_keys, pk))
                 for col, val in row.items():
                     if col in ('_row_id', '_block_id') or val is None:
                         continue
@@ -798,7 +800,7 @@ class _Ingester:
                             f"merge conflict on '{tbl_name}'.'{col}': "
                             f"keeping '{existing[col]}', ignoring '{val}'"
                         )
-                        self._emit_error(msg)
+                        self._emit_error(msg, table=tbl_name, column=col, key_values=pk_values)
 
         # Flush Loop-class scalar buffers accumulated during this block
         for tbl_name, col_dict in loop_scalar_buffers.items():
@@ -1333,7 +1335,7 @@ def ingest(
     *,
     propagate_fk: bool = False,
     dataset_id: str | None = None,
-    on_error: Callable[[str, str | None], None] | None = None,
+    on_error: Callable[..., None] | None = None,
 ) -> list[str]:
     """Ingest a parsed ``CifFile`` into a SQLite database.
 
@@ -1356,9 +1358,11 @@ def ingest(
         but not found in any dataset block.
     on_error:
         Optional callback for non-fatal semantic errors/warnings.  Called as
-        ``on_error(message, block_id)`` where ``block_id`` is the name of the
-        data block being processed, or ``None`` for errors raised outside block
-        processing (e.g. bridge-column fill).
+        ``on_error(message, block_id, *, table=None, column=None, key_values=None)``
+        where ``block_id`` is the name of the data block being processed (or
+        ``None`` for errors outside block processing), and ``table``,
+        ``column``, ``key_values`` carry structured context when available
+        (e.g. merge conflicts).
 
     Returns
     -------

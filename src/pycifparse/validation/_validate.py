@@ -68,6 +68,9 @@ def _ingest_msg_to_issue(
     msg: str,
     severity: Literal['Error', 'Warning'],
     block: str | None = None,
+    table: str | None = None,
+    column: str | None = None,
+    key_values: dict[str, str | None] | None = None,
 ) -> ValidationIssue:
     return ValidationIssue(
         stage='ingest',
@@ -76,7 +79,7 @@ def _ingest_msg_to_issue(
         message=msg,
         block=block, tag=None, value=None,
         line=None, col=None,
-        table=None, column=None, row_id=None, key_values=None,
+        table=table, column=column, row_id=None, key_values=key_values,
     )
 
 
@@ -183,10 +186,10 @@ def validate(
             database=None,
         )
 
-    collected: list[tuple[str, str | None]] = []
+    collected: list[tuple[str, str | None, str | None, str | None, dict[str, str | None] | None]] = []
 
-    def _collect(msg: str, block_id: str | None = None) -> None:
-        collected.append((msg, block_id))
+    def _collect(msg: str, block_id: str | None = None, *, table: str | None = None, column: str | None = None, key_values: dict[str, str | None] | None = None) -> None:
+        collected.append((msg, block_id, table, column, key_values))
 
     ingest_ok = False
     try:
@@ -203,40 +206,40 @@ def validate(
         )
         ingest_ok = True
 
-        for msg, blk in collected:
-            issues.append(_ingest_msg_to_issue(msg, 'Warning', blk))
+        for msg, blk, tbl, col, kv in collected:
+            issues.append(_ingest_msg_to_issue(msg, 'Warning', blk, tbl, col, kv))
 
     except IngestionError as exc:
         error_set = set(exc.errors)
-        for msg, blk in collected:
+        for msg, blk, tbl, col, kv in collected:
             sev: Literal['Error', 'Warning'] = 'Error' if msg in error_set else 'Warning'
-            issues.append(_ingest_msg_to_issue(msg, sev, blk))
+            issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
         conn = None
 
     except sqlite3.IntegrityError as exc:
         if 'FOREIGN KEY' in str(exc):
-            for msg, blk in collected:
-                issues.append(_ingest_msg_to_issue(msg, 'Warning', blk))
+            for msg, blk, tbl, col, kv in collected:
+                issues.append(_ingest_msg_to_issue(msg, 'Warning', blk, tbl, col, kv))
             issues.append(_ingest_exc_to_issue(
                 'fk_violation',
                 "FK constraint violated during ingestion; this likely indicates "
                 "a bug in stub row creation",
             ))
         else:
-            for msg, blk in collected:
-                issues.append(_ingest_msg_to_issue(msg, 'Warning', blk))
+            for msg, blk, tbl, col, kv in collected:
+                issues.append(_ingest_msg_to_issue(msg, 'Warning', blk, tbl, col, kv))
             issues.append(_ingest_exc_to_issue('internal_error', str(exc)))
         conn = None
 
     except ValueError as exc:
-        for msg, blk in collected:
-            issues.append(_ingest_msg_to_issue(msg, 'Warning', blk))
+        for msg, blk, tbl, col, kv in collected:
+            issues.append(_ingest_msg_to_issue(msg, 'Warning', blk, tbl, col, kv))
         issues.append(_ingest_exc_to_issue('dataset_error', str(exc)))
         conn = None
 
     except Exception as exc:
-        for msg, blk in collected:
-            issues.append(_ingest_msg_to_issue(msg, 'Warning', blk))
+        for msg, blk, tbl, col, kv in collected:
+            issues.append(_ingest_msg_to_issue(msg, 'Warning', blk, tbl, col, kv))
         issues.append(_ingest_exc_to_issue('internal_error', str(exc)))
         conn = None
 

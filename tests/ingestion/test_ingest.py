@@ -1377,7 +1377,7 @@ class TestOnErrorCallback:
         ]))
         conn = _conn(schema)
         received = []
-        errors = ingest(f, conn, schema, on_error=lambda msg, blk=None: received.append(msg))
+        errors = ingest(f, conn, schema, on_error=lambda msg, blk=None, **kw: received.append(msg))
         assert len(received) == len(errors)
         assert received == errors
 
@@ -1424,11 +1424,12 @@ class TestMergeIntoCoverage:
         merged: dict = {}
         counters: dict = {}
         msgs = []
+        emit = lambda msg, **kw: msgs.append(msg)
         row1 = {'_block_id': 'B1', 'structure_id': 'S1', 'length_a': '5.0'}
-        _merge_into(merged, 'cell', row1, cell_table, counters, msgs.append)
+        _merge_into(merged, 'cell', row1, cell_table, counters, emit)
         row2 = {'_block_id': 'B2', 'structure_id': 'S1', 'length_a': '6.0'}
         # emit_error=None (default) → emit is used for conflict
-        _merge_into(merged, 'cell', row2, cell_table, counters, msgs.append)
+        _merge_into(merged, 'cell', row2, cell_table, counters, emit)
         assert any('merge conflict' in m for m in msgs)
 
 
@@ -1506,7 +1507,7 @@ class TestSqliteInsertError:
         # Drop the structured table so the INSERT fails
         conn.execute('DROP TABLE "structure"')
         errors = []
-        _Ingester(f, conn, schema, False, None, lambda msg, blk=None: errors.append(msg)).run()
+        _Ingester(f, conn, schema, False, None, lambda msg, blk=None, **kw: errors.append(msg)).run()
         assert any('sqlite3 error' in e for e in errors)
         conn.close()
 

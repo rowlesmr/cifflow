@@ -7,10 +7,9 @@
 **Current stage:** Stage 7 complete. Unified validation layer implemented.
 
 **Test suite state (2026-04-19):**
-- ~1718 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
-- 58 slow tests pass: `pytest -m slow`
-- Total: ~1776 passing, 0 xfail
-- 4 pre-existing failures: missing `ideal_condensed.cif` test file (unrelated)
+- ~1504 tests pass (non-slow): `.venv/Scripts/python -m pytest -k "not slow" --tb=short -q`
+- 58 slow tests pass: `.venv/Scripts/python -m pytest -m slow`
+- Total: ~1562 passing, 0 xfail, 0 failures
 
 ---
 
@@ -99,6 +98,26 @@ In both cases the builder should continue (consistent with its error-tolerant de
 error must be recorded. Recovery action for scalar-then-loop: the scalar value is lost (note
 this in the error). Recovery for loop-then-scalar: the extra value is appended (the inconsistent
 loop will be visible in the model).
+
+---
+
+#### Add `source_line`/`source_col` to `CifBlock` and surface in `ValidationIssue`
+
+Ingest-stage `ValidationIssue` objects currently populate `block` (block name) but leave
+`line` and `col` as `None`. The `data_` token's position is available at parse time but not
+stored on `CifBlock`.
+
+Required changes (do in one pass):
+1. `CifBlock.__init__`: add `source_line: int = 0, source_col: int = 0`
+2. `CifParserEvents.on_data_block` (`types.py`): add `line: int = 0, col: int = 0` params
+3. `parser.py`: pass `tok.line, tok.column` when emitting `on_data_block`
+4. `builder.py`: accept and store them on the block
+5. `inspect/_parser.py`: accept and forward them
+6. `ingest.py` `_emit`/`_emit_error`: look up `block.source_line/col`; extend `on_error`
+   callback to `(msg, block_id, line, col)`
+7. `_validate.py`: populate `ValidationIssue.line/col` from the callback
+8. `inspect/_ingest.py`: update `_on_error` to accept `(msg, block_id, line, col)`
+9. Test mock handlers (`test_parser.py`, `test_malformed.py`): add `line=0, col=0` defaults
 
 ---
 
