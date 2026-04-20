@@ -332,7 +332,7 @@ class TestCategorySkipping:
 
 class TestTypeMapping:
     @pytest.mark.parametrize('type_contents', [
-        'Integer', 'Real', 'Text', 'Word', 'Code', 'List', 'Table', None,
+        'Integer', 'Real', 'Text', 'Word', 'Code', 'List', 'Table',
     ])
     def test_type_contents_stored_as_is(self, type_contents):
         """type_contents is stored verbatim from the DDLm dictionary."""
@@ -342,6 +342,15 @@ class TestTypeMapping:
         schema = generate_schema(d)
         col = next(c for c in schema.tables['t'].columns if c.name == 'col')
         assert col.type_contents == type_contents
+
+    def test_type_contents_none_defaults_to_text(self):
+        """Missing type_contents in a domain item defaults to 'Text'."""
+        cats = [_cat('t', 't', 'Set')]
+        items = [_item('_t.col', 't', 'col', type_contents=None)]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        col = next(c for c in schema.tables['t'].columns if c.name == 'col')
+        assert col.type_contents == 'Text'
 
     @pytest.mark.parametrize('type_contents', [
         'Integer', 'Real', 'Text', 'Word', None,

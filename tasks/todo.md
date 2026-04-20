@@ -4,41 +4,107 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 6 complete. `CifWriter` + `clean` API implemented.
+**Current stage:** Stage 7 complete. Unified validation layer implemented.
 
-**Test suite state (2026-04-18):**
-- ~1555 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
-- 58 slow tests pass: `pytest -m slow`
-- Total: ~1613 passing, 0 xfail
-- 2 pre-existing failures: missing `ideal_condensed.cif` test file (unrelated)
-
----
-
-### Active task: pending items from `CifWriter` + `clean` implementation
-
-#### Rename `_error_value` → `_pycifparse_error_value`
-
-The synthetic tag `_error_value` (used by the parser to store orphan values with no preceding
-tag) could clash with a legitimately defined tag in a real CIF file. It should be renamed to
-`_pycifparse_error_value` to use a clearly library-specific namespace.
-
-Action required:
-- Rename `'_error_value'` → `'_pycifparse_error_value'` everywhere it appears:
-  `src/pycifparse/cifmodel/builder.py`, any tests that reference it, and
-  `prompts/construct_cif.md`.
-- Rename `'_block_id'` → `'_pycifparse_block_id'` and `'_row_id'` → `'_pycifparse_row_id'`
-  everywhere they appear: schema generation, ingestion, output, compactification, fidelity,
-  inspect layers, all tests, all prompts, and `docs/api.md`. This is a pervasive rename —
-  do it in one pass with a global search-and-replace, then verify no plain `_block_id` or
-  `_row_id` strings remain (grep for both before closing).
-- `_pycifparse_id` is already correctly named; no change needed there.
-- Register all four `_pycifparse_*` synthetic tags (`_pycifparse_block_id`,
-  `_pycifparse_row_id`, `_pycifparse_id`, `_pycifparse_error_value`) with the IUCr so the
-  namespace is formally reserved and cannot be assigned to a real dictionary item.
+**Test suite state (2026-04-19):**
+- ~1504 tests pass (non-slow): `.venv/Scripts/python -m pytest -k "not slow" --tb=short -q`
+- 58 slow tests pass: `.venv/Scripts/python -m pytest -m slow`
+- Total: ~1562 passing, 0 xfail, 0 failures
 
 ---
 
-#### Known gap to fix in `CifBuilder` (before or after implementing writer/clean)
+### Completed task: unified validation layer (2026-04-19) ✓
+
+Spec: `prompts/unified_validate.md`
+
+#### What was implemented
+
+- `DdlmItem`: added `enumeration_range` and `type_dimension` fields
+- `loader.py`: populates both new fields from `_enumeration.range` / `_type.dimension`
+- `ColumnDef`: added `type_container`, `enumeration_states`, `enumeration_range`, `type_dimension`
+- `generate_schema()`: propagates all four new fields; `type_contents` defaults to `'Text'` when absent
+- `quote.py`: added `is_table_key_quotable()` helper
+- `src/pycifparse/validation/`: new package with `_db_checks.py`, `_db_validate.py`, `_validate.py`, `__init__.py`
+- `pycifparse/__init__.py`: exports `validate`, `ValidationReport`, `ValidationIssue`
+- `tests/validation/`: `test_validate.py` (42 tests) + `test_db_validate.py` (121 tests) = 163 tests
+
+#### Lessons: 91–94
+
+---
+
+### Remaining items
+
+#### Unify severity levels and message style across all pipeline stages
+
+Each pipeline stage currently uses its own severity vocabulary and message conventions:
+
+- **Parser/builder**: `ParseError.error_type` is `'lexical' | 'syntactic' | 'semantic'` —
+  a category, not a severity. All parse errors are treated as errors by consumers, but
+  some (e.g. unknown tag routed to fallback) are arguably warnings.
+- **Ingestion**: `ingest()` returns plain `list[str]`; the `on_error` callback now carries
+  `severity='Warning' | 'Info'`, but callers who use the return value have no severity at all.
+  The distinction between what is an error vs. a warning is implicit (strings in
+  `IngestionError.errors` are errors; everything else is a warning).
+- **Validation**: `ValidationIssue.severity` is `'Error' | 'Warning' | 'Info'` — the most
+  complete model; use this as the reference.
+
+The goal is consistent severity semantics and message phrasing across all three stages,
+so that a caller can filter by severity without needing to know which layer raised the issue.
+
+Work to scope before implementing:
+
+- Audit every `on_error` / `ParseError` emission site and assign it a severity from
+  `'Error' | 'Warning' | 'Info'` using the definitions already established in `ValidationIssue`.
+- Decide whether `ParseError.error_type` (`lexical`, `syntactic`, `semantic`) maps to
+  severity or remains a separate classification field alongside severity.
+- Standardise message phrasing: tense, quoting style, and level of detail should be
+  consistent regardless of which layer emits the message.
+- `ingest()` return value (`list[str]`) carries no severity — decide whether to change it
+  to `list[tuple[str, str]]` or leave it as-is and route all severity information through
+  the `on_error` callback only.
+
+---
+
+#### Scope `_validation_result` table purpose
+
+The `_validation_result` table was created during the ingestion layer for two UUID-regime
+checks (`uuid_regime`, `uuid_reference_check`). Now that the content validator (above) uses
+a report-object approach (Option A) and does not write to the database, the table's ongoing
+role is unclear.
+
+Questions to resolve before writing the validator spec:
+- Are the two existing ingestion checks (`uuid_regime`, `uuid_reference_check`) still
+  the right things to store in the database, or should they also move to a report object?
+- If the table is retained, should it be extended with columns for table/column/tag/value
+  to support future DB-write validation results?
+- If neither ingestion check nor future validation writes to it, should the table be removed?
+
+---
+
+#### Scope: read `ddl.dic` to provide DDLm attribute defaults
+
+DDLm attribute defaults (e.g. `_type.container` defaults to `Single`,
+`_type.contents` may have a default, etc.) are defined in `ddl.dic` itself,
+not hardcoded in pycifparse. Currently defaults are either `None` or
+approximated by ad-hoc `or 'Single'` guards in `generate_schema()`.
+
+Scope what it would mean to load `ddl.dic` at schema-generation time and use
+it as the authoritative source of DDLm attribute defaults, so that `DdlmItem`
+fields reflect true DDLm defaults rather than Python `None`.
+
+Questions to resolve:
+- Which DDLm attributes have declared defaults in `ddl.dic`, and what are they?
+- Where in the pipeline should the defaults be applied — in `loader.py` when
+  populating `DdlmItem`, or in `generate_schema()` when building `ColumnDef`?
+- Does loading `ddl.dic` impose a runtime cost or dependency that conflicts
+  with the "no runtime dependencies" design goal?
+- Are there attributes where `None` is semantically meaningful (i.e. "not
+  declared") distinct from the DDLm default — and if so, how are they
+  distinguished?
+
+---
+
+#### Known gap: `CifBuilder` cross-type duplicate tags
 
 **Cross-type duplicate tags: scalar vs loop column in the same namespace.**
 
@@ -66,13 +132,32 @@ loop will be visible in the model).
 
 ---
 
-### Remaining items
+#### Add `source_line`/`source_col` to `CifBlock` and surface in `ValidationIssue`
 
-#### Update `docs/api.md`
+Ingest-stage `ValidationIssue` objects currently populate `block` (block name) but leave
+`line` and `col` as `None`. The `data_` token's position is available at parse time but not
+stored on `CifBlock`.
 
-- Add `cifmodel/writer.py` and `cifmodel/clean.py` to the module layout table.
-- Add API sections for `CifWriter`, `BlockWriter`, `SaveFrameWriter`, `CifInput`, `clean`, `CleanWarning`.
-- Mark `CifVersion` as now exported from top-level `pycifparse`.
+Required changes (do in one pass):
+1. `CifBlock.__init__`: add `source_line: int = 0, source_col: int = 0`
+2. `CifParserEvents.on_data_block` (`types.py`): add `line: int = 0, col: int = 0` params
+3. `parser.py`: pass `tok.line, tok.column` when emitting `on_data_block`
+4. `builder.py`: accept and store them on the block
+5. `inspect/_parser.py`: accept and forward them
+6. `ingest.py` `_emit`/`_emit_error`: look up `block.source_line/col`; extend `on_error`
+   callback to `(msg, block_id, line, col)`
+7. `_validate.py`: populate `ValidationIssue.line/col` from the callback
+8. `inspect/_ingest.py`: update `_on_error` to accept `(msg, block_id, line, col)`
+9. Test mock handlers (`test_parser.py`, `test_malformed.py`): add `line=0, col=0` defaults
+
+---
+
+#### Rename `_block_id` → `_pycifparse_block_id`, `_row_id` → `_pycifparse_row_id`
+
+Pervasive rename across schema generation, ingestion, output, compactification, fidelity,
+inspect layers, all tests, all prompts, and `docs/api.md`. Do in one pass with global
+search-and-replace; grep for both before closing. `_pycifparse_id` and
+`_pycifparse_error_value` are already correctly named.
 
 ---
 
@@ -269,12 +354,7 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 
 ### Planned features
 
-- **Validation layer** (`src/pycifparse/validation/`) — spec: `prompts/Stage6_Validation_Prompt.md`.
-  Operates on `CifFile` before ingestion. Checks `type_container`, `type_dimension`, `ValueType`
-  consistency, `type_contents` format, `enumeration_states` membership, `enumeration_range` bounds.
-  Returns `ValidationReport`; never blocks processing.
-  **Prerequisites:** extend `DdlmItem` + `loader.py` with `enumeration_range` and `type_dimension`;
-  extend `ColumnDef` with `type_container`, `type_dimension`, `enumeration_states`, `enumeration_range`.
+- ~~**Validation layer**~~ — **DONE** (2026-04-19). `src/pycifparse/validation/`. Spec: `prompts/unified_validate.md`. 163 tests. Lessons 91–94.
 
 - ~~**`check_fidelity`**~~ — **DONE** (2026-04-13). See Lessons 62–64.
 

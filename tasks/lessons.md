@@ -1,5 +1,77 @@
 # pycifparse — Lessons Learned
 
+## Lesson 96 — Test callbacks that accept a two-arg signature break when a third kwarg is added (2026-04-20)
+
+**Context:** `on_error` callback in `ingest()` extended from `(msg, block_id)` to `(msg, block_id, *, table, column, key_values)`.
+
+**Mistake:** Existing test lambdas `lambda msg, blk=None: ...` and `list.append` were passed as the callback. When the ingester called them with keyword arguments, Python raised `TypeError` (unexpected keyword argument / too many arguments).
+
+**Fix:** Update all test callbacks to accept `**kw`: `lambda msg, blk=None, **kw: ...`.
+
+**Rule:** Any time a callback signature gains optional keyword arguments, grep for every call site that passes a bare lambda or method (e.g. `list.append`) as the callback and update them. Direct method references like `list.append` can never accept kwargs.
+
+---
+
+## Lesson 95 — Structured data in callbacks: use keyword-only kwargs, not positional extension (2026-04-20)
+
+**Context:** Adding `table`, `column`, `key_values` to the `on_error` callback to give merge conflicts structured metadata.
+
+**Decision:** Extended the signature as keyword-only args with defaults (`*, table=None, column=None, key_values=None`) rather than adding positional args.
+
+**Why:** Positional extension is a hard breaking change — every caller must update their signature to match arity. Keyword-only args with defaults are backward-compatible: callers that don't declare them will break only if the callee actually passes them (which it does), so callers need `**kwargs` to absorb extras. This is still a change, but a more targeted one.
+
+**Rule:** When extending a callback signature with optional metadata, prefer keyword-only args. Document the full signature in the docstring; use `Callable[..., None]` as the type annotation and explain the actual contract in prose.
+
+---
+
+## Lesson 94 — Test message-content assertions can break when repr() is used in format strings (2026-04-19)
+
+**Context:** `test_table_unquotable_key_gives_error` in `tests/validation/test_db_validate.py`.
+
+**Mistake:** Test asserted `bad_key in r.message` where `bad_key = "''' and \"\"\""`. The message was formatted with `{key!r}`, so the literal string never appeared verbatim in the message (Python repr escapes the inner quotes differently).
+
+**Fix:** Assert on `r.value == bad_key` instead — the `value` field carries the raw string, not the repr.
+
+**Rule:** When checking that a specific string appears in an error message, prefer asserting on a structured field (`value`, `tag`, etc.) rather than parsing the human-readable `message`. If you must check `message`, use the exact formatted form including any `repr()` escaping.
+
+---
+
+## Lesson 93 — Patching the wrong function when the real trigger is never called (2026-04-19)
+
+**Context:** `TestInternalError` in `tests/validation/test_db_validate.py`.
+
+**Mistake:** Patched `_check_keyless_cardinality` to raise, but the test table had PKs (`_block_id`, `_row_id`), so the code path that calls `_check_keyless_cardinality` (keyless Set tables only) was never reached. The patch was never triggered; the test passed vacuously.
+
+**Fix:** Patch `_run_validation` directly to raise, which is always called regardless of table shape.
+
+**Rule:** Before patching a function to simulate an error, verify that the test setup actually exercises the code path that calls it. A vacuously-passing test gives false confidence.
+
+---
+
+## Lesson 92 — Parametrize None separately when a downstream default converts it (2026-04-19)
+
+**Context:** `TestTypeMapping.test_type_contents_stored_as_is` in `tests/dictionary/test_schema.py`.
+
+**Mistake:** `None` was included in the parametrize list for `type_contents`. After adding `item.type_contents or 'Text'` in `generate_schema()`, the `None` case now produces `'Text'`, so `assert col.type_contents == None` fails.
+
+**Fix:** Remove `None` from the parametrize list. Add a dedicated `test_type_contents_none_defaults_to_text` test that asserts `col.type_contents == 'Text'`.
+
+**Rule:** When a function converts a sentinel input value (e.g. `None → 'Text'`), do not test the sentinel alongside the pass-through values in a single parametrize block. Give it its own test that asserts the converted output.
+
+---
+
+## Lesson 91 — Define helpers before the dict/mapping that references them (2026-04-19)
+
+**Context:** `_db_checks.py`; `_TYPE_CONTENTS_RULES` dict referencing `_valid_datetime`, `_valid_real`, `_valid_range`.
+
+**Mistake:** The initial file draft placed `_TYPE_CONTENTS_RULES` before the helper functions it referenced. Python raises `NameError` at module import time.
+
+**Fix:** Move all helper functions above the dict that uses them.
+
+**Rule:** Module-level dicts/mappings that reference functions must appear after those functions in the source file. Unlike class bodies, module-level expressions are evaluated top-to-bottom at import time.
+
+---
+
 ## Lesson 90 — strip_loop_padding k=0 unless ALL columns have trailing PLACEHOLDERs (2026-04-18)
 
 **Context:** `_strip_padding_in_ns` in `cifmodel/clean.py`; test for `strip_loop_padding`.

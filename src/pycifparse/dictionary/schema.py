@@ -155,7 +155,10 @@ class ColumnDef:
     is_primary_key: bool
     is_synthetic: bool
     linked_item_id: str | None
-    type_container: str | None = None
+    type_container: str | None = 'Single'
+    enumeration_states: list[str] = field(default_factory=list)
+    enumeration_range: str | None = None
+    type_dimension: str | None = None
 
 
 @dataclass
@@ -526,14 +529,17 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 col = ColumnDef(
                     name=obj_id,
                     definition_id=item.definition_id,
-                    type_contents=item.type_contents,
-                    type_container=item.type_container,
+                    type_contents=item.type_contents or 'Text',
+                    type_container=item.type_container or 'Single',
                     nullable=False,
                     is_primary_key=True,
                     is_synthetic=False,
                     linked_item_id=(
                         item.linked_item_id if item.type_purpose == 'SU' else None
                     ),
+                    enumeration_states=item.enumeration_states,
+                    enumeration_range=item.enumeration_range,
+                    type_dimension=item.type_dimension,
                 )
                 column_to_tag[(tbl_name, obj_id)] = item.definition_id
             columns.append(col)
@@ -546,14 +552,17 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             col = ColumnDef(
                 name=obj_id,
                 definition_id=item.definition_id,
-                type_contents=item.type_contents,
-                type_container=item.type_container,
+                type_contents=item.type_contents or 'Text',
+                type_container=item.type_container or 'Single',
                 nullable=True,
                 is_primary_key=False,
                 is_synthetic=False,
                 linked_item_id=(
                     item.linked_item_id if item.type_purpose == 'SU' else None
                 ),
+                enumeration_states=item.enumeration_states,
+                enumeration_range=item.enumeration_range,
+                type_dimension=item.type_dimension,
             )
             columns.append(col)
             column_to_tag[(tbl_name, obj_id)] = item.definition_id

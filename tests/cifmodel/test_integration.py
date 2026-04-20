@@ -142,7 +142,6 @@ class TestBuildContainers:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _SMALL_FILES = [
-    'ideal_condensed.cif',
     'single_one.cif',
     'single_many_1.cif',
     'single_many_2.cif',

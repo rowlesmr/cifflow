@@ -41,6 +41,8 @@ _FRAME_TAGS = frozenset({
     '_description.text',
     '_enumeration_set.state',
     '_enumeration.default',
+    '_enumeration.range',
+    '_type.dimension',
     '_category_key.name',
     '_alias.definition_id',
     '_definition_replaced.id',
@@ -180,6 +182,8 @@ def _extract_item(data: dict[str, list], warn: Callable[[str], None]) -> DdlmIte
     category_keys = [v.lower() for v in _str_list(data, '_category_key.name')]
     enumeration_states = _str_list(data, '_enumeration_set.state')
     enumeration_default = _scalar(data, '_enumeration.default', keep_dot=True)
+    enumeration_range = _scalar(data, '_enumeration.range')
+    type_dimension    = _scalar(data, '_type.dimension')
 
     return DdlmItem(
         definition_id=definition_id,
@@ -200,6 +204,8 @@ def _extract_item(data: dict[str, list], warn: Callable[[str], None]) -> DdlmIte
         aliases=aliases,
         replaced_by=replaced_by,
         is_deprecated=is_deprecated,
+        enumeration_range=enumeration_range,
+        type_dimension=type_dimension,
     )
 
 

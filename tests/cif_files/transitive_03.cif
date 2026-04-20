@@ -19,6 +19,7 @@
 data_wavelength_1
 _audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
 _diffrn.id	STP_1
+_diffrn.diffrn_radiation_id CR_RAD  # necessary to link _diffrn.id to _diffrn_radiation.id
 _diffrn_radiation.id	CR_RAD
 _diffrn_radiation.probe	x-ray
 loop_
@@ -40,7 +41,8 @@ _pd_diffractogram.id	pattern_1
 _diffrn.id	STP_1
 _pd_instr.id	chrome_dome
 _pd_instr.radiation_id	CR_RAD
-_pd_diffractogram.instr_id	chrome_dome
+#_pd_diffractogram.diffrn_id	STP_1      # no link to _diffrn_radiation.id without one of these. could be solved by propagate_fk=True
+#_pd_diffractogram.instr_id	chrome_dome    # no link to _diffrn_radiation.id without one of these
 _diffrn.ambient_temperature	293
 loop_
 	_pd_data.point_id
@@ -75,6 +77,7 @@ C   37.79   0.61    506    2  0
 data_wavelength_2
 _audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
 _diffrn.id	STP_2
+_diffrn.diffrn_radiation_id copper
 _diffrn_radiation.id	copper
 _diffrn_radiation.probe	x-ray
 loop_
@@ -92,8 +95,9 @@ data_powder_2
 _audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
 _pd_diffractogram.id	pattern_2
 _diffrn.id	STP_2
-_pd_diffractogram.diffrn_id	STP_2
-_diffrn.diffrn_radiation_id copper
+_pd_instr.id	coppertop
+_pd_instr.radiation_id	copper
+_pd_diffractogram.instr_id	coppertop # radiation_id look up done via here
 _diffrn.ambient_temperature	293
 loop_
 	_pd_data.point_id
@@ -112,6 +116,60 @@ loop_
 data_peak_2
 _audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
 _pd_diffractogram.id	pattern_2
+loop_
+_pd_peak.id
+_pd_peak.2theta_centroid
+_pd_peak.width_2theta
+_pd_peak.intensity
+_pd_peak.intensity_su
+_pd_peak.wavelength_id
+A   22.35   0.26   1023    7  0
+B   34.74   0.56   2318   15  0
+C   47.79   0.61    506    2  0
+
+
+
+data_wavelength_3
+_audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
+_diffrn.id	STP_3
+_diffrn.diffrn_radiation_id cobalt
+_diffrn_radiation.id	cobalt
+_diffrn_radiation.probe	x-ray
+loop_
+_diffrn_radiation_wavelength.id
+_diffrn_radiation_wavelength.wt
+_diffrn_radiation_wavelength.value
+0	  0.3780000	  1.7889847
+1	  0.1440000	  1.7892524
+2	  0.1270000	  1.7896946
+3	  0.0880000	  1.7888515
+4	  0.1970000	  1.7927905
+5	  0.0950000	  1.7930637
+6	  0.0500000	  1.7934738
+
+data_powder_3
+_audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
+_pd_diffractogram.id	pattern_3
+_diffrn.id	STP_3
+_pd_diffractogram.diffrn_id	STP_3 # radiation_id look up done via here
+_diffrn.ambient_temperature	293
+loop_
+	_pd_data.point_id
+	_pd_meas.2theta_scan
+	_pd_proc.2theta_corrected
+	_pd_proc.intensity_total
+	_pd_proc.ls_weight
+	_pd_calc.intensity_total
+	_pd_calc.intensity_bkg
+        0    10.000000     9.967007     2.000000     0.500000     5.000000     5.000000
+        1    15.000000    14.967164     2.000000     0.500000     2.166667     2.166667
+        2    20.000000    19.967384     2.000000     0.500000     0.000000     0.000000
+        3    25.000000    24.967666     2.000000     0.500000    -1.382265    -1.500000
+        4    30.000000    29.968010     2.000000     0.500000    -0.980738    -2.333333
+
+data_peak_3
+_audit_dataset.id e624ae46-b67f-4aa5-a5c8-22e94854f0ad
+_pd_diffractogram.id	pattern_3
 loop_
 _pd_peak.id
 _pd_peak.2theta_centroid
