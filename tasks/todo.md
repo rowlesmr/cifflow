@@ -34,6 +34,37 @@ Spec: `prompts/unified_validate.md`
 
 ### Remaining items
 
+#### Unify severity levels and message style across all pipeline stages
+
+Each pipeline stage currently uses its own severity vocabulary and message conventions:
+
+- **Parser/builder**: `ParseError.error_type` is `'lexical' | 'syntactic' | 'semantic'` —
+  a category, not a severity. All parse errors are treated as errors by consumers, but
+  some (e.g. unknown tag routed to fallback) are arguably warnings.
+- **Ingestion**: `ingest()` returns plain `list[str]`; the `on_error` callback now carries
+  `severity='Warning' | 'Info'`, but callers who use the return value have no severity at all.
+  The distinction between what is an error vs. a warning is implicit (strings in
+  `IngestionError.errors` are errors; everything else is a warning).
+- **Validation**: `ValidationIssue.severity` is `'Error' | 'Warning' | 'Info'` — the most
+  complete model; use this as the reference.
+
+The goal is consistent severity semantics and message phrasing across all three stages,
+so that a caller can filter by severity without needing to know which layer raised the issue.
+
+Work to scope before implementing:
+
+- Audit every `on_error` / `ParseError` emission site and assign it a severity from
+  `'Error' | 'Warning' | 'Info'` using the definitions already established in `ValidationIssue`.
+- Decide whether `ParseError.error_type` (`lexical`, `syntactic`, `semantic`) maps to
+  severity or remains a separate classification field alongside severity.
+- Standardise message phrasing: tense, quoting style, and level of detail should be
+  consistent regardless of which layer emits the message.
+- `ingest()` return value (`list[str]`) carries no severity — decide whether to change it
+  to `list[tuple[str, str]]` or leave it as-is and route all severity information through
+  the `on_error` callback only.
+
+---
+
 #### Scope `_validation_result` table purpose
 
 The `_validation_result` table was created during the ingestion layer for two UUID-regime
