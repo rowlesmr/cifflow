@@ -41,7 +41,7 @@ _pd_diffractogram.id	pattern_1
 _diffrn.id	STP_1
 _pd_instr.id	chrome_dome
 _pd_instr.radiation_id	CR_RAD
-#_pd_diffractogram.diffrn_id	STP_1      # no link to _diffrn_radiation.id without one of these
+#_pd_diffractogram.diffrn_id	STP_1      # no link to _diffrn_radiation.id without one of these. could be solved by propagate_fk=True
 #_pd_diffractogram.instr_id	chrome_dome    # no link to _diffrn_radiation.id without one of these
 _diffrn.ambient_temperature	293
 loop_
