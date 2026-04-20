@@ -45,12 +45,14 @@ pycifparse/
 │   └── quote.py          # quote(), make_text_field()
 ├── fidelity/
 │   └── check.py          # check_fidelity()
-└── inspect/
-    ├── _lexer.py         # inspect_lexer
-    ├── _parser.py        # inspect_parse, ParseHandler
-    ├── _model.py         # inspect_model
-    ├── _schema.py        # inspect_schema
-    └── _ingest.py        # inspect_ingest, TraceEvent
+├── inspect/
+│   ├── _lexer.py         # inspect_lexer
+│   ├── _parser.py        # inspect_parse, ParseHandler
+│   ├── _model.py         # inspect_model
+│   ├── _schema.py        # inspect_schema
+│   └── _ingest.py        # inspect_ingest, TraceEvent
+└── validation/
+    └── _validate.py      # validate(), ValidationReport, ValidationIssue
 ```
 
 ---
@@ -957,10 +959,12 @@ class DdlmItem:
     units_code:         str | None
     description:        str | None
     enumeration_states: list[str]     # _enumeration_set.state values
+    enumeration_range:  str | None    # _enumeration.range (e.g. "0.:inf")
     category_keys:      list[str]     # _category_key.name (category frames)
     aliases:            list[str]     # _alias.definition_id (old names)
     replaced_by:        list[str]     # _definition_replaced.by; "" = no replacement
     is_deprecated:      bool          # True if any _definition_replaced row exists
+    type_dimension:     str | None    # _type.dimension (e.g. "[3]", "[3,3]")
 ```
 
 One save frame from a DDLm dictionary.  Produced by `DictionaryLoader.load()`.
@@ -1092,14 +1096,18 @@ class ColumnDef:
     nullable:        bool        # False for synthetic and PK columns; True otherwise
     is_primary_key:  bool
     is_synthetic:    bool        # True for _block_id, _row_id, _pycifparse_id
-    linked_item_id:  str | None  # SU items only; no FK constraint produced
-    type_container:  str | None  # DDLm _type.container value: "Single", "Matrix",
-                                 #   "List", "Array", etc.; None if unknown or synthetic.
-                                 #   Non-"Single" columns store JSON and are always TEXT.
+    linked_item_id:      str | None  # SU items only; no FK constraint produced
+    type_container:      str | None  # DDLm _type.container value: "Single", "Matrix",
+                                     #   "List", "Array", etc.; None if unknown or synthetic.
+                                     #   Non-"Single" columns store JSON and are always TEXT.
+    enumeration_states:  list[str]   # allowed values from _enumeration_set.state; [] if none
+    enumeration_range:   str | None  # _enumeration.range (e.g. "0.:inf"); None if absent
+    type_dimension:      str | None  # _type.dimension (e.g. "[3]", "[3,3]"); None if absent
 ```
 
 All value columns use `TEXT` storage regardless of `type_contents` or `type_container`.
-Both fields are retained for type-coercion use (see `convert_database`).
+These fields are used by `validate()` for content checks and are retained for type-coercion
+use (see `convert_database`).
 When `type_container` is not `"Single"` (e.g. `"Matrix"`, `"List"`, `"Array"`), the
 column stores a JSON-encoded structure; `convert_database` casts the leaf values within
 that JSON rather than the column value as a whole.
@@ -1757,6 +1765,127 @@ dot = visualise_schema(schema, show_columns='sparse', highlight_orphans=True)
 html = visualise_schema_html(schema, title='cif_core.dic schema')
 with open('schema.html', 'w', encoding='utf-8') as f:
     f.write(html)
+```
+
+---
+
+## Validation layer (`pycifparse.validation`)
+
+```python
+from pycifparse import validate, ValidationReport, ValidationIssue
+```
+
+### `ValidationIssue`
+
+```python
+@dataclass
+class ValidationIssue:
+    stage:      Literal['parse', 'ingest', 'database']
+    severity:   Literal['Error', 'Warning']
+    check:      str           # machine-readable check name (see table below)
+    message:    str           # human-readable description
+    block:      str | None    # data block name; None for parse-stage issues
+    tag:        str | None    # _definition.id of the failing tag
+    value:      str | None    # failing value as stored in the database
+    line:       int | None    # source line (parse stage only)
+    col:        int | None    # source column (parse stage only)
+    table:      str | None    # SQLite table name (database stage only)
+    column:     str | None    # SQLite column name (database stage only)
+    row_id:     int | None    # _row_id of the failing row (database stage only)
+    key_values: dict[str, str | None] | None  # PK tag → value for the row
+```
+
+**Check names:**
+
+| `stage` | `check` | `severity` | Meaning |
+|---|---|---|---|
+| `parse` | `lexical` / `syntactic` / `semantic` | Error | Parse error from `CifParser` |
+| `parse` | `internal_error` | Error | Unexpected exception during parsing |
+| `ingest` | `ingest` | Error or Warning | Message from `ingest()` `on_error` callback |
+| `ingest` | `fk_violation` | Error | FK constraint violated during ingestion |
+| `ingest` | `dataset_error` | Error | Invalid `dataset_id` or schema mismatch |
+| `ingest` | `internal_error` | Error | Unexpected exception during ingestion |
+| `database` | `unknown_tag` | Warning | Tag routed to `_cif_fallback` (not in schema) |
+| `database` | `keyless_set_cardinality` | Error | Keyless Set table has more than one row per block |
+| `database` | `type_container` | Error | Value is not valid JSON for a non-Single container |
+| `database` | `table_key_not_quotable` | Error | Table key cannot be expressed as an inline CIF 2.0 string |
+| `database` | `type_dimension` | Error | Container shape does not match `_type.dimension` |
+| `database` | `type_contents` | Error or Warning | Leaf value does not match `_type.contents` format |
+| `database` | `enumeration_range` | Error | Leaf value outside `_enumeration.range` bounds |
+| `database` | `enumeration_states` | Error | Leaf value not in `_enumeration_set.state` list |
+| `database` | `internal_error` | Error | Unexpected exception during DB validation |
+
+---
+
+### `ValidationReport`
+
+```python
+@dataclass
+class ValidationReport:
+    passed:   bool                    # True iff no Error-severity issues
+    issues:   list[ValidationIssue]
+    database: sqlite3.Connection | None  # in-memory DB; None if ingest failed
+```
+
+`passed` is `True` when `issues` contains no `'Error'`-severity entry.
+The in-memory `database` is available for further querying after validation;
+it is `None` when ingestion fails or an internal error occurs during DB validation.
+
+---
+
+### `validate()`
+
+```python
+def validate(
+    source: str | pathlib.Path | CifFile,
+    schema: SchemaSpec | None = None,
+    *,
+    parse_errors: list[ParseError] | None = None,
+    block_id: str | None = None,
+    dataset_id: str | None = None,
+    propagate_fk: bool = False,
+) -> ValidationReport
+```
+
+Parse (if needed), ingest to an in-memory database, and validate against the schema.
+Never raises; all exceptions are captured as `internal_error` issues.
+
+**Stages:**
+
+1. **Parse** — if `source` is a `str` or `Path`, it is parsed with `build()` and any
+   `ParseError` objects collected.  If `source` is an already-built `CifFile`, you may
+   supply a pre-collected `parse_errors` list; a `UserWarning` is emitted if
+   `parse_errors` is supplied alongside a `str`/`Path` source (it would be ignored).
+
+2. **Ingest** — the `CifFile` is ingested into an in-memory SQLite database via
+   `ingest()`.  Messages sent to `on_error` become `Warning` issues; an `IngestionError`
+   causes those same messages to be classified as `Error` where appropriate, and
+   `database` is set to `None`.
+
+3. **Database** — only when `schema` is not `None` and ingestion succeeded.
+   Runs checks A–E (container type, dimension, contents, enumeration range, enumeration
+   states) on every domain column, plus `unknown_tag` and `keyless_set_cardinality`.
+
+**Parameters:**
+
+| Parameter | Default | Effect |
+|---|---|---|
+| `source` | — | CIF source: raw string, `Path`, or pre-built `CifFile` |
+| `schema` | `None` | If supplied, enables Stage 3 database checks |
+| `parse_errors` | `None` | Pre-collected errors when passing a `CifFile` |
+| `block_id` | `None` | Restrict Stage 3 checks to one data block |
+| `dataset_id` | `None` | Passed to `ingest()` for multi-dataset merge |
+| `propagate_fk` | `False` | Passed to `ingest()` |
+
+```python
+report = validate("##CIF_2.0\ndata_test\n_atom.type_symbol Cu\n", schema=schema)
+if not report.passed:
+    for issue in report.issues:
+        print(f"[{issue.severity}] {issue.stage}/{issue.check}: {issue.message}")
+
+# Query the ingested database directly:
+if report.database:
+    rows = report.database.execute('SELECT * FROM atom').fetchall()
 ```
 
 ---

@@ -38,6 +38,12 @@ _RESERVED_PREFIX = ('data_', 'save_')
 # Public entry point
 # ---------------------------------------------------------------------------
 
+def is_table_key_quotable(key: str) -> bool:
+    """Return True if key can be expressed as an inline CIF 2.0 quoted string."""
+    result = _quote_string(key, CifVersion.CIF_2_0)
+    return not result.startswith('\n')
+
+
 def quote(stored: str, version: CifVersion) -> str:
     """Return a valid CIF token for *stored*, suitable for the given *version*.
 

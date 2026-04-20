@@ -91,3 +91,5 @@ class DdlmItem:
     aliases: list[str] = field(default_factory=list)
     replaced_by: list[str] = field(default_factory=list)
     is_deprecated: bool = False
+    enumeration_range: str | None = None
+    type_dimension: str | None = None

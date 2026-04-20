@@ -4,62 +4,32 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 6 complete. `CifWriter` + `clean` API implemented.
+**Current stage:** Stage 7 complete. Unified validation layer implemented.
 
-**Test suite state (2026-04-18):**
-- ~1555 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
+**Test suite state (2026-04-19):**
+- ~1718 tests pass (non-slow): `source .venv/Scripts/activate && pytest -m "not slow" --tb=short -q`
 - 58 slow tests pass: `pytest -m slow`
-- Total: ~1613 passing, 0 xfail
-- 2 pre-existing failures: missing `ideal_condensed.cif` test file (unrelated)
+- Total: ~1776 passing, 0 xfail
+- 4 pre-existing failures: missing `ideal_condensed.cif` test file (unrelated)
 
 ---
 
-### Active task: database content validator (scoped 2026-04-18)
+### Completed task: unified validation layer (2026-04-19) ✓
 
-Spec to be written at `prompts/Stage7_Validator_Prompt.md`.
+Spec: `prompts/unified_validate.md`
 
-#### Decisions
+#### What was implemented
 
-| Question | Decision |
-|---|---|
-| Include `_enumeration_set.state`? | Yes |
-| Output shape | Report object only (`ValidationResult` / `ValidationReport`); no DB write |
-| Non-Single containers | All three: container type + element count (`_type.dimension`) + leaf values (`_type.contents`) |
-| Sentinels (`NULL`, `'.'`, `'?'`) | Skip all checks |
-| SU columns | Apply all `_type.*` checks to the bare measurand value |
-| `Imag` / `Complex` | Write stubs; clearly marked as no-op |
-| `ByReference` / `Inherited` | Skip |
-| `Uri` / `Iri` | RFC 3986 Appendix B structural regex; `Warning` severity |
+- `DdlmItem`: added `enumeration_range` and `type_dimension` fields
+- `loader.py`: populates both new fields from `_enumeration.range` / `_type.dimension`
+- `ColumnDef`: added `type_container`, `enumeration_states`, `enumeration_range`, `type_dimension`
+- `generate_schema()`: propagates all four new fields; `type_contents` defaults to `'Text'` when absent
+- `quote.py`: added `is_table_key_quotable()` helper
+- `src/pycifparse/validation/`: new package with `_db_checks.py`, `_db_validate.py`, `_validate.py`, `__init__.py`
+- `pycifparse/__init__.py`: exports `validate`, `ValidationReport`, `ValidationIssue`
+- `tests/validation/`: `test_validate.py` (42 tests) + `test_db_validate.py` (121 tests) = 163 tests
 
-#### Prerequisites (extend before implementing validator)
-
-- Add `enumeration_range: str | None` to `DdlmItem`; populate in `loader.py`
-- Add `type_dimension: str | None` to `DdlmItem`; populate in `loader.py`
-- Add `enumeration_states: list[str]`, `enumeration_range: str | None`,
-  `type_dimension: str | None` to `ColumnDef`; populate in `generate_schema()`
-
-#### `_type.contents` validation rules (to implement)
-
-| Value | Check |
-|---|---|
-| `Text` | Always valid |
-| `Word` | No ASCII whitespace |
-| `Code` | No ASCII whitespace |
-| `Name` | `[A-Za-z0-9_]+` |
-| `Tag` | `_\S+` |
-| `Uri` | RFC 3986 Appendix B regex |
-| `Iri` | RFC 3986 regex with Unicode-widened path/query/fragment |
-| `Date` | `\d{4}-\d{2}-\d{2}` |
-| `DateTime` | `datetime.fromisoformat` or RFC 3339 regex |
-| `Version` | `\d+\.\d+\.\d+.*` |
-| `Dimension` | `\[\d*(,\d+)*\]` |
-| `Range` | `(-?\S+)?:(-?\S+)?` with at least one side |
-| `Integer` | `[+-]?\d+` |
-| `Real` | float pattern incl. scientific notation |
-| `Imag` | stub / no-op |
-| `Complex` | stub / no-op |
-| `Symop` | `\d+([_ ]\d{3,})?` |
-| `Implied` / `ByReference` / `Inherited` | Skip |
+#### Lessons: 91–94
 
 ---
 
@@ -334,12 +304,7 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 
 ### Planned features
 
-- **Validation layer** (`src/pycifparse/validation/`) — spec: `prompts/Stage6_Validation_Prompt.md`.
-  Operates on `CifFile` before ingestion. Checks `type_container`, `type_dimension`, `ValueType`
-  consistency, `type_contents` format, `enumeration_states` membership, `enumeration_range` bounds.
-  Returns `ValidationReport`; never blocks processing.
-  **Prerequisites:** extend `DdlmItem` + `loader.py` with `enumeration_range` and `type_dimension`;
-  extend `ColumnDef` with `type_container`, `type_dimension`, `enumeration_states`, `enumeration_range`.
+- ~~**Validation layer**~~ — **DONE** (2026-04-19). `src/pycifparse/validation/`. Spec: `prompts/unified_validate.md`. 163 tests. Lessons 91–94.
 
 - ~~**`check_fidelity`**~~ — **DONE** (2026-04-13). See Lessons 62–64.
 
