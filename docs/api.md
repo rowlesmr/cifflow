@@ -607,7 +607,17 @@ class EmitMode(Enum):
 
 **`GROUPED`** traverses the FK graph (BFS) from each table to find the nearest Set-class ancestor.  Tables whose FK chains share the same Set anchor and the same anchor key values are emitted together.  This merges rows from multiple original blocks that carry the same Set-level identity.  Tables with no Set ancestor fall back to `_block_id` grouping and are absorbed into co-located Set-anchored blocks; truly orphaned block IDs produce standalone blocks.
 
-**`ALL_BLOCKS`** (CIF 2.0): injects `_audit_dataset.id` as the first tag of every emitted block so that a reader can recognise all blocks as belonging to the same dataset.  The dataset ID is the existing UUID from `_block_dataset_membership` (when `id_regime='dataset'` and a single unique ID is present), or a freshly generated UUID otherwise.  The injection is skipped for any block that already carries `_audit_dataset.id` via its structured table (`audit_dataset`) or `_cif_fallback` rows.
+**`ALL_BLOCKS`** emits one block per table, split by Set-key combination.  Raises `ValueError` if any `_cif_fallback` rows are present (unknown tags cannot be assigned to a dictionary-split block) or if any keyless Set table (one whose only PK column is `_pycifparse_id`) contains data.
+
+Block partitioning rules:
+
+- **Set category** — one block per row.  Block name: `{table}_{pk_val...}`.
+- **Loop category, no Set-key columns** — one block for all rows.  Block name: `{table}`.
+- **Loop category, one or more Set-key columns** — one block per unique combination of Set-key values.  Block name: `{table}_{set_val...}`.  Set-key values are emitted as scalar tag–value pairs above the loop (using the parent category's tag name); the corresponding FK columns are suppressed from the loop header.
+
+`_audit_dataset.id` injection: the dataset ID is resolved per block by looking up the originating `_block_id` values in `_block_dataset_membership`.  If exactly one distinct ID is found it is injected as a scalar.  If multiple IDs are found they are injected as a `loop_`.  If none is found a fresh UUID is generated (CIF 2.0 only).  Injection is skipped for any block that already carries `_audit_dataset.id` via its structured table (`audit_dataset`) or `_cif_fallback` rows.
+
+**`OutputPlan` in ALL_BLOCKS mode:** spec-matching (`matches`, `single_block`, `block_namer`) is not applied.  `category_order` from the first `BlockSpec` that declares one controls the order in which tables are processed (and thus the order of their blocks in the output file).  The wildcard `'*'` notation is supported.  Unlisted tables follow alphabetically (Set-class first).
 
 ---
 

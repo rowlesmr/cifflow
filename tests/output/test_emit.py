@@ -671,50 +671,61 @@ class TestAllBlocks:
     def grouped_schema(self):
         return _make_schema(_GROUPED_DIC)
 
-    def test_keyless_set_one_block_per_source_block(self, mini_schema):
+    def test_keyless_set_raises(self, mini_schema):
+        """ALL_BLOCKS raises ValueError when a keyless Set table contains data."""
         conn = _ingest_src(
             '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n',
             mini_schema,
         )
-        result = emit(conn, schema=mini_schema, mode=EmitMode.ALL_BLOCKS)
-        headers = [l for l in result.splitlines() if l.startswith('data_')]
-        assert len(headers) == 1
-        assert '_cell.length_a  5.4' in result
+        with pytest.raises(ValueError, match='keyless Set'):
+            emit(conn, schema=mini_schema, mode=EmitMode.ALL_BLOCKS)
 
-    def test_round_trip(self, mini_schema):
-        conn = _ingest_src(
-            '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n_cell.length_b  3.2\n',
-            mini_schema,
+    def test_fallback_rows_raise(self, grouped_schema):
+        """ALL_BLOCKS raises ValueError when unknown tags are present in fallback."""
+        cif_src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            '_expt.id  exp1\n'
+            '_unknown.tag  hello\n'
         )
-        result = emit(conn, schema=mini_schema, mode=EmitMode.ALL_BLOCKS)
-        cif2, errors = build(result)
-        assert not errors
+        conn = _ingest_src(cif_src, grouped_schema)
+        with pytest.raises(ValueError, match='fallback'):
+            emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
 
-    def test_two_set_rows_produce_two_blocks(self, grouped_schema):
-        """Two distinct expt.id values → two output blocks."""
+    def test_set_table_one_block_per_row(self, grouped_schema):
+        """Each row in a Set table produces its own block."""
         conn = _ingest_src(_GROUPED_SEPARATE_CIF, grouped_schema)
         result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
-        headers = [l for l in result.splitlines() if l.startswith('data_')]
-        assert len(headers) == 2
+        cif2, errors = build(result)
+        assert not errors
+        expt_blocks = [n for n in cif2.blocks if '_expt.id' in cif2[n]]
+        assert len(expt_blocks) == 2
 
-    def test_same_set_key_produces_one_block(self, grouped_schema):
-        """Two source blocks sharing the same expt.id → merged into one output block."""
+    def test_set_table_merged_key_one_block(self, grouped_schema):
+        """Two source blocks sharing the same expt.id → one expt block."""
         conn = _ingest_src(_GROUPED_MERGE_CIF, grouped_schema)
         result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
-        headers = [l for l in result.splitlines() if l.startswith('data_')]
-        assert len(headers) == 1
+        cif2, errors = build(result)
+        assert not errors
+        expt_blocks = [n for n in cif2.blocks if '_expt.id' in cif2[n]]
+        assert len(expt_blocks) == 1
 
-    def test_loop_rows_grouped_with_set_anchor(self, grouped_schema):
-        """Peak rows go into the same block as their expt anchor."""
+    def test_loop_table_in_own_block(self, grouped_schema):
+        """Loop table (no Set FK in PK) goes into its own single block."""
         conn = _ingest_src(_GROUPED_SEPARATE_CIF, grouped_schema)
         result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
         cif2, errors = build(result)
         assert not errors
-        # Each block should contain both an expt row and peak rows for that expt.
-        blocks_with_peaks = [
-            cif2[n] for n in cif2.blocks if cif2[n]['_peak.intensity']
-        ]
-        assert len(blocks_with_peaks) == 2
+        peak_blocks = [n for n in cif2.blocks if '_peak.intensity' in cif2[n]]
+        assert len(peak_blocks) == 1
+        assert len(cif2[peak_blocks[0]]['_peak.intensity']) == 2
+
+    def test_block_name_derived_from_table_name(self, grouped_schema):
+        """Block names start with the table name."""
+        conn = _ingest_src(_GROUPED_SEPARATE_CIF, grouped_schema)
+        result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
+        headers = [l[len('data_'):] for l in result.splitlines() if l.startswith('data_')]
+        assert any(h.startswith('expt_') for h in headers)
+        assert any(h.startswith('peak') for h in headers)
 
     def test_dataset_id_injected_cif20(self, grouped_schema):
         conn = _ingest_src(_GROUPED_SEPARATE_CIF, grouped_schema)
@@ -735,11 +746,170 @@ class TestAllBlocks:
         cif2, errors = build(result)
         assert not errors
         dataset_ids = [
-            cif2[n]['_audit_dataset.id'][0]
+            str(cif2[n]['_audit_dataset.id'][0])
             for n in cif2.blocks if cif2[n]['_audit_dataset.id']
         ]
-        assert len(dataset_ids) == 2
-        assert dataset_ids[0] == dataset_ids[1]
+        assert len(dataset_ids) == len(cif2.blocks)
+        assert len(set(dataset_ids)) == 1
+
+
+# Schema with Loop table whose PK includes a Set FK — exercises header scalars.
+_SET_KEY_IN_PK_DIC = """\
+#\\#CIF_2.0
+data_set_key_in_pk_dic
+
+save_MEAS
+  _definition.id        MEAS
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     meas
+  _category_key.name    '_meas.id'
+save_
+
+save_meas.id
+  _definition.id        '_meas.id'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_POINT
+  _definition.id        POINT
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     point
+  loop_
+    _category_key.name
+    '_point.meas_id'
+    '_point.id'
+save_
+
+save_point.meas_id
+  _definition.id        '_point.meas_id'
+  _definition.class     Attribute
+  _name.category_id     point
+  _name.object_id       meas_id
+  _type.purpose         Link
+  _type.source          Related
+  _type.container       Single
+  _type.contents        Code
+  _name.linked_item_id  '_meas.id'
+save_
+
+save_point.id
+  _definition.id        '_point.id'
+  _definition.class     Attribute
+  _name.category_id     point
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_point.value
+  _definition.id        '_point.value'
+  _definition.class     Attribute
+  _name.category_id     point
+  _name.object_id       value
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+"""
+
+_SET_KEY_IN_PK_CIF = (
+    '#\\#CIF_2.0\n'
+    'data_m1\n'
+    '_meas.id  M1\n'
+    'loop_\n  _point.meas_id\n  _point.id\n  _point.value\n'
+    '  M1  0  1.0\n'
+    '  M1  1  2.0\n'
+    '\n\n'
+    'data_m2\n'
+    '_meas.id  M2\n'
+    'loop_\n  _point.meas_id\n  _point.id\n  _point.value\n'
+    '  M2  0  3.0\n'
+    '  M2  1  4.0\n'
+)
+
+
+class TestAllBlocksSetKeyInPK:
+    """ALL_BLOCKS with a Loop table whose PK includes a FK to a Set category."""
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_SET_KEY_IN_PK_DIC)
+
+    @pytest.fixture
+    def conn(self, schema):
+        return _ingest_src(_SET_KEY_IN_PK_CIF, schema)
+
+    def test_point_blocks_split_by_meas(self, conn, schema):
+        """One point block per meas_id value."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        point_blocks = [n for n in cif2.blocks if '_point.value' in cif2[n]]
+        assert len(point_blocks) == 2
+
+    def test_set_key_scalar_above_loop(self, conn, schema):
+        """_meas.id appears as a scalar tag-value pair in each point block."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        point_blocks = [n for n in cif2.blocks if '_point.value' in cif2[n]]
+        for bname in point_blocks:
+            assert '_meas.id' in cif2[bname], f"_meas.id missing in block {bname}"
+
+    def test_meas_id_not_in_loop_header(self, conn, schema):
+        """_point.meas_id is suppressed from the loop_ header (it's a Set-key scalar)."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        lines = result.splitlines()
+        in_loop = False
+        for line in lines:
+            s = line.strip()
+            if s == 'loop_':
+                in_loop = True
+                continue
+            if in_loop and s.startswith('_'):
+                assert s != '_point.meas_id', "_point.meas_id must not appear in loop header"
+                continue
+            in_loop = False
+
+    def test_block_name_includes_table_and_set_val(self, conn, schema):
+        """Block names for point groups follow {table}_{set_val} pattern."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        headers = [l[len('data_'):] for l in result.splitlines() if l.startswith('data_')]
+        point_headers = [h for h in headers if h.startswith('point_')]
+        assert 'point_M1' in point_headers
+        assert 'point_M2' in point_headers
+
+    def test_row_values_correct(self, conn, schema):
+        """Each point block contains only the rows for its meas_id."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        for bname in cif2.blocks:
+            block = cif2[bname]
+            if '_point.value' not in block:
+                continue
+            values = [float(str(v)) for v in block['_point.value']]
+            meas_id = str(block['_meas.id'][0])
+            if meas_id == 'M1':
+                assert values == [1.0, 2.0]
+            elif meas_id == 'M2':
+                assert values == [3.0, 4.0]
+
+    def test_output_is_valid_cif(self, conn, schema):
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        _, errors = build(result)
+        assert not errors, errors
 
 
 # ---------------------------------------------------------------------------
