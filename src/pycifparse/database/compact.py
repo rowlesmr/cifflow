@@ -31,6 +31,7 @@ _FALLBACK_DDL = [
         '    "value_type"  TEXT     NOT NULL,\n'
         '    "loop_id"     INTEGER,\n'
         '    "col_index"   INTEGER,\n'
+        '    "ref_table"   TEXT,\n'
         '    PRIMARY KEY ("_block_id", "_row_id", "tag")\n'
         ')'
     ),

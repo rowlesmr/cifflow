@@ -867,6 +867,7 @@ def emit_fallback_create_statements() -> list[str]:
         f"    {_qi('value_type')}  TEXT     NOT NULL,\n"
         f"    {_qi('loop_id')}     INTEGER,\n"
         f"    {_qi('col_index')}   INTEGER,\n"
+        f"    {_qi('ref_table')}   TEXT,\n"
         f"    PRIMARY KEY ({_qi('_block_id')}, {_qi('_row_id')}, {_qi('tag')})\n"
         f")"
     )

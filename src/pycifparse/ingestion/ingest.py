@@ -1233,6 +1233,7 @@ class _Ingester:
                     'value_type': vtype,
                     'loop_id': loop_id_counter,
                     'col_index': col_idx,
+                    'ref_table': first_structured_table,
                 })
 
         # Single-iteration fk_accumulator rule
@@ -1376,10 +1377,11 @@ class _Ingester:
             cur.executemany(
                 'INSERT INTO "_cif_fallback" '
                 '("_block_id", "_row_id", "tag", "value", "value_type", '
-                '"loop_id", "col_index") VALUES (?, ?, ?, ?, ?, ?, ?)',
+                '"loop_id", "col_index", "ref_table") VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     (r['_block_id'], r['_row_id'], r['tag'], r['value'],
-                     r['value_type'], r['loop_id'], r['col_index'])
+                     r['value_type'], r.get('loop_id'), r.get('col_index'),
+                     r.get('ref_table'))
                     for r in self.fallback_rows
                 ],
             )

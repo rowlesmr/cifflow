@@ -589,6 +589,50 @@ def _render_block(
     lines: list[str] = [f'data_{block_name}']
     first_category = True
 
+    # Partition fallback rows into three groups:
+    #   mixed_fallback  — unknown tags that were in a loop alongside known tags;
+    #                     keyed ref_table -> loop_id -> col_index -> {row_id: (value, vtype)}
+    #   pure_loop_rows  — unknown tags in a loop with no known tags; keyed by loop_id
+    #   remnant_rows    — scalar fallback (loop_id is None) and anything not injected
+    mixed_fallback: dict[str, dict[int, dict[int, dict[int, tuple]]]] = {}
+    pure_loop_rows: dict[int, list[dict]] = {}
+    remnant_rows: list[dict] = []
+
+    for r in data.fallback_rows:
+        lid = r.get('loop_id')
+        ref = r.get('ref_table')
+        if lid is None:
+            remnant_rows.append(r)
+        elif ref is not None:
+            col_idx = r.get('col_index', 0) or 0
+            row_id = r.get('_row_id', 0)
+            val = r.get('value', '')
+            vtype = r.get('value_type', '')
+            tag = r.get('tag', '')
+            (mixed_fallback
+             .setdefault(ref, {})
+             .setdefault(lid, {})
+             .setdefault(col_idx, {}))[row_id] = (tag, val, vtype)
+        else:
+            pure_loop_rows.setdefault(lid, []).append(r)
+
+    # Build per-table extra-column list:
+    # ref_table -> list of (tag, col_index, {row_id: (value, vtype)})
+    # ordered by (loop_id, col_index) to preserve original column ordering.
+    extra_cols_for: dict[str, list[tuple[str, int, dict[int, tuple]]]] = {}
+    for ref, loop_dict in mixed_fallback.items():
+        cols_list: list[tuple[str, int, dict[int, tuple]]] = []
+        for lid in sorted(loop_dict):
+            for col_idx in sorted(loop_dict[lid]):
+                cell_map = loop_dict[lid][col_idx]
+                # All cells for this (loop_id, col_idx) share the same tag.
+                sample = next(iter(cell_map.values()))
+                tag = sample[0]
+                # row_id -> (value, vtype)
+                row_vals = {rid: (v, vt) for rid, (_, v, vt) in cell_map.items()}
+                cols_list.append((tag, col_idx, row_vals))
+        extra_cols_for[ref] = cols_list
+
     # Inject _audit_dataset.id when requested.
     if data.dataset_id is not None:
         audit_in_table = 'audit_dataset' in data.table_rows
@@ -633,15 +677,33 @@ def _render_block(
                 lines.append('')
             first_category = False
 
+            extra = extra_cols_for.get(table_name)
             if table_def.category_class == 'Set' and len(rows) == 1:
                 lines.extend(_render_set_category(rows[0], cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit))
             else:
-                lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit))
+                lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit, extra_fallback_cols=extra))
 
-    if data.fallback_rows:
+    # Pure-fallback loops: emit each loop_id group as a standalone loop_.
+    for lid in sorted(pure_loop_rows):
+        loop_rows = pure_loop_rows[lid]
         if not first_category:
             lines.append('')
-        lines.extend(_render_fallback(data.fallback_rows, version, pretty, line_limit))
+        first_category = False
+        lines.extend(_render_pure_fallback_loop(loop_rows, version, pretty, line_limit))
+
+    # Scalar fallback and any remnant rows (scalars, or loop rows whose ref_table
+    # is not present in this block's table_rows — treated as plain fallback).
+    actual_remnant = remnant_rows
+    for ref, cols_list in extra_cols_for.items():
+        if ref not in data.table_rows:
+            # ref_table not rendered in this block: fall back to plain fallback.
+            for tag, _ci, row_vals in cols_list:
+                for _rid, (val, vtype) in row_vals.items():
+                    actual_remnant.append({'tag': tag, 'value': val, 'value_type': vtype})
+    if actual_remnant:
+        if not first_category:
+            lines.append('')
+        lines.extend(_render_fallback(actual_remnant, version, pretty, line_limit))
 
     return lines
 
@@ -969,14 +1031,24 @@ def _render_loop_category(
     reconstruct_su: bool,
     pretty: bool,
     line_limit: int | None = None,
+    extra_fallback_cols: 'list[tuple[str, int, dict[int, tuple]]] | None' = None,
 ) -> list[str]:
-    """Emit a Loop-class category as a ``loop_`` construct."""
+    """Emit a Loop-class category as a ``loop_`` construct.
+
+    *extra_fallback_cols* is a list of ``(tag, col_index, {row_id: (value, vtype)})``
+    tuples for unknown tags that were in the same source loop as this category.
+    They are appended as additional columns after the structured ones, aligned
+    by the row's ``_row_id``.
+    """
     su_map = _su_col_map(table_def) if reconstruct_su else {}
 
     lines = ['loop_']
     for col in cols:
         tag = _col_tag(table_name, col, schema)
         lines.append(f'  {tag}')
+    if extra_fallback_cols:
+        for tag, _ci, _row_vals in extra_fallback_cols:
+            lines.append(f'  {tag}')
 
     # Build token matrix: one quote() call per cell.
     matrix: list[list[str]] = []
@@ -996,6 +1068,18 @@ def _render_loop_category(
                 if line_limit is not None:
                     token = _apply_line_limit(value, token, line_limit)
             tokens.append(token)
+        if extra_fallback_cols:
+            row_id = row.get('_row_id')
+            for _tag, _ci, row_vals in extra_fallback_cols:
+                cell = row_vals.get(row_id)
+                if cell is None:
+                    tokens.append('.')
+                else:
+                    val, vtype = cell
+                    token = _fallback_token(val, vtype, version)
+                    if line_limit is not None and token.startswith('\n') and vtype != 'placeholder':
+                        token = make_text_field(val, line_limit)
+                    tokens.append(token)
         matrix.append(tokens)
 
     if pretty:
@@ -1008,6 +1092,60 @@ def _render_loop_category(
     for tokens in matrix:
         lines.extend(_format_row(tokens, col_widths, line_limit))
 
+    return lines
+
+
+def _render_pure_fallback_loop(
+    rows: list[dict],
+    version: CifVersion,
+    pretty: bool = False,
+    line_limit: int | None = None,
+) -> list[str]:
+    """Emit a group of unknown tags that shared a loop with no structured columns."""
+    # Group by tag, ordered by col_index within the loop then by row_id.
+    tag_order: list[str] = []
+    seen_tags: set[str] = set()
+    for r in sorted(rows, key=lambda r: (r.get('col_index') or 0, r.get('_row_id') or 0)):
+        t = r.get('tag', '')
+        if t not in seen_tags:
+            tag_order.append(t)
+            seen_tags.add(t)
+
+    # Build per-tag ordered value list (sorted by _row_id).
+    tag_values: dict[str, list[tuple[str, str]]] = {t: [] for t in tag_order}
+    for t in tag_order:
+        for r in sorted(
+            (r for r in rows if r.get('tag') == t),
+            key=lambda r: r.get('_row_id') or 0,
+        ):
+            tag_values[t].append((r.get('value', ''), r.get('value_type', '')))
+
+    if not tag_order:
+        return []
+
+    lines = ['loop_']
+    for t in tag_order:
+        lines.append(f'  {t}')
+
+    n_rows = len(tag_values[tag_order[0]])
+    matrix: list[list[str]] = []
+    for i in range(n_rows):
+        tokens = []
+        for t in tag_order:
+            entries = tag_values[t]
+            if i < len(entries):
+                val, vtype = entries[i]
+                token = _fallback_token(val, vtype, version)
+                if line_limit is not None and token.startswith('\n') and vtype != 'placeholder':
+                    token = make_text_field(val, line_limit)
+            else:
+                token = '.'
+            tokens.append(token)
+        matrix.append(tokens)
+
+    col_widths = _col_widths(matrix) if pretty else None
+    for tokens in matrix:
+        lines.extend(_format_row(tokens, col_widths, line_limit))
     return lines
 
 

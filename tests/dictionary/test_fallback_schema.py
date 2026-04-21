@@ -84,7 +84,7 @@ class TestFallbackTableStructure:
 
     def test_expected_columns_present(self, conn):
         pragma = {row[1]: row for row in conn.execute('PRAGMA table_info("_cif_fallback")')}
-        for col in ('_block_id', '_row_id', 'tag', 'value', 'value_type', 'loop_id', 'col_index'):
+        for col in ('_block_id', '_row_id', 'tag', 'value', 'value_type', 'loop_id', 'col_index', 'ref_table'):
             assert col in pragma, f"column {col!r} missing from _cif_fallback"
 
     def test_block_id_not_null(self, conn):
@@ -114,6 +114,10 @@ class TestFallbackTableStructure:
     def test_col_index_nullable(self, conn):
         pragma = {row[1]: row for row in conn.execute('PRAGMA table_info("_cif_fallback")')}
         assert pragma['col_index'][3] == 0  # nullable
+
+    def test_ref_table_nullable(self, conn):
+        pragma = {row[1]: row for row in conn.execute('PRAGMA table_info("_cif_fallback")')}
+        assert pragma['ref_table'][3] == 0  # nullable
 
     def test_primary_key_is_block_id_row_id_tag(self, conn):
         pk_cols = {
@@ -262,6 +266,30 @@ class TestApplyFallbackSchemaBehaviour:
         conn.commit()
         row = conn.execute('SELECT loop_id, col_index FROM "_cif_fallback"').fetchone()
         assert row == (None, None)
+
+    def test_accepts_null_ref_table(self):
+        conn = sqlite3.connect(':memory:')
+        apply_fallback_schema(conn)
+        conn.execute(
+            'INSERT INTO "_cif_fallback" '
+            '(_block_id, _row_id, tag, value, value_type, loop_id, col_index, ref_table) '
+            "VALUES ('blk1', 1, '_some.tag', 'hello', 'string', NULL, NULL, NULL)"
+        )
+        conn.commit()
+        row = conn.execute('SELECT ref_table FROM "_cif_fallback"').fetchone()
+        assert row == (None,)
+
+    def test_accepts_non_null_ref_table(self):
+        conn = sqlite3.connect(':memory:')
+        apply_fallback_schema(conn)
+        conn.execute(
+            'INSERT INTO "_cif_fallback" '
+            '(_block_id, _row_id, tag, value, value_type, loop_id, col_index, ref_table) '
+            "VALUES ('blk1', 1, '_some.tag', 'hello', 'string', 0, 0, 'pd_data')"
+        )
+        conn.commit()
+        row = conn.execute('SELECT ref_table FROM "_cif_fallback"').fetchone()
+        assert row == ('pd_data',)
 
     def test_same_tag_different_blocks_allowed(self):
         conn = sqlite3.connect(':memory:')
