@@ -184,7 +184,8 @@ def emit(
         raw_blocks = _collect_original(conn, schema)
 
     if mode == EmitMode.ALL_BLOCKS:
-        ordered = [(b, None) for b in raw_blocks]
+        plan_spec = plan.specs[0] if plan and plan.specs else None
+        ordered = [(b, plan_spec) for b in raw_blocks]
     else:
         ordered = _sort_and_merge(raw_blocks, plan)
 
@@ -632,14 +633,14 @@ def _ordered_tables_all_blocks(
 def _resolve_dataset_id(
     conn: sqlite3.Connection,
     block_ids: set[str],
-    version: CifVersion,
+    fallback: 'str | None',
 ) -> 'str | list[str] | None':
     """Return the _audit_dataset_id(s) for the given originating _block_id values.
 
     Ignores synthetic empty-string block_ids.  If _block_dataset_membership is
-    absent or has no matching rows, falls back to a fresh UUID (CIF 2.0) or None.
-    Returns a plain str for one match, a sorted list for multiple, or a fresh
-    UUID / None when no membership data is found.
+    absent or has no matching rows, returns *fallback* (a shared UUID generated
+    once per emit call, or None for CIF 1.1).
+    Returns a plain str for one match, a sorted list for multiple.
     """
     real_bids = {b for b in block_ids if b}
     if real_bids:
@@ -650,14 +651,14 @@ def _resolve_dataset_id(
                 f'WHERE "_block_id" IN ({placeholders})',
                 tuple(sorted(real_bids)),
             ).fetchall()
-            ids = sorted(r[0] for r in rows if r[0] is not None)
+            ids = sorted(r[0] for r in rows if r[0])
             if len(ids) == 1:
                 return ids[0]
             if len(ids) > 1:
                 return ids
         except sqlite3.OperationalError:
             pass
-    return str(uuid.uuid4()) if version == CifVersion.CIF_2_0 else None
+    return fallback
 
 
 def _collect_all_blocks(
@@ -717,6 +718,7 @@ def _collect_all_blocks(
             f"dictionary-split block."
         )
 
+    fallback_id: str | None = str(uuid.uuid4()) if version == CifVersion.CIF_2_0 else None
     result: list[_BlockData] = []
 
     for table_name in _ordered_tables_all_blocks(schema, plan):
@@ -751,7 +753,7 @@ def _collect_all_blocks(
                             parent_tables.append(set_table)
 
                 cat_order = sorted(parent_tables) + [table_name] if parent_tables else None
-                did = _resolve_dataset_id(conn, {row.get('_block_id')}, version)
+                did = _resolve_dataset_id(conn, {row.get('_block_id')}, fallback_id)
                 result.append(_BlockData(
                     name=block_name,
                     table_rows=block_table_rows,
@@ -770,7 +772,7 @@ def _collect_all_blocks(
             if not set_key_cols:
                 # Pure Loop — one block for all rows.
                 block_name = _sanitize_block_name(table_name) or table_name
-                did = _resolve_dataset_id(conn, {row.get('_block_id') for row in rows}, version)
+                did = _resolve_dataset_id(conn, {row.get('_block_id') for row in rows}, fallback_id)
                 result.append(_BlockData(
                     name=block_name,
                     table_rows={table_name: rows},
@@ -806,7 +808,7 @@ def _collect_all_blocks(
                             parent_tables.append(set_table)
 
                     cat_order = sorted(parent_tables) + [table_name]
-                    did = _resolve_dataset_id(conn, {row.get('_block_id') for row in group_rows}, version)
+                    did = _resolve_dataset_id(conn, {row.get('_block_id') for row in group_rows}, fallback_id)
                     result.append(_BlockData(
                         name=block_name,
                         table_rows=block_table_rows,
@@ -908,8 +910,11 @@ def _render_block(
             first_category = False
 
     effective_spec = spec
-    if spec is None and data.preferred_category_order:
-        effective_spec = BlockSpec(category_order=data.preferred_category_order)
+    if data.preferred_category_order:
+        effective_spec = BlockSpec(
+            category_order=data.preferred_category_order,
+            column_order=spec.column_order if spec is not None else {},
+        )
 
     for item in _ordered_categories(schema, effective_spec, data.table_rows):
         if isinstance(item, list):
