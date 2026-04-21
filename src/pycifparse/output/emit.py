@@ -49,6 +49,7 @@ class _BlockData:
     suppress_loop_fk_pk: bool = False  # ORIGINAL mode only: suppress FK cols from Loop categories
     dataset_id: str | list[str] | None = None
     preferred_category_order: list[str] | None = None  # ALL_BLOCKS: parent tables before child
+    conformance_tags: list[tuple[str, str]] | None = None  # ONE_BLOCK: injected before all data
 
 
 def _make_block_data(
@@ -332,6 +333,7 @@ def _replace_name(block: _BlockData, name: str) -> _BlockData:
         suppress_fk_pk=block.suppress_fk_pk,
         suppress_loop_fk_pk=block.suppress_loop_fk_pk,
         dataset_id=block.dataset_id,
+        conformance_tags=block.conformance_tags,
         preferred_category_order=block.preferred_category_order,
     )
 
@@ -522,6 +524,30 @@ def _collect_one_block(
         if rows:
             table_rows[table_name] = rows
     fallback = _fetch_rows(conn, '_cif_fallback')
+
+    # Build conformance tags — only inject when dictionary metadata is available
+    # and the relevant tables are not already present in the database.
+    conformance: list[tuple[str, str]] = []
+    audit_conform_present = 'audit_conform' in table_rows or any(
+        (r.get('tag') or '').lower().startswith('_audit_conform.') for r in fallback
+    )
+    if not audit_conform_present:
+        conform_block: list[tuple[str, str]] = []
+        if schema.dictionary_title:
+            conform_block.append(('_audit_conform.dict_name', schema.dictionary_title))
+        if schema.dictionary_version:
+            conform_block.append(('_audit_conform.dict_version', schema.dictionary_version))
+        if schema.dictionary_uri:
+            conform_block.append(('_audit_conform.dict_location', schema.dictionary_uri))
+        if conform_block:
+            # Only emit _audit.schema when there are conformance entries to accompany it.
+            audit_present = 'audit' in table_rows or any(
+                (r.get('tag') or '').lower() == '_audit.schema' for r in fallback
+            )
+            if not audit_present:
+                conformance.append(('_audit.schema', 'Custom'))
+            conformance.extend(conform_block)
+
     return [_BlockData(
         name='output',
         table_rows=table_rows,
@@ -529,6 +555,7 @@ def _collect_one_block(
         anchor_frozenset=frozenset(),
         anchor_key_dict={},
         suppress_fk_pk=False,
+        conformance_tags=conformance or None,
     )]
 
 
@@ -890,6 +917,12 @@ def _render_block(
                 row_vals = {rid: (v, vt) for rid, (_, v, vt) in cell_map.items()}
                 cols_list.append((tag, col_idx, row_vals))
         extra_cols_for[ref] = cols_list
+
+    # Inject conformance tags (ONE_BLOCK) before all other content.
+    if data.conformance_tags:
+        for ctag, cval in data.conformance_tags:
+            lines.append(f'{ctag}  {quote(cval, version)}')
+        first_category = False
 
     # Inject _audit_dataset.id when requested.
     if data.dataset_id is not None:

@@ -1452,6 +1452,7 @@ def _assert_same_data(
     conn_orig: sqlite3.Connection,
     conn_emit: sqlite3.Connection,
     schema: SchemaSpec,
+    exclude_tables: set[str] | None = None,
 ) -> None:
     """Assert that two databases hold the same CIF data modulo _block_id / _row_id.
 
@@ -1460,8 +1461,12 @@ def _assert_same_data(
     must be identical.
 
     Block names and insertion order may differ; they are not compared.
+    *exclude_tables* names tables to skip (e.g. conformance tables injected by ONE_BLOCK).
     """
+    skip = exclude_tables or set()
     for table_name in schema.tables:
+        if table_name in skip:
+            continue
         try:
             cols = _data_cols(conn_orig, table_name, schema)
         except Exception:
@@ -1657,7 +1662,9 @@ class TestEmitRoundTripIntegration:
 
     def test_one_structure_one_block(self, one_structure_conn, core_schema):
         conn2 = _emit_and_reingest(one_structure_conn, core_schema, EmitMode.ONE_BLOCK)
-        _assert_same_data(one_structure_conn, conn2, core_schema)
+        # audit / audit_conform are injected as conformance metadata by ONE_BLOCK
+        _assert_same_data(one_structure_conn, conn2, core_schema,
+                          exclude_tables={'audit', 'audit_conform'})
 
     def test_one_structure_grouped(self, one_structure_conn, core_schema):
         conn2 = _emit_and_reingest(one_structure_conn, core_schema, EmitMode.GROUPED)
@@ -1673,7 +1680,8 @@ class TestEmitRoundTripIntegration:
 
     def test_multi_one_one_block(self, multi_one_conn, pow_schema):
         conn2 = _emit_and_reingest(multi_one_conn, pow_schema, EmitMode.ONE_BLOCK)
-        _assert_same_data(multi_one_conn, conn2, pow_schema)
+        _assert_same_data(multi_one_conn, conn2, pow_schema,
+                          exclude_tables={'audit', 'audit_conform'})
 
 
 _SHARED_DATASET_CIF = """\
