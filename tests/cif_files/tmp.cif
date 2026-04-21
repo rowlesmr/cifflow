@@ -1,0 +1,47 @@
+#\#CIF_2.0
+#CIF_POW schema
+
+data_some_characters
+_audit_dataset.id	975eb50d-3a40-4a3c-9625-68f11733da5f
+
+_pd_diffractogram.id	A
+
+_pd_meas.datetime_initiated	2022-01-11T14:32:57+02:00
+_pd_calc.method	Rietveld
+_pd_meas.scan_method	cont
+
+_failover_scalar_tag value
+
+loop_
+	_pd_data.point_id
+	_pd_meas.2theta_scan
+    _non_structured.tag
+	_pd_proc.2theta_corrected
+	_pd_proc.intensity_total
+	_pd_proc.ls_weight
+	_pd_calc.intensity_total
+	_pd_calc.intensity_bkg
+        0    10.000000  q  10.000000     1.000000     1.000000     2.000000     2.000000
+        1    15.000000  w  15.000000     1.000000     1.000000     0.500000     0.500000
+        2    20.000000  e  20.000000     1.000000     1.000000    -0.666667    -0.666667
+        3    25.000000  r  25.000000     1.000000     1.000000    -1.500000    -1.500000
+
+loop_
+	_atom_site.label
+	_atom_site.type_symbol
+    _missing_tag.defn
+	_atom_site.site_symmetry_multiplicity
+	_atom_site.fract_x
+	_atom_site.fract_y
+	_atom_site.fract_z
+	_atom_site.occupancy
+	_atom_site.B_iso_or_equiv
+	Pa1 Pa blarg  2 0 0 0 1 1
+
+loop_
+    _unknown_tag.probable_key
+    _unknown_tag.value
+    _another_one.v
+    1 2 3
+    4 5 6
+    7 8 9
