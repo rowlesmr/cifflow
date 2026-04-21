@@ -176,7 +176,7 @@ def emit(
     if mode == EmitMode.ONE_BLOCK:
         raw_blocks = _collect_one_block(conn, schema)
     elif mode == EmitMode.ALL_BLOCKS:
-        raw_blocks = _collect_all_blocks(conn, schema, version)
+        raw_blocks = _collect_all_blocks(conn, schema, version, plan)
     elif mode == EmitMode.GROUPED:
         raw_blocks = _collect_grouped(conn, schema)
     else:  # ORIGINAL
@@ -526,24 +526,106 @@ def _collect_one_block(
     )]
 
 
+def _classify_pk_cols(
+    tdef: TableDef,
+    schema: SchemaSpec,
+) -> list[tuple[str, bool, str | None]]:
+    """Classify each domain PK column of a Loop table as Set-key or Loop-key.
+
+    Returns a list of ``(col_name, is_set_key, parent_tag)`` in primary-key
+    declaration order.  ``parent_tag`` is the canonical tag of the target
+    column in the Set category (e.g. ``'_pd_diffractogram.id'``), or ``None``
+    for Loop-key columns.
+    """
+    fk_map: dict[str, tuple[str, str]] = {}
+    for fk in tdef.foreign_keys:
+        if len(fk.source_columns) == 1:
+            fk_map[fk.source_columns[0]] = (fk.target_table, fk.target_columns[0])
+
+    result: list[tuple[str, bool, str | None]] = []
+    for col_name in tdef.primary_keys:
+        if col_name in _SYNTHETIC:
+            continue
+        if col_name in fk_map:
+            target_table, target_col = fk_map[col_name]
+            target_tdef = schema.tables.get(target_table)
+            if target_tdef and target_tdef.category_class == 'Set':
+                parent_tag = schema.column_to_tag.get((target_table, target_col))
+                result.append((col_name, True, parent_tag))
+                continue
+        result.append((col_name, False, None))
+    return result
+
+
+def _ordered_tables_all_blocks(
+    schema: SchemaSpec,
+    plan: 'OutputPlan | None',
+) -> list[str]:
+    """Return table names in ALL_BLOCKS emission order.
+
+    If *plan* supplies a category order (taken from the first BlockSpec that
+    has one), tables are emitted in that order (with wildcard expansion);
+    remaining tables follow alphabetically, Set categories before Loop.
+    """
+    all_tables = set(schema.tables.keys())
+    result: list[str] = []
+    listed: set[str] = set()
+
+    category_order = None
+    if plan:
+        for spec in plan.blocks:
+            if spec.category_order:
+                category_order = spec.category_order
+                break
+
+    if category_order:
+        for item in category_order:
+            names = item if isinstance(item, list) else [item]
+            for name in names:
+                if name.endswith('*'):
+                    for t in _expand_wildcard(name, schema):
+                        if t in all_tables and t not in listed:
+                            result.append(t)
+                            listed.add(t)
+                else:
+                    if name in all_tables and name not in listed:
+                        result.append(name)
+                        listed.add(name)
+
+    set_rem = sorted(t for t in all_tables if t not in listed and schema.tables[t].category_class == 'Set')
+    loop_rem = sorted(t for t in all_tables if t not in listed and schema.tables[t].category_class != 'Set')
+    result.extend(set_rem)
+    result.extend(loop_rem)
+    return result
+
+
 def _collect_all_blocks(
     conn: sqlite3.Connection,
     schema: SchemaSpec,
     version: CifVersion,
+    plan: 'OutputPlan | None' = None,
 ) -> list[_BlockData]:
-    """ALL_BLOCKS: one block per Set-anchor key combination.
+    """ALL_BLOCKS: one block per table per Set-key combination.
 
-    Set categories: one output block per row (each row is a distinct instance).
-    Loop categories: grouped by the domain PK of the nearest Set ancestor via FK
-    chain.  Tables with no Set ancestor are grouped by ``_block_id``.
+    Each table is emitted independently into its own block(s):
 
-    Mirrors ``_collect_grouped`` logic.  In CIF 2.0, each block receives a
-    shared ``_audit_dataset.id`` UUID that links all blocks to the one dataset
-    produced by this ``emit()`` call.
+    - **Set category**: one block per row.  Block name =
+      ``{table_name}_{pk_val...}``.
+    - **Loop category, only Loop-category keys**: one block for all rows.
+      Block name = ``{table_name}``.
+    - **Loop category, one or more Set-category keys**: one block per unique
+      combination of Set-key values.  Block name =
+      ``{table_name}_{set_val...}``.  Set-key values are emitted as scalar
+      tag-value pairs above the loop using the parent category's tag name;
+      the corresponding FK columns are suppressed from the loop header.
 
-    Raises ``ValueError`` if the database contains fallback rows (unknown tags
-    cannot be reliably assigned to a dictionary-split block) or rows in keyless
-    Set tables (no domain PK means no unambiguous block identity).
+    Table emission order follows *plan*'s category order (same wildcard
+    notation as GROUPED); unspecified tables follow alphabetically
+    (Set categories before Loop).
+
+    Raises ``ValueError`` if the database contains fallback rows or rows in
+    keyless Set tables — neither can be unambiguously assigned to a
+    dictionary-split block.
     """
     # Guard: fallback rows
     fallback_count = conn.execute('SELECT COUNT(*) FROM "_cif_fallback"').fetchone()[0]
@@ -574,28 +656,90 @@ def _collect_all_blocks(
             f"dictionary-split block."
         )
 
-    dataset_id: str | None = None
-    if version == CifVersion.CIF_2_0:
-        dataset_id = str(uuid.uuid4())
+    dataset_id: str | None = str(uuid.uuid4()) if version == CifVersion.CIF_2_0 else None
 
-    grouped = _collect_grouped(conn, schema)
+    result: list[_BlockData] = []
 
-    result = []
-    for block in grouped:
-        # Drop `audit_dataset` from table_rows so the emission UUID is always
-        # injected as `_audit_dataset.id` for every block.  This ensures all
-        # output blocks share the same dataset identifier when re-ingested.
-        table_rows = {k: v for k, v in block.table_rows.items()
-                      if k != 'audit_dataset'}
-        result.append(_BlockData(
-            name=block.name,
-            table_rows=table_rows,
-            fallback_rows=block.fallback_rows,
-            anchor_frozenset=block.anchor_frozenset,
-            anchor_key_dict=block.anchor_key_dict,
-            suppress_fk_pk=False,
-            dataset_id=dataset_id,
-        ))
+    for table_name in _ordered_tables_all_blocks(schema, plan):
+        tdef = schema.tables[table_name]
+        rows = _fetch_rows(conn, table_name)
+        if not rows:
+            continue
+
+        domain_pks = [pk for pk in tdef.primary_keys if pk not in _SYNTHETIC]
+
+        if tdef.category_class == 'Set':
+            # One block per row.
+            for row in sorted(rows, key=lambda r: tuple(r.get(pk) or '' for pk in domain_pks)):
+                pk_vals = [str(row.get(pk) or '') for pk in domain_pks]
+                block_name = _sanitize_block_name('_'.join([table_name] + pk_vals)) or table_name
+                result.append(_BlockData(
+                    name=block_name,
+                    table_rows={table_name: [row]},
+                    fallback_rows=[],
+                    anchor_frozenset=frozenset(),
+                    anchor_key_dict={},
+                    suppress_fk_pk=False,
+                    dataset_id=dataset_id,
+                ))
+        else:
+            # Loop category: classify PK columns.
+            col_info = _classify_pk_cols(tdef, schema)
+            set_key_cols = [(col, tag) for col, is_set, tag in col_info if is_set]
+
+            if not set_key_cols:
+                # Pure Loop — one block for all rows.
+                block_name = _sanitize_block_name(table_name) or table_name
+                result.append(_BlockData(
+                    name=block_name,
+                    table_rows={table_name: rows},
+                    fallback_rows=[],
+                    anchor_frozenset=frozenset(),
+                    anchor_key_dict={},
+                    suppress_fk_pk=False,
+                    dataset_id=dataset_id,
+                ))
+            else:
+                # Group rows by Set-key tuple.
+                groups: dict[tuple, list[dict]] = {}
+                for row in rows:
+                    key = tuple(row.get(col) for col, _ in set_key_cols)
+                    groups.setdefault(key, []).append(row)
+
+                # Build FK map for Set-key columns: col → (target_table, target_col)
+                set_fk_map: dict[str, tuple[str, str]] = {}
+                for fk in tdef.foreign_keys:
+                    if len(fk.source_columns) == 1 and fk.source_columns[0] in {c for c, _ in set_key_cols}:
+                        set_fk_map[fk.source_columns[0]] = (fk.target_table, fk.target_columns[0])
+
+                for set_vals in sorted(groups, key=lambda t: tuple(v or '' for v in t)):
+                    group_rows = groups[set_vals]
+                    val_strs = [str(v or '') for v in set_vals]
+                    block_name = _sanitize_block_name('_'.join([table_name] + val_strs)) or table_name
+
+                    # Inject synthetic single-row Set parent entries so that
+                    # _suppressed_fk_pk_cols can find them (suppressing the FK
+                    # columns from the loop) and _render_set_category emits them
+                    # as scalar tag-value pairs above the loop.
+                    block_table_rows: dict[str, list[dict]] = {table_name: group_rows}
+                    for (col, _parent_tag), val in zip(set_key_cols, set_vals):
+                        if col in set_fk_map and val is not None:
+                            target_table, target_col = set_fk_map[col]
+                            block_table_rows[target_table] = [
+                                {'_block_id': '', '_row_id': 0, target_col: val}
+                            ]
+
+                    result.append(_BlockData(
+                        name=block_name,
+                        table_rows=block_table_rows,
+                        fallback_rows=[],
+                        anchor_frozenset=frozenset(),
+                        anchor_key_dict={},
+                        suppress_fk_pk=True,
+                        suppress_loop_fk_pk=True,
+                        dataset_id=dataset_id,
+                    ))
+
     return result
 
 
