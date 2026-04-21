@@ -671,24 +671,25 @@ class TestAllBlocks:
     def grouped_schema(self):
         return _make_schema(_GROUPED_DIC)
 
-    def test_keyless_set_one_block_per_source_block(self, mini_schema):
+    def test_keyless_set_raises(self, mini_schema):
+        """ALL_BLOCKS raises ValueError when a keyless Set table contains data."""
         conn = _ingest_src(
             '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n',
             mini_schema,
         )
-        result = emit(conn, schema=mini_schema, mode=EmitMode.ALL_BLOCKS)
-        headers = [l for l in result.splitlines() if l.startswith('data_')]
-        assert len(headers) == 1
-        assert '_cell.length_a  5.4' in result
+        with pytest.raises(ValueError, match='keyless Set'):
+            emit(conn, schema=mini_schema, mode=EmitMode.ALL_BLOCKS)
 
-    def test_round_trip(self, mini_schema):
-        conn = _ingest_src(
-            '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n_cell.length_b  3.2\n',
-            mini_schema,
+    def test_fallback_rows_raise(self, grouped_schema):
+        """ALL_BLOCKS raises ValueError when unknown tags are present in fallback."""
+        cif_src = (
+            '#\\#CIF_2.0\ndata_b\n'
+            '_expt.id  exp1\n'
+            '_unknown.tag  hello\n'
         )
-        result = emit(conn, schema=mini_schema, mode=EmitMode.ALL_BLOCKS)
-        cif2, errors = build(result)
-        assert not errors
+        conn = _ingest_src(cif_src, grouped_schema)
+        with pytest.raises(ValueError, match='fallback'):
+            emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
 
     def test_two_set_rows_produce_two_blocks(self, grouped_schema):
         """Two distinct expt.id values → two output blocks."""

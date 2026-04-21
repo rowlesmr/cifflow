@@ -540,7 +540,40 @@ def _collect_all_blocks(
     Mirrors ``_collect_grouped`` logic.  In CIF 2.0, each block receives a
     shared ``_audit_dataset.id`` UUID that links all blocks to the one dataset
     produced by this ``emit()`` call.
+
+    Raises ``ValueError`` if the database contains fallback rows (unknown tags
+    cannot be reliably assigned to a dictionary-split block) or rows in keyless
+    Set tables (no domain PK means no unambiguous block identity).
     """
+    # Guard: fallback rows
+    fallback_count = conn.execute('SELECT COUNT(*) FROM "_cif_fallback"').fetchone()[0]
+    if fallback_count:
+        raise ValueError(
+            f"ALL_BLOCKS requires all tags to be known to the dictionary, but "
+            f"{fallback_count} fallback row(s) are present in _cif_fallback. "
+            f"Unknown tags cannot be reliably assigned to a dictionary-split block."
+        )
+
+    # Guard: keyless Set tables (Set tables with no domain primary key)
+    keyless_problems: list[str] = []
+    for table_name, tdef in schema.tables.items():
+        if tdef.category_class != 'Set':
+            continue
+        domain_pks = [pk for pk in tdef.primary_keys if pk not in _SYNTHETIC]
+        if domain_pks:
+            continue
+        count = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()[0]
+        if count:
+            keyless_problems.append(f"{table_name} ({count} row(s))")
+    if keyless_problems:
+        raise ValueError(
+            f"ALL_BLOCKS requires every Set category to have a domain primary key, "
+            f"but the following keyless Set table(s) contain data: "
+            f"{', '.join(keyless_problems)}. "
+            f"Rows in keyless Sets cannot be unambiguously associated with a "
+            f"dictionary-split block."
+        )
+
     dataset_id: str | None = None
     if version == CifVersion.CIF_2_0:
         dataset_id = str(uuid.uuid4())
