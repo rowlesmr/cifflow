@@ -15,9 +15,9 @@ from pycifparse.dictionary.schema_apply import apply_fallback_schema
 # ---------------------------------------------------------------------------
 
 class TestEmitFallbackCreateStatements:
-    def test_returns_four_statements(self):
+    def test_statement_count(self):
         stmts = emit_fallback_create_statements()
-        assert len(stmts) == 4
+        assert len(stmts) == 6
 
     def test_first_is_create_table(self):
         stmts = emit_fallback_create_statements()
@@ -43,6 +43,16 @@ class TestEmitFallbackCreateStatements:
         stmts = emit_fallback_create_statements()
         assert 'CREATE TABLE IF NOT EXISTS' in stmts[3]
         assert '_validation_result' in stmts[3]
+
+    def test_fifth_is_block_order_table(self):
+        stmts = emit_fallback_create_statements()
+        assert 'CREATE TABLE IF NOT EXISTS' in stmts[4]
+        assert '_block_order' in stmts[4]
+
+    def test_sixth_is_tag_presence_table(self):
+        stmts = emit_fallback_create_statements()
+        assert 'CREATE TABLE IF NOT EXISTS' in stmts[5]
+        assert '_tag_presence' in stmts[5]
 
 
 # ---------------------------------------------------------------------------

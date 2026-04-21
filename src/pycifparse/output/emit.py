@@ -11,6 +11,7 @@ unrelated sources) are not detected or resolved by the output layer.
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 import uuid
@@ -342,29 +343,13 @@ def _collect_original(
     result = []
     for bid in block_ids:
         table_rows = {}
-        for table_name in schema.tables:
-            rows = _fetch_rows(conn, table_name, '"_block_id" = ?', (bid,))
+        for table_name, table_def in schema.tables.items():
+            if table_def.category_class == 'Set':
+                rows = _fetch_set_rows_for_block(conn, bid, table_name, table_def)
+            else:
+                rows = _fetch_rows(conn, table_name, '"_block_id" = ?', (bid,))
             if rows:
                 table_rows[table_name] = rows
-
-        # audit_dataset rows must reflect the membership of this block, not
-        # wherever the rows happen to be stored (only one block owns them).
-        if 'audit_dataset' in schema.tables:
-            try:
-                dataset_ids = [
-                    r[0] for r in conn.execute(
-                        'SELECT "_audit_dataset_id" FROM "_block_dataset_membership" '
-                        'WHERE "_block_id" = ? AND "_audit_dataset_id" != ""',
-                        (bid,),
-                    ).fetchall()
-                ]
-            except sqlite3.OperationalError:
-                dataset_ids = []
-            if dataset_ids:
-                table_rows['audit_dataset'] = [
-                    {'_block_id': bid, '_row_id': i, 'id': did}
-                    for i, did in enumerate(dataset_ids)
-                ]
 
         fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
         result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True, suppress_loop_fk_pk=True))
@@ -1469,6 +1454,54 @@ def _merge_su(measurand: str, scaled_su: str) -> str:
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
+
+def _fetch_set_rows_for_block(
+    conn: sqlite3.Connection,
+    block_id: str,
+    table_name: str,
+    table_def: 'TableDef',
+) -> list[dict]:
+    """Return Set-class rows that *block_id* contributed to.
+
+    Rows owned by this block (_block_id = block_id, including stubs) are returned
+    unmasked.  Rows that this block contributed to but does not own (a later block
+    contributed different columns to a shared key) are returned with non-contributed
+    columns masked to None so only the block's own tags are emitted.
+    """
+    owned_rows: dict[tuple, dict] = {
+        tuple(row.get(pk) for pk in table_def.primary_keys): row
+        for row in _fetch_rows(conn, table_name, '"_block_id" = ?', (block_id,))
+    }
+
+    try:
+        presence = conn.execute(
+            'SELECT "column_name", "pk_json" FROM "_tag_presence" '
+            'WHERE "_block_id" = ? AND "table_name" = ?',
+            (block_id, table_name),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return list(owned_rows.values())
+
+    pk_to_cols: dict[str, set[str]] = {}
+    for col_name, pk_json in presence:
+        pk_to_cols.setdefault(pk_json, set()).add(col_name)
+
+    result: list[dict] = list(owned_rows.values())
+    for pk_json, contrib_cols in pk_to_cols.items():
+        pk_vals = json.loads(pk_json)
+        pk_key = tuple(pk_vals)
+        if pk_key in owned_rows:
+            continue  # Already included unmasked
+        where = ' AND '.join(f'"{c}" = ?' for c in table_def.primary_keys)
+        for row in _fetch_rows(conn, table_name, where, tuple(pk_vals)):
+            masked = {
+                k: (v if k in contrib_cols or k in _SYNTHETIC else None)
+                for k, v in row.items()
+            }
+            masked['_block_id'] = block_id
+            result.append(masked)
+    return result
+
 
 def _fetch_rows(
     conn: sqlite3.Connection,

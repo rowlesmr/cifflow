@@ -1506,6 +1506,70 @@ class TestEmitRoundTripIntegration:
         _assert_same_data(multi_one_conn, conn2, pow_schema)
 
 
+_SHARED_DATASET_CIF = """\
+#\\#CIF_2.0
+
+data_block1
+_audit_dataset.id 7002c403-8d26-4c52-bd46-6b12bc761a48
+_diffrn.id A
+
+data_block2
+_audit_dataset.id 7002c403-8d26-4c52-bd46-6b12bc761a48
+_diffrn.id B
+
+data_block3
+_audit_dataset.id 7002c403-8d26-4c52-bd46-6b12bc761a48
+_diffrn.id C
+"""
+
+_DATASET_UUID = '7002c403-8d26-4c52-bd46-6b12bc761a48'
+
+
+@pytest.mark.slow
+class TestOriginalModeSharedSet:
+    """ORIGINAL mode must re-emit every block's own Set tags even when multiple
+    blocks share the same Set key (here: all three blocks share one audit_dataset.id)."""
+
+    @pytest.fixture(scope='class')
+    def shared_dataset_conn(self, pow_schema):
+        return _ingest_src(_SHARED_DATASET_CIF, pow_schema)
+
+    @pytest.fixture(scope='class')
+    def shared_dataset_cif_out(self, shared_dataset_conn, pow_schema):
+        cif_out = emit(shared_dataset_conn, pow_schema, mode=EmitMode.ORIGINAL)
+        cif_rt, errors = build(cif_out)
+        assert not errors
+        return cif_rt
+
+    def test_all_blocks_have_audit_dataset_id(self, shared_dataset_cif_out):
+        """Every output block must contain _audit_dataset.id."""
+        for block_name in ('block1', 'block2', 'block3'):
+            assert block_name in shared_dataset_cif_out, \
+                f'block {block_name!r} missing from output'
+            block = shared_dataset_cif_out[block_name]
+            assert '_audit_dataset.id' in block, \
+                f'block {block_name!r}: _audit_dataset.id absent'
+            vals = block['_audit_dataset.id']
+            assert vals[0] == _DATASET_UUID, (
+                f'block {block_name!r}: expected _audit_dataset.id = {_DATASET_UUID!r}, '
+                f'got {vals!r}'
+            )
+
+    def test_all_blocks_have_correct_diffrn_id(self, shared_dataset_cif_out):
+        """Every output block must contain its own _diffrn.id."""
+        expected = {'block1': 'A', 'block2': 'B', 'block3': 'C'}
+        for block_name, diffrn_id in expected.items():
+            assert block_name in shared_dataset_cif_out, \
+                f'block {block_name!r} missing from output'
+            block = shared_dataset_cif_out[block_name]
+            assert '_diffrn.id' in block, \
+                f'block {block_name!r}: _diffrn.id absent'
+            vals = block['_diffrn.id']
+            assert vals[0] == diffrn_id, (
+                f'block {block_name!r}: expected _diffrn.id = {diffrn_id!r}, got {vals!r}'
+            )
+
+
 # ---------------------------------------------------------------------------
 # OutputPlan — matches, wildcards, merge groups, single_block, block_namer
 # ---------------------------------------------------------------------------

@@ -725,6 +725,8 @@ class _Ingester:
         self.block_order_rows: list[tuple[str, int]] = []
         # (check_name, severity, block_id, detail, id_regime) for _validation_result
         self.validation_rows: list[dict] = []
+        # (block_id, table_name, column_name, pk_json) for _tag_presence
+        self.tag_presence_rows: list[tuple[str, str, str, str]] = []
 
     # ── Public entry point ────────────────────────────────────────────────────
 
@@ -863,6 +865,10 @@ class _Ingester:
             if tbl_name not in self.merged_rows:
                 self.merged_rows[tbl_name] = {}
             pk = _pk_tuple(row, table)
+            pk_json_str = json.dumps(list(pk))
+            for col, val in col_dict.items():
+                if val is not None:
+                    self.tag_presence_rows.append((block_id, tbl_name, col, pk_json_str))
             if pk not in self.merged_rows[tbl_name]:
                 self.merged_rows[tbl_name][pk] = dict(row)
             else:
@@ -1361,6 +1367,14 @@ class _Ingester:
                      r['value_type'], r['loop_id'], r['col_index'])
                     for r in self.fallback_rows
                 ],
+            )
+
+        # _tag_presence
+        if self.tag_presence_rows:
+            cur.executemany(
+                'INSERT OR IGNORE INTO "_tag_presence" '
+                '("_block_id", "table_name", "column_name", "pk_json") VALUES (?, ?, ?, ?)',
+                self.tag_presence_rows,
             )
 
         # _block_order

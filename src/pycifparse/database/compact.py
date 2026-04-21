@@ -18,6 +18,7 @@ _SU_RE = re.compile(r'\(\d+\)$')
 # Fallback-tier table names that are always copied, never dropped.
 _FALLBACK_TABLES = (
     '_cif_fallback', '_block_dataset_membership', '_validation_result', '_block_order',
+    '_tag_presence',
 )
 
 _FALLBACK_DDL = [
@@ -58,6 +59,15 @@ _FALLBACK_DDL = [
         'CREATE TABLE IF NOT EXISTS "_block_order" (\n'
         '    "_block_id"  TEXT     PRIMARY KEY,\n'
         '    "position"   INTEGER  NOT NULL\n'
+        ')'
+    ),
+    (
+        'CREATE TABLE IF NOT EXISTS "_tag_presence" (\n'
+        '    "_block_id"    TEXT  NOT NULL,\n'
+        '    "table_name"   TEXT  NOT NULL,\n'
+        '    "column_name"  TEXT  NOT NULL,\n'
+        '    "pk_json"      TEXT  NOT NULL,\n'
+        '    PRIMARY KEY ("_block_id", "table_name", "column_name")\n'
         ')'
     ),
 ]
