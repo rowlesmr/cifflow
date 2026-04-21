@@ -45,6 +45,7 @@ class _BlockData:
     anchor_frozenset: frozenset[str]
     anchor_key_dict: dict[str, list[str]]
     suppress_fk_pk: bool
+    suppress_loop_fk_pk: bool = False  # ORIGINAL mode only: suppress FK cols from Loop categories
     dataset_id: str | None = None
 
 
@@ -54,6 +55,7 @@ def _make_block_data(
     fallback_rows: list[dict],
     schema: SchemaSpec,
     suppress_fk_pk: bool,
+    suppress_loop_fk_pk: bool = False,
     dataset_id: str | None = None,
 ) -> _BlockData:
     anchor_fs = frozenset(
@@ -78,6 +80,7 @@ def _make_block_data(
         anchor_frozenset=anchor_fs,
         anchor_key_dict=anchor_kd,
         suppress_fk_pk=suppress_fk_pk,
+        suppress_loop_fk_pk=suppress_loop_fk_pk,
         dataset_id=dataset_id,
     )
 
@@ -321,6 +324,7 @@ def _replace_name(block: _BlockData, name: str) -> _BlockData:
         anchor_frozenset=block.anchor_frozenset,
         anchor_key_dict=block.anchor_key_dict,
         suppress_fk_pk=block.suppress_fk_pk,
+        suppress_loop_fk_pk=block.suppress_loop_fk_pk,
         dataset_id=block.dataset_id,
     )
 
@@ -342,8 +346,28 @@ def _collect_original(
             rows = _fetch_rows(conn, table_name, '"_block_id" = ?', (bid,))
             if rows:
                 table_rows[table_name] = rows
+
+        # audit_dataset rows must reflect the membership of this block, not
+        # wherever the rows happen to be stored (only one block owns them).
+        if 'audit_dataset' in schema.tables:
+            try:
+                dataset_ids = [
+                    r[0] for r in conn.execute(
+                        'SELECT "_audit_dataset_id" FROM "_block_dataset_membership" '
+                        'WHERE "_block_id" = ? AND "_audit_dataset_id" != ""',
+                        (bid,),
+                    ).fetchall()
+                ]
+            except sqlite3.OperationalError:
+                dataset_ids = []
+            if dataset_ids:
+                table_rows['audit_dataset'] = [
+                    {'_block_id': bid, '_row_id': i, 'id': did}
+                    for i, did in enumerate(dataset_ids)
+                ]
+
         fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
-        result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True))
+        result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True, suppress_loop_fk_pk=True))
     return result
 
 
@@ -614,7 +638,10 @@ def _render_block(
             if not cols:
                 continue
 
-            if data.suppress_fk_pk and table_def.category_class == 'Set' and len(rows) == 1:
+            if data.suppress_fk_pk and (
+                (table_def.category_class == 'Set' and len(rows) == 1)
+                or data.suppress_loop_fk_pk
+            ):
                 suppressed = _suppressed_fk_pk_cols(table_def, rows, data.table_rows, schema)
                 cols = [c for c in cols if c not in suppressed]
             if not cols:
@@ -1575,10 +1602,19 @@ def _all_block_ids_for_tables(conn: sqlite3.Connection, table_names: list[str]) 
 
 
 def _all_block_ids(conn: sqlite3.Connection, schema: SchemaSpec) -> list[str]:
-    """Return sorted list of all distinct ``_block_id`` values across all tables."""
+    """Return all distinct ``_block_id`` values in original ingestion order.
+
+    Falls back to sorted order if ``_block_order`` is absent (e.g. legacy databases).
+    """
+    try:
+        cursor = conn.execute('SELECT "_block_id" FROM "_block_order" ORDER BY "position"')
+        return [row[0] for row in cursor.fetchall()]
+    except sqlite3.OperationalError:
+        pass
+
+    # Legacy fallback: collect from all tables and sort
     seen: set[str] = set()
     ids: list[str] = []
-
     for table_name in list(schema.tables.keys()) + ['_cif_fallback']:
         try:
             cursor = conn.execute(f'SELECT DISTINCT "_block_id" FROM "{table_name}"')
@@ -1588,5 +1624,4 @@ def _all_block_ids(conn: sqlite3.Connection, schema: SchemaSpec) -> list[str]:
                     ids.append(bid)
         except sqlite3.OperationalError:
             pass
-
     return sorted(ids)

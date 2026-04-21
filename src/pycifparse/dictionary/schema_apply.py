@@ -97,8 +97,9 @@ def apply_fallback_schema(
     are used, call :func:`apply_schema` first and then this function.
 
     In addition to ``_cif_fallback``, this function creates
-    ``_block_dataset_membership`` and ``_validation_result`` — the metadata
-    tables used by the ingestion layer for namespace tracking.
+    ``_block_dataset_membership``, ``_validation_result``, and ``_block_order``
+    — the metadata tables used by the ingestion layer for namespace tracking
+    and block ordering.
 
     Parameters
     ----------
@@ -133,6 +134,7 @@ def apply_fallback_schema(
                 conn.execute('DROP TABLE IF EXISTS "_cif_fallback"')
                 conn.execute('DROP TABLE IF EXISTS "_block_dataset_membership"')
                 conn.execute('DROP TABLE IF EXISTS "_validation_result"')
+                conn.execute('DROP TABLE IF EXISTS "_block_order"')
             for stmt in stmts:
                 conn.execute(stmt)
         except sqlite3.Error:
