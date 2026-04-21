@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from pycifparse.dictionary.schema import ColumnDef
+from pycifparse.ingestion.ingest import decode_container
 from pycifparse.output.quote import is_table_key_quotable
 
 _SENTINELS = frozenset({'.', '?'})
@@ -138,7 +139,7 @@ def check_type_container(
 
     if tc is None or tc == 'Single':
         try:
-            parsed = json.loads(value)
+            parsed = decode_container(value)
         except (json.JSONDecodeError, ValueError):
             return [], False, None
         if isinstance(parsed, list):
@@ -149,7 +150,7 @@ def check_type_container(
 
     if tc in ('List', 'Array', 'Matrix'):
         try:
-            parsed = json.loads(value)
+            parsed = decode_container(value)
         except (json.JSONDecodeError, ValueError):
             return [('type_container', 'Error', "Expected JSON array, got scalar", value)], True, None
         if isinstance(parsed, dict):
@@ -160,7 +161,7 @@ def check_type_container(
 
     if tc == 'Table':
         try:
-            parsed = json.loads(value)
+            parsed = decode_container(value)
         except (json.JSONDecodeError, ValueError):
             return [('type_container', 'Error', "Expected JSON object, got scalar", value)], True, None
         if isinstance(parsed, list):
