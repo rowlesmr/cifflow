@@ -671,7 +671,7 @@ class TestFallbackScalars:
             ).fetchall()
         }
         assert tables == {'_cif_fallback', '_block_dataset_membership',
-                          '_validation_result', '_block_order'}
+                          '_validation_result', '_block_order', '_tag_presence'}
 
 
 # ---------------------------------------------------------------------------

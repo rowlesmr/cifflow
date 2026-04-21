@@ -725,6 +725,8 @@ class _Ingester:
         self.block_order_rows: list[tuple[str, int]] = []
         # (check_name, severity, block_id, detail, id_regime) for _validation_result
         self.validation_rows: list[dict] = []
+        # (block_id, table_name, column_name, pk_json) for _tag_presence
+        self.tag_presence_rows: list[tuple[str, str, str, str]] = []
 
     # ── Public entry point ────────────────────────────────────────────────────
 
@@ -863,6 +865,10 @@ class _Ingester:
             if tbl_name not in self.merged_rows:
                 self.merged_rows[tbl_name] = {}
             pk = _pk_tuple(row, table)
+            pk_json_str = json.dumps(list(pk))
+            for col, val in col_dict.items():
+                if val is not None:
+                    self.tag_presence_rows.append((block_id, tbl_name, col, pk_json_str))
             if pk not in self.merged_rows[tbl_name]:
                 self.merged_rows[tbl_name][pk] = dict(row)
             else:
@@ -891,6 +897,11 @@ class _Ingester:
             _apply_fk(row, table, self.schema, None,
                       fk_accumulator, self.propagate_fk, self._emit,
                       block_id, self.merged_rows, self.row_id_counters)
+            pk = _pk_tuple(row, table)
+            pk_json_str = json.dumps(list(pk))
+            for col, val in col_dict.items():
+                if val is not None:
+                    self.tag_presence_rows.append((block_id, tbl_name, col, pk_json_str))
             _merge_into(
                 self.merged_rows, tbl_name, row, table,
                 self.row_id_counters, self._emit, self._emit_error,
@@ -1177,6 +1188,16 @@ class _Ingester:
             ids: dict[str, int] = {}
             for tbl_name, row in iter_rows.items():
                 table = self.schema.tables[tbl_name]
+                # Record tag presence when this loop row merges into an existing
+                # row owned by a different block (contributed-but-not-owned case).
+                pk = _pk_tuple(row, table)
+                existing = self.merged_rows.get(tbl_name, {}).get(pk)
+                if existing is not None and existing.get('_block_id') != block_id:
+                    pk_json_str = json.dumps(list(pk))
+                    direct_cols = {col_name for col_name, _, _ in loop_tables.get(tbl_name, [])}
+                    for col in direct_cols:
+                        if row.get(col) is not None:
+                            self.tag_presence_rows.append((block_id, tbl_name, col, pk_json_str))
                 rid = _merge_into(
                     self.merged_rows, tbl_name, row, table,
                     self.row_id_counters, self._emit, self._emit_error,
@@ -1212,6 +1233,7 @@ class _Ingester:
                     'value_type': vtype,
                     'loop_id': loop_id_counter,
                     'col_index': col_idx,
+                    'ref_table': first_structured_table,
                 })
 
         # Single-iteration fk_accumulator rule
@@ -1355,12 +1377,21 @@ class _Ingester:
             cur.executemany(
                 'INSERT INTO "_cif_fallback" '
                 '("_block_id", "_row_id", "tag", "value", "value_type", '
-                '"loop_id", "col_index") VALUES (?, ?, ?, ?, ?, ?, ?)',
+                '"loop_id", "col_index", "ref_table") VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     (r['_block_id'], r['_row_id'], r['tag'], r['value'],
-                     r['value_type'], r['loop_id'], r['col_index'])
+                     r['value_type'], r.get('loop_id'), r.get('col_index'),
+                     r.get('ref_table'))
                     for r in self.fallback_rows
                 ],
+            )
+
+        # _tag_presence
+        if self.tag_presence_rows:
+            cur.executemany(
+                'INSERT OR IGNORE INTO "_tag_presence" '
+                '("_block_id", "table_name", "column_name", "pk_json") VALUES (?, ?, ?, ?)',
+                self.tag_presence_rows,
             )
 
         # _block_order

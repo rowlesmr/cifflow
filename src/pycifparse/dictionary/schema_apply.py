@@ -135,6 +135,7 @@ def apply_fallback_schema(
                 conn.execute('DROP TABLE IF EXISTS "_block_dataset_membership"')
                 conn.execute('DROP TABLE IF EXISTS "_validation_result"')
                 conn.execute('DROP TABLE IF EXISTS "_block_order"')
+                conn.execute('DROP TABLE IF EXISTS "_tag_presence"')
             for stmt in stmts:
                 conn.execute(stmt)
         except sqlite3.Error:

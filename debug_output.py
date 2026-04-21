@@ -21,7 +21,7 @@ import sqlite3
 ROOT     = pathlib.Path(__file__).parent
 DIC_DIR  = ROOT / 'data' / 'dictionaries'
 
-FILE_NAME = "multi_one" # "pathological_key_block"
+FILE_NAME = "tmp" # "multi_one" # "pathological_key_block"
 
 CIF_FILE = ROOT / 'tests' / 'cif_files' / (FILE_NAME +'.cif')
 
