@@ -1,5 +1,43 @@
 # pycifparse — Lessons Learned
 
+## Lesson 100 — ALL_BLOCKS `dataset_id` must come from `_block_dataset_membership`, not a single upfront UUID (2026-04-21)
+
+**Context:** ALL_BLOCKS mode injected one `uuid.uuid4()` for all emitted blocks. The fidelity checker then found `_audit_dataset.id` values differing between the original file and re-emitted file.
+
+**Fix:** `_resolve_dataset_id()` queries `_block_dataset_membership` for the originating `_block_id` values of each row group. Returns the existing ID (str), a sorted list when multiple IDs (emitted as a `loop_`), or a fresh UUID only when no membership data exists.
+
+**Rule:** In ALL_BLOCKS mode, `dataset_id` must be resolved per block from the database, not generated once globally. `_BlockData.dataset_id` may be `str | list[str] | None`.
+
+---
+
+## Lesson 99 — `_sort_and_merge` re-sorts ALL_BLOCKS output alphabetically, discarding plan ordering (2026-04-21)
+
+**Context:** `_ordered_tables_all_blocks` orders table processing by `plan.category_order`, but ALL_BLOCKS blocks all have empty `anchor_frozenset`, so they all match the catch-all spec and are then sorted alphabetically by `_sort_and_merge`, undoing the plan order.
+
+**Fix:** In `emit()`, ALL_BLOCKS skips `_sort_and_merge` entirely: `ordered = [(b, None) for b in raw_blocks]`. The ordering is already baked into the list from `_collect_all_blocks`.
+
+**Rule:** `_sort_and_merge` is designed for GROUPED/ORIGINAL anchor-key matching. For ALL_BLOCKS, bypass it and preserve the collector's output order directly.
+
+---
+
+## Lesson 98 — `plan.specs` not `plan.blocks` (2026-04-21)
+
+**Context:** `_ordered_tables_all_blocks` referenced `plan.blocks` — a non-existent attribute. `OutputPlan` uses `specs`.
+
+**Rule:** `OutputPlan.specs` is the list of `BlockSpec` objects. There is no `.blocks` attribute.
+
+---
+
+## Lesson 97 — `_classify_pk_cols` returns 5-tuples; all unpack sites must match (2026-04-21)
+
+**Context:** The Loop branch of `_collect_all_blocks` still unpacked 3-tuples `(col, tag)` after `_classify_pk_cols` was extended to return `(col, is_set, tag, set_table, set_col)`. This caused `ValueError: not enough values to unpack` and left the old `set_fk_map` approach in place.
+
+**Fix:** Updated unpacking to `(col, tag, st, sc)` for the filtered list and `(col, _, _, _)` for the grouping key. Removed the now-redundant `set_fk_map` construction.
+
+**Rule:** When changing a return tuple's arity, grep for every unpack site before closing. The Set branch and Loop branch of the same function can diverge silently.
+
+---
+
 ## Lesson 96 — Test callbacks that accept a two-arg signature break when a third kwarg is added (2026-04-20)
 
 **Context:** `on_error` callback in `ingest()` extended from `(msg, block_id)` to `(msg, block_id, *, table, column, key_values)`.

@@ -4,12 +4,23 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 7 complete. Unified validation layer implemented.
+**Current stage:** Stage 7 complete. ALL_BLOCKS mode complete. Lessons 97–100.
 
-**Test suite state (2026-04-19):**
-- ~1504 tests pass (non-slow): `.venv/Scripts/python -m pytest -k "not slow" --tb=short -q`
-- 58 slow tests pass: `.venv/Scripts/python -m pytest -m slow`
-- Total: ~1562 passing, 0 xfail, 0 failures
+**Test suite state (2026-04-21):**
+- 148 emit tests pass
+- Full suite: run `.venv/Scripts/python -m pytest -k "not slow" --tb=short -q` to confirm
+
+### Completed task: ALL_BLOCKS mode (2026-04-21) ✓
+
+- `_classify_pk_cols` extended to 5-tuple `(col, is_set, tag, set_table, set_col)` — handles multi-column FKs and one-hop Loop intermediates
+- Loop branch updated to use 5-tuple unpacking; removed `set_fk_map`
+- `_BlockData.preferred_category_order` — parent tables before child in block output
+- `_ordered_tables_all_blocks` — controls table iteration order from plan's `category_order`
+- `_collect_all_blocks` — guards (fallback rows, keyless Sets), per-table block generation, synthetic parent row injection
+- `_resolve_dataset_id` — per-block lookup via `_block_dataset_membership`; preserves original `_audit_dataset.id`; returns `str | list[str] | None`; `_BlockData.dataset_id` type widened accordingly; `_render_block` emits multi-ID as `loop_`
+- `_sort_and_merge` bypassed for ALL_BLOCKS (plan ordering already baked in)
+- `plan.blocks` typo fixed to `plan.specs`
+- Lessons 97–100
 
 ---
 
@@ -373,12 +384,7 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 
 ### Planned features
 
-- **Investigate multi-dataset blocks**: When blocks have multiple `_audit_dataset.id` values
-  (i.e. a block belongs to more than one dataset), `ingest()` raises `ValueError` during
-  re-ingestion of GROUPED-mode output because the auto-detection finds no common dataset ID
-  across blocks. Need to decide: should GROUPED output preserve all dataset IDs per block, or
-  should re-ingestion be more tolerant (union rather than intersection), or should the emit layer
-  warn when emitting a multi-dataset file in GROUPED mode?
+- **Investigate multi-dataset blocks (GROUPED)**: ALL_BLOCKS now correctly emits multiple `_audit_dataset.id` values as a `loop_` when a row group spans more than one original dataset. The equivalent question for GROUPED mode remains open: should GROUPED output preserve all dataset IDs per block, or should re-ingestion be more tolerant (union rather than intersection)?
 
 
 - ~~**Validation layer**~~ — **DONE** (2026-04-19). `src/pycifparse/validation/`. Spec: `prompts/unified_validate.md`. 163 tests. Lessons 91–94.
