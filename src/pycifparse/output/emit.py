@@ -48,6 +48,7 @@ class _BlockData:
     suppress_fk_pk: bool
     suppress_loop_fk_pk: bool = False  # ORIGINAL mode only: suppress FK cols from Loop categories
     dataset_id: str | None = None
+    preferred_category_order: list[str] | None = None  # ALL_BLOCKS: parent tables before child
 
 
 def _make_block_data(
@@ -327,6 +328,7 @@ def _replace_name(block: _BlockData, name: str) -> _BlockData:
         suppress_fk_pk=block.suppress_fk_pk,
         suppress_loop_fk_pk=block.suppress_loop_fk_pk,
         dataset_id=block.dataset_id,
+        preferred_category_order=block.preferred_category_order,
     )
 
 
@@ -683,6 +685,7 @@ def _collect_all_blocks(
                 block_name = _sanitize_block_name('_'.join([table_name] + pk_vals)) or table_name
 
                 block_table_rows: dict[str, list[dict]] = {table_name: [row]}
+                parent_tables: list[str] = []
                 if set_key_cols:
                     # Inject synthetic parent rows so _suppressed_fk_pk_cols
                     # suppresses the FK column and the parent tag is emitted as a scalar.
@@ -693,7 +696,9 @@ def _collect_all_blocks(
                             block_table_rows[target_table] = [
                                 {'_block_id': '', '_row_id': 0, target_col: val}
                             ]
+                            parent_tables.append(target_table)
 
+                cat_order = sorted(parent_tables) + [table_name] if parent_tables else None
                 result.append(_BlockData(
                     name=block_name,
                     table_rows=block_table_rows,
@@ -702,6 +707,7 @@ def _collect_all_blocks(
                     anchor_key_dict={},
                     suppress_fk_pk=bool(set_key_cols),
                     dataset_id=dataset_id,
+                    preferred_category_order=cat_order,
                 ))
         else:
             # Loop category: classify PK columns.
@@ -742,14 +748,17 @@ def _collect_all_blocks(
                     # _suppressed_fk_pk_cols can find them (suppressing the FK
                     # columns from the loop) and _render_set_category emits them
                     # as scalar tag-value pairs above the loop.
-                    block_table_rows: dict[str, list[dict]] = {table_name: group_rows}
+                    block_table_rows = {table_name: group_rows}
+                    parent_tables = []
                     for (col, _parent_tag), val in zip(set_key_cols, set_vals):
                         if col in set_fk_map and val is not None:
                             target_table, target_col = set_fk_map[col]
                             block_table_rows[target_table] = [
                                 {'_block_id': '', '_row_id': 0, target_col: val}
                             ]
+                            parent_tables.append(target_table)
 
+                    cat_order = sorted(parent_tables) + [table_name]
                     result.append(_BlockData(
                         name=block_name,
                         table_rows=block_table_rows,
@@ -759,6 +768,7 @@ def _collect_all_blocks(
                         suppress_fk_pk=True,
                         suppress_loop_fk_pk=True,
                         dataset_id=dataset_id,
+                        preferred_category_order=cat_order,
                     ))
 
     return result
@@ -843,7 +853,11 @@ def _render_block(
             lines.append(f'{audit_tag}  {quote(data.dataset_id, version)}')
             first_category = False
 
-    for item in _ordered_categories(schema, spec, data.table_rows):
+    effective_spec = spec
+    if spec is None and data.preferred_category_order:
+        effective_spec = BlockSpec(category_order=data.preferred_category_order)
+
+    for item in _ordered_categories(schema, effective_spec, data.table_rows):
         if isinstance(item, list):
             # Merge group
             cat_lines = _render_merge_group(item, data.table_rows, schema, version, spec, reconstruct_su, pretty, line_limit)
