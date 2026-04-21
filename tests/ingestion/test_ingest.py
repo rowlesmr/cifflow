@@ -315,13 +315,13 @@ class TestEncodeValue:
         lst = [_s('a'), _s('b')]
         stored, vtype = encode_value(lst)
         assert vtype == 'list'
-        assert json.loads(stored) == ['a', 'b']
+        assert decode_container(stored) == ['a', 'b']
 
     def test_dict_value(self):
         d = {'key': _s('val')}
         stored, vtype = encode_value(d)
         assert vtype == 'table'
-        assert json.loads(stored) == {'key': 'val'}
+        assert decode_container(stored) == {'key': 'val'}
 
 
 # ===========================================================================
@@ -332,21 +332,21 @@ class TestEncodeContainer:
     def test_placeholder_in_list_stored_as_string(self):
         lst = [_ph('.'), _s('real')]
         stored, _ = encode_container(lst)
-        data = json.loads(stored)
+        data = decode_container(stored)
         assert data[0] == '.'     # PLACEHOLDER stored as plain '.'
         assert data[1] == 'real'
 
     def test_quoted_dot_in_list_stored_with_delimiters(self):
         lst = [_dq('.'), _s('x')]
         stored, _ = encode_container(lst)
-        data = json.loads(stored)
+        data = decode_container(stored)
         assert data[0] == '"."'
 
     def test_nested_container(self):
         lst = [{'a': _s('1')}, {'a': _s('2')}]
         stored, vtype = encode_container(lst)
         assert vtype == 'list'
-        data = json.loads(stored)
+        data = decode_container(stored)
         assert data == [{'a': '1'}, {'a': '2'}]
 
     def test_decode_container_roundtrips(self):
@@ -1328,7 +1328,7 @@ class TestContainerValues:
         ingest(f, conn)
         row = _fallback(conn, 'B')[0]
         assert row[4] == 'list'
-        assert json.loads(row[3]) == ['a', 'b']
+        assert decode_container(row[3]) == ['a', 'b']
 
     def test_table_value_in_fallback_is_json(self):
         cif_table = {'k': _s('v')}  # CIF table value
@@ -1337,7 +1337,7 @@ class TestContainerValues:
         ingest(f, conn)
         row = _fallback(conn, 'B')[0]
         assert row[4] == 'table'
-        assert json.loads(row[3]) == {'k': 'v'}
+        assert decode_container(row[3]) == {'k': 'v'}
 
     def test_placeholder_inside_list_stored_as_plain_string(self):
         cif_list = [_ph('.'), _s('real')]
@@ -1345,7 +1345,7 @@ class TestContainerValues:
         conn = _conn()
         ingest(f, conn)
         row = _fallback(conn, 'B')[0]
-        data = json.loads(row[3])
+        data = decode_container(row[3])
         assert data[0] == '.'
 
     def test_quoted_dot_inside_list_stored_with_delimiters(self):
@@ -1354,7 +1354,7 @@ class TestContainerValues:
         conn = _conn()
         ingest(f, conn)
         row = _fallback(conn, 'B')[0]
-        data = json.loads(row[3])
+        data = decode_container(row[3])
         assert data[0] == '"."'
 
     def test_decode_container_roundtrips(self):

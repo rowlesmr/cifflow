@@ -585,9 +585,26 @@ class TestEdgeCases:
     def test_long_plain_string_roundtrip_20(self):
         rt('a' * 200, CIF20)
 
-    def test_json_stored_value_roundtrip_20(self):
-        # JSON-encoded containers pass through as regular strings
-        rt('["a","b"]', CIF20)
+    def test_json_like_string_is_not_decoded_as_container(self):
+        # A plain string that looks like JSON is quoted as a string, not a list
+        assert quote('["a","b"]', CIF20) == """'["a","b"]'"""
+
+    def test_sentinel_prefixed_list_emits_cif_list(self):
+        from pycifparse.ingestion.ingest import encode_container
+        from pycifparse.cifmodel.scalar import CifScalar
+        from pycifparse.types import ValueType
+        stored, _ = encode_container(['a', 'b'])
+        assert quote(stored, CIF20) == '[a b]'
+
+    def test_sentinel_prefixed_table_emits_cif_table(self):
+        from pycifparse.ingestion.ingest import encode_container
+        stored, _ = encode_container({'k': 'v'})
+        assert quote(stored, CIF20) == '{k: v}'
+
+    def test_sentinel_prefixed_nested_list(self):
+        from pycifparse.ingestion.ingest import encode_container
+        stored, _ = encode_container([['1', '2'], ['3', '4']])
+        assert quote(stored, CIF20) == '[[1 2] [3 4]]'
 
 
 # ---------------------------------------------------------------------------

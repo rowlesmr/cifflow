@@ -749,10 +749,10 @@ class TestFallbackContainers:
         assert row[1] == 'list'
 
     def test_list_json_content(self, fallback_containers_conn):
+        from pycifparse.ingestion.ingest import decode_container
         row = _fallback(fallback_containers_conn, 'test_fallback_containers',
                         '_vector.coords')
-        parsed = json.loads(row[0])
-        assert parsed == ['1.0', '2.0', '3.0']
+        assert decode_container(row[0]) == ['1.0', '2.0', '3.0']
 
     def test_table_value_type(self, fallback_containers_conn):
         row = _fallback(fallback_containers_conn, 'test_fallback_containers',
@@ -761,10 +761,10 @@ class TestFallbackContainers:
         assert row[1] == 'table'
 
     def test_nested_list_json(self, fallback_containers_conn):
+        from pycifparse.ingestion.ingest import decode_container
         row = _fallback(fallback_containers_conn, 'test_fallback_containers',
                         '_matrix.row')
-        parsed = json.loads(row[0])
-        assert parsed == [['1', '0', '0'], ['0', '1', '0'], ['0', '0', '1']]
+        assert decode_container(row[0]) == [['1', '0', '0'], ['0', '1', '0'], ['0', '0', '1']]
 
 
 # ---------------------------------------------------------------------------

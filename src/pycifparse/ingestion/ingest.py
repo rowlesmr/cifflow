@@ -76,8 +76,17 @@ def encode_value(value: CifScalar | list | dict) -> tuple[str | None, str]:
     return raw, vt.value
 
 
+# Sentinel prefix that marks a stored value as a JSON-encoded CIF container.
+# A null byte cannot appear in any valid CIF string value, so this is unambiguous.
+_CONTAINER_PREFIX = '\x00'
+
+
 def encode_container(value: list | dict) -> tuple[str, str]:
-    """Return ``(json_string, 'list'|'table')`` for a CIF container value."""
+    """Return ``(stored_string, 'list'|'table')`` for a CIF container value.
+
+    The stored string is prefixed with ``_CONTAINER_PREFIX`` so that the output
+    layer can identify containers unambiguously without guessing from content.
+    """
     def _encode(v: Any) -> Any:
         if isinstance(v, list):
             return [_encode(item) for item in v]
@@ -91,12 +100,14 @@ def encode_container(value: list | dict) -> tuple[str, str]:
         return raw
 
     vtype = 'list' if isinstance(value, list) else 'table'
-    return json.dumps(_encode(value), ensure_ascii=False), vtype
+    return _CONTAINER_PREFIX + json.dumps(_encode(value), ensure_ascii=False), vtype
 
 
-def decode_container(json_str: str) -> list | dict:
-    """Decode a stored JSON container back to a Python list or dict."""
-    return json.loads(json_str)
+def decode_container(stored: str) -> list | dict:
+    """Decode a stored container string back to a Python list or dict."""
+    if stored.startswith(_CONTAINER_PREFIX):
+        stored = stored[len(_CONTAINER_PREFIX):]
+    return json.loads(stored)
 
 
 _SU_RE = re.compile(

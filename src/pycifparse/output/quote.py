@@ -8,12 +8,13 @@ produces a correctly round-trippable result.
 Storage encoding (from ``ingest.encode_value``):
 - PLACEHOLDER ``.`` / ``?``        → stored as ``.`` / ``?``   (length 1)
 - Quoted ``.`` / ``?``             → stored as ``"."`` / ``"?"`` (length 3)
-- Container (list / table)         → stored as JSON text
+- Container (list / table)         → stored as JSON text (CIF 2.0 only)
 - Everything else                  → stored as raw string
 """
 
 from __future__ import annotations
 
+from pycifparse.ingestion.ingest import _CONTAINER_PREFIX, decode_container
 from pycifparse.types import CifVersion
 
 # Hardcoded prefix for prefixed semicolon-delimited fields.
@@ -44,6 +45,28 @@ def is_table_key_quotable(key: str) -> bool:
     return not result.startswith('\n')
 
 
+def _format_container(value: list | dict, version: CifVersion) -> str:
+    """Render a decoded CIF container back to CIF 2.0 token syntax."""
+    if isinstance(value, list):
+        parts = [_format_container_element(v, version) for v in value]
+        return '[' + ' '.join(parts) + ']'
+    # dict → table
+    parts = []
+    for k, v in value.items():
+        key_token = quote(k, version)
+        val_token = _format_container_element(v, version)
+        parts.append(f'{key_token}: {val_token}')
+    return '{' + ' '.join(parts) + '}'
+
+
+def _format_container_element(v: object, version: CifVersion) -> str:
+    if isinstance(v, list):
+        return _format_container(v, version)
+    if isinstance(v, dict):
+        return _format_container(v, version)
+    return quote(str(v), version)
+
+
 def quote(stored: str, version: CifVersion) -> str:
     """Return a valid CIF token for *stored*, suitable for the given *version*.
 
@@ -72,6 +95,8 @@ def quote(stored: str, version: CifVersion) -> str:
         return stored                          # PLACEHOLDER — always unquoted
     if stored in ('"."', '"?"'):
         return _quote_string(stored[1], version)   # quoted dot/question-mark
+    if version == CifVersion.CIF_2_0 and stored.startswith(_CONTAINER_PREFIX):
+        return _format_container(decode_container(stored), version)
     return _quote_string(stored, version)
 
 
