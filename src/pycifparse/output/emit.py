@@ -183,7 +183,10 @@ def emit(
     else:  # ORIGINAL
         raw_blocks = _collect_original(conn, schema)
 
-    ordered = _sort_and_merge(raw_blocks, plan)
+    if mode == EmitMode.ALL_BLOCKS:
+        ordered = [(b, None) for b in raw_blocks]
+    else:
+        ordered = _sort_and_merge(raw_blocks, plan)
 
     # Disambiguate block names; collect all output lines flat.
     used_names: dict[str, int] = {}
@@ -600,7 +603,7 @@ def _ordered_tables_all_blocks(
 
     category_order = None
     if plan:
-        for spec in plan.blocks:
+        for spec in plan.specs:
             if spec.category_order:
                 category_order = spec.category_order
                 break
