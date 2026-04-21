@@ -891,7 +891,13 @@ def emit_fallback_create_statements() -> list[str]:
         f"    {_qi('id_regime')}   TEXT\n"
         f")"
     )
-    return [fallback, index, membership, validation]
+    block_order = (
+        f"CREATE TABLE IF NOT EXISTS {_qi('_block_order')} (\n"
+        f"    {_qi('_block_id')}   TEXT     PRIMARY KEY,\n"
+        f"    {_qi('position')}    INTEGER  NOT NULL\n"
+        f")"
+    )
+    return [fallback, index, membership, validation, block_order]
 
 
 def emit_create_statements(schema: SchemaSpec) -> list[str]:

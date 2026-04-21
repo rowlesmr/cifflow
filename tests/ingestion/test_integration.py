@@ -190,7 +190,7 @@ class TestIngestNoSchema:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             ).fetchall()
         }
-        assert tables == {'_cif_fallback', '_block_dataset_membership', '_validation_result'}
+        assert tables == {'_cif_fallback', '_block_dataset_membership', '_validation_result', '_block_order'}
 
 
 # ---------------------------------------------------------------------------

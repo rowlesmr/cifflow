@@ -16,7 +16,9 @@ if TYPE_CHECKING:
 _SU_RE = re.compile(r'\(\d+\)$')
 
 # Fallback-tier table names that are always copied, never dropped.
-_FALLBACK_TABLES = ('_cif_fallback', '_block_dataset_membership', '_validation_result')
+_FALLBACK_TABLES = (
+    '_cif_fallback', '_block_dataset_membership', '_validation_result', '_block_order',
+)
 
 _FALLBACK_DDL = [
     (
@@ -50,6 +52,12 @@ _FALLBACK_DDL = [
         '    "block_id"    TEXT,\n'
         '    "detail"      TEXT,\n'
         '    "id_regime"   TEXT\n'
+        ')'
+    ),
+    (
+        'CREATE TABLE IF NOT EXISTS "_block_order" (\n'
+        '    "_block_id"  TEXT     PRIMARY KEY,\n'
+        '    "position"   INTEGER  NOT NULL\n'
         ')'
     ),
 ]

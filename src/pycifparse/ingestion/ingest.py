@@ -721,6 +721,8 @@ class _Ingester:
         self.fallback_rows: list[dict] = []
         # (block_id, audit_dataset_id, id_regime) rows for _block_dataset_membership
         self.membership_rows: list[dict] = []
+        # (block_id, position) rows for _block_order
+        self.block_order_rows: list[tuple[str, int]] = []
         # (check_name, severity, block_id, detail, id_regime) for _validation_result
         self.validation_rows: list[dict] = []
 
@@ -733,7 +735,8 @@ class _Ingester:
         self.conn.isolation_level = None
         self.conn.execute('BEGIN')
         try:
-            for block in blocks:
+            for position, block in enumerate(blocks):
+                self._block_position = position
                 self._process_block(block)
             if self._semantic_errors:
                 raise IngestionError(self._semantic_errors)
@@ -1304,6 +1307,7 @@ class _Ingester:
         block_id: str,
         id_regime: str,
     ) -> None:
+        self.block_order_rows.append((block_id, self._block_position))
         dataset_ids = _read_dataset_ids(block)
         if dataset_ids:
             for did in sorted(dataset_ids):
@@ -1357,6 +1361,13 @@ class _Ingester:
                      r['value_type'], r['loop_id'], r['col_index'])
                     for r in self.fallback_rows
                 ],
+            )
+
+        # _block_order
+        if self.block_order_rows:
+            cur.executemany(
+                'INSERT OR IGNORE INTO "_block_order" ("_block_id", "position") VALUES (?, ?)',
+                self.block_order_rows,
             )
 
         # _block_dataset_membership
