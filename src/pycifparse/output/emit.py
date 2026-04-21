@@ -670,16 +670,37 @@ def _collect_all_blocks(
 
         if tdef.category_class == 'Set':
             # One block per row.
+            # Classify PK columns: some may FK to a parent Set category.
+            col_info = _classify_pk_cols(tdef, schema)
+            set_key_cols = [(col, tag) for col, is_set, tag in col_info if is_set]
+            set_fk_map_set: dict[str, tuple[str, str]] = {}
+            for fk in tdef.foreign_keys:
+                if len(fk.source_columns) == 1 and fk.source_columns[0] in {c for c, _ in set_key_cols}:
+                    set_fk_map_set[fk.source_columns[0]] = (fk.target_table, fk.target_columns[0])
+
             for row in sorted(rows, key=lambda r: tuple(r.get(pk) or '' for pk in domain_pks)):
                 pk_vals = [str(row.get(pk) or '') for pk in domain_pks]
                 block_name = _sanitize_block_name('_'.join([table_name] + pk_vals)) or table_name
+
+                block_table_rows: dict[str, list[dict]] = {table_name: [row]}
+                if set_key_cols:
+                    # Inject synthetic parent rows so _suppressed_fk_pk_cols
+                    # suppresses the FK column and the parent tag is emitted as a scalar.
+                    for (col, _parent_tag) in set_key_cols:
+                        val = row.get(col)
+                        if col in set_fk_map_set and val is not None:
+                            target_table, target_col = set_fk_map_set[col]
+                            block_table_rows[target_table] = [
+                                {'_block_id': '', '_row_id': 0, target_col: val}
+                            ]
+
                 result.append(_BlockData(
                     name=block_name,
-                    table_rows={table_name: [row]},
+                    table_rows=block_table_rows,
                     fallback_rows=[],
                     anchor_frozenset=frozenset(),
                     anchor_key_dict={},
-                    suppress_fk_pk=False,
+                    suppress_fk_pk=bool(set_key_cols),
                     dataset_id=dataset_id,
                 ))
         else:
