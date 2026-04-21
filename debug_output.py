@@ -21,11 +21,11 @@ import sqlite3
 ROOT     = pathlib.Path(__file__).parent
 DIC_DIR  = ROOT / 'data' / 'dictionaries'
 
-FILE_NAME = "multi_one"
+FILE_NAME = "multi_one" # "pathological_key_block"
 
 CIF_FILE = ROOT / 'tests' / 'cif_files' / (FILE_NAME +'.cif')
 
-
+DB_COMPACT_FILE = ROOT / (FILE_NAME +'_compact_db.db')
 
 
 
@@ -39,6 +39,7 @@ from pycifparse import (
     load_dictionary,
     save_dictionary,
     generate_schema,
+    compactify_database,
     emit,
     EmitMode,
     OutputPlan,
@@ -144,6 +145,25 @@ print()
 if report.database is None:
     print('No database — skipping CIF emission.')
     raise SystemExit(1)
+
+if report.database:
+    if DB_COMPACT_FILE.exists():
+        DB_COMPACT_FILE.unlink()  # start fresh each run
+
+    dest = sqlite3.connect(DB_COMPACT_FILE)
+    compactify_database(
+        src=report.database,  # source connection (already populated by ingest)
+        dst=dest,  # destination connection (must be empty)
+        schema=schema,  # SchemaSpec used when src was populated
+    )
+    dest.close()
+
+
+
+
+
+
+
 
 # ---------------------------------------------------------------------------
 # Step 4 — Emit one CIF file per mode

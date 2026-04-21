@@ -1,0 +1,33 @@
+#\#CIF_2.0
+
+
+data_distributed_structure_01
+_audit_dataset.id	4d37c3a9-7555-4b37-a4f0-a08a19f61c4d
+_structure.id A
+_cell.length_a 1
+
+data_distributed_structure_02
+_audit_dataset.id	4d37c3a9-7555-4b37-a4f0-a08a19f61c4d
+_structure.id A
+_cell.length_b 2
+
+data_distributed_structure_03
+_audit_dataset.id	4d37c3a9-7555-4b37-a4f0-a08a19f61c4d
+_structure.id A
+_cell.length_c 3
+
+data_distributed_structure_04
+_audit_dataset.id	4d37c3a9-7555-4b37-a4f0-a08a19f61c4d
+_structure.id A
+_cell.angle_alpha 91
+
+data_distributed_structure_05
+_audit_dataset.id	4d37c3a9-7555-4b37-a4f0-a08a19f61c4d
+_structure.id A
+_cell.angle_beta 92
+
+data_distributed_structure_06
+_audit_dataset.id	4d37c3a9-7555-4b37-a4f0-a08a19f61c4d
+_structure.id A
+_cell.angle_gamma 93
+
