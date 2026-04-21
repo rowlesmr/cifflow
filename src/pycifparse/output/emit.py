@@ -11,6 +11,7 @@ unrelated sources) are not detected or resolved by the output layer.
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 import uuid
@@ -342,29 +343,10 @@ def _collect_original(
     result = []
     for bid in block_ids:
         table_rows = {}
-        for table_name in schema.tables:
-            rows = _fetch_rows(conn, table_name, '"_block_id" = ?', (bid,))
+        for table_name, table_def in schema.tables.items():
+            rows = _fetch_rows_for_block(conn, bid, table_name, table_def)
             if rows:
                 table_rows[table_name] = rows
-
-        # audit_dataset rows must reflect the membership of this block, not
-        # wherever the rows happen to be stored (only one block owns them).
-        if 'audit_dataset' in schema.tables:
-            try:
-                dataset_ids = [
-                    r[0] for r in conn.execute(
-                        'SELECT "_audit_dataset_id" FROM "_block_dataset_membership" '
-                        'WHERE "_block_id" = ? AND "_audit_dataset_id" != ""',
-                        (bid,),
-                    ).fetchall()
-                ]
-            except sqlite3.OperationalError:
-                dataset_ids = []
-            if dataset_ids:
-                table_rows['audit_dataset'] = [
-                    {'_block_id': bid, '_row_id': i, 'id': did}
-                    for i, did in enumerate(dataset_ids)
-                ]
 
         fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
         result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True, suppress_loop_fk_pk=True))
@@ -607,6 +589,50 @@ def _render_block(
     lines: list[str] = [f'data_{block_name}']
     first_category = True
 
+    # Partition fallback rows into three groups:
+    #   mixed_fallback  — unknown tags that were in a loop alongside known tags;
+    #                     keyed ref_table -> loop_id -> col_index -> {row_id: (value, vtype)}
+    #   pure_loop_rows  — unknown tags in a loop with no known tags; keyed by loop_id
+    #   remnant_rows    — scalar fallback (loop_id is None) and anything not injected
+    mixed_fallback: dict[str, dict[int, dict[int, dict[int, tuple]]]] = {}
+    pure_loop_rows: dict[int, list[dict]] = {}
+    remnant_rows: list[dict] = []
+
+    for r in data.fallback_rows:
+        lid = r.get('loop_id')
+        ref = r.get('ref_table')
+        if lid is None:
+            remnant_rows.append(r)
+        elif ref is not None:
+            col_idx = r.get('col_index', 0) or 0
+            row_id = r.get('_row_id', 0)
+            val = r.get('value', '')
+            vtype = r.get('value_type', '')
+            tag = r.get('tag', '')
+            (mixed_fallback
+             .setdefault(ref, {})
+             .setdefault(lid, {})
+             .setdefault(col_idx, {}))[row_id] = (tag, val, vtype)
+        else:
+            pure_loop_rows.setdefault(lid, []).append(r)
+
+    # Build per-table extra-column list:
+    # ref_table -> list of (tag, col_index, {row_id: (value, vtype)})
+    # ordered by (loop_id, col_index) to preserve original column ordering.
+    extra_cols_for: dict[str, list[tuple[str, int, dict[int, tuple]]]] = {}
+    for ref, loop_dict in mixed_fallback.items():
+        cols_list: list[tuple[str, int, dict[int, tuple]]] = []
+        for lid in sorted(loop_dict):
+            for col_idx in sorted(loop_dict[lid]):
+                cell_map = loop_dict[lid][col_idx]
+                # All cells for this (loop_id, col_idx) share the same tag.
+                sample = next(iter(cell_map.values()))
+                tag = sample[0]
+                # row_id -> (value, vtype)
+                row_vals = {rid: (v, vt) for rid, (_, v, vt) in cell_map.items()}
+                cols_list.append((tag, col_idx, row_vals))
+        extra_cols_for[ref] = cols_list
+
     # Inject _audit_dataset.id when requested.
     if data.dataset_id is not None:
         audit_in_table = 'audit_dataset' in data.table_rows
@@ -651,15 +677,33 @@ def _render_block(
                 lines.append('')
             first_category = False
 
+            extra = extra_cols_for.get(table_name)
             if table_def.category_class == 'Set' and len(rows) == 1:
                 lines.extend(_render_set_category(rows[0], cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit))
             else:
-                lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit))
+                lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit, extra_fallback_cols=extra))
 
-    if data.fallback_rows:
+    # Pure-fallback loops: emit each loop_id group as a standalone loop_.
+    for lid in sorted(pure_loop_rows):
+        loop_rows = pure_loop_rows[lid]
         if not first_category:
             lines.append('')
-        lines.extend(_render_fallback(data.fallback_rows, version, pretty, line_limit))
+        first_category = False
+        lines.extend(_render_pure_fallback_loop(loop_rows, version, pretty, line_limit))
+
+    # Scalar fallback and any remnant rows (scalars, or loop rows whose ref_table
+    # is not present in this block's table_rows — treated as plain fallback).
+    actual_remnant = remnant_rows
+    for ref, cols_list in extra_cols_for.items():
+        if ref not in data.table_rows:
+            # ref_table not rendered in this block: fall back to plain fallback.
+            for tag, _ci, row_vals in cols_list:
+                for _rid, (val, vtype) in row_vals.items():
+                    actual_remnant.append({'tag': tag, 'value': val, 'value_type': vtype})
+    if actual_remnant:
+        if not first_category:
+            lines.append('')
+        lines.extend(_render_fallback(actual_remnant, version, pretty, line_limit))
 
     return lines
 
@@ -987,14 +1031,24 @@ def _render_loop_category(
     reconstruct_su: bool,
     pretty: bool,
     line_limit: int | None = None,
+    extra_fallback_cols: 'list[tuple[str, int, dict[int, tuple]]] | None' = None,
 ) -> list[str]:
-    """Emit a Loop-class category as a ``loop_`` construct."""
+    """Emit a Loop-class category as a ``loop_`` construct.
+
+    *extra_fallback_cols* is a list of ``(tag, col_index, {row_id: (value, vtype)})``
+    tuples for unknown tags that were in the same source loop as this category.
+    They are appended as additional columns after the structured ones, aligned
+    by the row's ``_row_id``.
+    """
     su_map = _su_col_map(table_def) if reconstruct_su else {}
 
     lines = ['loop_']
     for col in cols:
         tag = _col_tag(table_name, col, schema)
         lines.append(f'  {tag}')
+    if extra_fallback_cols:
+        for tag, _ci, _row_vals in extra_fallback_cols:
+            lines.append(f'  {tag}')
 
     # Build token matrix: one quote() call per cell.
     matrix: list[list[str]] = []
@@ -1014,6 +1068,18 @@ def _render_loop_category(
                 if line_limit is not None:
                     token = _apply_line_limit(value, token, line_limit)
             tokens.append(token)
+        if extra_fallback_cols:
+            row_id = row.get('_row_id')
+            for _tag, _ci, row_vals in extra_fallback_cols:
+                cell = row_vals.get(row_id)
+                if cell is None:
+                    tokens.append('.')
+                else:
+                    val, vtype = cell
+                    token = _fallback_token(val, vtype, version)
+                    if line_limit is not None and token.startswith('\n') and vtype != 'placeholder':
+                        token = make_text_field(val, line_limit)
+                    tokens.append(token)
         matrix.append(tokens)
 
     if pretty:
@@ -1026,6 +1092,60 @@ def _render_loop_category(
     for tokens in matrix:
         lines.extend(_format_row(tokens, col_widths, line_limit))
 
+    return lines
+
+
+def _render_pure_fallback_loop(
+    rows: list[dict],
+    version: CifVersion,
+    pretty: bool = False,
+    line_limit: int | None = None,
+) -> list[str]:
+    """Emit a group of unknown tags that shared a loop with no structured columns."""
+    # Group by tag, ordered by col_index within the loop then by row_id.
+    tag_order: list[str] = []
+    seen_tags: set[str] = set()
+    for r in sorted(rows, key=lambda r: (r.get('col_index') or 0, r.get('_row_id') or 0)):
+        t = r.get('tag', '')
+        if t not in seen_tags:
+            tag_order.append(t)
+            seen_tags.add(t)
+
+    # Build per-tag ordered value list (sorted by _row_id).
+    tag_values: dict[str, list[tuple[str, str]]] = {t: [] for t in tag_order}
+    for t in tag_order:
+        for r in sorted(
+            (r for r in rows if r.get('tag') == t),
+            key=lambda r: r.get('_row_id') or 0,
+        ):
+            tag_values[t].append((r.get('value', ''), r.get('value_type', '')))
+
+    if not tag_order:
+        return []
+
+    lines = ['loop_']
+    for t in tag_order:
+        lines.append(f'  {t}')
+
+    n_rows = len(tag_values[tag_order[0]])
+    matrix: list[list[str]] = []
+    for i in range(n_rows):
+        tokens = []
+        for t in tag_order:
+            entries = tag_values[t]
+            if i < len(entries):
+                val, vtype = entries[i]
+                token = _fallback_token(val, vtype, version)
+                if line_limit is not None and token.startswith('\n') and vtype != 'placeholder':
+                    token = make_text_field(val, line_limit)
+            else:
+                token = '.'
+            tokens.append(token)
+        matrix.append(tokens)
+
+    col_widths = _col_widths(matrix) if pretty else None
+    for tokens in matrix:
+        lines.extend(_format_row(tokens, col_widths, line_limit))
     return lines
 
 
@@ -1390,27 +1510,50 @@ def _suppressed_fk_pk_cols(
     table_rows: dict[str, list[dict]],
     schema: SchemaSpec,
 ) -> set[str]:
-    """Return FK-PK columns that are implicit from a co-emitted Set category."""
+    """Return FK-PK columns that are implicit from a co-emitted Set category.
+
+    Handles both direct FKs to a Set table and one-hop chains through a
+    Loop-class intermediate (e.g. pd_meas.diffractogram_id →
+    pd_data.diffractogram_id → pd_diffractogram.id).
+    """
     pk_cols: set[str] = set(table_def.primary_keys) - _SYNTHETIC
     suppressed: set[str] = set()
 
     for fk in table_def.foreign_keys:
-        target_name = fk.target_table
-        target_def = schema.tables.get(target_name)
-        if target_def is None or target_def.category_class != 'Set':
-            continue
-        target_table_rows = table_rows.get(target_name)
-        if not target_table_rows or len(target_table_rows) != 1:
-            continue
-
         if not all(c in pk_cols for c in fk.source_columns):
             continue
 
-        target_row = target_table_rows[0]
-        expected = tuple(target_row.get(c) for c in fk.target_columns)
+        target_name = fk.target_table
+        target_def = schema.tables.get(target_name)
+        if target_def is None:
+            continue
 
-        if all(tuple(row.get(c) for c in fk.source_columns) == expected for row in rows):
-            suppressed.update(fk.source_columns)
+        if target_def.category_class == 'Set':
+            # Direct FK to a Set table — existing logic.
+            target_table_rows = table_rows.get(target_name)
+            if not target_table_rows or len(target_table_rows) != 1:
+                continue
+            target_row = target_table_rows[0]
+            expected = tuple(target_row.get(c) for c in fk.target_columns)
+            if all(tuple(row.get(c) for c in fk.source_columns) == expected for row in rows):
+                suppressed.update(fk.source_columns)
+
+        else:
+            # Loop-class intermediate: check each column individually for a
+            # single-column onward FK to a Set table.
+            for src_col, tgt_col in zip(fk.source_columns, fk.target_columns):
+                for hop_fk in target_def.foreign_keys:
+                    if hop_fk.source_columns != [tgt_col]:
+                        continue
+                    ultimate_def = schema.tables.get(hop_fk.target_table)
+                    if ultimate_def is None or ultimate_def.category_class != 'Set':
+                        continue
+                    ultimate_rows = table_rows.get(hop_fk.target_table)
+                    if not ultimate_rows or len(ultimate_rows) != 1:
+                        continue
+                    expected_val = ultimate_rows[0].get(hop_fk.target_columns[0])
+                    if all(row.get(src_col) == expected_val for row in rows):
+                        suppressed.add(src_col)
 
     return suppressed
 
@@ -1469,6 +1612,55 @@ def _merge_su(measurand: str, scaled_su: str) -> str:
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
+
+def _fetch_rows_for_block(
+    conn: sqlite3.Connection,
+    block_id: str,
+    table_name: str,
+    table_def: 'TableDef',
+) -> list[dict]:
+    """Return rows that *block_id* contributed to, for ORIGINAL mode emission.
+
+    Rows owned by this block (_block_id = block_id, including stubs and actual
+    loop rows) are returned unmasked.  Rows that this block contributed to as a
+    scalar tag but does not own (a later block contributed to a shared Set/Loop
+    scalar key) are returned with non-contributed columns masked to None.
+    """
+    owned_rows: dict[tuple, dict] = {
+        tuple(row.get(pk) for pk in table_def.primary_keys): row
+        for row in _fetch_rows(conn, table_name, '"_block_id" = ?', (block_id,))
+    }
+
+    try:
+        presence = conn.execute(
+            'SELECT "column_name", "pk_json" FROM "_tag_presence" '
+            'WHERE "_block_id" = ? AND "table_name" = ?',
+            (block_id, table_name),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return list(owned_rows.values())
+
+    pk_to_cols: dict[str, set[str]] = {}
+    for col_name, pk_json in presence:
+        pk_to_cols.setdefault(pk_json, set()).add(col_name)
+
+    result: list[dict] = list(owned_rows.values())
+    for pk_json, contrib_cols in pk_to_cols.items():
+        pk_vals = json.loads(pk_json)
+        pk_key = tuple(pk_vals)
+        if pk_key in owned_rows:
+            continue  # Already included unmasked
+        where = ' AND '.join(f'"{c}" = ?' for c in table_def.primary_keys)
+        pk_set = set(table_def.primary_keys)
+        for row in _fetch_rows(conn, table_name, where, tuple(pk_vals)):
+            masked = {
+                k: (v if k in contrib_cols or k in _SYNTHETIC or k in pk_set else None)
+                for k, v in row.items()
+            }
+            masked['_block_id'] = block_id
+            result.append(masked)
+    return result
+
 
 def _fetch_rows(
     conn: sqlite3.Connection,

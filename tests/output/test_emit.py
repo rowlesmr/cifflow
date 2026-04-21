@@ -1506,6 +1506,70 @@ class TestEmitRoundTripIntegration:
         _assert_same_data(multi_one_conn, conn2, pow_schema)
 
 
+_SHARED_DATASET_CIF = """\
+#\\#CIF_2.0
+
+data_block1
+_audit_dataset.id 7002c403-8d26-4c52-bd46-6b12bc761a48
+_diffrn.id A
+
+data_block2
+_audit_dataset.id 7002c403-8d26-4c52-bd46-6b12bc761a48
+_diffrn.id B
+
+data_block3
+_audit_dataset.id 7002c403-8d26-4c52-bd46-6b12bc761a48
+_diffrn.id C
+"""
+
+_DATASET_UUID = '7002c403-8d26-4c52-bd46-6b12bc761a48'
+
+
+@pytest.mark.slow
+class TestOriginalModeSharedSet:
+    """ORIGINAL mode must re-emit every block's own Set tags even when multiple
+    blocks share the same Set key (here: all three blocks share one audit_dataset.id)."""
+
+    @pytest.fixture(scope='class')
+    def shared_dataset_conn(self, pow_schema):
+        return _ingest_src(_SHARED_DATASET_CIF, pow_schema)
+
+    @pytest.fixture(scope='class')
+    def shared_dataset_cif_out(self, shared_dataset_conn, pow_schema):
+        cif_out = emit(shared_dataset_conn, pow_schema, mode=EmitMode.ORIGINAL)
+        cif_rt, errors = build(cif_out)
+        assert not errors
+        return cif_rt
+
+    def test_all_blocks_have_audit_dataset_id(self, shared_dataset_cif_out):
+        """Every output block must contain _audit_dataset.id."""
+        for block_name in ('block1', 'block2', 'block3'):
+            assert block_name in shared_dataset_cif_out, \
+                f'block {block_name!r} missing from output'
+            block = shared_dataset_cif_out[block_name]
+            assert '_audit_dataset.id' in block, \
+                f'block {block_name!r}: _audit_dataset.id absent'
+            vals = block['_audit_dataset.id']
+            assert vals[0] == _DATASET_UUID, (
+                f'block {block_name!r}: expected _audit_dataset.id = {_DATASET_UUID!r}, '
+                f'got {vals!r}'
+            )
+
+    def test_all_blocks_have_correct_diffrn_id(self, shared_dataset_cif_out):
+        """Every output block must contain its own _diffrn.id."""
+        expected = {'block1': 'A', 'block2': 'B', 'block3': 'C'}
+        for block_name, diffrn_id in expected.items():
+            assert block_name in shared_dataset_cif_out, \
+                f'block {block_name!r} missing from output'
+            block = shared_dataset_cif_out[block_name]
+            assert '_diffrn.id' in block, \
+                f'block {block_name!r}: _diffrn.id absent'
+            vals = block['_diffrn.id']
+            assert vals[0] == diffrn_id, (
+                f'block {block_name!r}: expected _diffrn.id = {diffrn_id!r}, got {vals!r}'
+            )
+
+
 # ---------------------------------------------------------------------------
 # OutputPlan — matches, wildcards, merge groups, single_block, block_namer
 # ---------------------------------------------------------------------------
@@ -2525,3 +2589,142 @@ class TestDecimalAlign:
         assert _parse_numeric('\n;text\n;') is None  # multiline
         assert _parse_numeric('abc') is None    # code/non-numeric
         assert _parse_numeric('1.2.3') is None  # two dots
+
+
+# ---------------------------------------------------------------------------
+# ORIGINAL mode — unknown tags in mixed loops appear alongside known tags
+# ---------------------------------------------------------------------------
+
+class TestOriginalModeFallbackLoop:
+    """Unknown tags in a loop that also contains known tags must be re-emitted
+    in the same loop_ block as the known tags (not relegated to a separate
+    fallback section), with values row-aligned to their structured counterparts.
+    """
+
+    # Minimal dictionary: one Loop category (atom_site) with a key + one data col.
+    _DIC = _LOOP_DIC
+
+    # CIF that mixes a known tag (_atom_site.id) with an unknown one (_unknown.extra).
+    _CIF = (
+        '#\\#CIF_2.0\n'
+        'data_mixed\n'
+        'loop_\n'
+        '  _atom_site.id\n'
+        '  _atom_site.type_symbol\n'
+        '  _unknown.extra\n'
+        '  C1  C  alpha\n'
+        '  O1  O  beta\n'
+        '  N1  N  gamma\n'
+    )
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(self._DIC)
+
+    @pytest.fixture
+    def conn(self, schema):
+        return _ingest_src(self._CIF, schema)
+
+    def test_unknown_tag_present_in_output(self, conn, schema):
+        result = emit(conn, schema, mode=EmitMode.ORIGINAL)
+        assert '_unknown.extra' in result
+
+    def test_unknown_tag_in_same_loop_as_known_tag(self, conn, schema):
+        result = emit(conn, schema, mode=EmitMode.ORIGINAL)
+        lines = result.splitlines()
+        loop_start = next(i for i, l in enumerate(lines) if l.strip() == 'loop_')
+        # Find the loop_ block containing _atom_site.id
+        atom_site_loop = None
+        for i, l in enumerate(lines):
+            if l.strip() == 'loop_':
+                # Collect header tags
+                j = i + 1
+                tags_in_loop = []
+                while j < len(lines) and lines[j].strip().startswith('_'):
+                    tags_in_loop.append(lines[j].strip())
+                    j += 1
+                if '_atom_site.id' in tags_in_loop:
+                    atom_site_loop = tags_in_loop
+                    break
+        assert atom_site_loop is not None, "no loop_ containing _atom_site.id found"
+        assert '_unknown.extra' in atom_site_loop, (
+            f"_unknown.extra not in same loop header as _atom_site.id; loop tags: {atom_site_loop}"
+        )
+
+    def test_unknown_tag_values_row_aligned(self, conn, schema):
+        """Values for _unknown.extra must appear in the correct row positions."""
+        result = emit(conn, schema, mode=EmitMode.ORIGINAL)
+        lines = result.splitlines()
+        # Find the loop_ that has both known and unknown tags, then collect data rows.
+        in_loop = False
+        tag_order = []
+        data_rows = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped == 'loop_':
+                in_loop = True
+                tag_order = []
+                data_rows = []
+                continue
+            if in_loop and stripped.startswith('_'):
+                tag_order.append(stripped)
+                continue
+            if in_loop and tag_order and stripped:
+                # Data row — split by whitespace
+                data_rows.append(stripped.split())
+                continue
+            if in_loop and not stripped:
+                in_loop = False
+
+        assert '_atom_site.id' in tag_order
+        assert '_unknown.extra' in tag_order
+        extra_idx = tag_order.index('_unknown.extra')
+        expected = ['alpha', 'beta', 'gamma']
+        actual = [row[extra_idx] for row in data_rows if len(row) > extra_idx]
+        assert actual == expected, f"row-aligned values mismatch: {actual!r}"
+
+    def test_output_is_valid_cif(self, conn, schema):
+        result = emit(conn, schema, mode=EmitMode.ORIGINAL)
+        _, errors = build(result)
+        assert not errors, errors
+
+    def test_known_values_preserved(self, conn, schema):
+        result = emit(conn, schema, mode=EmitMode.ORIGINAL)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2['mixed']
+        ids = [str(v) for v in block['_atom_site.id']]
+        assert ids == ['C1', 'O1', 'N1']
+
+    def test_pure_unknown_loop_emitted_separately(self, schema):
+        """A loop containing ONLY unknown tags is emitted as its own loop_."""
+        cif_src = (
+            '#\\#CIF_2.0\n'
+            'data_pure\n'
+            'loop_\n'
+            '  _atom_site.id\n'
+            '  _atom_site.type_symbol\n'
+            '  C1  C\n'
+            '  O1  O\n'
+            '\n'
+            'loop_\n'
+            '  _unknown.foo\n'
+            '  _unknown.bar\n'
+            '  x1  y1\n'
+            '  x2  y2\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+        result = emit(conn, schema, mode=EmitMode.ORIGINAL)
+        assert '_unknown.foo' in result
+        assert '_unknown.bar' in result
+        # The unknown tags must be inside a loop_ header
+        lines = result.splitlines()
+        unknown_in_loop = False
+        for i, l in enumerate(lines):
+            if l.strip() == 'loop_':
+                j = i + 1
+                while j < len(lines) and lines[j].strip().startswith('_'):
+                    if lines[j].strip() in ('_unknown.foo', '_unknown.bar'):
+                        unknown_in_loop = True
+                    j += 1
+        assert unknown_in_loop, "_unknown tags not found inside a loop_ header"
