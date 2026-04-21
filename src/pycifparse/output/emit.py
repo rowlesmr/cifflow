@@ -45,6 +45,7 @@ class _BlockData:
     anchor_frozenset: frozenset[str]
     anchor_key_dict: dict[str, list[str]]
     suppress_fk_pk: bool
+    suppress_loop_fk_pk: bool = False  # ORIGINAL mode only: suppress FK cols from Loop categories
     dataset_id: str | None = None
 
 
@@ -54,6 +55,7 @@ def _make_block_data(
     fallback_rows: list[dict],
     schema: SchemaSpec,
     suppress_fk_pk: bool,
+    suppress_loop_fk_pk: bool = False,
     dataset_id: str | None = None,
 ) -> _BlockData:
     anchor_fs = frozenset(
@@ -78,6 +80,7 @@ def _make_block_data(
         anchor_frozenset=anchor_fs,
         anchor_key_dict=anchor_kd,
         suppress_fk_pk=suppress_fk_pk,
+        suppress_loop_fk_pk=suppress_loop_fk_pk,
         dataset_id=dataset_id,
     )
 
@@ -321,6 +324,7 @@ def _replace_name(block: _BlockData, name: str) -> _BlockData:
         anchor_frozenset=block.anchor_frozenset,
         anchor_key_dict=block.anchor_key_dict,
         suppress_fk_pk=block.suppress_fk_pk,
+        suppress_loop_fk_pk=block.suppress_loop_fk_pk,
         dataset_id=block.dataset_id,
     )
 
@@ -363,7 +367,7 @@ def _collect_original(
                 ]
 
         fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
-        result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True))
+        result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True, suppress_loop_fk_pk=True))
     return result
 
 
@@ -634,7 +638,10 @@ def _render_block(
             if not cols:
                 continue
 
-            if data.suppress_fk_pk and table_def.category_class == 'Set' and len(rows) == 1:
+            if data.suppress_fk_pk and (
+                (table_def.category_class == 'Set' and len(rows) == 1)
+                or data.suppress_loop_fk_pk
+            ):
                 suppressed = _suppressed_fk_pk_cols(table_def, rows, data.table_rows, schema)
                 cols = [c for c in cols if c not in suppressed]
             if not cols:

@@ -161,6 +161,25 @@ search-and-replace; grep for both before closing. `_pycifparse_id` and
 
 ---
 
+#### Known gap: `diffrn_radiation` PK overridden by `cif_img.dic`
+
+`multi_block_core.dic` defines `_diffrn_radiation.id` as the category key for
+`DIFFRN_RADIATION`, giving it PK `['id']`. `cif_img.dic` (also imported by `cif_pow.dic`)
+redefines the category key as `['diffrn_id', 'variant']`, which overwrites the correct key
+during dictionary merging. As a result, the schema generated from `cif_pow.dic` has the
+wrong PK for `diffrn_radiation`, and the FK from
+`diffrn_radiation_wavelength.radiation_id → diffrn_radiation.id` is not captured.
+
+This is a dictionary design conflict above the library's remit — `cif_img.dic` and
+`multi_block_core.dic` disagree on the canonical key for the same category. Resolution
+requires the dictionary authors to align the two constituent dictionaries.
+
+Consequence: `_diffrn_radiation_wavelength.radiation_id` cannot be suppressed from
+ORIGINAL-mode output (the FK is absent from the schema) until the dictionary conflict
+is resolved or a workaround is introduced.
+
+---
+
 ## Previously completed (2026-04-15 to 2026-04-18)
 
 - **`CifWriter` + `clean` API**: `writer.py`, `clean.py`, model prerequisites (`version`,
@@ -353,6 +372,14 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 ## Future work
 
 ### Planned features
+
+- **Investigate multi-dataset blocks**: When blocks have multiple `_audit_dataset.id` values
+  (i.e. a block belongs to more than one dataset), `ingest()` raises `ValueError` during
+  re-ingestion of GROUPED-mode output because the auto-detection finds no common dataset ID
+  across blocks. Need to decide: should GROUPED output preserve all dataset IDs per block, or
+  should re-ingestion be more tolerant (union rather than intersection), or should the emit layer
+  warn when emitting a multi-dataset file in GROUPED mode?
+
 
 - ~~**Validation layer**~~ — **DONE** (2026-04-19). `src/pycifparse/validation/`. Spec: `prompts/unified_validate.md`. 163 tests. Lessons 91–94.
 
