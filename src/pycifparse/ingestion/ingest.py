@@ -897,6 +897,11 @@ class _Ingester:
             _apply_fk(row, table, self.schema, None,
                       fk_accumulator, self.propagate_fk, self._emit,
                       block_id, self.merged_rows, self.row_id_counters)
+            pk = _pk_tuple(row, table)
+            pk_json_str = json.dumps(list(pk))
+            for col, val in col_dict.items():
+                if val is not None:
+                    self.tag_presence_rows.append((block_id, tbl_name, col, pk_json_str))
             _merge_into(
                 self.merged_rows, tbl_name, row, table,
                 self.row_id_counters, self._emit, self._emit_error,
@@ -1183,6 +1188,16 @@ class _Ingester:
             ids: dict[str, int] = {}
             for tbl_name, row in iter_rows.items():
                 table = self.schema.tables[tbl_name]
+                # Record tag presence when this loop row merges into an existing
+                # row owned by a different block (contributed-but-not-owned case).
+                pk = _pk_tuple(row, table)
+                existing = self.merged_rows.get(tbl_name, {}).get(pk)
+                if existing is not None and existing.get('_block_id') != block_id:
+                    pk_json_str = json.dumps(list(pk))
+                    direct_cols = {col_name for col_name, _, _ in loop_tables.get(tbl_name, [])}
+                    for col in direct_cols:
+                        if row.get(col) is not None:
+                            self.tag_presence_rows.append((block_id, tbl_name, col, pk_json_str))
                 rid = _merge_into(
                     self.merged_rows, tbl_name, row, table,
                     self.row_id_counters, self._emit, self._emit_error,

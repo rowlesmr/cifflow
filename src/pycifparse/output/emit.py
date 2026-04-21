@@ -344,10 +344,7 @@ def _collect_original(
     for bid in block_ids:
         table_rows = {}
         for table_name, table_def in schema.tables.items():
-            if table_def.category_class == 'Set':
-                rows = _fetch_set_rows_for_block(conn, bid, table_name, table_def)
-            else:
-                rows = _fetch_rows(conn, table_name, '"_block_id" = ?', (bid,))
+            rows = _fetch_rows_for_block(conn, bid, table_name, table_def)
             if rows:
                 table_rows[table_name] = rows
 
@@ -1455,18 +1452,18 @@ def _merge_su(measurand: str, scaled_su: str) -> str:
 # Database helpers
 # ---------------------------------------------------------------------------
 
-def _fetch_set_rows_for_block(
+def _fetch_rows_for_block(
     conn: sqlite3.Connection,
     block_id: str,
     table_name: str,
     table_def: 'TableDef',
 ) -> list[dict]:
-    """Return Set-class rows that *block_id* contributed to.
+    """Return rows that *block_id* contributed to, for ORIGINAL mode emission.
 
-    Rows owned by this block (_block_id = block_id, including stubs) are returned
-    unmasked.  Rows that this block contributed to but does not own (a later block
-    contributed different columns to a shared key) are returned with non-contributed
-    columns masked to None so only the block's own tags are emitted.
+    Rows owned by this block (_block_id = block_id, including stubs and actual
+    loop rows) are returned unmasked.  Rows that this block contributed to as a
+    scalar tag but does not own (a later block contributed to a shared Set/Loop
+    scalar key) are returned with non-contributed columns masked to None.
     """
     owned_rows: dict[tuple, dict] = {
         tuple(row.get(pk) for pk in table_def.primary_keys): row
