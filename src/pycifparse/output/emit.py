@@ -342,6 +342,26 @@ def _collect_original(
             rows = _fetch_rows(conn, table_name, '"_block_id" = ?', (bid,))
             if rows:
                 table_rows[table_name] = rows
+
+        # audit_dataset rows must reflect the membership of this block, not
+        # wherever the rows happen to be stored (only one block owns them).
+        if 'audit_dataset' in schema.tables:
+            try:
+                dataset_ids = [
+                    r[0] for r in conn.execute(
+                        'SELECT "_audit_dataset_id" FROM "_block_dataset_membership" '
+                        'WHERE "_block_id" = ? AND "_audit_dataset_id" != ""',
+                        (bid,),
+                    ).fetchall()
+                ]
+            except sqlite3.OperationalError:
+                dataset_ids = []
+            if dataset_ids:
+                table_rows['audit_dataset'] = [
+                    {'_block_id': bid, '_row_id': i, 'id': did}
+                    for i, did in enumerate(dataset_ids)
+                ]
+
         fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
         result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True))
     return result
@@ -1575,10 +1595,19 @@ def _all_block_ids_for_tables(conn: sqlite3.Connection, table_names: list[str]) 
 
 
 def _all_block_ids(conn: sqlite3.Connection, schema: SchemaSpec) -> list[str]:
-    """Return sorted list of all distinct ``_block_id`` values across all tables."""
+    """Return all distinct ``_block_id`` values in original ingestion order.
+
+    Falls back to sorted order if ``_block_order`` is absent (e.g. legacy databases).
+    """
+    try:
+        cursor = conn.execute('SELECT "_block_id" FROM "_block_order" ORDER BY "position"')
+        return [row[0] for row in cursor.fetchall()]
+    except sqlite3.OperationalError:
+        pass
+
+    # Legacy fallback: collect from all tables and sort
     seen: set[str] = set()
     ids: list[str] = []
-
     for table_name in list(schema.tables.keys()) + ['_cif_fallback']:
         try:
             cursor = conn.execute(f'SELECT DISTINCT "_block_id" FROM "{table_name}"')
@@ -1588,5 +1617,4 @@ def _all_block_ids(conn: sqlite3.Connection, schema: SchemaSpec) -> list[str]:
                     ids.append(bid)
         except sqlite3.OperationalError:
             pass
-
     return sorted(ids)
