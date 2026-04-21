@@ -1513,9 +1513,10 @@ def _fetch_rows_for_block(
         if pk_key in owned_rows:
             continue  # Already included unmasked
         where = ' AND '.join(f'"{c}" = ?' for c in table_def.primary_keys)
+        pk_set = set(table_def.primary_keys)
         for row in _fetch_rows(conn, table_name, where, tuple(pk_vals)):
             masked = {
-                k: (v if k in contrib_cols or k in _SYNTHETIC else None)
+                k: (v if k in contrib_cols or k in _SYNTHETIC or k in pk_set else None)
                 for k, v in row.items()
             }
             masked['_block_id'] = block_id

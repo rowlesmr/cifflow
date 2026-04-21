@@ -903,7 +903,7 @@ def emit_fallback_create_statements() -> list[str]:
         f"    {_qi('table_name')}    TEXT  NOT NULL,\n"
         f"    {_qi('column_name')}   TEXT  NOT NULL,\n"
         f"    {_qi('pk_json')}       TEXT  NOT NULL,\n"
-        f"    PRIMARY KEY ({_qi('_block_id')}, {_qi('table_name')}, {_qi('column_name')})\n"
+        f"    PRIMARY KEY ({_qi('_block_id')}, {_qi('table_name')}, {_qi('column_name')}, {_qi('pk_json')})\n"
         f")"
     )
     return [fallback, index, membership, validation, block_order, tag_presence]
