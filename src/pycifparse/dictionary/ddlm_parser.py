@@ -53,3 +53,4 @@ class DdlmDictionary:
     deprecated_ids: set[str]
     warnings: list[str] = field(default_factory=list)
     source_files: list[str] = field(default_factory=list)
+    uri: str | None = None

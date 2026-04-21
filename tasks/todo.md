@@ -45,6 +45,27 @@ Spec: `prompts/unified_validate.md`
 
 ### Remaining items
 
+#### Expand tests to cover file-based loading
+
+Most tests construct schemas, CIF models, and databases entirely in memory using
+inline strings and `sqlite3.connect(':memory:')`.  Real-world usage loads
+dictionaries from `.dic` files (via `DictionaryLoader` or cache), ingests `.cif`
+files from disk, and writes output files.  Gaps include:
+
+- Loading a dictionary from a `.dic` file and verifying the resulting schema matches
+  expectations (title, version, uri, table count, FK structure).
+- Loading a cached dictionary from a `.json` file and confirming round-trip fidelity
+  with the live-loaded version (all fields including `uri`).
+- Ingesting a real `.cif` file from disk into a file-backed SQLite database (not
+  `:memory:`), closing the connection, reopening it, and emitting — exercises the
+  full persistence path.
+- Emitting to a `.cif` file on disk and re-ingesting from that file.
+- `_replace_name` and other `_BlockData` helpers: property-based or table-driven
+  tests verifying that every field is preserved after round-trips through helper
+  functions (lesson from the `conformance_tags` omission bug).
+
+---
+
 #### Unify severity levels and message style across all pipeline stages
 
 Each pipeline stage currently uses its own severity vocabulary and message conventions:
@@ -169,6 +190,27 @@ Pervasive rename across schema generation, ingestion, output, compactification, 
 inspect layers, all tests, all prompts, and `docs/api.md`. Do in one pass with global
 search-and-replace; grep for both before closing. `_pycifparse_id` and
 `_pycifparse_error_value` are already correctly named.
+
+---
+
+#### Instrument parse/ingest/database phases for performance profiling
+
+The full pipeline (dictionary load → schema generation → CIF parse → ingest → emit) has
+not been profiled against large or complex files.  Before optimising anything, identify
+where time actually goes.
+
+Suggested approach:
+- Write a dedicated profiling script (not inside `scripts/`, which is the AI review
+  toolchain) that drives the full pipeline against a large real-world input (e.g. a
+  multi-block powder CIF with `cif_pow.dic`).
+- Use `cProfile` / `pstats` or `py-spy` from outside the library — do not embed
+  timing code in library modules.
+- Add coarse `time.perf_counter()` brackets in the profiling script around each phase
+  call so wall-clock cost is visible without a full profiler run.
+- Key suspects to measure: dictionary `_load_recursive` (import resolution),
+  `generate_schema` (BFS/FK derivation), `_Ingester.run` (per-block merge loops),
+  `_fill_bridge_columns`, and `emit` (alignment passes for large loops).
+- Record findings in `tasks/lessons.md` before making any changes.
 
 ---
 

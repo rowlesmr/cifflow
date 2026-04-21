@@ -396,11 +396,13 @@ class DictionaryLoader:
         block_name = cif.blocks[0]
         block = cif[block_name]
 
-        # Resolve base_uri from _dictionary.uri if not supplied by caller.
+        # Read the canonical dictionary URI unconditionally.
+        uri_vals = block['_dictionary.uri'] if '_dictionary.uri' in block else []
+        dict_uri = uri_vals[0] if uri_vals and isinstance(uri_vals[0], str) and uri_vals[0] not in ('.', '?') else None
+
+        # Resolve base_uri for import resolution if not supplied by caller.
         if base_uri is None:
-            uri_vals = block['_dictionary.uri'] if '_dictionary.uri' in block else []
-            if uri_vals and isinstance(uri_vals[0], str) and uri_vals[0] not in ('.', '?'):
-                base_uri = uri_vals[0]
+            base_uri = dict_uri
 
         title = block['_dictionary.title'][0] if '_dictionary.title' in block else None
         if isinstance(title, str) and title in ('.', '?'):
@@ -444,6 +446,7 @@ class DictionaryLoader:
             name=block_name,
             title=title,
             version=version,
+            uri=dict_uri,
             categories=categories,
             items=items,
             tag_to_item=tag_to_item,

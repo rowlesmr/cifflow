@@ -41,6 +41,7 @@ def save_dictionary(
         'name': dictionary.name,
         'title': dictionary.title,
         'version': dictionary.version,
+        'uri': dictionary.uri,
         'categories': {
             k: dataclasses.asdict(v)
             for k, v in dictionary.categories.items()
@@ -131,6 +132,7 @@ def load_dictionary(path: str | pathlib.Path) -> DdlmDictionary:
             deprecated_ids=set(data['deprecated_ids']),
             warnings=data['warnings'],
             source_files=data.get('source_files', []),
+            uri=data.get('uri'),
         )
     except (KeyError, TypeError) as e:
         raise ValueError(f'invalid dictionary cache structure in {path}: {e}')
