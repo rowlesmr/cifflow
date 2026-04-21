@@ -1,28 +1,40 @@
 #\#CIF_2.0
 
 
-#######  Begin instrument information  #######
-data_some_characters_instrument
+####### Begin publication information #######
+data_publication
 _audit_dataset.id	975eb50d-3a40-4a3c-9625-68f11733da5f
-_pd_instr.id	chrome_dome
-_pd_instr.2theta_monochr_pre	26.6
-_pd_instr.cons_illum_flag	no
-_pd_instr.divg_eq_mono_spec	0.2
-_pd_instr.detector_circle_radius	250
-_pd_instr.geometry	Bragg-Brentano
-_pd_instr.monochr_pre_spec
-;mosaic graphite
-;
-_pd_instr.soller_ax_mono_spec	4
 
-_pd_instr_detector.id	CD-detc
-_pd_instr_detector.instr_id	chrome_dome
-_pd_instr.soller_ax_spec_detc	4.5
-#######  End instrument information  #######
+loop_
+_audit_author.id
+_audit_author.address
+_audit_author.email
+_audit_author.name
+a "14 Greenfield Avenue, Subiaco WA 6008, Australia" olivia.turner@examplemail.com "Olivia Turner"
+b "52 Riverbend Drive, East Perth WA 6004, Australia" marcus.chen@examplemail.com "Marcus Chen"
+c "9 Coral Street, Fremantle WA 6160, Australia" sophie.williams@examplemail.com "Sophie Williams"
+d "27 Banksia Crescent, Joondalup WA 6027, Australia" daniel.hughes@examplemail.com "Daniel Hughes"
+
+loop_
+_audit_author_role.id
+_audit_author_role.role
+a  design
+b  design
+c  design
+d  design
+a  synthesis
+a  preparation
+a  characterisation
+a  measurement
+b  analysis
+c  software
+a  submission
+####### End publication information #######
 
 #######  Begin wavelength information  #######
 data_some_characters_wavelength
 _audit_dataset.id	975eb50d-3a40-4a3c-9625-68f11733da5f
+_diffrn.id STP_Cr
 _diffrn_radiation.id	CR_RAD
 _diffrn_radiation.probe	x-ray
 loop_
@@ -42,6 +54,31 @@ _diffrn_source.power	1200
 _diffrn_source.voltage	30
 _diffrn_source.target	Cr
 #######  End wavelength information  #######
+
+#######  Begin instrument information  #######
+data_some_characters_instrument
+loop_
+_audit_dataset.id
+975eb50d-3a40-4a3c-9625-68f11733da5f
+#7002c403-8d26-4c52-bd46-6b12bc761a48
+#26274904-f006-4606-8c43-ac6fd43bf596
+
+_pd_instr.id	chrome_dome
+_pd_instr.2theta_monochr_pre	26.6
+_pd_instr.cons_illum_flag	no
+_pd_instr.divg_eq_mono_spec	0.2
+_pd_instr.detector_circle_radius	250
+_pd_instr.geometry	Bragg-Brentano
+_pd_instr.monochr_pre_spec
+;mosaic graphite
+;
+_pd_instr.soller_ax_mono_spec	4
+
+_pd_instr_detector.id	CD-detc
+_pd_instr_detector.instr_id	chrome_dome
+_pd_instr.soller_ax_spec_detc	4.5
+#######  End instrument information  #######
+
 
 #######  Begin preferred orientation information  #######
 data_Selenium_0_some_characters_preferred_orientation
@@ -78,6 +115,7 @@ _pd_instr.soller_ax_spec_anal	2
 #######  Begin wavelength information  #######
 data_a_couple_of_ascii_things_wavelength
 _audit_dataset.id	975eb50d-3a40-4a3c-9625-68f11733da5f
+_diffrn.id STP_Cu
 _diffrn_radiation.id	copper
 _diffrn_radiation.probe	x-ray
 loop_
@@ -106,7 +144,7 @@ loop_
 _pd_pref_orient_March_Dollase.id
 _pd_pref_orient_March_Dollase.hkl
 _pd_pref_orient_March_Dollase.r
-0	[ 1 2 3 ]	0.8
+0 [ 1 2 3 ]	0.8
 #######  End preferred orientation information  #######
 
 #######  Begin instrument information  #######
@@ -130,6 +168,7 @@ _pd_instr.soller_ax_spec_detc	4
 #######  Begin wavelength information  #######
 data_another_string_wavelength
 _audit_dataset.id	975eb50d-3a40-4a3c-9625-68f11733da5f
+_diffrn.id STP_Co
 _diffrn_radiation.id	cobalt_tube
 _diffrn_radiation.probe	x-ray
 loop_
@@ -692,14 +731,14 @@ _refln.F_squared_meas
 loop_
 _pd_calc_component.point_id
 _pd_calc_component.intensity_net
-        5       0.000000  
-        6       0.000000  
-        7       0.000000  
-        8       0.000000  
-        9       0.001128  
-       10       0.694603  
-       11       0.001353  
-       12       0.000000  
+        5       0.000000
+        6       0.000000
+        7       0.000000
+        8       0.000000
+        9       0.001128
+       10       0.694603
+       11       0.001353
+       12       0.000000
 #######  End phase and diffractogram information  #######
 
 
@@ -723,16 +762,16 @@ _refln.F_squared_meas
 loop_
 _pd_calc_component.point_id
 _pd_calc_component.intensity_net
-        3       0.000000  
-        4       0.000000  
-        5       0.000000  
-        6       0.000000  
-        7       0.071082  
-        8       1.494255  
-        9       3.023972  
-       10       0.003691  
-       11       0.000000  
-       12       0.000000  
+        3       0.000000
+        4       0.000000
+        5       0.000000
+        6       0.000000
+        7       0.071082
+        8       1.494255
+        9       3.023972
+       10       0.003691
+       11       0.000000
+       12       0.000000
 #######  End phase and diffractogram information  #######
 
 
@@ -756,15 +795,15 @@ _refln.F_squared_meas
 loop_
 _pd_calc_component.point_id
 _pd_calc_component.intensity_net
-        4       0.000000  
-        5       0.000000  
-        6       0.000000  
-        7       0.000000  
-        8       0.022693  
-        9       0.354497  
-       10       0.900505  
-       11       0.039992  
-       12       0.000000  
+        4       0.000000
+        5       0.000000
+        6       0.000000
+        7       0.000000
+        8       0.022693
+        9       0.354497
+       10       0.900505
+       11       0.039992
+       12       0.000000
 #######  End phase and diffractogram information  #######
 
 
@@ -790,17 +829,17 @@ _refln.F_squared_meas
 loop_
 _pd_calc_component.point_id
 _pd_calc_component.intensity_net
-        2       0.000000  
-        3       0.000000  
-        4       0.000000  
-        5       0.019910  
-        6       1.339203  
-        7       0.514866  
-        8       0.404537  
-        9       0.024461  
-       10       0.534743  
-       11       0.984208  
-       12       0.117588  
+        2       0.000000
+        3       0.000000
+        4       0.000000
+        5       0.019910
+        6       1.339203
+        7       0.514866
+        8       0.404537
+        9       0.024461
+       10       0.534743
+       11       0.984208
+       12       0.117588
 #######  End phase and diffractogram information  #######
 
 
@@ -829,19 +868,19 @@ _refln.F_squared_meas
 loop_
 _pd_calc_component.point_id
 _pd_calc_component.intensity_net
-        0       0.000000  
-        1       0.000000  
-        2       0.000000  
-        3       0.117735  
-        4       1.234078  
-        5       2.227874  
-        6       1.339094  
-        7       0.767300  
-        8       0.613015  
-        9       0.923026  
-       10       2.305422  
-       11       2.288778  
-       12       1.776921  
+        0       0.000000
+        1       0.000000
+        2       0.000000
+        3       0.117735
+        4       1.234078
+        5       2.227874
+        6       1.339094
+        7       0.767300
+        8       0.613015
+        9       0.923026
+       10       2.305422
+       11       2.288778
+       12       1.776921
 #######  End phase and diffractogram information  #######
 
 
@@ -868,18 +907,18 @@ _refln.F_squared_meas
 loop_
 _pd_calc_component.point_id
 _pd_calc_component.intensity_net
-        1       0.000000  
-        2       0.000000  
-        3       0.000000  
-        4       0.118517  
-        5       1.167917  
-        6       1.204682  
-        7       0.325442  
-        8       0.157019  
-        9       0.469437  
-       10       0.376703  
-       11       0.436506  
-       12       1.485302  
+        1       0.000000
+        2       0.000000
+        3       0.000000
+        4       0.118517
+        5       1.167917
+        6       1.204682
+        7       0.325442
+        8       0.157019
+        9       0.469437
+       10       0.376703
+       11       0.436506
+       12       1.485302
 #######  End phase and diffractogram information  #######
 
 
@@ -903,17 +942,17 @@ _refln.F_squared_meas
 loop_
 _pd_calc_component.point_id
 _pd_calc_component.intensity_net
-        2       0.000000  
-        3       0.000000  
-        4       0.000000  
-        5       0.000448  
-        6       0.085664  
-        7       2.068297  
-        8       0.201925  
-        9       1.314393  
-       10       0.004710  
-       11       0.000000  
-       12       0.000000  
+        2       0.000000
+        3       0.000000
+        4       0.000000
+        5       0.000448
+        6       0.085664
+        7       2.068297
+        8       0.201925
+        9       1.314393
+       10       0.004710
+       11       0.000000
+       12       0.000000
 #######  End phase and diffractogram information  #######
 
 
@@ -939,19 +978,19 @@ _refln.F_squared_meas
 loop_
 _pd_calc_component.point_id
 _pd_calc_component.intensity_net
-        0       0.000000  
-        1       0.000000  
-        2       0.000000  
-        3       0.000389  
-        4       0.074746  
-        5       0.790313  
-        6       2.283823  
-        7       2.008360  
-        8       0.438287  
-        9       0.744376  
-       10       0.384143  
-       11       0.185132  
-       12       0.386129  
+        0       0.000000
+        1       0.000000
+        2       0.000000
+        3       0.000389
+        4       0.074746
+        5       0.790313
+        6       2.283823
+        7       2.008360
+        8       0.438287
+        9       0.744376
+       10       0.384143
+       11       0.185132
+       12       0.386129
 #######  End phase and diffractogram information  #######
 
 
@@ -977,17 +1016,17 @@ _refln.F_squared_meas
 loop_
 _pd_calc_component.point_id
 _pd_calc_component.intensity_net
-        2       0.000000  
-        3       0.000000  
-        4       0.000000  
-        5       0.000946  
-        6       0.377622  
-        7       3.197426  
-        8       0.911380  
-        9       0.066615  
-       10       0.288604  
-       11       0.860453  
-       12       0.400268  
+        2       0.000000
+        3       0.000000
+        4       0.000000
+        5       0.000946
+        6       0.377622
+        7       3.197426
+        8       0.911380
+        9       0.066615
+       10       0.288604
+       11       0.860453
+       12       0.400268
 #######  End phase and diffractogram information  #######
 
 
@@ -999,7 +1038,7 @@ _pd_diffractogram.id	some_characters
 _diffrn.id	STP
 _pd_instr.id	chrome_dome
 _pd_instr.radiation_id	CR_RAD
-_pd_diffractogram.diffrn_id	STP
+_pd_diffractogram.diffrn_id	STP_Cr
 _pd_diffractogram.instr_id	chrome_dome
 
 _pd_meas.datetime_initiated	2022-01-11T14:32:57+02:00
@@ -1018,19 +1057,19 @@ loop_
 	_pd_proc.ls_weight
 	_pd_calc.intensity_total
 	_pd_calc.intensity_bkg
-        0    10.000000    10.000000     1.000000     1.000000     2.000000     2.000000 
-        1    15.000000    15.000000     1.000000     1.000000     0.500000     0.500000 
-        2    20.000000    20.000000     1.000000     1.000000    -0.666667    -0.666667 
-        3    25.000000    25.000000     1.000000     1.000000    -1.500000    -1.500000 
-        4    30.000000    30.000000     1.000000     1.000000    -2.000000    -2.000000 
-        5    35.000000    35.000000     1.000000     1.000000    -2.166667    -2.166667 
-        6    40.000000    40.000000     1.000000     1.000000    -2.000000    -2.000000 
-        7    45.000000    45.000000     1.000000     1.000000    -1.428918    -1.500000 
-        8    50.000000    50.000000     1.000000     1.000000     0.850280    -0.666667 
-        9    55.000000    55.000000     1.000000     1.000000     3.879597     0.500000 
-       10    60.000000    60.000000     1.000000     1.000000     3.598799     2.000000 
-       11    65.000000    65.000000     1.000000     1.000000     3.874679     3.833333 
-       12    70.000000    70.000000     1.000000     1.000000     6.000000     6.000000 
+        0    10.000000    10.000000     1.000000     1.000000     2.000000     2.000000
+        1    15.000000    15.000000     1.000000     1.000000     0.500000     0.500000
+        2    20.000000    20.000000     1.000000     1.000000    -0.666667    -0.666667
+        3    25.000000    25.000000     1.000000     1.000000    -1.500000    -1.500000
+        4    30.000000    30.000000     1.000000     1.000000    -2.000000    -2.000000
+        5    35.000000    35.000000     1.000000     1.000000    -2.166667    -2.166667
+        6    40.000000    40.000000     1.000000     1.000000    -2.000000    -2.000000
+        7    45.000000    45.000000     1.000000     1.000000    -1.428918    -1.500000
+        8    50.000000    50.000000     1.000000     1.000000     0.850280    -0.666667
+        9    55.000000    55.000000     1.000000     1.000000     3.879597     0.500000
+       10    60.000000    60.000000     1.000000     1.000000     3.598799     2.000000
+       11    65.000000    65.000000     1.000000     1.000000     3.874679     3.833333
+       12    70.000000    70.000000     1.000000     1.000000     6.000000     6.000000
 #######  End powder diffraction data  #######
 
 
@@ -1042,7 +1081,7 @@ _pd_diffractogram.id	a_couple_of_ascii_things
 _diffrn.id	STP
 _pd_instr.id	copper_top
 _pd_instr.radiation_id	copper
-_pd_diffractogram.diffrn_id	STP
+_pd_diffractogram.diffrn_id	STP_Cu
 _pd_diffractogram.instr_id	copper_top
 
 _pd_meas.datetime_initiated	2022-01-12T13:36:23+02:00
@@ -1061,19 +1100,19 @@ loop_
 	_pd_proc.ls_weight
 	_pd_calc.intensity_total
 	_pd_calc.intensity_bkg
-        0    10.000000     9.967007     2.000000     0.500000     5.000000     5.000000 
-        1    15.000000    14.967164     2.000000     0.500000     2.166667     2.166667 
-        2    20.000000    19.967384     2.000000     0.500000     0.000000     0.000000 
-        3    25.000000    24.967666     2.000000     0.500000    -1.382265    -1.500000 
-        4    30.000000    29.968010     2.000000     0.500000    -0.980738    -2.333333 
-        5    35.000000    34.968414     2.000000     0.500000     0.915701    -2.500000 
-        6    40.000000    39.968878     2.000000     0.500000     1.882979    -2.000000 
-        7    45.000000    44.969402     2.000000     0.500000     0.774275    -0.833333 
-        8    50.000000    49.969984     2.000000     0.500000     2.174571     1.000000 
-        9    55.000000    54.970623     2.000000     0.500000     4.916924     3.500000 
-       10    60.000000    59.971318     2.000000     0.500000     9.883535     6.666667 
-       11    65.000000    64.972068     2.000000     0.500000    14.209492    10.500000 
-       12    70.000000    69.972871     2.000000     0.500000    18.379811    15.000000 
+        0    10.000000     9.967007     2.000000     0.500000     5.000000     5.000000
+        1    15.000000    14.967164     2.000000     0.500000     2.166667     2.166667
+        2    20.000000    19.967384     2.000000     0.500000     0.000000     0.000000
+        3    25.000000    24.967666     2.000000     0.500000    -1.382265    -1.500000
+        4    30.000000    29.968010     2.000000     0.500000    -0.980738    -2.333333
+        5    35.000000    34.968414     2.000000     0.500000     0.915701    -2.500000
+        6    40.000000    39.968878     2.000000     0.500000     1.882979    -2.000000
+        7    45.000000    44.969402     2.000000     0.500000     0.774275    -0.833333
+        8    50.000000    49.969984     2.000000     0.500000     2.174571     1.000000
+        9    55.000000    54.970623     2.000000     0.500000     4.916924     3.500000
+       10    60.000000    59.971318     2.000000     0.500000     9.883535     6.666667
+       11    65.000000    64.972068     2.000000     0.500000    14.209492    10.500000
+       12    70.000000    69.972871     2.000000     0.500000    18.379811    15.000000
 #######  End powder diffraction data  #######
 
 
@@ -1085,7 +1124,7 @@ _pd_diffractogram.id	another_string
 _diffrn.id	STP
 _pd_instr.id	the_best_wavelength
 _pd_instr.radiation_id	cobalt_tube
-_pd_diffractogram.diffrn_id	STP
+_pd_diffractogram.diffrn_id	STP_Co
 _pd_diffractogram.instr_id	the_best_wavelength
 
 _pd_meas.datetime_initiated	2022-01-13T12:22:58+02:00
@@ -1104,17 +1143,17 @@ loop_
 	_pd_proc.ls_weight
 	_pd_calc.intensity_total
 	_pd_calc.intensity_bkg
-        0    10.000000    10.032993     3.000000     0.333333     8.000000     8.000000 
-        1    15.000000    15.032836     3.000000     0.333333     3.833333     3.833333 
-        2    20.000000    20.032616     3.000000     0.333333     0.666667     0.666667 
-        3    25.000000    25.032334     3.000000     0.333333    -1.499611    -1.500000 
-        4    30.000000    30.031990     3.000000     0.333333    -2.591920    -2.666667 
-        5    35.000000    35.031586     3.000000     0.333333    -2.041627    -2.833333 
-        6    40.000000    40.031122     3.000000     0.333333     0.747108    -2.000000 
-        7    45.000000    45.030598     3.000000     0.333333     7.107417    -0.166667 
-        8    50.000000    50.030016     3.000000     0.333333     4.218258     2.666667 
-        9    55.000000    55.029377     3.000000     0.333333     8.625384     6.500000 
-       10    60.000000    60.028682     3.000000     0.333333    12.010790    11.333333 
-       11    65.000000    65.027932     3.000000     0.333333    18.212252    17.166667 
-       12    70.000000    70.027129     3.000000     0.333333    24.786397    24.000000 
+        0    10.000000    10.032993     3.000000     0.333333     8.000000     8.000000
+        1    15.000000    15.032836     3.000000     0.333333     3.833333     3.833333
+        2    20.000000    20.032616     3.000000     0.333333     0.666667     0.666667
+        3    25.000000    25.032334     3.000000     0.333333    -1.499611    -1.500000
+        4    30.000000    30.031990     3.000000     0.333333    -2.591920    -2.666667
+        5    35.000000    35.031586     3.000000     0.333333    -2.041627    -2.833333
+        6    40.000000    40.031122     3.000000     0.333333     0.747108    -2.000000
+        7    45.000000    45.030598     3.000000     0.333333     7.107417    -0.166667
+        8    50.000000    50.030016     3.000000     0.333333     4.218258     2.666667
+        9    55.000000    55.029377     3.000000     0.333333     8.625384     6.500000
+       10    60.000000    60.028682     3.000000     0.333333    12.010790    11.333333
+       11    65.000000    65.027932     3.000000     0.333333    18.212252    17.166667
+       12    70.000000    70.027129     3.000000     0.333333    24.786397    24.000000
 #######  End powder diffraction data  #######
