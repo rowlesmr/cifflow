@@ -1372,27 +1372,50 @@ def _suppressed_fk_pk_cols(
     table_rows: dict[str, list[dict]],
     schema: SchemaSpec,
 ) -> set[str]:
-    """Return FK-PK columns that are implicit from a co-emitted Set category."""
+    """Return FK-PK columns that are implicit from a co-emitted Set category.
+
+    Handles both direct FKs to a Set table and one-hop chains through a
+    Loop-class intermediate (e.g. pd_meas.diffractogram_id →
+    pd_data.diffractogram_id → pd_diffractogram.id).
+    """
     pk_cols: set[str] = set(table_def.primary_keys) - _SYNTHETIC
     suppressed: set[str] = set()
 
     for fk in table_def.foreign_keys:
-        target_name = fk.target_table
-        target_def = schema.tables.get(target_name)
-        if target_def is None or target_def.category_class != 'Set':
-            continue
-        target_table_rows = table_rows.get(target_name)
-        if not target_table_rows or len(target_table_rows) != 1:
-            continue
-
         if not all(c in pk_cols for c in fk.source_columns):
             continue
 
-        target_row = target_table_rows[0]
-        expected = tuple(target_row.get(c) for c in fk.target_columns)
+        target_name = fk.target_table
+        target_def = schema.tables.get(target_name)
+        if target_def is None:
+            continue
 
-        if all(tuple(row.get(c) for c in fk.source_columns) == expected for row in rows):
-            suppressed.update(fk.source_columns)
+        if target_def.category_class == 'Set':
+            # Direct FK to a Set table — existing logic.
+            target_table_rows = table_rows.get(target_name)
+            if not target_table_rows or len(target_table_rows) != 1:
+                continue
+            target_row = target_table_rows[0]
+            expected = tuple(target_row.get(c) for c in fk.target_columns)
+            if all(tuple(row.get(c) for c in fk.source_columns) == expected for row in rows):
+                suppressed.update(fk.source_columns)
+
+        else:
+            # Loop-class intermediate: check each column individually for a
+            # single-column onward FK to a Set table.
+            for src_col, tgt_col in zip(fk.source_columns, fk.target_columns):
+                for hop_fk in target_def.foreign_keys:
+                    if hop_fk.source_columns != [tgt_col]:
+                        continue
+                    ultimate_def = schema.tables.get(hop_fk.target_table)
+                    if ultimate_def is None or ultimate_def.category_class != 'Set':
+                        continue
+                    ultimate_rows = table_rows.get(hop_fk.target_table)
+                    if not ultimate_rows or len(ultimate_rows) != 1:
+                        continue
+                    expected_val = ultimate_rows[0].get(hop_fk.target_columns[0])
+                    if all(row.get(src_col) == expected_val for row in rows):
+                        suppressed.add(src_col)
 
     return suppressed
 
