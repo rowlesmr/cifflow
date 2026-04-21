@@ -531,31 +531,56 @@ def _collect_one_block(
 def _classify_pk_cols(
     tdef: TableDef,
     schema: SchemaSpec,
-) -> list[tuple[str, bool, str | None]]:
-    """Classify each domain PK column of a Loop table as Set-key or Loop-key.
+) -> list[tuple[str, bool, str | None, str | None, str | None]]:
+    """Classify each domain PK column as Set-key or Loop-key.
 
-    Returns a list of ``(col_name, is_set_key, parent_tag)`` in primary-key
-    declaration order.  ``parent_tag`` is the canonical tag of the target
-    column in the Set category (e.g. ``'_pd_diffractogram.id'``), or ``None``
-    for Loop-key columns.
+    Returns a list of ``(col_name, is_set_key, parent_tag, set_table, set_col)``
+    in primary-key declaration order.  For Set-key columns, ``parent_tag`` is
+    the canonical tag of the ultimate Set PK column, ``set_table`` and
+    ``set_col`` identify where to inject synthetic parent rows.  All three are
+    ``None`` for Loop-key columns.
+
+    Handles both single- and multi-column FKs, and follows one hop through a
+    Loop-class intermediate to reach the Set (e.g. pd_calc → pd_data →
+    pd_diffractogram).
     """
-    fk_map: dict[str, tuple[str, str]] = {}
+    # Build col → [(target_table, target_col)] from every FK (single or composite).
+    col_to_targets: dict[str, list[tuple[str, str]]] = {}
     for fk in tdef.foreign_keys:
-        if len(fk.source_columns) == 1:
-            fk_map[fk.source_columns[0]] = (fk.target_table, fk.target_columns[0])
+        for src, tgt in zip(fk.source_columns, fk.target_columns):
+            col_to_targets.setdefault(src, []).append((fk.target_table, tgt))
 
-    result: list[tuple[str, bool, str | None]] = []
+    result: list[tuple[str, bool, str | None, str | None, str | None]] = []
     for col_name in tdef.primary_keys:
         if col_name in _SYNTHETIC:
             continue
-        if col_name in fk_map:
-            target_table, target_col = fk_map[col_name]
+        found = False
+        for target_table, target_col in col_to_targets.get(col_name, []):
             target_tdef = schema.tables.get(target_table)
-            if target_tdef and target_tdef.category_class == 'Set':
-                parent_tag = schema.column_to_tag.get((target_table, target_col))
-                result.append((col_name, True, parent_tag))
+            if target_tdef is None:
                 continue
-        result.append((col_name, False, None))
+            if target_tdef.category_class == 'Set':
+                parent_tag = schema.column_to_tag.get((target_table, target_col))
+                result.append((col_name, True, parent_tag, target_table, target_col))
+                found = True
+                break
+            # One hop through a Loop intermediate.
+            for hop_fk in target_tdef.foreign_keys:
+                if target_col not in hop_fk.source_columns:
+                    continue
+                idx = hop_fk.source_columns.index(target_col)
+                ult_table = hop_fk.target_table
+                ult_col = hop_fk.target_columns[idx]
+                ult_tdef = schema.tables.get(ult_table)
+                if ult_tdef and ult_tdef.category_class == 'Set':
+                    parent_tag = schema.column_to_tag.get((ult_table, ult_col))
+                    result.append((col_name, True, parent_tag, ult_table, ult_col))
+                    found = True
+                    break
+            if found:
+                break
+        if not found:
+            result.append((col_name, False, None, None, None))
     return result
 
 
@@ -674,11 +699,7 @@ def _collect_all_blocks(
             # One block per row.
             # Classify PK columns: some may FK to a parent Set category.
             col_info = _classify_pk_cols(tdef, schema)
-            set_key_cols = [(col, tag) for col, is_set, tag in col_info if is_set]
-            set_fk_map_set: dict[str, tuple[str, str]] = {}
-            for fk in tdef.foreign_keys:
-                if len(fk.source_columns) == 1 and fk.source_columns[0] in {c for c, _ in set_key_cols}:
-                    set_fk_map_set[fk.source_columns[0]] = (fk.target_table, fk.target_columns[0])
+            set_key_cols = [(col, tag, st, sc) for col, is_set, tag, st, sc in col_info if is_set]
 
             for row in sorted(rows, key=lambda r: tuple(r.get(pk) or '' for pk in domain_pks)):
                 pk_vals = [str(row.get(pk) or '') for pk in domain_pks]
@@ -689,14 +710,13 @@ def _collect_all_blocks(
                 if set_key_cols:
                     # Inject synthetic parent rows so _suppressed_fk_pk_cols
                     # suppresses the FK column and the parent tag is emitted as a scalar.
-                    for (col, _parent_tag) in set_key_cols:
+                    for (col, _parent_tag, set_table, set_col) in set_key_cols:
                         val = row.get(col)
-                        if col in set_fk_map_set and val is not None:
-                            target_table, target_col = set_fk_map_set[col]
-                            block_table_rows[target_table] = [
-                                {'_block_id': '', '_row_id': 0, target_col: val}
+                        if set_table and val is not None:
+                            block_table_rows[set_table] = [
+                                {'_block_id': '', '_row_id': 0, set_col: val}
                             ]
-                            parent_tables.append(target_table)
+                            parent_tables.append(set_table)
 
                 cat_order = sorted(parent_tables) + [table_name] if parent_tables else None
                 result.append(_BlockData(
@@ -712,7 +732,7 @@ def _collect_all_blocks(
         else:
             # Loop category: classify PK columns.
             col_info = _classify_pk_cols(tdef, schema)
-            set_key_cols = [(col, tag) for col, is_set, tag in col_info if is_set]
+            set_key_cols = [(col, tag, st, sc) for col, is_set, tag, st, sc in col_info if is_set]
 
             if not set_key_cols:
                 # Pure Loop — one block for all rows.
@@ -730,14 +750,8 @@ def _collect_all_blocks(
                 # Group rows by Set-key tuple.
                 groups: dict[tuple, list[dict]] = {}
                 for row in rows:
-                    key = tuple(row.get(col) for col, _ in set_key_cols)
+                    key = tuple(row.get(col) for col, _, _, _ in set_key_cols)
                     groups.setdefault(key, []).append(row)
-
-                # Build FK map for Set-key columns: col → (target_table, target_col)
-                set_fk_map: dict[str, tuple[str, str]] = {}
-                for fk in tdef.foreign_keys:
-                    if len(fk.source_columns) == 1 and fk.source_columns[0] in {c for c, _ in set_key_cols}:
-                        set_fk_map[fk.source_columns[0]] = (fk.target_table, fk.target_columns[0])
 
                 for set_vals in sorted(groups, key=lambda t: tuple(v or '' for v in t)):
                     group_rows = groups[set_vals]
@@ -750,13 +764,12 @@ def _collect_all_blocks(
                     # as scalar tag-value pairs above the loop.
                     block_table_rows = {table_name: group_rows}
                     parent_tables = []
-                    for (col, _parent_tag), val in zip(set_key_cols, set_vals):
-                        if col in set_fk_map and val is not None:
-                            target_table, target_col = set_fk_map[col]
-                            block_table_rows[target_table] = [
-                                {'_block_id': '', '_row_id': 0, target_col: val}
+                    for (col, _parent_tag, set_table, set_col), val in zip(set_key_cols, set_vals):
+                        if set_table and val is not None:
+                            block_table_rows[set_table] = [
+                                {'_block_id': '', '_row_id': 0, set_col: val}
                             ]
-                            parent_tables.append(target_table)
+                            parent_tables.append(set_table)
 
                     cat_order = sorted(parent_tables) + [table_name]
                     result.append(_BlockData(
