@@ -47,7 +47,7 @@ class _BlockData:
     anchor_key_dict: dict[str, list[str]]
     suppress_fk_pk: bool
     suppress_loop_fk_pk: bool = False  # ORIGINAL mode only: suppress FK cols from Loop categories
-    dataset_id: str | None = None
+    dataset_id: str | list[str] | None = None
     preferred_category_order: list[str] | None = None  # ALL_BLOCKS: parent tables before child
 
 
@@ -629,6 +629,37 @@ def _ordered_tables_all_blocks(
     return result
 
 
+def _resolve_dataset_id(
+    conn: sqlite3.Connection,
+    block_ids: set[str],
+    version: CifVersion,
+) -> 'str | list[str] | None':
+    """Return the _audit_dataset_id(s) for the given originating _block_id values.
+
+    Ignores synthetic empty-string block_ids.  If _block_dataset_membership is
+    absent or has no matching rows, falls back to a fresh UUID (CIF 2.0) or None.
+    Returns a plain str for one match, a sorted list for multiple, or a fresh
+    UUID / None when no membership data is found.
+    """
+    real_bids = {b for b in block_ids if b}
+    if real_bids:
+        try:
+            placeholders = ','.join('?' * len(real_bids))
+            rows = conn.execute(
+                f'SELECT DISTINCT "_audit_dataset_id" FROM "_block_dataset_membership" '
+                f'WHERE "_block_id" IN ({placeholders})',
+                tuple(sorted(real_bids)),
+            ).fetchall()
+            ids = sorted(r[0] for r in rows if r[0] is not None)
+            if len(ids) == 1:
+                return ids[0]
+            if len(ids) > 1:
+                return ids
+        except sqlite3.OperationalError:
+            pass
+    return str(uuid.uuid4()) if version == CifVersion.CIF_2_0 else None
+
+
 def _collect_all_blocks(
     conn: sqlite3.Connection,
     schema: SchemaSpec,
@@ -686,8 +717,6 @@ def _collect_all_blocks(
             f"dictionary-split block."
         )
 
-    dataset_id: str | None = str(uuid.uuid4()) if version == CifVersion.CIF_2_0 else None
-
     result: list[_BlockData] = []
 
     for table_name in _ordered_tables_all_blocks(schema, plan):
@@ -722,6 +751,7 @@ def _collect_all_blocks(
                             parent_tables.append(set_table)
 
                 cat_order = sorted(parent_tables) + [table_name] if parent_tables else None
+                did = _resolve_dataset_id(conn, {row.get('_block_id')}, version)
                 result.append(_BlockData(
                     name=block_name,
                     table_rows=block_table_rows,
@@ -729,7 +759,7 @@ def _collect_all_blocks(
                     anchor_frozenset=frozenset(),
                     anchor_key_dict={},
                     suppress_fk_pk=bool(set_key_cols),
-                    dataset_id=dataset_id,
+                    dataset_id=did,
                     preferred_category_order=cat_order,
                 ))
         else:
@@ -740,6 +770,7 @@ def _collect_all_blocks(
             if not set_key_cols:
                 # Pure Loop — one block for all rows.
                 block_name = _sanitize_block_name(table_name) or table_name
+                did = _resolve_dataset_id(conn, {row.get('_block_id') for row in rows}, version)
                 result.append(_BlockData(
                     name=block_name,
                     table_rows={table_name: rows},
@@ -747,7 +778,7 @@ def _collect_all_blocks(
                     anchor_frozenset=frozenset(),
                     anchor_key_dict={},
                     suppress_fk_pk=False,
-                    dataset_id=dataset_id,
+                    dataset_id=did,
                 ))
             else:
                 # Group rows by Set-key tuple.
@@ -775,6 +806,7 @@ def _collect_all_blocks(
                             parent_tables.append(set_table)
 
                     cat_order = sorted(parent_tables) + [table_name]
+                    did = _resolve_dataset_id(conn, {row.get('_block_id') for row in group_rows}, version)
                     result.append(_BlockData(
                         name=block_name,
                         table_rows=block_table_rows,
@@ -783,7 +815,7 @@ def _collect_all_blocks(
                         anchor_key_dict={},
                         suppress_fk_pk=True,
                         suppress_loop_fk_pk=True,
-                        dataset_id=dataset_id,
+                        dataset_id=did,
                         preferred_category_order=cat_order,
                     ))
 
@@ -866,7 +898,13 @@ def _render_block(
         )
         if not audit_in_table and not audit_in_fallback:
             audit_tag = schema.column_to_tag.get(('audit_dataset', 'id'), '_audit_dataset.id')
-            lines.append(f'{audit_tag}  {quote(data.dataset_id, version)}')
+            if isinstance(data.dataset_id, list):
+                lines.append('loop_')
+                lines.append(f'  {audit_tag}')
+                for did in data.dataset_id:
+                    lines.append(f'  {quote(did, version)}')
+            else:
+                lines.append(f'{audit_tag}  {quote(data.dataset_id, version)}')
             first_category = False
 
     effective_spec = spec
