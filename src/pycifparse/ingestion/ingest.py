@@ -258,6 +258,9 @@ def _pk_tuple(row: dict, table: TableDef) -> tuple:
     return tuple(row.get(k) for k in table.primary_keys)
 
 
+_SYNTHETIC_PK_COLS = frozenset({'_block_id', '_row_id', '_pycifparse_id'})
+
+
 def _merge_into(
     merged_rows: dict[str, dict[tuple, dict]],
     table_name: str,
@@ -266,6 +269,7 @@ def _merge_into(
     row_id_counters: dict[str, int],
     emit: Callable[..., None],
     emit_error: Callable[..., None] | None = None,
+    block_pk_values: 'dict[str, list[str]] | None' = None,
 ) -> int:
     """Merge *row* into *merged_rows[table_name]*.  Returns the row's ``_row_id``.
 
@@ -284,6 +288,17 @@ def _merge_into(
     if pk not in tbl_rows:
         row['_row_id'] = _next_row_id(row_id_counters, table_name)
         tbl_rows[pk] = dict(row)
+        if block_pk_values is not None:
+            bid = row.get('_block_id')
+            if bid is not None:
+                entry = block_pk_values.get(bid)
+                if entry is None:
+                    block_pk_values[bid] = entry = []
+                for pk_col in table.primary_keys:
+                    if pk_col not in _SYNTHETIC_PK_COLS:
+                        v = row.get(pk_col)
+                        if v is not None:
+                            entry.append(v)
         return row['_row_id']
     else:
         existing = tbl_rows[pk]
@@ -322,6 +337,7 @@ def _apply_fk(
     block_id: str | None = None,
     merged_rows: dict[str, dict[tuple, dict]] | None = None,
     row_id_counters: dict[str, int] | None = None,
+    block_pk_values: 'dict[str, list[str]] | None' = None,
 ) -> None:
     """Fill missing FK/PK columns in *row* in-place.
 
@@ -391,7 +407,8 @@ def _apply_fk(
                 if parent_table is not None:
                     stub: dict = {'_block_id': block_id, tgt_col: val}
                     _merge_into(merged_rows, fk.target_table, stub,
-                                parent_table, row_id_counters, emit)
+                                parent_table, row_id_counters, emit,
+                                block_pk_values=block_pk_values)
 
         else:
             # ── Composite FK ──────────────────────────────────────────────────
@@ -473,7 +490,8 @@ def _apply_fk(
                         for _, tc, v in col_vals:
                             stub[tc] = v
                         _merge_into(merged_rows, fk.target_table, stub,
-                                    parent_table, row_id_counters, emit)
+                                    parent_table, row_id_counters, emit,
+                                    block_pk_values=block_pk_values)
 
     # ── Propagation links ─────────────────────────────────────────────────────
     # PK columns that are DDLm Link items but have no FK constraint (e.g. the
@@ -718,6 +736,7 @@ class _Ingester:
         # Per-ingest accumulators
         self.row_id_counters: dict[str, int] = {}
         self.merged_rows: dict[str, dict[tuple, dict]] = {}
+        self._block_pk_values: dict[str, list[str]] = {}
         self.fallback_rows: list[dict] = []
         # (block_id, audit_dataset_id, id_regime) rows for _block_dataset_membership
         self.membership_rows: list[dict] = []
@@ -861,7 +880,8 @@ class _Ingester:
             # Apply FK propagation before merging
             _apply_fk(row, table, self.schema, None,
                       fk_accumulator, self.propagate_fk, self._emit,
-                      block_id, self.merged_rows, self.row_id_counters)
+                      block_id, self.merged_rows, self.row_id_counters,
+                      self._block_pk_values)
             if tbl_name not in self.merged_rows:
                 self.merged_rows[tbl_name] = {}
             pk = _pk_tuple(row, table)
@@ -871,6 +891,14 @@ class _Ingester:
                     self.tag_presence_rows.append((block_id, tbl_name, col, pk_json_str))
             if pk not in self.merged_rows[tbl_name]:
                 self.merged_rows[tbl_name][pk] = dict(row)
+                entry = self._block_pk_values.get(block_id)
+                if entry is None:
+                    self._block_pk_values[block_id] = entry = []
+                for pk_col in table.primary_keys:
+                    if pk_col not in _SYNTHETIC_PK_COLS:
+                        v = row.get(pk_col)
+                        if v is not None:
+                            entry.append(v)
             else:
                 existing = self.merged_rows[tbl_name][pk]
                 pk_values = dict(zip(table.primary_keys, pk))
@@ -896,7 +924,8 @@ class _Ingester:
                 row['_pycifparse_id'] = str(_uuid_module.uuid4())
             _apply_fk(row, table, self.schema, None,
                       fk_accumulator, self.propagate_fk, self._emit,
-                      block_id, self.merged_rows, self.row_id_counters)
+                      block_id, self.merged_rows, self.row_id_counters,
+                      self._block_pk_values)
             pk = _pk_tuple(row, table)
             pk_json_str = json.dumps(list(pk))
             for col, val in col_dict.items():
@@ -905,6 +934,7 @@ class _Ingester:
             _merge_into(
                 self.merged_rows, tbl_name, row, table,
                 self.row_id_counters, self._emit, self._emit_error,
+                self._block_pk_values,
             )
 
         self._record_membership(block, block_id, self._id_regime(block_id))
@@ -1106,7 +1136,8 @@ class _Ingester:
 
                 _apply_fk(row, table, self.schema, iter_by_defid,
                           fk_accumulator, self.propagate_fk, self._emit,
-                          block_id, self.merged_rows, self.row_id_counters)
+                          block_id, self.merged_rows, self.row_id_counters,
+                          self._block_pk_values)
                 iter_rows[tbl_name] = row
 
             # ── Per-iteration UUID fill for missing PKs ───────────────────────
@@ -1152,10 +1183,12 @@ class _Ingester:
                                     _apply_fk(stub, parent_table, self.schema, None,
                                               fk_accumulator, self.propagate_fk,
                                               self._emit, block_id,
-                                              self.merged_rows, self.row_id_counters)
+                                              self.merged_rows, self.row_id_counters,
+                                              self._block_pk_values)
                                     _merge_into(self.merged_rows, fk.target_table,
                                                 stub, parent_table,
-                                                self.row_id_counters, self._emit)
+                                                self.row_id_counters, self._emit,
+                                                block_pk_values=self._block_pk_values)
 
             # Cross-table PK propagation for multi-category loops.
             # All compatible tables share the same PK column names.  After
@@ -1201,6 +1234,7 @@ class _Ingester:
                 rid = _merge_into(
                     self.merged_rows, tbl_name, row, table,
                     self.row_id_counters, self._emit, self._emit_error,
+                    self._block_pk_values,
                 )
                 ids[tbl_name] = rid
             iter_row_ids.append(ids)
@@ -1301,24 +1335,7 @@ class _Ingester:
 
     def _id_regime(self, block_id: str) -> str:
         """Determine id_regime for a general block (no _audit_dataset.id)."""
-        # Collect PK values of rows first contributed by this block
-        pk_values: list[str] = []
-        for tbl_name, tbl_rows in self.merged_rows.items():
-            table = self.schema.tables[tbl_name]
-            non_synthetic_pks = [
-                k for k in table.primary_keys
-                if k not in ('_block_id', '_row_id', '_pycifparse_id')
-            ]
-            if not non_synthetic_pks:
-                continue
-            for row in tbl_rows.values():
-                if row.get('_block_id') != block_id:
-                    continue
-                for pk_col in non_synthetic_pks:
-                    v = row.get(pk_col)
-                    if v is not None:
-                        pk_values.append(v)
-
+        pk_values = self._block_pk_values.get(block_id)
         if not pk_values:
             return 'assumed'
         return 'uuid' if all(_is_uuid(v) for v in pk_values) else 'assumed'
