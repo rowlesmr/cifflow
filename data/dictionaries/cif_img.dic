@@ -52,7 +52,7 @@ data_CIF_IMG
 #        CATEGORY_GROUP_LIST
 #        SUB_CATEGORY
 #
-#        category  ARRAY_DATA 
+#        category  ARRAY_DATA
 #
 #                  _array_data.array_id
 #                  _array_data.binary_id
@@ -63,7 +63,7 @@ data_CIF_IMG
 #                  _array_data.variant
 #
 
-#        category  ARRAY_DATA_EXTERNAL_DATA 
+#        category  ARRAY_DATA_EXTERNAL_DATA
 #
 #                  _array_data_external_data.archive_format
 #                  _array_data_external_data.archive_path
@@ -77,7 +77,7 @@ data_CIF_IMG
 #                  _array_data_external_data.version
 #
 
-#        category  ARRAY_ELEMENT_SIZE 
+#        category  ARRAY_ELEMENT_SIZE
 #
 #                  _array_element_size.array_id
 #                  _array_element_size.index
@@ -85,7 +85,7 @@ data_CIF_IMG
 #                  _array_element_size.variant
 #
 
-#        category  ARRAY_INTENSITIES 
+#        category  ARRAY_INTENSITIES
 #
 #                  _array_intensities.array_id
 #                  _array_intensities.binary_id
@@ -104,7 +104,7 @@ data_CIF_IMG
 #                  _array_intensities.variant
 #
 
-#        category  ARRAY_STRUCTURE 
+#        category  ARRAY_STRUCTURE
 #
 #                  _array_structure.byte_order
 #                  _array_structure.compression_type
@@ -114,7 +114,7 @@ data_CIF_IMG
 #                  _array_structure.variant
 #
 
-#        category  ARRAY_STRUCTURE_LIST 
+#        category  ARRAY_STRUCTURE_LIST
 #
 #                  _array_structure_list.axis_set_id
 #                  _array_structure_list.array_id
@@ -126,7 +126,7 @@ data_CIF_IMG
 #                  _array_structure_list.variant
 #
 
-#        category  ARRAY_STRUCTURE_LIST_SECTION 
+#        category  ARRAY_STRUCTURE_LIST_SECTION
 #
 #                  _array_structure_list_section.array_id
 #                  _array_structure_list_section.end
@@ -137,7 +137,7 @@ data_CIF_IMG
 #                  _array_structure_list_section.variant
 #
 
-#        category  ARRAY_STRUCTURE_LIST_AXIS 
+#        category  ARRAY_STRUCTURE_LIST_AXIS
 #
 #                  _array_structure_list_axis.axis_id
 #                  _array_structure_list_axis.axis_set_id
@@ -154,7 +154,7 @@ data_CIF_IMG
 #                  _array_structure_list_axis.variant
 #
 
-#        category  AXIS 
+#        category  AXIS
 #
 #                  _axis.depends_on
 #                  _axis.equipment
@@ -173,12 +173,12 @@ data_CIF_IMG
 #                  _axis.variant
 #
 
-#        category  DIFFRN 
+#        category  DIFFRN
 #
 #                  _diffrn.id
 #
 
-#        category  DIFFRN_DATA_FRAME 
+#        category  DIFFRN_DATA_FRAME
 #
 #                  _diffrn_data_frame.array_id
 #                  _diffrn_data_frame.array_section_id
@@ -194,7 +194,7 @@ data_CIF_IMG
 #                  _diffrn_data_frame.variant
 #
 
-#        category  DIFFRN_DETECTOR 
+#        category  DIFFRN_DETECTOR
 #
 #                  _diffrn_detector.details
 #                  _diffrn_detector.detector
@@ -208,7 +208,7 @@ data_CIF_IMG
 #                  _diffrn_detector.variant
 #
 
-#        category  DIFFRN_DETECTOR_AXIS 
+#        category  DIFFRN_DETECTOR_AXIS
 #
 #                  _diffrn_detector_axis.axis_id
 #                  _diffrn_detector_axis.detector_id
@@ -216,7 +216,7 @@ data_CIF_IMG
 #                  _diffrn_detector_axis.variant
 #
 
-#        category  DIFFRN_DETECTOR_ELEMENT 
+#        category  DIFFRN_DETECTOR_ELEMENT
 #
 #                  _diffrn_detector_element.id
 #                  _diffrn_detector_element.detector_id
@@ -227,7 +227,7 @@ data_CIF_IMG
 #                  _diffrn_detector_element.variant
 #
 
-#        category  DIFFRN_MEASUREMENT 
+#        category  DIFFRN_MEASUREMENT
 #
 #                  _diffrn_measurement.diffrn_id
 #                  _diffrn_measurement.details
@@ -244,7 +244,7 @@ data_CIF_IMG
 #                  _diffrn_measurement.variant
 #
 
-#        category  DIFFRN_MEASUREMENT_AXIS 
+#        category  DIFFRN_MEASUREMENT_AXIS
 #
 #                  _diffrn_measurement_axis.axis_id
 #                  _diffrn_measurement_axis.measurement_device
@@ -252,7 +252,7 @@ data_CIF_IMG
 #                  _diffrn_measurement_axis.variant
 #
 
-#        category  DIFFRN_RADIATION 
+#        category  DIFFRN_RADIATION
 #
 #                  _diffrn_radiation.beam_width
 #                  _diffrn_radiation.beam_height
@@ -288,14 +288,14 @@ data_CIF_IMG
 #                  _diffrn_radiation.xray_symbol
 #
 
-#        category  DIFFRN_REFLN 
+#        category  DIFFRN_REFLN
 #
 #                  _diffrn_refln.diffrn_id
 #                  _diffrn_refln.frame_id
 #                  _diffrn_refln.variant
 #
 
-#        category  DIFFRN_SCAN 
+#        category  DIFFRN_SCAN
 #
 #                  _diffrn_scan.id
 #                  _diffrn_scan.date_end
@@ -311,7 +311,7 @@ data_CIF_IMG
 #                  _diffrn_scan.variant
 #
 
-#        category  DIFFRN_SCAN_AXIS 
+#        category  DIFFRN_SCAN_AXIS
 #
 #                  _diffrn_scan_axis.axis_id
 #                  _diffrn_scan_axis.angle_start
@@ -329,7 +329,7 @@ data_CIF_IMG
 #                  _diffrn_scan_axis.variant
 #
 
-#        category  DIFFRN_SCAN_COLLECTION 
+#        category  DIFFRN_SCAN_COLLECTION
 #
 #                  _diffrn_scan_collection.details
 #                  _diffrn_scan_collection.diffrn_id
@@ -339,7 +339,7 @@ data_CIF_IMG
 #                  _diffrn_scan_collection.variant
 #
 
-#        category  DIFFRN_SCAN_FRAME 
+#        category  DIFFRN_SCAN_FRAME
 #
 #                  _diffrn_scan_frame.date
 #                  _diffrn_scan_frame.diffrn_id
@@ -360,7 +360,7 @@ data_CIF_IMG
 #                  _diffrn_scan_frame.variant
 #
 
-#        category  DIFFRN_SCAN_FRAME_AXIS 
+#        category  DIFFRN_SCAN_FRAME_AXIS
 #
 #                  _diffrn_scan_frame_axis.axis_id
 #                  _diffrn_scan_frame_axis.angle
@@ -376,7 +376,7 @@ data_CIF_IMG
 #                  _diffrn_scan_frame_axis.variant
 #
 
-#        category  DIFFRN_SCAN_FRAME_MONITOR 
+#        category  DIFFRN_SCAN_FRAME_MONITOR
 #
 #                  _diffrn_scan_frame_monitor.id
 #                  _diffrn_scan_frame_monitor.detector_id
@@ -388,14 +388,14 @@ data_CIF_IMG
 #                  _diffrn_scan_frame_monitor.variant
 #
 
-#        category  DIFFRN_SOURCE 
+#        category  DIFFRN_SOURCE
 #
 #                  _diffrn_source.diffrn_id
 #                  _diffrn_source.source
 #                  _diffrn_source.type
 #
 
-#        category  MAP 
+#        category  MAP
 #
 #                  _map.details
 #                  _map.diffrn_id
@@ -404,7 +404,7 @@ data_CIF_IMG
 #                  _map.variant
 #
 
-#        category  MAP_SEGMENT 
+#        category  MAP_SEGMENT
 #
 #                  _map_segment.array_id
 #                  _map_segment.array_section_id
@@ -418,7 +418,7 @@ data_CIF_IMG
 #                  _map_segment.variant
 #
 
-#        category  VARIANT 
+#        category  VARIANT
 #
 #                  _variant.details
 #                  _variant.diffrn_id
@@ -429,7 +429,7 @@ data_CIF_IMG
 #                  _variant.variant_of
 #
 
-#       ***DEPRECATED*** data items 
+#       ***DEPRECATED*** data items
 #
 #                  _diffrn_detector_axis.id
 #                  _diffrn_detector_element.center[1]
@@ -772,7 +772,7 @@ save_CIF_IMG_HEAD
     dictionary
 ;
     _name.category_id             CIF_IMG
-    _name.object_id               CIF_IMG_HEAD
+    _name.object_id               CIF_IMG_HEAD #this is what's in the import get
 
     _import.get
         [{'dupl':Ignore  'file':multi_block_core.dic  'mode':Full
@@ -1006,9 +1006,9 @@ save_array_data.data
     _definition.update            2025-09-23
     _description.text
 ;             The value of _array_data.data contains the array data
-              encapsulated in a STAR string.  The value of this item is 
-              required unless a value is given for 
-               _array_data.external_data_id instead, in which 
+              encapsulated in a STAR string.  The value of this item is
+              required unless a value is given for
+               _array_data.external_data_id instead, in which
               case, a null value of '.' should be given here.
 
               The representation used is a variant on the
@@ -1036,7 +1036,7 @@ save_array_data.data
               or the parameter
                 conversions="X-CBF_BACKGROUND_OFFSET_DELTA"
 
-              If the parameter 
+              If the parameter
                 conversions="X-CBF_PACKED"
               is given it may be further modified with the parameters
                 uncorrelated_sections
@@ -1260,7 +1260,7 @@ save_array_data.external_data_id
               If not given, then the actual array data should be specified as
               the value of _array_data.data.  If
               both values are given, the value on _array_data.data takes
-              precedence, and a warning of a possible conflict should be issued. 
+              precedence, and a warning of a possible conflict should be issued.
 
 ;
     _name.category_id             array_data
@@ -1524,22 +1524,22 @@ save_array_data_external_data.frame
 ;
 
     The position of the raw data array in what may possibly be a
-    multi-dimensional array of data referenced by   
+    multi-dimensional array of data referenced by
        _array_data_external_data.uri and _array_data_external_data.path.
     For many of the formats, data for a single frame is identified by that
     reference.  If data for multiple frames or data for portions of
     one or more frames is referenced, the desired portion can be
-    identified dimension by dimension as an array section identifier 
+    identified dimension by dimension as an array section identifier
     the form
        ARRAYID(start1:end1:stride1,start2:end2:stride2, ...)
     or other valid ARRAY_STRUCTURE_LIST_SECTION
     identifier.
-    
+
     Note that the precendence ordering of dimensions varies, even within a
     single specified format.  For example HDF5 supports both C slowest first
     and Fortran fastest first, so it is essential to properly populate
     ARRAY_STRUCTURE_LIST category.
-    
+
 ;
     _name.category_id             array_data_external_data
     _name.object_id               frame
@@ -1560,7 +1560,7 @@ save_array_data_external_data.id
     _definition.update            2025-09-23
     _description.text
 ;             The value of _array_data_external_data.id must uniquely identify
-              each item of array_data_external_data.              
+              each item of array_data_external_data.
 
               This item has been made implicit and given a default value of 1
               as a convenience in writing miniCBF files.  Normally an
@@ -1874,7 +1874,7 @@ save_array_intensities.details
     _definition.id                '_array_intensities.details'
     _definition.update            2025-09-23
     _description.text
-;             A description of special aspects of the calculation of array 
+;             A description of special aspects of the calculation of array
               intensities.
 ;
     _name.category_id             array_intensities
@@ -2044,7 +2044,7 @@ save_array_intensities.overload
               value at or above which correct intensities may not be recorded.
 
               The valid pixel values are those less than
-              _array_intensities.overload and greater than or equal to 
+              _array_intensities.overload and greater than or equal to
               _array_intensities.underload
 ;
     _name.category_id             array_intensities
@@ -2121,7 +2121,7 @@ save_array_intensities.pixel_fast_bin_size
               'none'.
 
               It is specified as a float to allow for binning algorithms that
-              create array elements that are not integer multiples of the 
+              create array elements that are not integer multiples of the
               detector pixel size.
 ;
     _name.category_id             array_intensities
@@ -2209,8 +2209,8 @@ save_array_intensities.underload
 ;             The lowest value at which pixels for this detector are
               measured.
 
-              The valid pixel values are those less than 
-              _array_intensities.overload and greater than or equal to 
+              The valid pixel values are those less than
+              _array_intensities.overload and greater than or equal to
               _array_intensities.underload
 
 ;
@@ -2369,7 +2369,7 @@ save_array_structure.compression_type_flag
     _definition.id                '_array_structure.compression_type_flag'
     _definition.update            2025-09-23
     _description.text
-;             Flags modifying the type of data-compression method used to 
+;             Flags modifying the type of data-compression method used to
               compress the arraydata.
 ;
     _name.category_id             array_structure
@@ -2445,7 +2445,7 @@ save_array_structure.id
     _definition.update            2025-09-23
     _description.text
 ;             The value of _array_structure.id must uniquely identify
-              each item of array data.              
+              each item of array data.
 
               This item has been made implicit and given a default value of 1
               as a convenience in writing miniCBF files.  Normally an
@@ -2596,7 +2596,7 @@ save_array_structure_list.dimension
     _definition.id                '_array_structure_list.dimension'
     _definition.update            2025-09-23
     _description.text
-;             The number of elements stored in the array structure in 
+;             The number of elements stored in the array structure in
               this dimension.
 ;
     _name.category_id             array_structure_list
@@ -2914,14 +2914,14 @@ save_array_structure_list_axis.fract_displacement
         '_array_structure_list_axis.fract_displacement'
     _definition.update            2025-09-23
     _description.text
-;             The setting of the specified axis as a decimal fraction of 
-               the axis unit vector for the first data point of the array 
-               index with the corresponding value of 
-               _array_structure_list.axis_set_id.  
+;             The setting of the specified axis as a decimal fraction of
+               the axis unit vector for the first data point of the array
+               index with the corresponding value of
+               _array_structure_list.axis_set_id.
 
-               If the index is specified as 'increasing', this will be the 
-               centre of the pixel with index value 1.  If the index is 
-               specified as 'decreasing', this will be the centre of the 
+               If the index is specified as 'increasing', this will be the
+               centre of the pixel with index value 1.  If the index is
+               specified as 'decreasing', this will be the centre of the
                pixel with maximum index value.
 ;
     _name.category_id             array_structure_list_axis
@@ -2984,9 +2984,9 @@ save_array_structure_list_axis.reference_angle
     _definition.update            2025-09-23
     _description.text
 ;             The value of _array_structure_list_axis.reference_angle
-               specifies the setting of the angle of this axis used for 
-               determining a reference beam centre and a reference detector 
-               distance.  It is normally expected to be identical to the 
+               specifies the setting of the angle of this axis used for
+               determining a reference beam centre and a reference detector
+               distance.  It is normally expected to be identical to the
                value of _array_structure_list_axis.angle.
 
 ;
@@ -3007,7 +3007,7 @@ save_array_structure_list_axis.reference_displacement
     _definition.update            2025-09-23
     _description.text
 ;             The value of _array_structure_list_axis.reference_displacement
-               specifies the setting of the displacement of this axis used 
+               specifies the setting of the displacement of this axis used
                for determining a reference beam centre and a reference detector
                distance.  It is normally expected to be identical to the value
                of _array_structure_list_axis.displacement.
@@ -3070,7 +3070,7 @@ save_ARRAY_STRUCTURE_LIST_SECTION
     ...
 
     stopping either when the indices leave the limits of the indices
-    of that dimension or 
+    of that dimension or
     [min(_array_structure_list_section.start, _array_structure_list_section.end),
      max(_array_structure_list_section.start, _array_structure_list_section.end)].
     The ordering of these elements is determined by the overall ordering of
@@ -3241,7 +3241,7 @@ save_array_structure_list_section.start
                   ...
 
               stopping either when the indices leave the limits of the indices
-              of that dimension or 
+              of that dimension or
               [min(_array_structure_list_section.start,
                   _array_structure_list_section.end),
                max(_array_structure_list_section.start,
@@ -3319,11 +3319,11 @@ save_AXIS
 ;   Data items in the AXIS category record the information required
      to describe the various goniometer, detector, source and other
      axes needed to specify a data collection or the axes defining the
-     coordinate system of an image.  
+     coordinate system of an image.
 
-     The location of each axis is specified by two vectors: the axis 
-     itself, given by a unit vector in the direction of the axis, and 
-     an offset to the base of the unit vector.  
+     The location of each axis is specified by two vectors: the axis
+     itself, given by a unit vector in the direction of the axis, and
+     an offset to the base of the unit vector.
 
      The vectors defining an axis are referenced to an appropriate
      coordinate system, given in _axis.system.  The axis vector itself,
@@ -3331,24 +3331,24 @@ save_AXIS
      is a dimensionless unit vector.  Where meaningful, an offset vector
        [_axis.offset[1], _axis.offset[2], _axis.offset[3]]
      supplies the offsets to the base of a rotation or translation axis in
-     X, Y and Z.  This is appropriate for the imgCIF standard laboratory 
-     coordinate system, the NeXus/HDF5 McStas laboratory coordinate system 
-     and the last two Cartesian coordinate systems, but for the direct lattice, 
+     X, Y and Z.  This is appropriate for the imgCIF standard laboratory
+     coordinate system, the NeXus/HDF5 McStas laboratory coordinate system
+     and the last two Cartesian coordinate systems, but for the direct lattice,
      X corresponds to a, Y to b and Z to c, while for the reciprocal lattice,
      X corresponds to a*, Y to b* and Z to c*.
 
-     For purposes of visualization, all the coordinate systems are 
-     taken as right-handed, i.e. using the convention that the extended 
-     thumb of a right hand could point along the first (X) axis, the 
-     straightened pointer finger could point along the second (Y) axis 
+     For purposes of visualization, all the coordinate systems are
+     taken as right-handed, i.e. using the convention that the extended
+     thumb of a right hand could point along the first (X) axis, the
+     straightened pointer finger could point along the second (Y) axis
      and the middle finger folded inward could point along the third (Z)
      axis.  For a right-handed rotation axis, if the right hand is wrapped
      around the axis with the thumb pointed in the direction of the axis,
-     the fingers point in the positive rotation direction, i.e. clockwise.  
+     the fingers point in the positive rotation direction, i.e. clockwise.
 
-     THE IMGCIF STANDARD LABORATORY COORDINATE SYSTEM 
-     The imgCIF standard laboratory coordinate system is a right-handed   
-     orthogonal coordinate system similar to that used by MOSFLM,  
+     THE IMGCIF STANDARD LABORATORY COORDINATE SYSTEM
+     The imgCIF standard laboratory coordinate system is a right-handed
+     orthogonal coordinate system similar to that used by MOSFLM,
      but imgCIF puts Z along the X-ray beam, rather than putting X along the
      X-ray beam as in MOSFLM.
 
@@ -3362,7 +3362,7 @@ save_AXIS
      by the beam, that will be the origin of the axis system.  If no such
      point is defined, then the midpoint of the line of intersection
      between the sample and the centre of the beam will define the origin.
-     For this definition the sample positioning system will be set at 
+     For this definition the sample positioning system will be set at
      its initial reference position for the experiment.
                              | Y (to complete right-handed system)
                              |
@@ -3379,8 +3379,8 @@ save_AXIS
                        /Z (to source)
      Axis 1 (X): The X-axis is aligned to the mechanical axis pointing from
      the sample or specimen along the  principal axis of the goniometer or
-     sample positioning system if the sample positioning system has an axis 
-     that intersects the origin and which forms an angle of more than 22.5 
+     sample positioning system if the sample positioning system has an axis
+     that intersects the origin and which forms an angle of more than 22.5
      degrees with the beam axis.
 
      Axis 2 (Y): The Y-axis completes an orthogonal right-handed system
@@ -3393,8 +3393,8 @@ save_AXIS
 
      If the conditions for the X-axis can be met, the coordinate system
      will be based on the goniometer or other sample positioning system
-     and the beam and not on the orientation of the detector, gravity etc.  
-     The vectors necessary to specify all other axes are given by sets of 
+     and the beam and not on the orientation of the detector, gravity etc.
+     The vectors necessary to specify all other axes are given by sets of
      three components in the order (X, Y, Z).
      If the axis involved is a rotation axis, it is right-handed, i.e. as
      one views the object to be rotated from the origin (the tail) of the
@@ -3410,17 +3410,17 @@ save_AXIS
      gravity, then north.
 
      If the X-axis cannot be defined as above, then the
-     direction (not the origin) of the X-axis should be parallel to the axis 
-     of the primary detector element corresponding to the most rapidly 
-     varying dimension of that detector element's data array, with its 
-     positive sense corresponding to increasing values of the index for 
-     that dimension.  If the detector is such that such a direction cannot 
+     direction (not the origin) of the X-axis should be parallel to the axis
+     of the primary detector element corresponding to the most rapidly
+     varying dimension of that detector element's data array, with its
+     positive sense corresponding to increasing values of the index for
+     that dimension.  If the detector is such that such a direction cannot
      be defined (as with a point detector) or that the direction forms an
-     angle of less than 22.5 degrees with respect to the source axis, then 
-     the X-axis should be chosen so that if the Y-axis is chosen 
-     in the direction of gravity, and the Z-axis is chosen to be along 
-     the source axis, a right-handed orthogonal coordinate system is chosen.  
-     In the case of a vertical source axis, as a last resort, the 
+     angle of less than 22.5 degrees with respect to the source axis, then
+     the X-axis should be chosen so that if the Y-axis is chosen
+     in the direction of gravity, and the Z-axis is chosen to be along
+     the source axis, a right-handed orthogonal coordinate system is chosen.
+     In the case of a vertical source axis, as a last resort, the
      X-axis should be chosen to point north.
 
      All rotations are given in degrees and all translations are given in mm.
@@ -3446,7 +3446,7 @@ save_AXIS
      specify the location of the beam centre on the detector in terms
      of the origin of the detector, which is, of course, not coincident
      with the centre of the sample.
-     THE NEXUS/HDF5 MCSTAS LABORATORY COORDINATE SYSTEM 
+     THE NEXUS/HDF5 MCSTAS LABORATORY COORDINATE SYSTEM
      The standard coordinate frame in NeXus is the McStas coordinate frame,
      in which the Z-axis points in the direction of the incident beam, the
      X-axis is orthogonal to the Z-axis in the horizontal plane and pointing
@@ -3466,7 +3466,7 @@ save_AXIS
      of gravity, Gravity.  In order to translate a vector v_nx = ( x, y, z)
      from the NeXus coordinate system to the imgCIF coordinate system, we
      also need two additional axes, as unit vectors, Gravity_cbf the downwards
-     direction, and  Beam_cbf, the direction of the beam, e.g. ( 0, 0, -1).   
+     direction, and  Beam_cbf, the direction of the beam, e.g. ( 0, 0, -1).
 
      In practice, the beam is not necessarily perfectly horizontal, so Y_nx
      is not necessarily perfectly vertical. Therefore, in order to generate
@@ -3550,9 +3550,9 @@ save_AXIS
      AXIS.OFFSET[...] respectively.  The last component is the CBF row number
      to facilitate recovering the original CBF layout.
 
-     THE DIRECT LATTICE (FRACTIONAL COORDINATES) 
-     The unit cell, reciprocal cell and crystallographic orthogonal 
-     Cartesian coordinate system are defined by the CELL and the matrices 
+     THE DIRECT LATTICE (FRACTIONAL COORDINATES)
+     The unit cell, reciprocal cell and crystallographic orthogonal
+     Cartesian coordinate system are defined by the CELL and the matrices
      in the ATOM_SITES category.
 
      The direct lattice coordinate system is a system of fractional
@@ -3560,12 +3560,12 @@ save_AXIS
      This is a natural coordinate system for maps and atomic coordinates.
      It is the simplest coordinate system in which to apply symmetry.
      The axes are determined by the cell edges, and are not necessarily
-     orthogonal.  This coordinate system is not uniquely defined and 
+     orthogonal.  This coordinate system is not uniquely defined and
      depends on the cell parameters in the CELL category and the
-     settings chosen to index the crystal. 
+     settings chosen to index the crystal.
 
      Molecules in a crystal studied by X-ray diffraction are organized
-     into a repeating regular array of unit cells.  Each unit cell is defined 
+     into a repeating regular array of unit cells.  Each unit cell is defined
      by three vectors, a, b and c.  To quote from Drenth (2001),
      "The choice of the unit cell is not unique and therefore, guidelines
      have been established for selecting the standard basis vectors and
@@ -3597,7 +3597,7 @@ save_AXIS
      the origin of the cell for axes along the cell edges with no
      specified _array_structure_list_axis.displacement will have
      grid coordinates of (1,1,1), i.e. array indices of (1,1,1).
-     THE ORTHOGONAL CARTESIAN COORDINATE SYSTEM (REAL SPACE) 
+     THE ORTHOGONAL CARTESIAN COORDINATE SYSTEM (REAL SPACE)
      The orthogonal Cartesian coordinate system is a transformation of
      the direct lattice to the actual physical coordinates of atoms in
      space.  It is similar to the laboratory coordinate system, but
@@ -3606,7 +3606,7 @@ save_AXIS
      to orthogonal Cartesian coordinates is given by the
               _atom_sites.Cartn_transf_matrix[i][j]  and
               _atom_sites.Cartn_transf_vector[i]
-     tags.  A common choice for the matrix of the transformation is 
+     tags.  A common choice for the matrix of the transformation is
      given in Protein Data Bank (1992):
 
               | a      b cos \g   c cos \b                            |
@@ -3616,7 +3616,7 @@ save_AXIS
      This is a convenient coordinate system in which to do fitting
      of models to maps and in which to understand the chemistry of
      a molecule.
-     THE RECIPROCAL LATTICE 
+     THE RECIPROCAL LATTICE
      The reciprocal lattice coordinate system is used for diffraction
      intensities.  It is based on the reciprocal cell, the dual of the cell,
      in which reciprocal cell edges are derived from direct cell faces:
@@ -3625,13 +3625,13 @@ save_AXIS
         cos \a* = (cos \b  cos \g  - cos \a )/(sin \b sin \g )
         cos \b* = (cos \a  cos \g  - cos \b )/(sin \a sin \g )
         cos \g* = (cos \a  cos \b  - cos \g )/(sin \a sin \b )
-        V = abc (1 - cos^2^ \a 
+        V = abc (1 - cos^2^ \a
                        - cos^2^ \b
                        - cos^2^ \g
                        + 2 cos \a cos \b cos \g )^1/2^
 
      In this form the dimensions of the reciprocal lattice are in reciprocal
-     \%angstr\"oms (\%A^-1^).  A dimensionless form can be obtained by 
+     \%angstr\"oms (\%A^-1^).  A dimensionless form can be obtained by
      multiplying by the wavelength.  Reflections are commonly indexed against
      this coordinate system as (h, k, l) triples.
      References:
@@ -3639,7 +3639,7 @@ save_AXIS
      Drenth, J. (2001). Introduction to basic crystallography.
      International tables for crystallography, Vol. F, Crystallography of
      biological macromolecules, edited by M. G. Rossmann & E. Arnold,
-     1st ed., ch. 2.1, pp. 44--63. Dordrecht: Kluwer Academic Publishers.    
+     1st ed., ch. 2.1, pp. 44--63. Dordrecht: Kluwer Academic Publishers.
 
      Leslie, A. G. W. & Powell, H. (2004). MOSFLM v6.11.
      MRC Laboratory of Molecular Biology, Hills Road, Cambridge, England.
@@ -3746,12 +3746,12 @@ save_AXIS
 
         This example shows the axis specification of the axes for a map,
         using fractional coordinates.  Each cell edge has been divided
-        into a grid of 50 divisions in the ARRAY_STRUCTURE_LIST_AXIS 
+        into a grid of 50 divisions in the ARRAY_STRUCTURE_LIST_AXIS
         category.  The map is using only the first octant of the grid
         in the ARRAY_STRUCTURE_LIST category.
 
         The fastest changing axis is along A, then along B,
-        and the slowest is along C. 
+        and the slowest is along C.
 
         The map sampling is being done in the middle of each grid
         division.
@@ -3788,7 +3788,7 @@ save_AXIS
 ;      Example 4.
 
         This example shows the axis specification of the axes for a map,
-        this time as orthogonal \%angstr\"oms, using the same coordinate system 
+        this time as orthogonal \%angstr\"oms, using the same coordinate system
         as for the atomic coordinates.  The map is sampling every 1.5
         \%A (1.5e-7 mm) in a map segment 37.5 \%A on a side.
 ;
@@ -5276,7 +5276,7 @@ save_axis.system
     _definition.update            2025-09-23
     _description.text
 ;            The value of  _axis.system specifies the coordinate
-              system used to define the axis: 'laboratory', 'McStas', 'direct', 
+              system used to define the axis: 'laboratory', 'McStas', 'direct',
              'orthogonal', 'reciprocal' or 'abstract'.
 ;
     _name.category_id             axis
@@ -5593,8 +5593,8 @@ save_diffrn_data_frame.center_derived
 ;             The value of _diffrn_data_frame.center_derived
               is assumed to be 'yes', i.e. that values of
               _diffrn_data_frame.center_fast and
-              _diffrn_data_frame.center_slow 
-              are derived from the axis settings rather than measured.               
+              _diffrn_data_frame.center_slow
+              are derived from the axis settings rather than measured.
 ;
     _name.category_id             diffrn_data_frame
     _name.object_id               center_derived
@@ -5611,18 +5611,18 @@ save_diffrn_data_frame.center_fast
     _definition.id                '_diffrn_data_frame.center_fast'
     _definition.update            2025-09-23
     _description.text
-;            The value of _diffrn_data_frame.center_fast is 
+;            The value of _diffrn_data_frame.center_fast is
               the fast index axis beam centre position relative to the detector
               element face in the units specified in the data item
               _diffrn_data_frame.center_units along the fast
-              axis of the detector from the centre of the first pixel to 
+              axis of the detector from the centre of the first pixel to
               the point at which the Z axis (which should be collinear with the
               beam) intersects the face of the detector, if in fact it does.
               At the time of the measurement the current settings of
               the detector positioner for the given frame are used.
 
               It is important to note that for measurements in mm,
-              the sense of the axis is used, rather than the sign of the 
+              the sense of the axis is used, rather than the sign of the
               pixel-to-pixel increments.
 
 ;
@@ -5670,10 +5670,10 @@ save_diffrn_data_frame.center_units
     _definition.update            2025-09-23
     _description.text
 ;             The value of _diffrn_data_frame.center_units
-              specifies the units in which the values of 
+              specifies the units in which the values of
               _diffrn_data_frame.center_fast and
               _diffrn_data_frame.center_slow
-              are presented.  The default is 'mm' for millimetres.  The 
+              are presented.  The default is 'mm' for millimetres.  The
               alternatives are 'pixels' and 'bins'.  In all cases the
               centre distances are measured from the centre of the
               first pixel, i.e. in a 2x2 binning, the measuring origin
@@ -5724,7 +5724,7 @@ https://github.com/dials/cbflib/raw/refs/heads/main/doc/cif_img_1.4_4Jul06_draft
 
               Normally, when a conversion from a miniCBF has been done
               the data from _array_data.header_convention
-              should be transferred to this data item and 
+              should be transferred to this data item and
               _array_data.header_convention
               should be removed.
 ;
@@ -6370,21 +6370,21 @@ save_diffrn_detector_element.reference_center_fast
         '_diffrn_detector_element.reference_center_fast'
     _definition.update            2025-09-23
     _description.text
-;             The value of _diffrn_detector_element.reference_center_fast is 
+;             The value of _diffrn_detector_element.reference_center_fast is
               the fast index axis beam centre position relative to the detector
               element face in the units specified in the data item
               _diffrn_detector_element.reference_center_units along the fast
-              axis of the detector from the centre of the first pixel to 
-              the point at which the Z-axis (which should be collinear with the 
-              beam) intersects the face of the detector, if in fact it does.   
+              axis of the detector from the centre of the first pixel to
+              the point at which the Z-axis (which should be collinear with the
+              beam) intersects the face of the detector, if in fact it does.
               At the time of the measurement all settings of the detector
-              positioner should be at their reference settings.  If more than 
-              one reference setting has been used the value given should be 
-              representative of the beam centre as determined from the ensemble 
+              positioner should be at their reference settings.  If more than
+              one reference setting has been used the value given should be
+              representative of the beam centre as determined from the ensemble
               of settings.
 
               It is important to note that for measurements in mm,
-              the sense of the axis is used, rather than the sign of the 
+              the sense of the axis is used, rather than the sign of the
               pixel-to-pixel increments.
 
 ;
@@ -6408,12 +6408,12 @@ save_diffrn_detector_element.reference_center_slow
               the slow index axis beam centre position relative to the detector
               element face in the units specified in the data item
               _diffrn_detector_element.reference_center_units along the slow
-              axis of the detector from the centre of the first pixel to 
+              axis of the detector from the centre of the first pixel to
               the point at which the Z-axis (which should be collinear with the
               beam) intersects the face of the detector, if in fact it does.
               At the time of the measurement all settings of the detector
               positioner should be at their reference settings.  If more than
-              one reference setting has been used the value given should be 
+              one reference setting has been used the value given should be
               representative of the beam centre as determined from the ensemble
               of settings.
 
@@ -6437,10 +6437,10 @@ save_diffrn_detector_element.reference_center_units
     _definition.update            2025-09-23
     _description.text
 ;             The value of _diffrn_detector_element.reference_center_units
-              specifies the units in which the values of 
+              specifies the units in which the values of
               _diffrn_detector_element.reference_center_fast and
               _diffrn_detector_element.reference_center_slow
-              are presented.  The default is 'mm' for millimetres.  The 
+              are presented.  The default is 'mm' for millimetres.  The
               alternatives are 'pixels' and 'bins'.  In all cases the
               centre distances are measured from the centre of the
               first pixel, i.e. in a 2x2 binning, the measuring origin
@@ -6527,7 +6527,7 @@ save_DIFFRN_MEASUREMENT
     _diffrn_measurement.device_details     'none'
     _diffrn_measurement.method             'omega scan'
     _diffrn_measurement.details
-    ; 440 frames, 0.20 degrees, 150 sec, detector distance 12 cm, 
+    ; 440 frames, 0.20 degrees, 150 sec, detector distance 12 cm,
       detector angle 22.5 degrees
     ;
 ;
@@ -6694,7 +6694,7 @@ save_diffrn_measurement.sample_detector_distance
     _definition.update            2025-09-23
     _description.text
 ;             The value of _diffrn_measurement.sample_detector_distance gives
-              the unsigned distance in millimetres from the sample to the 
+              the unsigned distance in millimetres from the sample to the
               detector along the beam.  Normally this distance is derived
               from the axis settings.
 ;
@@ -6715,9 +6715,9 @@ save_diffrn_measurement.sample_detector_distance_derived
     _definition.update            2025-09-23
     _description.text
 ;             The value of _diffrn_measurement.sample_detector_distance_derived
-              is assumed to be 'yes', i.e. that value of 
+              is assumed to be 'yes', i.e. that value of
               _diffrn_measurement.sample_detector_distance
-              is derived from the axis settings rather than measured.               
+              is derived from the axis settings rather than measured.
 ;
     _name.category_id             diffrn_measurement
     _name.object_id               sample_detector_distance_derived
@@ -6737,7 +6737,7 @@ save_diffrn_measurement.sample_detector_voffset
 ;             The value of _diffrn_measurement.sample_detector_voffset gives
               the signed distance in millimetres in the vertical
               direction (positive for up) from the centre of
-              the beam to the centre of the detector. 
+              the beam to the centre of the detector.
 ;
     _name.category_id             diffrn_measurement
     _name.object_id               sample_detector_voffset
@@ -6982,10 +6982,10 @@ save_diffrn_radiation.beam_flux
     _definition.update            2025-09-23
     _description.text
 ;             The instantaneous flux spacially integrated over the portion
-              of the beam available to be incident on a sample (e.g. after 
-              collimation).  If the flux varies over the course of the 
-              experiment, the average over the time of the experiment should 
-              be reported.  This is sometimes referred to as total flux. 
+              of the beam available to be incident on a sample (e.g. after
+              collimation).  If the flux varies over the course of the
+              experiment, the average over the time of the experiment should
+              be reported.  This is sometimes referred to as total flux.
 ;
     _name.category_id             diffrn_radiation
     _name.object_id               beam_flux
@@ -7020,8 +7020,8 @@ save_diffrn_radiation.beam_flux_density_integrated
         '_diffrn_radiation.beam_flux_density_integrated'
     _definition.update            2025-09-23
     _description.text
-;             The time integral of the flux density.  The time over 
-              which the beam flux density is integrated is given in 
+;             The time integral of the flux density.  The time over
+              which the beam flux density is integrated is given in
               _diffrn_radiation.beam_flux_integration_time
 ;
     _name.category_id             diffrn_radiation
@@ -7039,10 +7039,10 @@ save_diffrn_radiation.beam_flux_integrated
     _definition.id                '_diffrn_radiation.beam_flux_integrated'
     _definition.update            2025-09-23
     _description.text
-;             The time integral of the flux spacially integrated over the 
-              portion of the beam available to be incident on a sample 
+;             The time integral of the flux spacially integrated over the
+              portion of the beam available to be incident on a sample
               (e.g. after collimation).  The time over which the beam flux
-              is integrated is given in 
+              is integrated is given in
               _diffrn_radiation.beam_flux_integration_time
 ;
     _name.category_id             diffrn_radiation
@@ -7061,7 +7061,7 @@ save_diffrn_radiation.beam_flux_integration_time
     _definition.update            2025-09-23
     _description.text
 ;             The time interval over which beam flux, beam incident flux
-              beam density is integrated.  
+              beam density is integrated.
 ;
     _name.category_id             diffrn_radiation
     _name.object_id               beam_flux_integration_time
@@ -7078,9 +7078,9 @@ save_diffrn_radiation.beam_incident_flux
     _definition.id                '_diffrn_radiation.beam_incident_flux'
     _definition.update            2025-09-23
     _description.text
-;             The instantaneous flux spacially integrated over the portion of 
-              the beam actually incident on the sample.  If the incident flux 
-              varies over the course of the experiment, the average over the 
+;             The instantaneous flux spacially integrated over the portion of
+              the beam actually incident on the sample.  If the incident flux
+              varies over the course of the experiment, the average over the
               time of the experiment should be reported.
 ;
     _name.category_id             diffrn_radiation
@@ -7100,7 +7100,7 @@ save_diffrn_radiation.beam_incident_flux_integrated
     _definition.update            2025-09-23
     _description.text
 ;             The time integral of the flux spacially integrated over the
-              portion of the beam actually incident on the sample.  The 
+              portion of the beam actually incident on the sample.  The
               time over which the beam flux is integrated is given in
 
               _diffrn_radiation.beam_flux_integration_time
@@ -7190,7 +7190,7 @@ save_diffrn_radiation.div_x_source
               collimation.
 
               This is the standard uncertainty (estimated standard
-              deviation, e.s.d.)  of the directions of photons in 
+              deviation, e.s.d.)  of the directions of photons in
               the XZ plane around the mean source beam direction.
 
               Note that for some synchrotrons this value is specified
@@ -7256,7 +7256,7 @@ save_diffrn_radiation.div_y_source
               collimation.
 
               This is the standard uncertainty (estimated standard deviation,
-              e.s.d.) of the directions of photons in the YZ plane around 
+              e.s.d.) of the directions of photons in the YZ plane around
               the mean source beam direction.
 
               Note that for some synchrotrons this value is specified
@@ -7431,7 +7431,7 @@ save_diffrn_radiation.polarisn_ratio_esd
 ;             The standard uncertainty (estimated standard deviation, e.s.d.) of
               _diffrn_radiation.polarisn_ratio,
               the polarization ratio of the diffraction beam incident on the
-              crystal. 
+              crystal.
 ;
     _name.category_id             diffrn_radiation
     _name.object_id               polarisn_ratio_esd
@@ -8747,7 +8747,7 @@ save_diffrn_scan.date_end_estimated
     _definition.id                '_diffrn_scan.date_end_estimated'
     _definition.update            2025-09-23
     _description.text
-;             The estimated date and time of the end of the scan.  Note 
+;             The estimated date and time of the end of the scan.  Note
               that this may be generated at the start or during the scan,
               before the precise time of the end of the scan is known.
 ;
@@ -9029,7 +9029,7 @@ save_diffrn_scan_axis.angle_range
     _definition.id                '_diffrn_scan_axis.angle_range'
     _definition.update            2025-09-23
     _description.text
-;             The total range covered during the scan from the starting position 
+;             The total range covered during the scan from the starting position
               to the end of the final step for the specified axis in degrees.
 ;
     _name.category_id             diffrn_scan_axis
@@ -9372,10 +9372,10 @@ save_DIFFRN_SCAN_COLLECTION
 ;        loop_
         _diffrn_scan_collection.scan_id
         _diffrn_scan_collection.details
-       
+
         multi_wedge
     ;   scan 20 micrometre beam in 100 micrometre steps on 31
-        by 46 alternating raster of 20 degree wedges 
+        by 46 alternating raster of 20 degree wedges
     ;
 ;
 
@@ -9468,7 +9468,7 @@ save_diffrn_scan_collection.type
               the strategy used in this scan, e.g. `rotation', 'raster',
               'vector', 'still', etc.
 
-              The default is 'rotation'. 
+              The default is 'rotation'.
 ;
     _name.category_id             diffrn_scan_collection
     _name.object_id               type
@@ -10912,7 +10912,7 @@ save_map_segment.array_id
     _definition.id                '_map_segment.array_id'
     _definition.update            2025-09-23
     _description.text
-;             The value of _map_segment.array_id identifies the array 
+;             The value of _map_segment.array_id identifies the array
               structure into which the map is organized.
 
               This item is a pointer to _array_structure.id in the
@@ -10950,8 +10950,8 @@ save_map_segment.binary_id
     _definition.id                '_map_segment.binary_id'
     _definition.update            2025-09-23
     _description.text
-;             The value of _map_segment.binary_id distinguishes the particular 
-              set of data organized according to _map_segment.array_id in 
+;             The value of _map_segment.binary_id distinguishes the particular
+              set of data organized according to _map_segment.array_id in
               which the data values of the map are stored.
 
               This item is a pointer to _array_data.binary_id in the
@@ -11077,8 +11077,8 @@ save_map_segment.mask_binary_id
     _definition.id                '_map_segment.mask_binary_id'
     _definition.update            2025-09-23
     _description.text
-;             The value of _map_segment.mask_binary_id identifies the 
-              particular set of data organized according to 
+;             The value of _map_segment.mask_binary_id identifies the
+              particular set of data organized according to
               _map_segment.mask_array_id specifying the mask for the map.
 
               This item is a pointer to _array_data.binary_id in the
@@ -11311,9 +11311,9 @@ save_variant.role
      preferred in other cases.
 ;
          'raw data'
-;    A value of 'raw data' indicates data prior to any corrections, 
+;    A value of 'raw data' indicates data prior to any corrections,
      calculations or refinements.  It is not necessarily an error for raw data
-     also to be a variant of an earlier variant.  It may be replacement raw 
+     also to be a variant of an earlier variant.  It may be replacement raw
      data for earlier data believed to be erroneous.
 ;
          'unsuccessful trial'
@@ -11328,9 +11328,9 @@ save_variant.timestamp
     _definition.id                '_variant.timestamp'
     _definition.update            2025-09-23
     _description.text
-;             The date and time identifying a variant.  This is not 
+;             The date and time identifying a variant.  This is not
               necessarily the precise time of the measurement or calculation
-              of the individual related data items, but a timestamp that 
+              of the individual related data items, but a timestamp that
               reflects the order in which the variants were defined.
 ;
     _name.category_id             variant
@@ -11350,7 +11350,7 @@ save_variant.variant
 ;             The value of _variant.variant must uniquely identify
               each variant for the given diffraction experiment and/or entry
 
-              This item has been made implicit and given a default value of 
+              This item has been made implicit and given a default value of
               null.
 ;
     _name.category_id             variant
@@ -11370,7 +11370,7 @@ save_variant.variant_of
     _description.text
 ;            The value of _variant.variant_of gives the variant
              from which this variant was derived.  If this value is not given,
-             the variant is assumed to be derived from the default null 
+             the variant is assumed to be derived from the default null
              variant.
 
              This item is a pointer to _variant.variant in the
@@ -11757,7 +11757,7 @@ save_
        '_map_segment.mask_array_id', '_map_segment.mask_binary_id',
        '_map_segment.id', '_map_segment.map_id',
        '_map_segment.details.
-     + Change type of 
+     + Change type of
        '_array_structure.byte_order' and
        '_array_structure.compression_type'
        to ucode to make these values case-insensitive
@@ -11826,7 +11826,7 @@ save_
     +  Define new tags _diffrn_scan.time_period,
        _diffrn_scan.time_rstrt_incr,
        _diffrn_scan_frame.time_period,
-       _diffrn_scan_frame.time_rstrt_incr 
+       _diffrn_scan_frame.time_rstrt_incr
     +  fix bad category name in loop in _diffrn_detector.id
     +  remove stray text field terminator at line 4642
     +  fix unquoted tag as a value in _diffrn_scan_frame_monitor.id
@@ -12072,8 +12072,8 @@ save_
       2022-06-09 (jrh).
     + Fix incorrect _diffrn_scan_axis.angle_range
       example and clarify definition 2022-06-09 (jrh)
-    + Clarify wording describing _array_intensities.overload 
-      2022-12-31 (ab) 
+    + Clarify wording describing _array_intensities.overload
+      2022-12-31 (ab)
 ;
          1.8.8                    2024-01-20
 ;   Additional flux tags and change to ddl2 version being the master
@@ -12084,7 +12084,7 @@ save_
     + Change from use of _item.type_code to _item_type.code
     + Fix extraneous single quote after _array_data_external_data.file_compression
     + Change 'photons per second' to photons_per_second in units
-    + Add micrometres, photons, photons_per_second, and 
+    + Add micrometres, photons, photons_per_second, and
       photons_per_seconf_per_micrometre_squared to units
     + Add stub DIFFRN category
     + Add _diffrn.id
