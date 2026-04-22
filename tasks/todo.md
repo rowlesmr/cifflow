@@ -4,11 +4,79 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current stage:** Stage 7 complete. ALL_BLOCKS mode complete. Lessons 97–100.
+**Current state:** Stage 7 complete (ALL_BLOCKS mode). Performance optimisation Phase 1.1 and 1.2 complete on a feature branch (not merged to main). Lessons 97–102.
 
-**Test suite state (2026-04-21):**
-- 148 emit tests pass
-- Full suite: run `.venv/Scripts/python -m pytest -k "not slow" --tb=short -q` to confirm
+**Test suite state (2026-04-23):**
+- 1836 tests pass (full suite)
+- Run: `.venv/Scripts/python -m pytest -k "not slow" --tb=short -q`
+
+---
+
+### Performance optimisation — Phase 1 (partial, feature branch only)
+
+Profiling was done against `second.cif` (18 MB, 156 blocks, ~378k lines) with `cif_pow.dic`.
+Profiler: `profile_pipeline.py --input second --profile`.
+
+#### Baseline (before optimisation)
+
+| Phase  | Time   |
+|--------|--------|
+| Parse  | 55.8 s |
+| Ingest | 71.9 s |
+| Total  | 133 s  |
+
+#### Phase 1.1 — Regex tokenizer (`lexer/_tokenize_re.py`) ✓ (feature branch)
+
+Replaced the generator-based `Lexer` with a two-pass regex tokenizer returning a flat `list[Token]`.
+Also replaced `_PeekableTokens` in `parser.py` with direct list indexing.
+
+**Approach:**
+- Pre-scan (`_PRESCAN_RE`) finds triple-quoted regions and semicolon multiline spans. Triple-quoted content is skipped so `\n;` inside `'''...'''` is not misidentified as a multiline delimiter.
+- Main regex (`_CIF2_RE` / `_CIF1_RE`) runs `re.finditer` over non-multiline segments.
+- CIF 1.x per-character charset validation in `_match_to_token` for DQ/SQ tokens.
+- Unterminated triple-quoted strings require greedy `TDQ_UNT`/`TSQ_UNT` fallback patterns; without them, the lazy `[\s\S]*?` fails and falls through to wrong patterns.
+- `:` is structural only immediately after a closing quote/bracket — replicated via lookbehind `(?<=[\"'\]\}]):`. Bare words consume `:` greedily (e.g. `16:00` is one token).
+
+**Result:** Parse 55.8 s → 20.5 s (~2.7×). Tokenize: 4.2 s, `_match_to_token`: 6.9 s, `_classify_bare`: 2.4 s.
+
+#### Phase 1.2 — `_id_regime` O(1) index ✓ (feature branch)
+
+`_id_regime` previously scanned all rows in `merged_rows` filtering by `_block_id` — O(blocks × total_rows) quadratic.
+
+**Fix:** Added `_block_pk_values: dict[str, list[str]]` to `_Ingester`. Populated during `_merge_into` (new `block_pk_values` parameter, also threaded through `_apply_fk`). Also updated the inline set-buffer merge path. `_id_regime` now does a single dict lookup.
+
+**Result:** Ingest 69.8 s → 48.6 s (~1.4×). Actual saving ~21 s (predicted ~13 s).
+
+#### After Phase 1.1 + 1.2
+
+| Phase      | Before | After  |
+|------------|--------|--------|
+| Parse      | 55.8 s | 19.8 s |
+| Ingest     | 69.8 s | 48.6 s |
+| Compactify |  5.2 s |  5.2 s |
+| Emit       |    —   | 35.2 s |
+| **Total**  | 133 s  | 109 s  |
+
+#### Remaining phases (not yet implemented)
+
+From `prompts/performance enhancement.md`:
+
+| Phase | Description | Estimated saving |
+|-------|-------------|-----------------|
+| 1.3 | SQLite write pragmas during ingest (`synchronous=OFF`, `journal_mode=MEMORY`) | 3–5 s |
+| 1.4 | Short-circuit `_apply_fk` when all FK columns already present | 8–12 s |
+| 1.5 | Replace `_pk_tuple` genexpr with `operator.itemgetter` | 2–3 s |
+| 1.6 | Streaming UPSERT (highest risk/reward) | TBD |
+
+Current ingest hot spots (from post-1.2 profile): `_apply_fk` 17.7 s (752 K calls), `dict.get` 6.1 s (35.6 M calls), `_merge_into` 10.0 s (1.98 M calls), `_pk_tuple` 5.4 s (2.74 M calls), `executemany` 5.6 s.
+
+#### Open decisions
+
+- **Branch merge**: performance work lives on a feature branch. Decide whether to merge to main before continuing with functional work, or keep separate.
+- **Emit optimisation**: emit now takes 35.2 s (32% of total). `quote()` + `_illegal_start` account for ~13 s combined (1.9 M calls). `_apply_decimal_align` is 4 s. Not yet in scope.
+- **Re-profile threshold**: re-profile after each of 1.3–1.5 before committing to 1.6.
+
+---
 
 ### Completed task: ALL_BLOCKS mode (2026-04-21) ✓
 
