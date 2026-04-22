@@ -157,3 +157,4 @@ prompts
 .claude/
 scripts/
 tests/test_coverage/
+profile_output/

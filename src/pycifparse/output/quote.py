@@ -305,10 +305,13 @@ def _quote_cif2(
             return f"'{s}'"
         if not has_double:
             return f'"{s}"'
+
     if not has_triple_single and not has_ending_single:
         return f"'''{s}'''"
     if not has_triple_double and not has_ending_double:
         return f'"""{s}"""'
+
+    # Both triple types present — fall through to semicolon below
     if '\n;' not in s:
         return _make_semicolon(s)
     return _make_prefixed_semicolon(s)
@@ -338,4 +341,5 @@ def _quote_cif11(
 
     if '\n;' not in s:
         return _make_semicolon(s)
-    return _make_prefixed_semicolon(s)
+    return _make_prefixed_semicolon(s)   
+    
