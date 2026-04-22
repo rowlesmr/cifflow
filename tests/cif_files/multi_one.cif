@@ -3,6 +3,7 @@
 
 ####### Begin publication information #######
 data_publication
+loop_
 _audit_dataset.id	975eb50d-3a40-4a3c-9625-68f11733da5f
 
 loop_
