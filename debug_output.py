@@ -21,7 +21,7 @@ import sqlite3
 ROOT     = pathlib.Path(__file__).parent
 DIC_DIR  = ROOT / 'data' / 'dictionaries'
 
-FILE_NAME = "tmp" # "multi_one" # "pathological_key_block"
+FILE_NAME = "multi_one" # "pathological_key_block""tmp" #
 
 CIF_FILE = ROOT / 'tests' / 'cif_files' / (FILE_NAME +'.cif')
 
@@ -232,8 +232,29 @@ GROUPED_PLAN = OutputPlan(
     ],
 )
 
+ALL_BLOCK_PLAN = OutputPlan(specs=[
+    BlockSpec(
+        # category_order=[
+        #     'diffrn',
+        #     'pd_diffractogram',  # plain name — emit this table first
+        #     ['pd_data', 'pd_meas', "pd_proc", "pd_calc"],  # merge group — emitted as one loop_
+        #     # anything not listed follows alphabetically (Set then Loop)
+        # ],
+        column_order={
+            #'pd_diffractogram': ['id', 'instr_id', 'diffrn_id'],
+            #'pd_calc_component': ['intensity_net', 'point_id', ],
+            'cell': ['structure_id', 'length_a', 'length_b', 'length_c', 'angle_alpha', 'angle_beta', 'angle_gamma', 'mass', 'volume'],
+        },
+    )
+])
+
+PLANS = {EmitMode.GROUPED: GROUPED_PLAN,
+         EmitMode.ALL_BLOCKS: ALL_BLOCK_PLAN,
+         EmitMode.ONE_BLOCK: ALL_BLOCK_PLAN}
+
 for mode, filename in MODES:
-    plan = GROUPED_PLAN if mode == EmitMode.GROUPED else None
+    plan = PLANS.get(mode, None)
+
     cif_text = emit(
         report.database,
         schema,
