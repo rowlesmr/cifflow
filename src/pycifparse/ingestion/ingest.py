@@ -417,7 +417,8 @@ def _apply_fk(
                     stub: dict = {'_block_id': block_id, tgt_col: val}
                     _merge_into(merged_rows, fk.target_table, stub,
                                 parent_table, row_id_counters, emit,
-                                block_pk_values=block_pk_values)
+                                block_pk_values=block_pk_values,
+                                pk_keys=tuple(parent_table.primary_keys))
 
         else:
             # ── Composite FK ──────────────────────────────────────────────────
@@ -500,7 +501,8 @@ def _apply_fk(
                             stub[tc] = v
                         _merge_into(merged_rows, fk.target_table, stub,
                                     parent_table, row_id_counters, emit,
-                                    block_pk_values=block_pk_values)
+                                    block_pk_values=block_pk_values,
+                                    pk_keys=tuple(parent_table.primary_keys))
 
     # ── Propagation links ─────────────────────────────────────────────────────
     # PK columns that are DDLm Link items but have no FK constraint (e.g. the
@@ -1186,13 +1188,15 @@ class _Ingester:
         all_iter_rows: list[dict[str, dict]] = []  # per-iteration {tbl: row}
 
         for iter_idx in range(n_iters):
-            # Encoded values keyed by canonical def_id (for FK propagation)
+            # Encode each structured tag value once; reuse for iter_by_defid and row building.
+            encoded_iter: dict[str, tuple] = {}  # tag → (raw_val, stored)
             iter_by_defid: dict[str, str] = {}
             for tag in loop_tags:
                 canonical, location = routing[tag]
                 if location:
                     val = block[tag][iter_idx]
                     stored, _ = encode_value(val)
+                    encoded_iter[tag] = (val, stored)
                     iter_by_defid[canonical] = stored
 
             iter_rows: dict[str, dict] = {}
@@ -1200,8 +1204,7 @@ class _Ingester:
                 table = self.schema.tables[tbl_name]
                 row: dict[str, Any] = {'_block_id': block_id}
                 for col_name, tag, canonical in loop_tables[tbl_name]:
-                    val = block[tag][iter_idx]
-                    stored, _ = encode_value(val)
+                    val, stored = encoded_iter[tag]
                     stored, su_val = self._maybe_split_su(val, stored, canonical)
                     row[col_name] = stored
                     if su_val is not None:
