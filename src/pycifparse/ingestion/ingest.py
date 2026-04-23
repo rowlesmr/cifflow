@@ -270,6 +270,7 @@ def _merge_into(
     emit: Callable[..., None],
     emit_error: Callable[..., None] | None = None,
     block_pk_values: 'dict[str, list[str]] | None' = None,
+    pk_keys: 'tuple | None' = None,
 ) -> int:
     """Merge *row* into *merged_rows[table_name]*.  Returns the row's ``_row_id``.
 
@@ -283,7 +284,7 @@ def _merge_into(
     if table_name not in merged_rows:
         merged_rows[table_name] = {}
     tbl_rows = merged_rows[table_name]
-    pk = _pk_tuple(row, table)
+    pk = tuple(map(row.get, pk_keys)) if pk_keys is not None else _pk_tuple(row, table)
 
     if pk not in tbl_rows:
         row['_row_id'] = _next_row_id(row_id_counters, table_name)
@@ -338,6 +339,7 @@ def _apply_fk(
     merged_rows: dict[str, dict[tuple, dict]] | None = None,
     row_id_counters: dict[str, int] | None = None,
     block_pk_values: 'dict[str, list[str]] | None' = None,
+    col_by_name: 'dict[str, object] | None' = None,
 ) -> None:
     """Fill missing FK/PK columns in *row* in-place.
 
@@ -346,9 +348,16 @@ def _apply_fk(
     inserted into the parent table so that deferred FK constraints can be
     satisfied at COMMIT.
     """
-    col_by_name = {c.name: c for c in table.columns if not c.is_synthetic}
+    if col_by_name is None:
+        col_by_name = {c.name: c for c in table.columns if not c.is_synthetic}
 
     for fk in table.foreign_keys:
+        # Skip FK filling and stub creation when all source cols are already
+        # populated and we're not in a loop context that may supply missing vals.
+        if (loop_row_by_defid is None
+                and all(row.get(sc) is not None for sc in fk.source_columns
+                        if col_by_name.get(sc) is not None)):
+            continue
         is_composite = len(fk.source_columns) > 1
 
         if not is_composite:
@@ -732,6 +741,16 @@ class _Ingester:
             build_tag_to_column(schema) if schema else {}
         )
         self.su_map: dict[str, str] = build_su_map(schema) if schema else {}
+        self._col_by_name: dict[str, dict[str, object]] = (
+            {tbl_name: {c.name: c for c in tbl.columns if not c.is_synthetic}
+             for tbl_name, tbl in schema.tables.items()}
+            if schema else {}
+        )
+        self._pk_keys: dict[str, tuple] = (
+            {tbl_name: tuple(tbl.primary_keys)
+             for tbl_name, tbl in schema.tables.items()}
+            if schema else {}
+        )
 
         # Per-ingest accumulators
         self.row_id_counters: dict[str, int] = {}
@@ -754,6 +773,12 @@ class _Ingester:
 
         old_isolation = self.conn.isolation_level
         self.conn.isolation_level = None
+        old_synchronous = self.conn.execute('PRAGMA synchronous').fetchone()[0]
+        old_journal_mode = self.conn.execute('PRAGMA journal_mode').fetchone()[0]
+        self.conn.execute('PRAGMA synchronous = OFF')
+        self.conn.execute('PRAGMA journal_mode = MEMORY')
+        self.conn.execute('PRAGMA cache_size = -65536')
+        self.conn.execute('PRAGMA temp_store = MEMORY')
         self.conn.execute('BEGIN')
         try:
             for position, block in enumerate(blocks):
@@ -796,6 +821,8 @@ class _Ingester:
             self.conn.execute('ROLLBACK')
             raise
         finally:
+            self.conn.execute(f'PRAGMA synchronous = {old_synchronous}')
+            self.conn.execute(f'PRAGMA journal_mode = {old_journal_mode}')
             self.conn.isolation_level = old_isolation
 
         return self.errors
@@ -881,10 +908,12 @@ class _Ingester:
             _apply_fk(row, table, self.schema, None,
                       fk_accumulator, self.propagate_fk, self._emit,
                       block_id, self.merged_rows, self.row_id_counters,
-                      self._block_pk_values)
+                      self._block_pk_values,
+                      self._col_by_name.get(tbl_name))
             if tbl_name not in self.merged_rows:
                 self.merged_rows[tbl_name] = {}
-            pk = _pk_tuple(row, table)
+            pk_keys = self._pk_keys[tbl_name]
+            pk = tuple(map(row.get, pk_keys))
             pk_json_str = json.dumps(list(pk))
             for col, val in col_dict.items():
                 if val is not None:
@@ -925,8 +954,10 @@ class _Ingester:
             _apply_fk(row, table, self.schema, None,
                       fk_accumulator, self.propagate_fk, self._emit,
                       block_id, self.merged_rows, self.row_id_counters,
-                      self._block_pk_values)
-            pk = _pk_tuple(row, table)
+                      self._block_pk_values,
+                      self._col_by_name.get(tbl_name))
+            pk_keys = self._pk_keys[tbl_name]
+            pk = tuple(map(row.get, pk_keys))
             pk_json_str = json.dumps(list(pk))
             for col, val in col_dict.items():
                 if val is not None:
@@ -935,6 +966,7 @@ class _Ingester:
                 self.merged_rows, tbl_name, row, table,
                 self.row_id_counters, self._emit, self._emit_error,
                 self._block_pk_values,
+                pk_keys,
             )
 
         self._record_membership(block, block_id, self._id_regime(block_id))
@@ -1109,6 +1141,47 @@ class _Ingester:
         # First structured table alphabetically (for fallback _row_id in multi-category)
         first_structured_table = table_names[0] if table_names else None
 
+        # Pre-loop analysis: which tables need _apply_fk at all?
+        # A table can skip _apply_fk when:
+        #   - every FK source column is provided by the loop (no value-filling needed), AND
+        #   - every FK target table is also in this loop (no external parent stubs needed), AND
+        #   - every propagation_link column is provided by the loop (or irrelevant).
+        tables_needing_fk: set[str] = set()
+        for tbl_name in table_names:
+            table = self.schema.tables[tbl_name]
+            provided = {col for col, _, _ in loop_tables[tbl_name]}
+            col_by_name_t = self._col_by_name.get(tbl_name, {})
+            _needs = False
+            for fk in table.foreign_keys:
+                # Case 1: any source col might need value-filling
+                for sc in fk.source_columns:
+                    col = col_by_name_t.get(sc)
+                    if col is None:
+                        continue
+                    if sc not in provided and (col.is_primary_key or self.propagate_fk):
+                        _needs = True
+                        break
+                if _needs:
+                    break
+                # Case 2: all source cols are provided → stub will be created;
+                # if parent table is outside this loop, we still need the stub call.
+                if (self.schema.tables.get(fk.target_table) is not None
+                        and fk.target_table not in loop_tables
+                        and all(sc in provided
+                                for sc in fk.source_columns
+                                if col_by_name_t.get(sc) is not None)):
+                    _needs = True
+                    break
+            if not _needs:
+                for col_name, _, _ in self.schema.propagation_links.get(tbl_name, []):
+                    if col_name not in provided:
+                        col = col_by_name_t.get(col_name)
+                        if col is not None and (col.is_primary_key or self.propagate_fk):
+                            _needs = True
+                            break
+            if _needs:
+                tables_needing_fk.add(tbl_name)
+
         # Per-iteration processing
         all_iter_rows: list[dict[str, dict]] = []  # per-iteration {tbl: row}
 
@@ -1134,10 +1207,12 @@ class _Ingester:
                     if su_val is not None:
                         row[self.su_map[canonical]] = su_val
 
-                _apply_fk(row, table, self.schema, iter_by_defid,
-                          fk_accumulator, self.propagate_fk, self._emit,
-                          block_id, self.merged_rows, self.row_id_counters,
-                          self._block_pk_values)
+                if tbl_name in tables_needing_fk:
+                    _apply_fk(row, table, self.schema, iter_by_defid,
+                              fk_accumulator, self.propagate_fk, self._emit,
+                              block_id, self.merged_rows, self.row_id_counters,
+                              self._block_pk_values,
+                              self._col_by_name.get(tbl_name))
                 iter_rows[tbl_name] = row
 
             # ── Per-iteration UUID fill for missing PKs ───────────────────────
@@ -1184,11 +1259,13 @@ class _Ingester:
                                               fk_accumulator, self.propagate_fk,
                                               self._emit, block_id,
                                               self.merged_rows, self.row_id_counters,
-                                              self._block_pk_values)
+                                              self._block_pk_values,
+                                              self._col_by_name.get(fk.target_table))
                                     _merge_into(self.merged_rows, fk.target_table,
                                                 stub, parent_table,
                                                 self.row_id_counters, self._emit,
-                                                block_pk_values=self._block_pk_values)
+                                                block_pk_values=self._block_pk_values,
+                                                pk_keys=self._pk_keys.get(fk.target_table))
 
             # Cross-table PK propagation for multi-category loops.
             # All compatible tables share the same PK column names.  After
@@ -1223,7 +1300,8 @@ class _Ingester:
                 table = self.schema.tables[tbl_name]
                 # Record tag presence when this loop row merges into an existing
                 # row owned by a different block (contributed-but-not-owned case).
-                pk = _pk_tuple(row, table)
+                pk_keys = self._pk_keys[tbl_name]
+                pk = tuple(map(row.get, pk_keys))
                 existing = self.merged_rows.get(tbl_name, {}).get(pk)
                 if existing is not None and existing.get('_block_id') != block_id:
                     pk_json_str = json.dumps(list(pk))
@@ -1235,6 +1313,7 @@ class _Ingester:
                     self.merged_rows, tbl_name, row, table,
                     self.row_id_counters, self._emit, self._emit_error,
                     self._block_pk_values,
+                    pk_keys,
                 )
                 ids[tbl_name] = rid
             iter_row_ids.append(ids)
