@@ -414,11 +414,15 @@ def _apply_fk(
                     and block_id is not None):
                 parent_table = schema.tables.get(fk.target_table)
                 if parent_table is not None:
+                    stub_pk_keys = tuple(parent_table.primary_keys)
                     stub: dict = {'_block_id': block_id, tgt_col: val}
-                    _merge_into(merged_rows, fk.target_table, stub,
-                                parent_table, row_id_counters, emit,
-                                block_pk_values=block_pk_values,
-                                pk_keys=tuple(parent_table.primary_keys))
+                    stub_pk = tuple(map(stub.get, stub_pk_keys))
+                    tbl_rows = merged_rows.get(fk.target_table)
+                    if tbl_rows is None or stub_pk not in tbl_rows:
+                        _merge_into(merged_rows, fk.target_table, stub,
+                                    parent_table, row_id_counters, emit,
+                                    block_pk_values=block_pk_values,
+                                    pk_keys=stub_pk_keys)
 
         else:
             # ── Composite FK ──────────────────────────────────────────────────
@@ -499,10 +503,14 @@ def _apply_fk(
                         stub = {'_block_id': block_id}
                         for _, tc, v in col_vals:
                             stub[tc] = v
-                        _merge_into(merged_rows, fk.target_table, stub,
-                                    parent_table, row_id_counters, emit,
-                                    block_pk_values=block_pk_values,
-                                    pk_keys=tuple(parent_table.primary_keys))
+                        stub_pk_keys = tuple(parent_table.primary_keys)
+                        stub_pk = tuple(map(stub.get, stub_pk_keys))
+                        tbl_rows = merged_rows.get(fk.target_table)
+                        if tbl_rows is None or stub_pk not in tbl_rows:
+                            _merge_into(merged_rows, fk.target_table, stub,
+                                        parent_table, row_id_counters, emit,
+                                        block_pk_values=block_pk_values,
+                                        pk_keys=stub_pk_keys)
 
     # ── Propagation links ─────────────────────────────────────────────────────
     # PK columns that are DDLm Link items but have no FK constraint (e.g. the
