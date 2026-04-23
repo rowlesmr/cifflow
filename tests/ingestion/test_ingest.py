@@ -17,6 +17,7 @@ from pycifparse.dictionary.schema import generate_schema
 from pycifparse.dictionary.schema_apply import apply_fallback_schema, apply_schema
 from pycifparse.ingestion.ingest import (
     _apply_fk,
+    _fk_specs_for,
     _merge_into,
     build_su_map,
     build_tag_to_column,
@@ -919,7 +920,8 @@ class TestFKPropagation:
         row = {'_block_id': 'B', 'length_a': '5.4'}
         errors = []
         fk_acc = {}
-        _apply_fk(row, table, schema, None, fk_acc,
+        sfk, cfk, prop = _fk_specs_for(table, schema)
+        _apply_fk(row, sfk, cfk, prop, None, fk_acc,
                   propagate_fk=False, emit=errors.append)
         sid = row.get('structure_id')
         assert sid is not None
@@ -939,7 +941,8 @@ class TestFKPropagation:
         row = {'_block_id': 'B', 'structure_id': 'EXPLICIT', 'length_a': '5.4'}
         fk_acc = {'_structure.id': 'S1'}
         errors = []
-        _apply_fk(row, table, schema, None, fk_acc, propagate_fk=True, emit=errors.append)
+        sfk, cfk, prop = _fk_specs_for(table, schema)
+        _apply_fk(row, sfk, cfk, prop, None, fk_acc, propagate_fk=True, emit=errors.append)
         assert row['structure_id'] == 'EXPLICIT'
         assert not errors
 
@@ -952,7 +955,8 @@ class TestFKPropagation:
         fk_acc = {}
         merged_rows: dict = {}
         row_id_counters: dict = {}
-        _apply_fk(row, table, schema, None, fk_acc,
+        sfk, cfk, prop = _fk_specs_for(table, schema)
+        _apply_fk(row, sfk, cfk, prop, None, fk_acc,
                   propagate_fk=False, emit=errors.append,
                   block_id='B', merged_rows=merged_rows,
                   row_id_counters=row_id_counters)
@@ -978,7 +982,8 @@ class TestFKPropagation:
         row_id_counters: dict = {'structure': 2}
         # Now ingest a cell row that already knows structure_id='S1'
         row = {'_block_id': 'B', 'structure_id': 'S1', 'length_a': '5.4'}
-        _apply_fk(row, table, schema, None, fk_acc,
+        sfk, cfk, prop = _fk_specs_for(table, schema)
+        _apply_fk(row, sfk, cfk, prop, None, fk_acc,
                   propagate_fk=False, emit=errors.append,
                   block_id='B', merged_rows=merged_rows,
                   row_id_counters=row_id_counters)
@@ -1554,7 +1559,8 @@ class TestFKKeyAbsentTargetNotInSchema:
         )
         row = {'_block_id': 'B', 'length_a': '5.0'}
         msgs = []
-        _apply_fk(row, cell_table, schema, None, {}, propagate_fk=False, emit=msgs.append)
+        sfk, cfk, prop = _fk_specs_for(cell_table, schema)
+        _apply_fk(row, sfk, cfk, prop, None, {}, propagate_fk=False, emit=msgs.append)
         # When target is not in schema.column_to_tag, emits a message and leaves NULL
         sid = row.get('structure_id')
         assert sid is None  # No UUID generated when target_def_id is missing
