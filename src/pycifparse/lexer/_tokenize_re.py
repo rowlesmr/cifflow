@@ -19,7 +19,7 @@ from pycifparse.types import CifVersion, TokenType, ValueType
 from pycifparse.lexer.tokens import LexerError, Token
 
 
-# ── Line-position index ────────────────────────────────────────────────────────
+# ── Line-position index (used for multiline spans and CIF 1.x error paths) ────
 
 def _build_line_starts(src: str) -> List[int]:
     """Return the byte offset at which each line begins (0-indexed)."""
@@ -156,6 +156,8 @@ def _make_lex_err(msg: str, line: int, col: int, ctx: str) -> LexerError:
 
 def _match_to_token(
     m: 're.Match[str]',
+    ln: int,
+    col: int,
     src: str,
     line_starts: List[int],
     line_offset: int,
@@ -163,17 +165,36 @@ def _match_to_token(
 ) -> Optional[Token]:
     """Convert a regex match to a Token, or None for discarded tokens (comments)."""
     kind = m.lastgroup
-    raw  = m.group(0)
-    ln, col = _line_col(m.start(), line_starts, line_offset)
 
     if kind == 'CMT':
         return None
 
-    if kind in ('DQ', 'SQ'):
+    # TAG: fast path — regex already guarantees it starts with '_'
+    if kind == 'TAG':
+        return Token(TokenType.TAG, m.group(0), None, ln, col)
+
+    raw = m.group(0)
+
+    # BW: inline classification to avoid _classify_bare call overhead
+    if kind == 'BW':
+        if raw == '.' or raw == '?':
+            return Token(TokenType.VALUE, raw, ValueType.PLACEHOLDER, ln, col)
+        lower = raw.lower()
+        if lower in _EXACT_KW or lower.startswith('data_') or lower.startswith('save_'):
+            return Token(TokenType.KEYWORD, raw, None, ln, col)
+        if not is_cif2 and raw[0] in ('[', '$'):
+            return Token(TokenType.VALUE, raw, ValueType.STRING, ln, col, [
+                _make_lex_err(
+                    f'bare word beginning with {raw[0]!r} is not permitted in CIF 1.x',
+                    ln, col, raw[0])
+            ])
+        return Token(TokenType.VALUE, raw, ValueType.STRING, ln, col)
+
+    if kind == 'DQ' or kind == 'SQ':
         content = raw[1:-1]
         vtype   = ValueType.DOUBLE_QUOTED if kind == 'DQ' else ValueType.SINGLE_QUOTED
-        errors: List[LexerError] = []
         if not is_cif2:
+            errors: List[LexerError] = []
             base = m.start() + 1
             for i, ch in enumerate(content):
                 code = ord(ch)
@@ -182,58 +203,46 @@ def _match_to_token(
                     errors.append(_make_lex_err(
                         f'character U+{code:04X} is not permitted in CIF 1.x',
                         cl, cc, ch))
-        return Token(TokenType.VALUE, content, vtype, ln, col, errors)
+            return Token(TokenType.VALUE, content, vtype, ln, col, errors)
+        return Token(TokenType.VALUE, content, vtype, ln, col)
 
-    if kind in ('TDQ', 'TSQ'):
+    if kind == 'TDQ' or kind == 'TSQ':
         content = raw[3:-3]
         if is_cif2:
             vtype = (ValueType.TRIPLE_DOUBLE_QUOTED if kind == 'TDQ'
                      else ValueType.TRIPLE_SINGLE_QUOTED)
             return Token(TokenType.VALUE, content, vtype, ln, col)
-        else:
-            triple = '"""' if kind == 'TDQ' else "'''"
-            err = _make_lex_err(
-                'triple-quoted strings are not valid in CIF 1.x', ln, col, triple)
-            return Token(TokenType.VALUE, content, ValueType.STRING, ln, col, [err])
+        triple = '"""' if kind == 'TDQ' else "'''"
+        return Token(TokenType.VALUE, content, ValueType.STRING, ln, col, [
+            _make_lex_err('triple-quoted strings are not valid in CIF 1.x', ln, col, triple)
+        ])
 
-    if kind in ('TDQ_UNT', 'TSQ_UNT'):
+    if kind == 'TDQ_UNT' or kind == 'TSQ_UNT':
         content   = raw[3:]
         triple    = '"""' if kind == 'TDQ_UNT' else "'''"
         vtype_str = 'triple_double_quoted' if kind == 'TDQ_UNT' else 'triple_single_quoted'
-        errors: List[LexerError] = []
+        errors = []
         if not is_cif2:
             errors.append(_make_lex_err(
                 'triple-quoted strings are not valid in CIF 1.x', ln, col, triple))
         errors.append(_make_lex_err(
             f'unterminated {vtype_str} string', ln, col, triple + raw[3:40]))
-        if is_cif2:
-            vtype = (ValueType.TRIPLE_DOUBLE_QUOTED if kind == 'TDQ_UNT'
-                     else ValueType.TRIPLE_SINGLE_QUOTED)
-        else:
-            vtype = ValueType.STRING
+        vtype = (ValueType.TRIPLE_DOUBLE_QUOTED if kind == 'TDQ_UNT'
+                 else ValueType.TRIPLE_SINGLE_QUOTED) if is_cif2 else ValueType.STRING
         return Token(TokenType.VALUE, content, vtype, ln, col, errors)
 
-    if kind in ('DQ_UNT', 'SQ_UNT'):
+    if kind == 'DQ_UNT' or kind == 'SQ_UNT':
         content   = raw[1:]
         vtype     = ValueType.DOUBLE_QUOTED if kind == 'DQ_UNT' else ValueType.SINGLE_QUOTED
         delim     = '"' if kind == 'DQ_UNT' else "'"
         vtype_str = 'double_quoted' if kind == 'DQ_UNT' else 'single_quoted'
-        err = _make_lex_err(
-            f'unterminated {vtype_str} string', ln, col,
-            f'{delim}{content[:40]}')
-        return Token(TokenType.VALUE, content, vtype, ln, col, [err])
+        return Token(TokenType.VALUE, content, vtype, ln, col, [
+            _make_lex_err(f'unterminated {vtype_str} string', ln, col,
+                          f'{delim}{content[:40]}')
+        ])
 
-    if kind in ('DEL', 'COL'):
-        return Token(TokenType.VALUE, raw, ValueType.STRING, ln, col)
-
-    # TAG or BW
-    tok_type, vtype = _classify_bare(raw)
-    errors: List[LexerError] = []
-    if not is_cif2 and raw[0] in ('[', '$'):
-        errors.append(_make_lex_err(
-            f'bare word beginning with {raw[0]!r} is not permitted in CIF 1.x',
-            ln, col, raw[0]))
-    return Token(tok_type, raw, vtype, ln, col, errors)
+    # DEL or COL
+    return Token(TokenType.VALUE, raw, ValueType.STRING, ln, col)
 
 
 # ── Public entry point ─────────────────────────────────────────────────────────
@@ -298,13 +307,62 @@ def tokenize(source: str, version: CifVersion, line_offset: int = 0) -> List[Tok
 
     tokens: List[Token] = []
 
+    # Running cursor for O(1) line/col without bisect.
+    # csr_pos:  byte offset of the end of the last token processed
+    # csr_line: 1-based line number at csr_pos
+    # csr_nl:   byte offset of the last '\n' seen before csr_pos
+    #           (initialised to -1 so that col = pos - csr_nl = pos + 1 on line 1)
+    csr_pos  = 0
+    csr_line = 1 + line_offset
+    csr_nl   = -1
+
+    count = src.count  # local alias for speed
+
     for i, (seg_s, seg_e) in enumerate(segments):
+        # Advance cursor over any multiline span that precedes this segment.
+        # After the previous iteration csr_pos == previous seg_e == this ml_start,
+        # and we need to step over [ml_start, ml_end) before scanning seg_s.
+        if seg_s > csr_pos:
+            n = count('\n', csr_pos, seg_s)
+            if n:
+                csr_line += n
+                csr_nl = src.rfind('\n', csr_pos, seg_s)
+            csr_pos = seg_s
+
         if seg_s < seg_e:
             for m in pat.finditer(src, seg_s, seg_e):
-                tok = _match_to_token(m, src, ls, line_offset, is_cif2)
+                start = m.start()
+                end   = m.end()
+
+                # Advance cursor to token start (whitespace / comment gap).
+                if start > csr_pos:
+                    n = count('\n', csr_pos, start)
+                    if n:
+                        csr_line += n
+                        csr_nl = src.rfind('\n', csr_pos, start)
+
+                ln  = csr_line
+                col = start - csr_nl  # 1-based column
+
+                # Advance cursor through the token (needed for multi-line TDQ/TSQ).
+                n = count('\n', start, end)
+                if n:
+                    csr_line += n
+                    csr_nl = src.rfind('\n', start, end)
+                csr_pos = end
+
+                tok = _match_to_token(m, ln, col, src, ls, line_offset, is_cif2)
                 if tok is not None:
                     tokens.append(tok)
+
         if i < len(ml_list):
-            tokens.append(ml_list[i][2])
+            ml_start_i, ml_end_i, ml_tok = ml_list[i]
+            tokens.append(ml_tok)
+            # Advance cursor through the multiline span.
+            n = count('\n', csr_pos, ml_end_i)
+            if n:
+                csr_line += n
+                csr_nl = src.rfind('\n', csr_pos, ml_end_i)
+            csr_pos = ml_end_i
 
     return tokens
