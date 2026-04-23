@@ -761,6 +761,13 @@ class _Ingester:
              for tbl_name, tbl in schema.tables.items()}
             if schema else {}
         )
+        # Column name list in schema order, per table — used by _flush to skip
+        # the per-table seen scan and maintain consistent INSERT column ordering.
+        self._flush_cols: dict[str, list[str]] = (
+            {tbl_name: [c.name for c in tbl.columns]
+             for tbl_name, tbl in schema.tables.items()}
+            if schema else {}
+        )
 
         # Per-ingest accumulators
         self.row_id_counters: dict[str, int] = {}
@@ -1461,21 +1468,29 @@ class _Ingester:
         for tbl_name, tbl_rows in self.merged_rows.items():
             if not tbl_rows:
                 continue
-            rows = list(tbl_rows.values())
-            # Determine columns as the union of all row keys (rows merged from stubs
-            # may have fewer keys than fully-populated rows).
-            seen: dict[str, None] = {}
-            for r in rows:
-                seen.update(dict.fromkeys(r.keys()))
-            cols = list(seen)
+            # Determine column list: use schema order when available, then append
+            # any extra keys (e.g. synthetics not in schema) found in actual rows.
+            schema_cols = self._flush_cols.get(tbl_name)
+            if schema_cols is not None:
+                seen: set[str] = set()
+                for r in tbl_rows.values():
+                    seen.update(r.keys())
+                schema_set = set(schema_cols)
+                cols = [c for c in schema_cols if c in seen] + \
+                       [k for k in seen if k not in schema_set]
+            else:
+                seen_dict: dict[str, None] = {}
+                for r in tbl_rows.values():
+                    seen_dict.update(dict.fromkeys(r.keys()))
+                cols = list(seen_dict)
             placeholders = ', '.join('?' for _ in cols)
             col_list = ', '.join(f'"{c}"' for c in cols)
             sql = (
-                f'INSERT OR REPLACE INTO "{tbl_name}" ({col_list}) '
+                f'INSERT INTO "{tbl_name}" ({col_list}) '
                 f'VALUES ({placeholders})'
             )
             try:
-                cur.executemany(sql, [[r.get(c) for c in cols] for r in rows])
+                cur.executemany(sql, (tuple(map(r.get, cols)) for r in tbl_rows.values()))
             except sqlite3.Error as e:
                 self._emit(f"sqlite3 error inserting into '{tbl_name}': {e}")
 
