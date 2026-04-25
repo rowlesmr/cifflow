@@ -146,6 +146,7 @@ class TestIngestStage:
         report = validate(_MINIMAL_CIF)
         db_issues = [i for i in report.issues if i.stage == 'database']
         assert db_issues == []
+        report.database.close()
 
     def test_schema_none_fallback_tables_exist(self):
         report = validate(_MINIMAL_CIF)
@@ -170,6 +171,7 @@ class TestIngestStage:
         # At least one warning from our fake
         warning_msgs = [i for i in ingest_issues if i.severity == 'Warning' and 'some warning message' in i.message]
         assert len(warning_msgs) >= 1
+        report.database.close()
 
     def test_ingestion_error_errors_become_error_issues(self):
         def _fail_ingest(cif, conn, schema, *, on_error=None, **kw):
@@ -187,6 +189,7 @@ class TestIngestStage:
         warning_issues = [i for i in ingest_issues if i.severity == 'Warning']
         assert any('semantic conflict A' in i.message for i in error_issues)
         assert any('non-semantic warning B' in i.message for i in warning_issues)
+        #
 
     def test_ingestion_error_does_not_raise(self):
         def _fail(cif, conn, schema, *, on_error=None, **kw):
@@ -195,6 +198,7 @@ class TestIngestStage:
         with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
             report = validate(_MINIMAL_CIF)  # must not raise
         assert report is not None
+        #report.database.close()
 
     def test_fk_violation_produces_fk_violation_issue(self):
         def _fail(cif, conn, schema, *, on_error=None, **kw):

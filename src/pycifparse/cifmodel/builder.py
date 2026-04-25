@@ -1,10 +1,10 @@
 """
 CifBuilder — constructs a CifFile from the CifParserEvents stream.
 
-CifBuilder implements CifParserEvents and is wired directly to CifParser:
+CifBuilder implements CifParserEvents and is wired directly to the Rust parser:
 
     builder = CifBuilder(on_error=handler.on_error)
-    CifParser(builder).parse(source)
+    version = pycifparse_core.parse(source, builder)
     cif = builder.result
 
 Semantic errors (empty loop, row-count mismatch) are reported via the
@@ -26,8 +26,6 @@ from pycifparse.types import ParseError, ValueType
 from pycifparse.cifmodel.model import CifBlock, CifFile, CifSaveFrame, CifValue
 from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.cifmodel.textfield import transform_multiline
-from pycifparse.parser.parser import CifParser
-from pycifparse.parser.version import detect_version
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -281,9 +279,9 @@ def build(
 
     *errors* contains both parser-level and IR-level errors in emission order.
     """
+    from pycifparse import pycifparse_core  # noqa: PLC0415
     errors: list[ParseError] = []
-    version = detect_version(source)
     builder = CifBuilder(on_error=errors.append, mode=mode)
-    CifParser(builder).parse(source)
+    version = pycifparse_core.parse(source, builder)
     builder.result.version = version
     return builder.result, errors

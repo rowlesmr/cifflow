@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
 
 [project]
 name = "pycifparse"
@@ -15,11 +15,10 @@ dev = [
     "pytest-cov>=5.0",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-"pycifparse.dictionary" = ["js/*.js", "js/LICENSES.txt"]
+[tool.maturin]
+python-source = "src"
+module-name = "pycifparse.pycifparse_core"
+manifest-path = "pycifparse_core/Cargo.toml"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
