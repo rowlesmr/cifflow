@@ -14,15 +14,16 @@ pub enum TokenType {
     Value,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ValueType {
-    MultilineString,
-    TripleDoubleQuoted,
-    TripleSingleQuoted,
-    DoubleQuoted,
-    SingleQuoted,
-    String,
-    Placeholder,
+    MultilineString    = 0,
+    TripleDoubleQuoted = 1,
+    TripleSingleQuoted = 2,
+    DoubleQuoted       = 3,
+    SingleQuoted       = 4,
+    String             = 5,
+    Placeholder        = 6,
 }
 
 impl ValueType {

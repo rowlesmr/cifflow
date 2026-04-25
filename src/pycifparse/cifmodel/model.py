@@ -47,9 +47,19 @@ class CifSaveFrame:
 
     def __getitem__(self, key: str) -> list[CifValue]:
         try:
-            return self._tags[key]
+            values = self._tags[key]
         except KeyError:
             raise KeyError(key)
+        # Lazily upgrade raw tuples (from parse_raw) to CifScalar.
+        # parse_raw emits (value_str, value_type_name) 2-tuples for scalars.
+        if values and isinstance(values[0], tuple):
+            from pycifparse.types import ValueType  # noqa: PLC0415
+            values = [
+                CifScalar(item[0], ValueType[item[1]]) if isinstance(item, tuple) else item
+                for item in values
+            ]
+            self._tags[key] = values
+        return values
 
     def __contains__(self, key: str) -> bool:
         return key in self._tags
@@ -97,10 +107,7 @@ class CifBlock(CifSaveFrame):
 
     def __getitem__(self, key: str) -> Union[list[CifValue], CifSaveFrame]:
         if key.startswith('_'):
-            try:
-                return self._tags[key]
-            except KeyError:
-                raise KeyError(key)
+            return super().__getitem__(key)
         try:
             return self._save_frames[key]
         except KeyError:
