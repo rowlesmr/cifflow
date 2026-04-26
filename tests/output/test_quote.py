@@ -29,8 +29,6 @@ CIF11 = CifVersion.CIF_1_1
 
 def _logical(stored: str) -> str:
     """The logical value that a stored string represents."""
-    if stored in ('"."', '"?"'):
-        return stored[1]
     return stored
 
 

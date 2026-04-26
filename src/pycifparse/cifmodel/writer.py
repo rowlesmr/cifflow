@@ -18,13 +18,12 @@ from __future__ import annotations
 import warnings
 from typing import Union
 
-from pycifparse.types import CifVersion, ValueType
+from pycifparse.types import CifVersion
 from pycifparse.cifmodel.model import CifBlock, CifFile, CifSaveFrame, CifValue
-from pycifparse.cifmodel.scalar import CifScalar
 
 # Recursive type alias (documentation only — Python does not enforce it at runtime)
-# CifInput = int | float | str | CifScalar | list[CifInput] | dict[str, CifInput]
-CifInput = Union[int, float, str, CifScalar, list, dict]
+# CifInput = int | float | str | list[CifInput] | dict[str, CifInput]
+CifInput = Union[int, float, str, list, dict]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -57,16 +56,12 @@ def _check_tag(tag: str, version: CifVersion) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _infer(value: CifInput) -> CifValue:
-    if isinstance(value, CifScalar):
-        return value
     if isinstance(value, bool):
-        return CifScalar(str(value), ValueType.STRING)
+        return str(value)
     if isinstance(value, (int, float)):
-        return CifScalar(str(value), ValueType.STRING)
+        return str(value)
     if isinstance(value, str):
-        if value in ('.', '?'):
-            return CifScalar(value, ValueType.PLACEHOLDER)
-        return CifScalar(value, ValueType.STRING)
+        return value
     if isinstance(value, list):
         return [_infer(e) for e in value]
     if isinstance(value, dict):

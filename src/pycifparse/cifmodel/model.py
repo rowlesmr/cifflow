@@ -18,11 +18,10 @@ Duplicate block and save frame names are preserved in file order.
 from __future__ import annotations
 from typing import Union
 
-from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.types import CifVersion
 
-# A CIF value stored in the model: scalar (CifScalar), or a nested container.
-CifValue = Union[CifScalar, list, dict]
+# A CIF value stored in the model: scalar string, or a nested container.
+CifValue = Union[str, list, dict]
 
 
 def _deepcopy_value(v: CifValue) -> CifValue:
@@ -30,7 +29,7 @@ def _deepcopy_value(v: CifValue) -> CifValue:
         return [_deepcopy_value(e) for e in v]
     if isinstance(v, dict):
         return {k: _deepcopy_value(val) for k, val in v.items()}
-    return v  # CifScalar is immutable — share the reference
+    return v  # str is immutable — share the reference
 
 
 class CifSaveFrame:
@@ -47,19 +46,9 @@ class CifSaveFrame:
 
     def __getitem__(self, key: str) -> list[CifValue]:
         try:
-            values = self._tags[key]
+            return self._tags[key]
         except KeyError:
             raise KeyError(key)
-        # Lazily upgrade raw tuples (from parse_raw) to CifScalar.
-        # parse_raw emits (value_str, value_type_name) 2-tuples for scalars.
-        if values and isinstance(values[0], tuple):
-            from pycifparse.types import ValueType  # noqa: PLC0415
-            values = [
-                CifScalar(item[0], ValueType[item[1]]) if isinstance(item, tuple) else item
-                for item in values
-            ]
-            self._tags[key] = values
-        return values
 
     def __contains__(self, key: str) -> bool:
         return key in self._tags

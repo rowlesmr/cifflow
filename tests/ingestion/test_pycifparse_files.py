@@ -352,12 +352,12 @@ class TestCoreUnknownTag:
         assert _fallback(unknown_tag_conn, 'test_unknown_tag', '_cell.length_a') is None
 
     def test_quoted_number_not_su_split(self, unknown_tag_conn):
-        """_quoted_number "37.4(2)" is DOUBLE_QUOTED: SU split must not apply."""
+        """_quoted_number "37.4(2)" lands in fallback (unknown tag); no SU split in fallback."""
         row = _fallback(unknown_tag_conn, 'test_unknown_tag', '_quoted_number')
         assert row is not None
         value, vtype = row
         assert value == '37.4(2)'
-        assert vtype == 'double_quoted'
+        assert vtype == 'string'
 
 
 # ---------------------------------------------------------------------------
@@ -656,12 +656,12 @@ class TestFallbackScalars:
     def test_single_quoted_value_type(self, fallback_scalars_conn):
         row = _fallback(fallback_scalars_conn, 'test_fallback_scalars',
                         '_sample.description')
-        assert row == ('a reddish powder', 'single_quoted')
+        assert row == ('a reddish powder', 'string')
 
     def test_quoted_number_value_type(self, fallback_scalars_conn):
-        """Double-quoted "11" must store value_type='double_quoted', not 'string'."""
+        """Quoting style is not preserved in the new model; value_type is 'string'."""
         row = _fallback(fallback_scalars_conn, 'test_fallback_scalars', '_result.number')
-        assert row == ('11', 'double_quoted')
+        assert row == ('11', 'string')
 
     def test_no_structured_table_rows(self, fallback_scalars_conn):
         tables = {
@@ -835,22 +835,22 @@ class TestFallbackValueTypes:
 
     def test_single_quoted(self, fallback_value_types_conn):
         row = _fallback(fallback_value_types_conn, _BLK, '_t.single_quoted')
-        assert row == ('hello world', 'single_quoted')
+        assert row == ('hello world', 'string')
 
     def test_double_quoted(self, fallback_value_types_conn):
         row = _fallback(fallback_value_types_conn, _BLK, '_t.double_quoted')
-        assert row == ('hello world', 'double_quoted')
+        assert row == ('hello world', 'string')
 
     def test_multiline_string(self, fallback_value_types_conn):
         row = _fallback(fallback_value_types_conn, _BLK, '_t.multiline')
         assert row is not None
-        assert row[1] == 'multiline_string'
+        assert row[1] == 'string'
         assert 'line one' in row[0] and 'line two' in row[0]
 
     def test_triple_single_quoted(self, fallback_value_types_conn):
         row = _fallback(fallback_value_types_conn, _BLK, '_t.triple_single')
-        assert row == ('triple single', 'triple_single_quoted')
+        assert row == ('triple single', 'string')
 
     def test_triple_double_quoted(self, fallback_value_types_conn):
         row = _fallback(fallback_value_types_conn, _BLK, '_t.triple_double')
-        assert row == ('triple double', 'triple_double_quoted')
+        assert row == ('triple double', 'string')

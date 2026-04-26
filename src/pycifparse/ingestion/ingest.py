@@ -13,9 +13,7 @@ import uuid as _uuid_module
 from typing import Any, Callable
 
 from pycifparse.cifmodel.model import CifBlock, CifFile
-from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.dictionary.schema import BridgeColumnDef, SchemaSpec, TableDef
-from pycifparse.types import ValueType
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +44,7 @@ class IngestionError(Exception):
 # Value encoding
 # ---------------------------------------------------------------------------
 
-def encode_value(value: CifScalar | list | dict) -> tuple[str | None, str]:
+def encode_value(value: str | list | dict) -> tuple[str | None, str]:
     """Encode a CIF value for SQLite storage.
 
     Returns ``(stored_string, value_type_str)``.  ``value_type_str`` is only
@@ -54,26 +52,21 @@ def encode_value(value: CifScalar | list | dict) -> tuple[str | None, str]:
     tables may ignore it.
 
     Applies the Lesson 19 presence-state encoding:
-    - PLACEHOLDER ``.`` / ``?``  -> ``'.'`` / ``'?'``
-    - Quoted ``.`` / ``?``       -> ``'"."'`` / ``'"?"'``
-    - Container                  -> JSON text
-    - Anything else              -> raw string
+    - PLACEHOLDER ``.`` / ``?`` (1-char)  -> NULL storage, ``'placeholder'``
+    - Quoted sentinel ``"."`` / ``"?"``   -> stored as-is, ``'double_quoted'``
+    - Container                           -> JSON text
+    - Anything else                       -> raw string, ``'string'``
     """
     if isinstance(value, list):
-        s, vt = encode_container(value)
-        return s, vt
+        return encode_container(value)
     if isinstance(value, dict):
-        s, vt = encode_container(value)
-        return s, vt
-    # CifScalar
-    vt = value.value_type
-    raw = str(value)
-    if vt == ValueType.PLACEHOLDER:
-        return raw, 'placeholder'
-    if raw in ('.', '?'):
-        # Quoted "." or "?" — store with delimiters to distinguish from PLACEHOLDER
-        return f'"{raw}"', vt.value
-    return raw, vt.value
+        return encode_container(value)
+    # Plain string — apply encoding convention
+    if value in ('.', '?'):
+        return value, 'placeholder'
+    if value in ('"."', '"?"'):
+        return value, 'double_quoted'
+    return value, 'string'
 
 
 # Sentinel prefix that marks a stored value as a JSON-encoded CIF container.
@@ -86,18 +79,15 @@ def encode_container(value: list | dict) -> tuple[str, str]:
 
     The stored string is prefixed with ``_CONTAINER_PREFIX`` so that the output
     layer can identify containers unambiguously without guessing from content.
+    Values use the encoding convention: plain strings stored as-is (quoted-sentinels
+    ``"."``/``"?"`` are already in encoded form).
     """
     def _encode(v: Any) -> Any:
         if isinstance(v, list):
             return [_encode(item) for item in v]
         if isinstance(v, dict):
             return {k: _encode(val) for k, val in v.items()}
-        raw = str(v)
-        if (raw in ('.', '?')
-                and hasattr(v, 'value_type')
-                and v.value_type != ValueType.PLACEHOLDER):
-            return f'"{raw}"'
-        return raw
+        return str(v)
 
     vtype = 'list' if isinstance(value, list) else 'table'
     return _CONTAINER_PREFIX + json.dumps(_encode(value), ensure_ascii=False), vtype
@@ -1278,10 +1268,7 @@ class _Ingester:
         canonical: str,
     ) -> tuple[str | None, str | None]:
         """Return ``(measurand_stored, su_stored)`` applying SU split if applicable."""
-        if (isinstance(val, CifScalar)
-                and val.value_type == ValueType.STRING
-                and canonical in self.su_map
-                and stored is not None):
+        if canonical in self.su_map and stored is not None:
             parts = split_su(stored)
             if parts:
                 measurand, su_digits = parts
@@ -1289,12 +1276,6 @@ class _Ingester:
             else:
                 # No SU sub-expression — leave SU column NULL
                 return stored, None
-        elif (isinstance(val, CifScalar)
-              and val.value_type == ValueType.STRING
-              and canonical not in self.su_map):
-            # Check if this is a measurand that has NO su column
-            # (su_map already handles the opposite direction)
-            pass
         return stored, None
 
     # ── id_regime determination ───────────────────────────────────────────────

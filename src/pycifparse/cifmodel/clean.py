@@ -16,9 +16,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from pycifparse.cifmodel.model import CifFile, CifSaveFrame
-from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.cifmodel.writer import CifWriter, BlockWriter, SaveFrameWriter
-from pycifparse.types import ValueType
 
 Keep = Literal['first', 'last']
 
@@ -216,7 +214,7 @@ def _step_strip_loop_padding(
 def _trailing_placeholder_count(values: list) -> int:
     count = 0
     for v in reversed(values):
-        if isinstance(v, CifScalar) and v == '?' and v.value_type == ValueType.PLACEHOLDER:
+        if v == '?':
             count += 1
         else:
             break

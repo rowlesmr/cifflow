@@ -4,11 +4,125 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current state:** Stage 7 complete (ALL_BLOCKS mode). Performance optimisation Phase 1.1 and 1.2 complete on a feature branch (not merged to main). Lessons 97–102.
+**Current state:** Phase B.2 complete — Arrow IR pipeline implemented. `build_arrow()` returns `list[pa.RecordBatch]` from Rust via Arrow IPC bytes; each batch has per-loop schema (only its own tag columns). `debug_parquet.py` writes one Parquet file per batch. All 1836 tests pass. Next: Phase B.3 — PyO3-exposed `CifFile`/`CifBlock`/`CifSaveFrame` backed by Arrow RecordBatches.
 
-**Test suite state (2026-04-23):**
+**Test suite state (2026-04-26):**
 - 1836 tests pass (full suite)
-- Run: `.venv/Scripts/python -m pytest -k "not slow" --tb=short -q`
+- Run: `.venv/Scripts/python -m pytest -m "not slow" --tb=short -q`
+
+---
+
+### Compiled Path Phase B — Arrow IR + Rust-backed CifFile
+
+**Goal:** Replace Python `CifFile`/`CifBlock`/`CifSaveFrame` with PyO3-exposed Rust structs backed by Arrow RecordBatches. Same public Python API. Enables Phase C (DuckDB merge).
+
+**Reference:** `prompts/compiled_path.md`
+
+#### Design decisions (confirmed)
+
+**No `CifScalar`, no `ValueType` in the Python API.**
+
+Plain Python strings throughout. Encoding conventions carry the semantics:
+
+| Meaning | Stored string | Emit behaviour |
+|---------|--------------|----------------|
+| PLACEHOLDER `.` or `?` | `.` or `?` (1 char) | bare, unquoted |
+| Quoted sentinel `"."` or `"?"` | `"."` or `"?"` (3 chars, with quotes) | emit with quotes |
+| CIF container (list/table) | `\x00[...]` / `\x00{...}` (JSON, `\x00` prefix) | decode JSON |
+| Everything else | raw string | re-quote based on content |
+
+`block["_tag"]` → `list[str]`  
+`CifScalar` deleted. `ValueType` no longer in Python API. ~20 tests updated.  
+Emit layer re-quotes by content analysis. Ingest checks string value directly.
+
+**Arrow schema (per compiled_path.md)**
+
+Scalar tags → one RecordBatch per block, one row, one column per tag:
+```
+_block_idx:  Int32
+_block_name: Utf8
+_frame_idx:  Int32  (NULL for block-level)
+_frame_name: Utf8   (NULL for block-level)
+_loop_id:    Utf8   "__scalars__"
+<tag_1>:     Utf8
+<tag_2>:     Utf8
+...
+```
+
+Loop → one RecordBatch per loop, N rows, one column per tag:
+```
+_block_idx:  Int32
+_block_name: Utf8
+_loop_id:    Utf8   "__loop_0__", "__loop_1__", ...
+<tag_1>:     Utf8
+<tag_2>:     Utf8
+...
+```
+
+**Python API preserved (unchanged):**
+```python
+cif["block"]              # → CifBlock
+block["_tag"]             # → list[str | list | dict]
+block["save_name"]        # → CifSaveFrame
+"_tag" in block           # → bool
+block.tags                # → list[str]
+block.loops               # → list[list[str]]
+block.save_frames         # → list[str]
+block.get_all("save")     # → list[CifSaveFrame]
+cif.blocks                # → list[str]
+cif.get_all("block")      # → list[CifBlock]
+cif.version               # → CifVersion
+cif.deepcopy()            # → CifFile
+```
+
+#### Phase B.1 — Drop CifScalar + plain string encoding ✓ COMPLETE (2026-04-26)
+
+- [x] `CifScalar` removed from all public exports (`__init__.py`, `cifmodel/__init__.py`)
+- [x] `CifValue = Union[str, list, dict]` (was `Union[CifScalar, list, dict]`)
+- [x] `raw_builder.rs`: `RawValue::Str(String)` (was `RawValue::Str(String, ValueType)`); `add_value` applies encoding conventions
+- [x] `builder.py` `add_value`: applies encoding conventions (multiline transform, `"."` / `"?"` sentinel)
+- [x] `clean.py`: `_trailing_placeholder_count` uses `v == '?'`
+- [x] `writer.py`: `_infer` returns plain strings; `CifInput` no longer includes `CifScalar`
+- [x] `ingest.py`: `encode_value` checks string value directly (no `.value_type`); `_maybe_split_su` simplified
+- [x] 36 tests updated; 1836 passing
+
+#### Phase B.2 — Arrow IR pipeline ✓ COMPLETE (2026-04-26)
+
+- [x] `arrow = { version = "53", features = ["ipc"] }` added to `pycifparse_core/Cargo.toml`
+- [x] `raw_builder.rs`: `ParsedCif::to_ipc_batches()` — scalar batch + one batch per loop per block/save-frame; each batch carries only its own tag columns; serialised via `arrow::ipc::writer::FileWriter` → `Vec<u8>`
+- [x] `lib.rs`: `parse_arrow(source, mode)` added; returns `(list[bytes], list[error_dicts])`; registered in module
+- [x] `builder.py`: `build_arrow(source, *, mode)` added; deserializes IPC bytes via `pyarrow.ipc.open_file`
+- [x] `__init__.py`: `build_arrow` exported
+- [x] `debug_parquet.py`: rewritten to use `build_arrow`; writes one Parquet file per batch (per-loop schema, no union/NULL padding)
+- [x] 1836 tests pass; Lessons 103–104
+
+#### Phase B.3 — PyO3-exposed CifFile backed by Arrow RecordBatches — next
+
+#### Implementation steps
+
+- [ ] **Step 1** — `cif_model.rs`: PyO3 `#[pyclass]` types
+  - `PyCifFile` — holds `Vec<PyCifBlock>` + version
+  - `PyCifBlock` — holds scalar RecordBatch + loop RecordBatches + save frames
+  - `PyCifSaveFrame` — same as PyCifBlock minus save frames
+  - All `#[pymethods]` implementing the preserved API
+- [ ] **Step 2** — Update `lib.rs`:
+  - `parse_raw` returns `PyCifFile` directly (not a dict)
+  - Keep `parse` (callback path) unchanged
+- [ ] **Step 3** — Update `builder.py`:
+  - `build()` delegates to `pycifparse_core.build(source, mode)`
+  - Remove dict-unpacking code
+- [ ] **Step 4** — Update `model.py`:
+  - `CifFile`, `CifBlock`, `CifSaveFrame` become thin Python wrappers or are removed
+- [ ] **Step 5** — Update `.pyi` stubs for new PyO3 types
+- [ ] **Step 6** — Run full test suite; fix failures
+- [ ] **Step 7** — Benchmark: verify parse still ≤ 1s
+
+#### Risk areas
+
+- `deepcopy()` on Arrow-backed types: must clone the underlying RecordBatches
+- Container values (CIF lists/tables) are not columnar — store as JSON strings in Arrow or as a separate side-channel
+- Save frame access from `CifBlock` — save frames nested inside blocks need to be accessible via `block["save_name"]`
+- `CifScalar` is removed from the public API; downstream consumers use plain `str` (resolved in B.1)
 
 ---
 

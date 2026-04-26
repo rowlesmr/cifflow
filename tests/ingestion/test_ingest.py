@@ -10,7 +10,6 @@ import pytest
 
 from pycifparse import ingest, IngestionError
 from pycifparse.cifmodel.model import CifBlock, CifFile
-from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.dictionary.ddlm_item import DdlmItem
 from pycifparse.dictionary.ddlm_parser import DdlmDictionary
 from pycifparse.dictionary.schema import generate_schema
@@ -29,17 +28,21 @@ from pycifparse.types import ValueType
 
 
 # ---------------------------------------------------------------------------
-# Primitive CifScalar helpers
+# Value helpers (plain strings in the new encoding)
 # ---------------------------------------------------------------------------
 
-def _s(value, vtype=ValueType.STRING):
-    return CifScalar(value, vtype)
+def _s(value):
+    return value
 
 def _ph(value):
-    return CifScalar(value, ValueType.PLACEHOLDER)
+    return value
 
 def _dq(value):
-    return CifScalar(value, ValueType.DOUBLE_QUOTED)
+    # Only '.' and '?' need sentinel encoding; other double-quoted values are
+    # indistinguishable from bare strings in the new model.
+    if value in ('.', '?'):
+        return f'"{value}"'
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +88,7 @@ def _make_dict(cats, items, alias=None, deprecated=None):
 
 def _block(name, scalars=None, loops=None):
     """
-    scalars: {tag: CifScalar}  or  {tag: [CifScalar, ...]}
+    scalars: {tag: str}  or  {tag: [str, ...]}
     loops: [(loop_tags, [[v00, v01, ...], [v10, ...], ...])]
     """
     b = CifBlock(name)
@@ -697,17 +700,18 @@ class TestSUIngestion:
         rows = _rows(conn, 'atom_site', ['x_fract', 'x_fract_su'])
         assert rows[0] == ('0.123', None)
 
-    def test_su_not_attempted_on_quoted_value(self):
+    def test_su_attempted_on_all_string_values(self):
+        # In the new model, quoting is not preserved for non-sentinel values,
+        # so SU splitting is attempted on all string values matching the pattern.
         schema = _schema_a()
         f = _file(_block('B', loops=[
             (['_atom_site.label', '_atom_site.x_fract'],
-             [[_s('C1'), _dq('0.123(4)')]]),
+             [[_s('C1'), _s('0.123(4)')]]),
         ]))
         conn = _conn(schema)
         ingest(f, conn, schema)
         rows = _rows(conn, 'atom_site', ['x_fract', 'x_fract_su'])
-        # Quoted values are never SU candidates; stored as-is
-        assert rows[0] == ('0.123(4)', None)
+        assert rows[0] == ('0.123', '0.004')
 
     def test_su_not_attempted_in_fallback(self):
         f = _file(_block('B', loops=[

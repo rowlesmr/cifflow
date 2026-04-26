@@ -9,3 +9,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.23", features = ["extension-module"] }
+arrow = { version = "53", features = ["ipc"] }

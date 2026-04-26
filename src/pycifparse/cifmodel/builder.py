@@ -24,7 +24,6 @@ from typing import Callable, Literal, Union
 
 from pycifparse.types import ParseError, ValueType
 from pycifparse.cifmodel.model import CifBlock, CifFile, CifSaveFrame, CifValue
-from pycifparse.cifmodel.scalar import CifScalar
 from pycifparse.cifmodel.textfield import transform_multiline
 
 
@@ -182,7 +181,9 @@ class CifBuilder:
             return
         if value_type == ValueType.MULTILINE_STRING:
             value = transform_multiline(value)
-        self._dispatch_value(CifScalar(value, value_type))
+        elif value_type != ValueType.PLACEHOLDER and value in ('.', '?'):
+            value = f'"{value}"'
+        self._dispatch_value(value)
 
     def on_list_start(self) -> None:
         if self._stopped:
@@ -250,7 +251,7 @@ class CifBuilder:
             # Pad mode: fill incomplete final row with '?'
             for _ in range(missing):
                 tag = self._loop_tags[self._loop_value_index % n]
-                self._loop_buffers[tag].append(CifScalar('?', ValueType.PLACEHOLDER))
+                self._loop_buffers[tag].append('?')
                 self._loop_value_index += 1
 
         if ns is not None:
@@ -268,6 +269,27 @@ class CifBuilder:
 # ─────────────────────────────────────────────────────────────────────────────
 # Convenience function
 # ─────────────────────────────────────────────────────────────────────────────
+
+def build_arrow(
+    source: str,
+    *,
+    mode: Literal['strict', 'pad'] = 'pad',
+) -> tuple[list, list[ParseError]]:
+    """
+    Parse *source* and return ``(list[pa.RecordBatch], errors)``.
+
+    Each RecordBatch covers one logical namespace section: either the scalar
+    tags of a block/save-frame or one loop within it.  The schema per batch
+    contains only the five metadata columns plus the tags present in that batch.
+    """
+    import io  # noqa: PLC0415
+    import pyarrow.ipc as ipc  # noqa: PLC0415
+    from pycifparse import pycifparse_core  # noqa: PLC0415
+    ipc_batches, error_dicts = pycifparse_core.parse_arrow(source, mode)
+    batches = [ipc.open_file(io.BytesIO(bytes(b))).get_batch(0) for b in ipc_batches]
+    errors = [ParseError(**e) for e in error_dicts]
+    return batches, errors
+
 
 def build(
     source: str,
@@ -294,7 +316,7 @@ def build(
         block = CifBlock(rb['name'])
         block._tag_order = list(rb['tag_order'])
         block._loops     = [list(loop) for loop in rb['loops']]
-        block._tags      = dict(rb['tags'])   # raw strings; CifScalar created lazily
+        block._tags      = dict(rb['tags'])
         for rsf in rb['save_frames']:
             sf = CifSaveFrame(rsf['name'])
             sf._tag_order = list(rsf['tag_order'])

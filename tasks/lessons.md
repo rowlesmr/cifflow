@@ -1,5 +1,23 @@
 # pycifparse — Lessons Learned
 
+## Lesson 104 — Arrow IPC is the correct Rust→Python transport for RecordBatches; avoid the `pyarrow` crate feature (2026-04-26)
+
+**Context:** Phase B.2 needed to return Arrow `RecordBatch` objects from Rust to Python. Two approaches exist in `arrow-rs`: the `pyarrow` feature on the `arrow` crate, which lets you hand a `RecordBatch` directly across the PyO3 boundary, and the IPC route, which serializes each batch to bytes in Rust and deserializes with `pyarrow.ipc` in Python.
+
+**Decision:** Use IPC bytes (`arrow::ipc::writer::FileWriter` → `Cursor<Vec<u8>>` → `PyBytes`). The `pyarrow` feature pins `arrow-rs` to a specific `pyo3` version — if it diverges from the `pyo3` version declared elsewhere in `Cargo.toml`, compilation fails. IPC carries no such coupling.
+
+**Rule:** When crossing the Rust/Python boundary with Arrow data, default to IPC bytes unless you have confirmed version alignment between `arrow`'s `pyarrow` feature and your `pyo3` dependency. One `FileWriter` per batch; `pyarrow.ipc.open_file(io.BytesIO(data)).get_batch(0)` on the Python side.
+
+---
+
+## Lesson 103 — Parquet and Arrow IPC both require a single schema per file; per-loop schemas are in-memory only (2026-04-26)
+
+**Context:** The compiled_path.md spec says each loop gets its own `RecordBatch` with only its own tag columns. This is valid as an in-memory `Vec<RecordBatch>` (each batch has its own schema). But writing to a single Parquet file or a single Arrow IPC file requires a unified schema across all row-groups/batches. The two representations are not equivalent on disk.
+
+**Rule:** Never conflate "per-batch schema" (in-memory Arrow) with "file schema" (Parquet/IPC). If you need to inspect batches from disk, either write one file per batch (as `debug_parquet.py` now does) or use a union schema with NULL padding. The per-loop schema lives only in memory.
+
+---
+
 ## Lesson 102 — `_id_regime` quadratic scan: maintain a per-block index during merge (2026-04-23)
 
 **Context:** `_id_regime` iterated over all rows in `merged_rows` for every block, filtering by `_block_id`. With 156 blocks and ~1.98 M total rows, this is O(blocks × rows) — 12.9 s cumulative in profiling.

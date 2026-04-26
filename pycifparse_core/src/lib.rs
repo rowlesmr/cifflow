@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyBytes, PyDict, PyList};
 
 mod error;
 mod event_sink;
@@ -173,6 +173,50 @@ fn parse_raw<'py>(py: Python<'py>, source: &str, mode: Option<&str>) -> PyResult
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// parse_arrow — returns (list[bytes], list[error_dicts])
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[pyfunction]
+#[pyo3(signature = (source, mode=None))]
+fn parse_arrow<'py>(
+    py: Python<'py>,
+    source: &str,
+    mode: Option<&str>,
+) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
+    let mode_strict = mode == Some("strict");
+    let vr = detect_version(source);
+    let mut builder = RawBuilder::new(vr.version, mode_strict);
+    for e in &vr.errors {
+        builder.push_error(e);
+    }
+    let lexer = Lexer::new(&vr.remaining, vr.version, vr.line_offset);
+    let tokens = lexer.tokenise();
+    let mut parser = Parser::new();
+    parser.parse(tokens, &mut builder)?;
+
+    let parsed = builder.finish();
+
+    let errors = PyList::empty(py);
+    for e in &parsed.errors {
+        let d = PyDict::new(py);
+        d.set_item("error_type", e.error_type)?;
+        d.set_item("message", e.message.as_str())?;
+        d.set_item("line", e.line)?;
+        d.set_item("column", e.column)?;
+        d.set_item("context", e.context.as_str())?;
+        d.set_item("recovery_action", e.recovery_action.as_str())?;
+        errors.append(&d)?;
+    }
+
+    let ipc_list = PyList::empty(py);
+    for batch_bytes in parsed.to_ipc_batches() {
+        ipc_list.append(PyBytes::new(py, &batch_bytes))?;
+    }
+
+    Ok((ipc_list, errors))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Module
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -180,5 +224,6 @@ fn parse_raw<'py>(py: Python<'py>, source: &str, mode: Option<&str>) -> PyResult
 fn pycifparse_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse, m)?)?;
     m.add_function(wrap_pyfunction!(parse_raw, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_arrow, m)?)?;
     Ok(())
 }

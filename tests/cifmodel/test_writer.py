@@ -145,7 +145,7 @@ class TestGetBlockIndex:
         bw = w.add_block("b")
         bw.set_tag("_x", "1")
         bw2 = w.get_block("b")
-        assert w["b"]["_x"][0] == CifScalar("1", ValueType.STRING)
+        assert w["b"]["_x"][0] == "1"
 
     def test_get_block_missing_raises(self):
         w = make_writer()
@@ -232,38 +232,38 @@ class TestSetTag:
         w = make_writer()
         bw = w.add_block("b")
         bw.set_tag("_cell_a", "5.0")
-        assert w["b"]["_cell_a"] == [CifScalar("5.0", ValueType.STRING)]
+        assert w["b"]["_cell_a"] == ["5.0"]
 
     def test_set_tag_int(self):
         w = make_writer()
         bw = w.add_block("b")
         bw.set_tag("_n", 42)
-        assert w["b"]["_n"] == [CifScalar("42", ValueType.STRING)]
+        assert w["b"]["_n"] == ["42"]
 
     def test_set_tag_float(self):
         w = make_writer()
         bw = w.add_block("b")
         bw.set_tag("_n", 3.14)
-        assert w["b"]["_n"] == [CifScalar("3.14", ValueType.STRING)]
+        assert w["b"]["_n"] == ["3.14"]
 
     def test_set_tag_placeholder_dot(self):
         w = make_writer()
         bw = w.add_block("b")
         bw.set_tag("_x", ".")
-        assert w["b"]["_x"][0].value_type == ValueType.PLACEHOLDER
+        assert w["b"]["_x"][0] == "."
 
     def test_set_tag_placeholder_question(self):
         w = make_writer()
         bw = w.add_block("b")
         bw.set_tag("_x", "?")
-        assert w["b"]["_x"][0].value_type == ValueType.PLACEHOLDER
+        assert w["b"]["_x"][0] == "?"
 
-    def test_set_tag_preserves_cifscalar(self):
+    def test_set_tag_preserves_str(self):
         w = make_writer()
         bw = w.add_block("b")
-        s = CifScalar("hello", ValueType.DOUBLE_QUOTED)
+        s = "hello"
         bw.set_tag("_x", s)
-        assert w["b"]["_x"][0] is s
+        assert w["b"]["_x"][0] == s
 
     def test_set_tag_list_container(self):
         w = make_writer()
@@ -271,7 +271,7 @@ class TestSetTag:
         bw.set_tag("_x", ["a", "b"])
         val = w["b"]["_x"][0]
         assert isinstance(val, list)
-        assert val[0] == CifScalar("a", ValueType.STRING)
+        assert val[0] == "a"
 
     def test_set_tag_missing_underscore_raises(self):
         w = make_writer()
@@ -756,45 +756,44 @@ class TestCifVersionRules:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestValueTypeInference:
-    def test_dot_is_placeholder(self):
+    def test_dot_stored_as_dot(self):
         w = make_writer()
         bw = w.add_block("b")
         bw.set_tag("_x", ".")
-        assert w["b"]["_x"][0].value_type == ValueType.PLACEHOLDER
+        assert w["b"]["_x"][0] == "."
 
-    def test_question_is_placeholder(self):
+    def test_question_stored_as_question(self):
         w = make_writer()
         bw = w.add_block("b")
         bw.set_tag("_x", "?")
-        assert w["b"]["_x"][0].value_type == ValueType.PLACEHOLDER
+        assert w["b"]["_x"][0] == "?"
 
-    def test_int_is_string(self):
+    def test_int_becomes_str(self):
         w = make_writer()
         bw = w.add_block("b")
         bw.set_tag("_x", 5)
         v = w["b"]["_x"][0]
-        assert v == CifScalar("5", ValueType.STRING)
-        assert v.value_type == ValueType.STRING
+        assert v == "5"
+        assert isinstance(v, str)
 
-    def test_float_is_string(self):
+    def test_float_becomes_str(self):
         w = make_writer()
         bw = w.add_block("b")
         bw.set_tag("_x", 2.5)
-        assert w["b"]["_x"][0] == CifScalar("2.5", ValueType.STRING)
+        assert w["b"]["_x"][0] == "2.5"
 
-    def test_other_str_is_string(self):
+    def test_other_str_stored_as_is(self):
         w = make_writer()
         bw = w.add_block("b")
         bw.set_tag("_x", "hello")
-        assert w["b"]["_x"][0].value_type == ValueType.STRING
+        assert w["b"]["_x"][0] == "hello"
 
-    def test_cifscalar_preserved(self):
+    def test_str_preserved(self):
         w = make_writer()
         bw = w.add_block("b")
-        s = CifScalar("hello", ValueType.SINGLE_QUOTED)
+        s = "hello"
         bw.set_tag("_x", s)
-        assert w["b"]["_x"][0] is s
-        assert w["b"]["_x"][0].value_type == ValueType.SINGLE_QUOTED
+        assert w["b"]["_x"][0] == s
 
     def test_nested_list_inferred_recursively(self):
         w = make_writer()
@@ -802,8 +801,8 @@ class TestValueTypeInference:
         bw.set_tag("_x", [".", 5])
         inner = w["b"]["_x"][0]
         assert isinstance(inner, list)
-        assert inner[0].value_type == ValueType.PLACEHOLDER
-        assert inner[1].value_type == ValueType.STRING
+        assert inner[0] == "."
+        assert inner[1] == "5"
 
     def test_nested_dict_inferred_recursively(self):
         w = make_writer()
@@ -811,7 +810,7 @@ class TestValueTypeInference:
         bw.set_tag("_x", {"k": "?"})
         inner = w["b"]["_x"][0]
         assert isinstance(inner, dict)
-        assert inner["k"].value_type == ValueType.PLACEHOLDER
+        assert inner["k"] == "?"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

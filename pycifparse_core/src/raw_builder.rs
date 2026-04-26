@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString, PyTuple};
+use pyo3::types::{PyDict, PyList, PyString};
 
 use crate::error::RustParseError;
 use crate::event_sink::EventSink;
@@ -21,7 +21,7 @@ use crate::version::CifVersion;
 
 #[derive(Debug)]
 pub enum RawValue {
-    Str(String, ValueType),
+    Str(String),
     List(Vec<RawValue>),
     Table(Vec<(String, RawValue)>), // ordered key-value pairs
 }
@@ -256,33 +256,20 @@ impl RawBuilder {
 // Python conversion helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// toplevel=true: scalars become (value_str, vt_name) tuples for lazy CifScalar creation.
-// toplevel=false (inside container): scalars become plain strings — containers are
-// accessed as Python str/list/dict already and don't need lazy CifScalar conversion.
-fn raw_value_to_python<'py>(py: Python<'py>, v: &RawValue, toplevel: bool) -> PyResult<Bound<'py, PyAny>> {
+fn raw_value_to_python<'py>(py: Python<'py>, v: &RawValue) -> PyResult<Bound<'py, PyAny>> {
     match v {
-        RawValue::Str(s, vt) => {
-            if toplevel {
-                let tuple = PyTuple::new(py, [
-                    PyString::new(py, s).into_any(),
-                    PyString::new(py, vt.python_attr()).into_any(),
-                ])?;
-                Ok(tuple.into_any())
-            } else {
-                Ok(PyString::new(py, s).into_any())
-            }
-        }
+        RawValue::Str(s) => Ok(PyString::new(py, s).into_any()),
         RawValue::List(items) => {
             let list = PyList::empty(py);
             for item in items {
-                list.append(&raw_value_to_python(py, item, false)?)?;
+                list.append(&raw_value_to_python(py, item)?)?;
             }
             Ok(list.into_any())
         }
         RawValue::Table(pairs) => {
             let dict = PyDict::new(py);
             for (k, v) in pairs {
-                dict.set_item(k.as_str(), raw_value_to_python(py, v, false)?)?;
+                dict.set_item(k.as_str(), raw_value_to_python(py, v)?)?;
             }
             Ok(dict.into_any())
         }
@@ -321,7 +308,7 @@ fn frame_data_to_python<'py>(
         if let Some(values) = data.tags.get(tag.as_str()) {
             let vals = PyList::empty(py);
             for v in values {
-                vals.append(&raw_value_to_python(py, v, true)?)?;
+                vals.append(&raw_value_to_python(py, v)?)?;
             }
             tags_dict.set_item(tag.as_str(), &vals)?;
         }
@@ -416,12 +403,13 @@ impl EventSink for RawBuilder {
         if self.stopped {
             return Ok(());
         }
-        let processed = if vtype == ValueType::MultilineString {
-            transform_multiline(value)
-        } else {
-            value.to_string()
+        let stored = match vtype {
+            ValueType::MultilineString => transform_multiline(value),
+            ValueType::Placeholder => value.to_string(),
+            _ if value == "." || value == "?" => format!("\"{}\"", value),
+            _ => value.to_string(),
         };
-        self.dispatch_value(RawValue::Str(processed, vtype));
+        self.dispatch_value(RawValue::Str(stored));
         Ok(())
     }
 
@@ -531,7 +519,7 @@ impl EventSink for RawBuilder {
             for _ in 0..missing {
                 let tag = self.loop_tags[self.loop_value_index % n].clone();
                 self.loop_buffers.entry(tag).or_default()
-                    .push(RawValue::Str("?".to_string(), ValueType::Placeholder));
+                    .push(RawValue::Str("?".to_string()));
                 self.loop_value_index += 1;
             }
         }
@@ -570,5 +558,205 @@ impl EventSink for RawBuilder {
             recovery_action: recovery.to_string(),
         });
         Ok(())
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Arrow IPC export
+// ─────────────────────────────────────────────────────────────────────────────
+
+use arrow::array::{ArrayRef, Int32Array, StringArray};
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::ipc::writer::FileWriter;
+use arrow::record_batch::RecordBatch;
+use std::io::Cursor;
+use std::sync::Arc;
+
+fn raw_to_str(v: &RawValue) -> String {
+    match v {
+        RawValue::Str(s) => s.clone(),
+        RawValue::List(items) => {
+            let parts: Vec<String> = items.iter().map(json_val).collect();
+            format!("\x00[{}]", parts.join(","))
+        }
+        RawValue::Table(pairs) => {
+            let parts: Vec<String> = pairs.iter()
+                .map(|(k, v)| format!("{}:{}", json_str(k), json_val(v)))
+                .collect();
+            format!("\x00{{{}}}", parts.join(","))
+        }
+    }
+}
+
+fn json_str(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"'  => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c    => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn json_val(v: &RawValue) -> String {
+    match v {
+        RawValue::Str(s) => json_str(s),
+        RawValue::List(items) => {
+            let parts: Vec<String> = items.iter().map(json_val).collect();
+            format!("[{}]", parts.join(","))
+        }
+        RawValue::Table(pairs) => {
+            let parts: Vec<String> = pairs.iter()
+                .map(|(k, v)| format!("{}:{}", json_str(k), json_val(v)))
+                .collect();
+            format!("{{{}}}", parts.join(","))
+        }
+    }
+}
+
+fn make_batch(
+    block_idx: i32,
+    block_name: &str,
+    frame_idx: Option<i32>,
+    frame_name: Option<&str>,
+    loop_id: &str,
+    tags: &[String],
+    tag_data: &HashMap<String, Vec<Option<String>>>,
+    n_rows: usize,
+) -> RecordBatch {
+    let mut fields = vec![
+        Field::new("_block_idx",  DataType::Int32, false),
+        Field::new("_block_name", DataType::Utf8,  false),
+        Field::new("_frame_idx",  DataType::Int32, true),
+        Field::new("_frame_name", DataType::Utf8,  true),
+        Field::new("_loop_id",    DataType::Utf8,  false),
+    ];
+    for tag in tags {
+        fields.push(Field::new(tag.as_str(), DataType::Utf8, true));
+    }
+    let schema = Arc::new(Schema::new(fields));
+
+    let mut arrays: Vec<ArrayRef> = vec![
+        Arc::new(Int32Array::from(vec![block_idx; n_rows])),
+        Arc::new(StringArray::from(vec![block_name; n_rows])),
+        Arc::new(Int32Array::from(vec![frame_idx; n_rows])),
+        Arc::new(StringArray::from(vec![frame_name; n_rows])),
+        Arc::new(StringArray::from(vec![loop_id; n_rows])),
+    ];
+    for tag in tags {
+        if let Some(col) = tag_data.get(tag.as_str()) {
+            arrays.push(Arc::new(StringArray::from(
+                col.iter().map(|o| o.as_deref()).collect::<Vec<_>>(),
+            )));
+        } else {
+            arrays.push(Arc::new(StringArray::from(vec![None::<&str>; n_rows])));
+        }
+    }
+
+    RecordBatch::try_new(schema, arrays).expect("schema/array length mismatch")
+}
+
+fn batch_to_ipc(batch: &RecordBatch) -> Vec<u8> {
+    let schema = batch.schema();
+    let mut buf = Cursor::new(Vec::<u8>::new());
+    {
+        let mut writer = FileWriter::try_new(&mut buf, schema.as_ref())
+            .expect("FileWriter creation failed");
+        writer.write(batch).expect("write failed");
+        writer.finish().expect("finish failed");
+    }
+    buf.into_inner()
+}
+
+fn frame_to_batches(
+    data: &FrameData,
+    block_idx: i32,
+    block_name: &str,
+    frame_idx: Option<i32>,
+    frame_name: Option<&str>,
+) -> Vec<RecordBatch> {
+    let loop_tag_set: HashSet<&str> = data.loops.iter()
+        .flat_map(|l| l.iter().map(String::as_str))
+        .collect();
+
+    let scalar_tags: Vec<String> = data.tag_order.iter()
+        .filter(|t| !loop_tag_set.contains(t.as_str()))
+        .cloned()
+        .collect();
+
+    let mut batches = Vec::new();
+
+    // Scalar batch
+    if !scalar_tags.is_empty() {
+        let n_rows = scalar_tags.iter()
+            .map(|t| data.tags.get(t.as_str()).map_or(0, |v| v.len()))
+            .max()
+            .unwrap_or(0);
+
+        if n_rows > 0 {
+            let mut tag_data: HashMap<String, Vec<Option<String>>> = HashMap::new();
+            for tag in &scalar_tags {
+                let vals = data.tags.get(tag.as_str()).map_or(&[][..], |v| v.as_slice());
+                let col = (0..n_rows)
+                    .map(|i| vals.get(i).map(raw_to_str))
+                    .collect();
+                tag_data.insert(tag.clone(), col);
+            }
+            batches.push(make_batch(
+                block_idx, block_name, frame_idx, frame_name,
+                "__scalars__", &scalar_tags, &tag_data, n_rows,
+            ));
+        }
+    }
+
+    // Loop batches
+    for (loop_idx, loop_tags) in data.loops.iter().enumerate() {
+        if loop_tags.is_empty() {
+            continue;
+        }
+        let n_rows = data.tags.get(loop_tags[0].as_str()).map_or(0, |v| v.len());
+        if n_rows == 0 {
+            continue;
+        }
+        let mut tag_data: HashMap<String, Vec<Option<String>>> = HashMap::new();
+        for tag in loop_tags {
+            let vals = data.tags.get(tag.as_str()).map_or(&[][..], |v| v.as_slice());
+            let col = vals.iter().map(|v| Some(raw_to_str(v))).collect();
+            tag_data.insert(tag.clone(), col);
+        }
+        let loop_id = format!("__loop_{}__", loop_idx);
+        batches.push(make_batch(
+            block_idx, block_name, frame_idx, frame_name,
+            &loop_id, loop_tags, &tag_data, n_rows,
+        ));
+    }
+
+    batches
+}
+
+impl ParsedCif {
+    pub fn to_ipc_batches(&self) -> Vec<Vec<u8>> {
+        let mut result = Vec::new();
+        for (block_idx, block) in self.blocks.iter().enumerate() {
+            let bi = block_idx as i32;
+            for batch in frame_to_batches(&block.data, bi, &block.name, None, None) {
+                result.push(batch_to_ipc(&batch));
+            }
+            let mut fi = 0i32;
+            for sf in &block.save_frames {
+                for batch in frame_to_batches(&sf.data, bi, &block.name, Some(fi), Some(&sf.name)) {
+                    result.push(batch_to_ipc(&batch));
+                }
+                fi += 1;
+            }
+        }
+        result
     }
 }

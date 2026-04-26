@@ -227,8 +227,9 @@ _foo.bar beta
     assert any(m.kind == 'fallback_mismatch' for m in r.mismatches)
 
 
-def test_fallback_value_type_differs_mismatch():
-    # same tag, same value but different quoting → different value_type in fallback
+def test_fallback_value_type_differs_no_mismatch():
+    # same tag, same value but different quoting → both stored as value_type='string'
+    # in the new system (quoting is not preserved for non-sentinel values)
     cif_a = """\
 data_block1
 _foo.bar alpha
@@ -238,8 +239,7 @@ data_block1
 _foo.bar "alpha"
 """
     r = check_fidelity(cif_a, cif_b, schema=None)
-    assert not r.passed
-    assert any(m.kind == 'value_type' for m in r.mismatches)
+    assert r.passed
 
 
 def test_all_null_column_vs_absent_passed():
