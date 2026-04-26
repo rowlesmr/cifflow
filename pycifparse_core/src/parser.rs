@@ -1,8 +1,8 @@
 // CIF Parser — generic over EventSink.
 //
-// Parser::parse<S: EventSink> calls sink methods directly; no Python I/O
-// on the raw-build path.  PyEventSink wraps a Python handler for the
-// callback path.
+// Parser::parse<S: EventSink> is PyO3-free: it calls sink methods directly
+// and returns ().  PyEventSink captures any Python exception internally;
+// the caller checks for it after parse() returns.
 
 use crate::event_sink::EventSink;
 use crate::lexer::{Token, TokenType, ValueType};
@@ -62,37 +62,35 @@ impl Parser {
         }
     }
 
-    pub fn parse<S: EventSink>(&mut self, tokens: Vec<Token>, sink: &mut S) -> pyo3::PyResult<()> {
+    pub fn parse<S: EventSink>(&mut self, tokens: Vec<Token>, sink: &mut S) {
         let n = tokens.len();
         let mut i = 0;
         while i < n && !self.halted {
             let tok = &tokens[i];
-            self.flush_errors(tok, sink)?;
+            self.flush_errors(tok, sink);
             self.last_line = tok.line;
             self.last_col  = tok.column;
-            i = self.dispatch(&tokens, i, sink)?;
+            i = self.dispatch(&tokens, i, sink);
         }
         if !self.halted {
-            self.handle_eof(sink)?;
+            self.handle_eof(sink);
         }
-        Ok(())
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    fn flush_errors<S: EventSink>(&self, tok: &Token, sink: &mut S) -> pyo3::PyResult<()> {
+    fn flush_errors<S: EventSink>(&self, tok: &Token, sink: &mut S) {
         for le in &tok.errors {
-            sink.on_parse_error("lexical", &le.message, le.line, le.column, &le.context, "lexer recovery")?;
+            sink.on_parse_error("lexical", &le.message, le.line, le.column, &le.context, "lexer recovery");
         }
-        Ok(())
     }
 
     fn emit<S: EventSink>(
         &self, sink: &mut S,
         etype: &'static str, msg: &str,
         line: u32, col: u32, context: &str, recovery: &str,
-    ) -> pyo3::PyResult<()> {
-        sink.on_parse_error(etype, msg, line, col, context, recovery)
+    ) {
+        sink.on_parse_error(etype, msg, line, col, context, recovery);
     }
 
     // ── Container helpers ─────────────────────────────────────────────────────
@@ -100,102 +98,97 @@ impl Parser {
     fn cleanup_table_frame<S: EventSink>(
         &mut self, frame: TableFrame,
         line: u32, col: u32, context: &str, sink: &mut S,
-    ) -> pyo3::PyResult<()> {
+    ) {
         match frame.state {
             TableState::Colon => {
                 if let Some(key) = frame.pending_key {
                     self.emit(sink, "syntactic",
                         &format!("table key {key:?} missing : separator"),
                         line, col, context,
-                        "emitted on_table_key; inserted ? placeholder")?;
+                        "emitted on_table_key; inserted ? placeholder");
                     let vt = frame.pending_key_vtype.unwrap_or(ValueType::String);
-                    sink.on_table_key(&key, vt)?;
-                    sink.add_value("?", ValueType::Placeholder)?;
+                    sink.on_table_key(&key, vt);
+                    sink.add_value("?", ValueType::Placeholder);
                 }
             }
             TableState::Value => {
                 self.emit(sink, "syntactic", "table key has no value",
-                    line, col, context, "inserted ? placeholder")?;
-                sink.add_value("?", ValueType::Placeholder)?;
+                    line, col, context, "inserted ? placeholder");
+                sink.add_value("?", ValueType::Placeholder);
             }
             TableState::Key => {}
         }
-        Ok(())
     }
 
     fn close_all_containers<S: EventSink>(
         &mut self, line: u32, col: u32, context: &str, reason: &str, sink: &mut S,
-    ) -> pyo3::PyResult<()> {
+    ) {
         while let Some(frame) = self.container_stack.pop() {
             match frame {
                 Frame::List => {
-                    sink.on_list_end()?;
+                    sink.on_list_end();
                     self.emit(sink, "syntactic",
                         &format!("implicitly closed unclosed list ({reason})"),
-                        line, col, context, "emitted on_list_end")?;
+                        line, col, context, "emitted on_list_end");
                 }
                 Frame::Table(tf) => {
-                    self.cleanup_table_frame(tf, line, col, context, sink)?;
-                    sink.on_table_end()?;
+                    self.cleanup_table_frame(tf, line, col, context, sink);
+                    sink.on_table_end();
                     self.emit(sink, "syntactic",
                         &format!("implicitly closed unclosed table ({reason})"),
-                        line, col, context, "emitted on_table_end")?;
+                        line, col, context, "emitted on_table_end");
                 }
             }
         }
         self.active_tag = None;
-        Ok(())
     }
 
     fn close_active_tag<S: EventSink>(
         &mut self, line: u32, col: u32, context: &str, reason: &str, sink: &mut S,
-    ) -> pyo3::PyResult<()> {
+    ) {
         if let Some(tag) = self.active_tag.take() {
             self.emit(sink, "syntactic",
                 &format!("tag {tag:?} has no value ({reason})"),
-                line, col, context, "inserted ? placeholder")?;
-            sink.add_value("?", ValueType::Placeholder)?;
+                line, col, context, "inserted ? placeholder");
+            sink.add_value("?", ValueType::Placeholder);
         }
-        Ok(())
     }
 
     fn close_loop<S: EventSink>(
         &mut self, line: u32, col: u32, context: &str, reason: &str, sink: &mut S,
-    ) -> pyo3::PyResult<()> {
+    ) {
         if !self.container_stack.is_empty() {
-            self.close_all_containers(line, col, context, reason, sink)?;
+            self.close_all_containers(line, col, context, reason, sink);
             self.emit(sink, "syntactic",
                 &format!("unterminated container(s) in loop value ({reason})"),
-                line, col, context, "containers implicitly closed")?;
+                line, col, context, "containers implicitly closed");
         }
         if !self.loop_has_values {
             let tags_repr = format!("{:?}", self.loop_tags);
             self.emit(sink, "syntactic",
                 &format!("loop has tags {tags_repr} but no values"),
-                line, col, context, "loop emitted empty")?;
+                line, col, context, "loop emitted empty");
         }
-        sink.on_loop_end()?;
+        sink.on_loop_end();
         self.in_loop = false;
         self.loop_tags.clear();
         self.loop_has_values = false;
-        Ok(())
     }
 
     fn prepare_for_keyword<S: EventSink>(
         &mut self, line: u32, col: u32, context: &str, keyword: &str, sink: &mut S,
-    ) -> pyo3::PyResult<()> {
+    ) {
         if self.in_loop {
             let reason = format!("terminated by {keyword}");
-            self.close_loop(line, col, context, &reason, sink)?;
+            self.close_loop(line, col, context, &reason, sink);
         } else {
             if !self.container_stack.is_empty() {
                 let reason = format!("terminated by {keyword}");
-                self.close_all_containers(line, col, context, &reason, sink)?;
+                self.close_all_containers(line, col, context, &reason, sink);
             }
             let reason = format!("terminated by {keyword}");
-            self.close_active_tag(line, col, context, &reason, sink)?;
+            self.close_active_tag(line, col, context, &reason, sink);
         }
-        Ok(())
     }
 
     fn after_close_container(&mut self) {
@@ -216,12 +209,12 @@ impl Parser {
 
     fn dispatch<S: EventSink>(
         &mut self, tokens: &[Token], i: usize, sink: &mut S,
-    ) -> pyo3::PyResult<usize> {
+    ) -> usize {
         let tok = &tokens[i];
         match tok.token_type {
             TokenType::Keyword => self.handle_keyword(tokens, i, sink),
-            TokenType::Tag     => { self.handle_tag(tok, sink)?; Ok(i + 1) }
-            TokenType::Value   => { self.handle_value(tok, sink)?; Ok(i + 1) }
+            TokenType::Tag     => { self.handle_tag(tok, sink); i + 1 }
+            TokenType::Value   => { self.handle_value(tok, sink); i + 1 }
         }
     }
 
@@ -229,99 +222,98 @@ impl Parser {
 
     fn handle_keyword<S: EventSink>(
         &mut self, tokens: &[Token], i: usize, sink: &mut S,
-    ) -> pyo3::PyResult<usize> {
+    ) -> usize {
         let tok = &tokens[i];
         let lower = tok.value.to_ascii_lowercase();
 
         if lower == "global_" {
-            self.handle_global(tok, sink)?;
-            return Ok(i + 1);
+            self.handle_global(tok, sink);
+            return i + 1;
         }
 
         if lower == "stop_" {
             if self.in_loop {
-                self.close_loop(tok.line, tok.column, &tok.value, "stop_", sink)?;
+                self.close_loop(tok.line, tok.column, &tok.value, "stop_", sink);
             } else {
                 self.emit(sink, "syntactic", "stop_ outside loop",
-                    tok.line, tok.column, &tok.value, "ignored")?;
+                    tok.line, tok.column, &tok.value, "ignored");
             }
-            return Ok(i + 1);
+            return i + 1;
         }
 
         if lower == "loop_" {
-            self.prepare_for_keyword(tok.line, tok.column, &tok.value, "loop_", sink)?;
+            self.prepare_for_keyword(tok.line, tok.column, &tok.value, "loop_", sink);
             if !self.in_data_block {
                 self.emit(sink, "syntactic", "loop_ outside data block",
-                    tok.line, tok.column, &tok.value, "continuing")?;
+                    tok.line, tok.column, &tok.value, "continuing");
             }
             return self.start_loop(tokens, i, sink);
         }
 
         // data_ / save_
         let tok_value = tok.value.clone();
-        self.prepare_for_keyword(tok.line, tok.column, &tok.value, &tok_value, sink)?;
+        self.prepare_for_keyword(tok.line, tok.column, &tok.value, &tok_value, sink);
 
         if lower.starts_with("data_") {
             let name = tok.value[5..].to_string();
             if name.is_empty() {
                 self.emit(sink, "syntactic", "data block with empty name",
-                    tok.line, tok.column, &tok.value, "using empty string")?;
+                    tok.line, tok.column, &tok.value, "using empty string");
             }
             if self.in_save_frame {
-                sink.on_save_frame_end()?;
+                sink.on_save_frame_end();
                 self.in_save_frame = false;
             }
             self.in_data_block = true;
-            sink.on_data_block(&name)?;
+            sink.on_data_block(&name);
         } else if lower.starts_with("save_") && lower.len() > 5 {
             let name = tok.value[5..].to_string();
             if !self.in_data_block {
                 self.emit(sink, "syntactic", "save frame outside data block",
-                    tok.line, tok.column, &tok.value, "continuing")?;
+                    tok.line, tok.column, &tok.value, "continuing");
             }
             if self.in_save_frame {
                 self.emit(sink, "syntactic", "nested save frame",
                     tok.line, tok.column, &tok.value,
-                    "implicitly closed previous save frame")?;
-                sink.on_save_frame_end()?;
+                    "implicitly closed previous save frame");
+                sink.on_save_frame_end();
             }
             self.in_save_frame = true;
-            sink.on_save_frame_start(&name)?;
+            sink.on_save_frame_start(&name);
         } else if lower == "save_" {
             if self.in_save_frame {
-                sink.on_save_frame_end()?;
+                sink.on_save_frame_end();
                 self.in_save_frame = false;
             } else {
                 self.emit(sink, "syntactic", "save_ (frame close) outside save frame",
-                    tok.line, tok.column, &tok.value, "ignored")?;
+                    tok.line, tok.column, &tok.value, "ignored");
             }
         }
 
-        Ok(i + 1)
+        i + 1
     }
 
-    fn handle_global<S: EventSink>(&mut self, tok: &Token, sink: &mut S) -> pyo3::PyResult<()> {
+    fn handle_global<S: EventSink>(&mut self, tok: &Token, sink: &mut S) {
         if self.in_loop {
-            self.close_loop(tok.line, tok.column, &tok.value, "global_", sink)?;
+            self.close_loop(tok.line, tok.column, &tok.value, "global_", sink);
         } else {
             if !self.container_stack.is_empty() {
-                self.close_all_containers(tok.line, tok.column, &tok.value, "global_", sink)?;
+                self.close_all_containers(tok.line, tok.column, &tok.value, "global_", sink);
             }
-            self.close_active_tag(tok.line, tok.column, &tok.value, "global_", sink)?;
+            self.close_active_tag(tok.line, tok.column, &tok.value, "global_", sink);
         }
         if self.in_save_frame {
-            sink.on_save_frame_end()?;
+            sink.on_save_frame_end();
             self.in_save_frame = false;
         }
         self.emit(sink, "syntactic", "global_ is reserved and not permitted in CIF",
-            tok.line, tok.column, &tok.value, "parsing halted")?;
+            tok.line, tok.column, &tok.value, "parsing halted");
         self.halted = true;
-        Ok(())
     }
 
     fn start_loop<S: EventSink>(
         &mut self, tokens: &[Token], i: usize, sink: &mut S,
-    ) -> pyo3::PyResult<usize> {
+    ) -> usize {
         let tok = &tokens[i];
         let mut j = i + 1;
         let mut tags: Vec<String> = Vec::new();
@@ -329,88 +321,87 @@ impl Parser {
         while j < tokens.len() {
             let nxt = &tokens[j];
             if nxt.token_type != TokenType::Tag { break; }
-            self.flush_errors(nxt, sink)?;
+            self.flush_errors(nxt, sink);
             tags.push(nxt.value.clone());
             j += 1;
         }
 
         if tags.is_empty() {
             self.emit(sink, "syntactic", "loop_ with no tags — loop skipped",
-                tok.line, tok.column, &tok.value, "loop ignored")?;
-            return Ok(j);
+                tok.line, tok.column, &tok.value, "loop ignored");
+            return j;
         }
 
         self.in_loop = true;
         self.loop_tags = tags.clone();
         self.loop_has_values = false;
 
-        sink.on_loop_start(&tags)?;
-        Ok(j)
+        sink.on_loop_start(&tags);
+        j
     }
 
     // ── Tag handling ──────────────────────────────────────────────────────────
 
-    fn handle_tag<S: EventSink>(&mut self, tok: &Token, sink: &mut S) -> pyo3::PyResult<()> {
+    fn handle_tag<S: EventSink>(&mut self, tok: &Token, sink: &mut S) {
         if self.in_loop {
             let reason = format!("new tag {:?}", tok.value);
-            self.close_loop(tok.line, tok.column, &tok.value, &reason, sink)?;
+            self.close_loop(tok.line, tok.column, &tok.value, &reason, sink);
         } else if !self.container_stack.is_empty() {
             self.emit(sink, "syntactic",
                 &format!("tag {:?} encountered inside open container", tok.value),
-                tok.line, tok.column, &tok.value, "implicitly closing containers")?;
+                tok.line, tok.column, &tok.value, "implicitly closing containers");
             let reason = format!("tag {:?}", tok.value);
-            self.close_all_containers(tok.line, tok.column, &tok.value, &reason, sink)?;
+            self.close_all_containers(tok.line, tok.column, &tok.value, &reason, sink);
         }
 
         let reason = format!("new tag {:?}", tok.value);
-        self.close_active_tag(tok.line, tok.column, &tok.value, &reason, sink)?;
+        self.close_active_tag(tok.line, tok.column, &tok.value, &reason, sink);
 
         if !self.in_data_block {
             self.emit(sink, "syntactic",
                 &format!("tag {:?} outside data block", tok.value),
-                tok.line, tok.column, &tok.value, "continuing")?;
+                tok.line, tok.column, &tok.value, "continuing");
         }
 
         self.active_tag = Some(tok.value.clone());
         self.tag_base_depth = self.container_stack.len();
-        sink.add_tag(&tok.value)?;
-        Ok(())
+        sink.add_tag(&tok.value);
     }
 
     // ── Value handling ────────────────────────────────────────────────────────
 
-    fn handle_value<S: EventSink>(&mut self, tok: &Token, sink: &mut S) -> pyo3::PyResult<()> {
+    fn handle_value<S: EventSink>(&mut self, tok: &Token, sink: &mut S) {
         let v = tok.value.as_str();
         let vt = tok.value_type.unwrap_or(ValueType::String);
 
-        if v == "[" { return self.open_list(tok, sink); }
-        if v == "]" { return self.close_list(tok, sink); }
-        if v == "{" { return self.open_table(tok, sink); }
-        if v == "}" { return self.close_table(tok, sink); }
+        if v == "[" { self.open_list(tok, sink); return; }
+        if v == "]" { self.close_list(tok, sink); return; }
+        if v == "{" { self.open_table(tok, sink); return; }
+        if v == "}" { self.close_table(tok, sink); return; }
         if v == ":" {
             let in_table = matches!(self.container_stack.last(), Some(Frame::Table(_)));
             if in_table {
-                return self.handle_table_colon(tok, sink);
+                self.handle_table_colon(tok, sink);
+                return;
             }
         }
 
-        self.dispatch_scalar_value(v, vt, tok, sink)
+        self.dispatch_scalar_value(v, vt, tok, sink);
     }
 
-    fn ensure_value_context<S: EventSink>(&mut self, tok: &Token, sink: &mut S) -> pyo3::PyResult<()> {
+    fn ensure_value_context<S: EventSink>(&mut self, tok: &Token, sink: &mut S) {
         if !self.in_loop && self.active_tag.is_none() && self.container_stack.is_empty() {
             self.emit(sink, "syntactic", "container without preceding tag",
-                tok.line, tok.column, &tok.value, "attached to _pycifparse_error_value")?;
-            sink.add_tag("_pycifparse_error_value")?;
+                tok.line, tok.column, &tok.value, "attached to _pycifparse_error_value");
+            sink.add_tag("_pycifparse_error_value");
             self.active_tag = Some("_pycifparse_error_value".to_string());
             self.tag_base_depth = 0;
         }
-        Ok(())
     }
 
     fn notify_parent_table_of_container_open<S: EventSink>(
         &mut self, tok: &Token, sink: &mut S,
-    ) -> pyo3::PyResult<()> {
+    ) {
         let table_action: Option<(TableState, Option<String>, Option<ValueType>)> =
             if let Some(Frame::Table(ref f)) = self.container_stack.last() {
                 Some((f.state.clone(), f.pending_key.clone(), f.pending_key_vtype))
@@ -419,14 +410,14 @@ impl Parser {
             };
 
         let Some((state, pending_key, pending_key_vtype)) = table_action else {
-            return Ok(());
+            return;
         };
 
         match state {
             TableState::Key => {
                 self.emit(sink, "syntactic", "container in table key position",
                     tok.line, tok.column, &tok.value,
-                    "treating container as table value (no key)")?;
+                    "treating container as table value (no key)");
                 if let Some(Frame::Table(ref mut f)) = self.container_stack.last_mut() {
                     f.state = TableState::Value;
                 }
@@ -436,9 +427,9 @@ impl Parser {
                     self.emit(sink, "syntactic",
                         &format!("table key {key:?} missing : separator"),
                         tok.line, tok.column, &tok.value,
-                        "emitted on_table_key; treating container as value")?;
+                        "emitted on_table_key; treating container as value");
                     let vt = pending_key_vtype.unwrap_or(ValueType::String);
-                    sink.on_table_key(&key, vt)?;
+                    sink.on_table_key(&key, vt);
                     if let Some(Frame::Table(ref mut f)) = self.container_stack.last_mut() {
                         f.pending_key = None;
                         f.state = TableState::Value;
@@ -447,32 +438,29 @@ impl Parser {
             }
             TableState::Value => {}
         }
-        Ok(())
     }
 
-    fn open_list<S: EventSink>(&mut self, tok: &Token, sink: &mut S) -> pyo3::PyResult<()> {
-        self.ensure_value_context(tok, sink)?;
-        self.notify_parent_table_of_container_open(tok, sink)?;
+    fn open_list<S: EventSink>(&mut self, tok: &Token, sink: &mut S) {
+        self.ensure_value_context(tok, sink);
+        self.notify_parent_table_of_container_open(tok, sink);
         self.container_stack.push(Frame::List);
-        sink.on_list_start()?;
-        Ok(())
+        sink.on_list_start();
     }
 
-    fn close_list<S: EventSink>(&mut self, tok: &Token, sink: &mut S) -> pyo3::PyResult<()> {
+    fn close_list<S: EventSink>(&mut self, tok: &Token, sink: &mut S) {
         if !matches!(self.container_stack.last(), Some(Frame::List)) {
             self.emit(sink, "syntactic", "unexpected ] — no open list",
-                tok.line, tok.column, &tok.value, "ignored")?;
-            return Ok(());
+                tok.line, tok.column, &tok.value, "ignored");
+            return;
         }
         self.container_stack.pop();
-        sink.on_list_end()?;
+        sink.on_list_end();
         self.after_close_container();
-        Ok(())
     }
 
-    fn open_table<S: EventSink>(&mut self, tok: &Token, sink: &mut S) -> pyo3::PyResult<()> {
-        self.ensure_value_context(tok, sink)?;
-        self.notify_parent_table_of_container_open(tok, sink)?;
+    fn open_table<S: EventSink>(&mut self, tok: &Token, sink: &mut S) {
+        self.ensure_value_context(tok, sink);
+        self.notify_parent_table_of_container_open(tok, sink);
         self.container_stack.push(Frame::Table(TableFrame {
             state: TableState::Key,
             pending_key: None,
@@ -481,28 +469,26 @@ impl Parser {
             pending_key_col: 0,
             pending_key_width: None,
         }));
-        sink.on_table_start()?;
-        Ok(())
+        sink.on_table_start();
     }
 
-    fn close_table<S: EventSink>(&mut self, tok: &Token, sink: &mut S) -> pyo3::PyResult<()> {
+    fn close_table<S: EventSink>(&mut self, tok: &Token, sink: &mut S) {
         if !matches!(self.container_stack.last(), Some(Frame::Table(_))) {
             self.emit(sink, "syntactic", "unexpected } — no open table",
-                tok.line, tok.column, &tok.value, "ignored")?;
-            return Ok(());
+                tok.line, tok.column, &tok.value, "ignored");
+            return;
         }
         let frame = self.container_stack.pop();
         if let Some(Frame::Table(tf)) = frame {
-            self.cleanup_table_frame(tf, tok.line, tok.column, &tok.value, sink)?;
+            self.cleanup_table_frame(tf, tok.line, tok.column, &tok.value, sink);
         }
-        sink.on_table_end()?;
+        sink.on_table_end();
         self.after_close_container();
-        Ok(())
     }
 
     fn handle_table_colon<S: EventSink>(
         &mut self, tok: &Token, sink: &mut S,
-    ) -> pyo3::PyResult<()> {
+    ) {
         let info: Option<(TableState, Option<String>, Option<ValueType>, u32, u32, Option<u32>)> =
             if let Some(Frame::Table(ref f)) = self.container_stack.last() {
                 Some((
@@ -516,7 +502,7 @@ impl Parser {
             } else { None };
 
         let Some((state, pending_key, pending_key_vtype, pk_line, pk_col, pk_width)) = info
-        else { return Ok(()); };
+        else { return; };
 
         match state {
             TableState::Colon => {
@@ -526,12 +512,12 @@ impl Parser {
                         let key = pending_key.as_deref().unwrap_or("");
                         self.emit(sink, "syntactic",
                             &format!("whitespace between table key {key:?} and : separator"),
-                            tok.line, tok.column, &tok.value, "accepted")?;
+                            tok.line, tok.column, &tok.value, "accepted");
                     }
                 }
                 let key = pending_key.unwrap_or_default();
                 let vt  = pending_key_vtype.unwrap_or(ValueType::String);
-                sink.on_table_key(&key, vt)?;
+                sink.on_table_key(&key, vt);
                 if let Some(Frame::Table(ref mut f)) = self.container_stack.last_mut() {
                     f.pending_key = None;
                     f.pending_key_vtype = None;
@@ -541,22 +527,21 @@ impl Parser {
             }
             TableState::Key => {
                 self.emit(sink, "syntactic", "unexpected : in table — no pending key",
-                    tok.line, tok.column, &tok.value, "ignored")?;
+                    tok.line, tok.column, &tok.value, "ignored");
             }
             TableState::Value => {
                 self.emit(sink, "syntactic", "unexpected : in table value position",
-                    tok.line, tok.column, &tok.value, "ignored")?;
+                    tok.line, tok.column, &tok.value, "ignored");
             }
         }
-        Ok(())
     }
 
     fn dispatch_scalar_in_table<S: EventSink>(
         &mut self, value: &str, vt: ValueType, tok: &Token, sink: &mut S,
-    ) -> pyo3::PyResult<()> {
+    ) {
         let state = if let Some(Frame::Table(ref f)) = self.container_stack.last() {
             f.state.clone()
-        } else { return Ok(()); };
+        } else { return; };
 
         match state {
             TableState::Key => {
@@ -566,7 +551,7 @@ impl Parser {
                 if !quoted {
                     self.emit(sink, "syntactic",
                         &format!("table key must be a quoted string, got unquoted: {value:?}"),
-                        tok.line, tok.column, &tok.value, "treating as key anyway")?;
+                        tok.line, tok.column, &tok.value, "treating as key anyway");
                 }
                 let width = match vt {
                     ValueType::SingleQuoted | ValueType::DoubleQuoted =>
@@ -592,10 +577,10 @@ impl Parser {
                 self.emit(sink, "syntactic",
                     &format!("table key {key:?} not followed by : separator"),
                     tok.line, tok.column, &tok.value,
-                    "emitted on_table_key; treating current token as value")?;
+                    "emitted on_table_key; treating current token as value");
                 let kv = kv.unwrap_or(ValueType::String);
-                sink.on_table_key(&key, kv)?;
-                sink.add_value(value, vt)?;
+                sink.on_table_key(&key, kv);
+                sink.add_value(value, vt);
                 if let Some(Frame::Table(ref mut f)) = self.container_stack.last_mut() {
                     f.pending_key = None;
                     f.pending_key_vtype = None;
@@ -604,70 +589,69 @@ impl Parser {
                 }
             }
             TableState::Value => {
-                sink.add_value(value, vt)?;
+                sink.add_value(value, vt);
                 if let Some(Frame::Table(ref mut f)) = self.container_stack.last_mut() {
                     f.state = TableState::Key;
                 }
             }
         }
-        Ok(())
     }
 
     fn dispatch_scalar_value<S: EventSink>(
         &mut self, value: &str, vt: ValueType, tok: &Token, sink: &mut S,
-    ) -> pyo3::PyResult<()> {
+    ) {
         let in_table = matches!(self.container_stack.last(), Some(Frame::Table(_)));
         let in_list  = matches!(self.container_stack.last(), Some(Frame::List));
 
         if in_table {
-            return self.dispatch_scalar_in_table(value, vt, tok, sink);
+            self.dispatch_scalar_in_table(value, vt, tok, sink);
+            return;
         }
         if in_list {
-            sink.add_value(value, vt)?;
-            return Ok(());
+            sink.add_value(value, vt);
+            return;
         }
         if self.in_loop {
-            sink.add_value(value, vt)?;
+            sink.add_value(value, vt);
             self.loop_has_values = true;
-            return Ok(());
+            return;
         }
         if self.active_tag.is_some() {
-            sink.add_value(value, vt)?;
+            sink.add_value(value, vt);
             self.active_tag = None;
-            return Ok(());
+            return;
         }
 
         // Orphan value
         self.emit(sink, "syntactic",
             &format!("value {value:?} has no preceding tag"),
-            tok.line, tok.column, &tok.value, "attached to _pycifparse_error_value")?;
-        sink.add_tag("_pycifparse_error_value")?;
-        sink.add_value(value, vt)?;
-        Ok(())
+            tok.line, tok.column, &tok.value, "attached to _pycifparse_error_value");
+        sink.add_tag("_pycifparse_error_value");
+        sink.add_value(value, vt);
     }
 
     // ── EOF ───────────────────────────────────────────────────────────────────
 
-    fn handle_eof<S: EventSink>(&mut self, sink: &mut S) -> pyo3::PyResult<()> {
+    fn handle_eof<S: EventSink>(&mut self, sink: &mut S) {
         let line = self.last_line;
         let col  = self.last_col;
 
         if self.in_loop {
-            self.close_loop(line, col, "EOF", "EOF", sink)?;
+            self.close_loop(line, col, "EOF", "EOF", sink);
         }
 
         while let Some(frame) = self.container_stack.pop() {
             match frame {
                 Frame::List => {
-                    sink.on_list_end()?;
+                    sink.on_list_end();
                     self.emit(sink, "syntactic", "unterminated list at EOF",
-                        line, col, "", "emitted on_list_end")?;
+                        line, col, "", "emitted on_list_end");
                 }
                 Frame::Table(tf) => {
-                    self.cleanup_table_frame(tf, line, col, "EOF", sink)?;
-                    sink.on_table_end()?;
+                    self.cleanup_table_frame(tf, line, col, "EOF", sink);
+                    sink.on_table_end();
                     self.emit(sink, "syntactic", "unterminated table at EOF",
-                        line, col, "", "emitted on_table_end")?;
+                        line, col, "", "emitted on_table_end");
                 }
             }
         }
@@ -675,16 +659,15 @@ impl Parser {
         if let Some(tag) = self.active_tag.take() {
             self.emit(sink, "syntactic",
                 &format!("tag {tag:?} has no value at EOF"),
-                line, col, &tag, "inserted ? placeholder")?;
-            sink.add_value("?", ValueType::Placeholder)?;
+                line, col, &tag, "inserted ? placeholder");
+            sink.add_value("?", ValueType::Placeholder);
         }
 
         if self.in_save_frame {
             self.emit(sink, "syntactic", "unterminated save frame at EOF",
-                line, col, "", "emitted on_save_frame_end")?;
-            sink.on_save_frame_end()?;
+                line, col, "", "emitted on_save_frame_end");
+            sink.on_save_frame_end();
             self.in_save_frame = false;
         }
-        Ok(())
     }
 }

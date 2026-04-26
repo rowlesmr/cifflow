@@ -4,11 +4,11 @@ use pyo3::types::{PyDict, PyList};
 mod cif_model;
 mod error;
 mod event_sink;
-mod lexer;
-mod parser;
-mod raw_builder;
+pub mod lexer;
+pub mod parser;
+pub mod raw_builder;
 mod textfield;
-mod version;
+pub mod version;
 
 use cif_model::{build_py_cif, PyCifBlock, PyCifFile, PyCifSaveFrame};
 use event_sink::EventSink;
@@ -25,6 +25,8 @@ struct PyEventSink<'py> {
     handler:         &'py Bound<'py, PyAny>,
     parse_error_cls: Bound<'py, PyAny>,
     vt_objs:         [Bound<'py, PyAny>; 7],
+    // First Python exception raised by a callback; subsequent calls are no-ops.
+    pending_error:   Option<PyErr>,
 }
 
 impl<'py> PyEventSink<'py> {
@@ -44,73 +46,83 @@ impl<'py> PyEventSink<'py> {
                 vt_cls.getattr("STRING")?,               // 5
                 vt_cls.getattr("PLACEHOLDER")?,          // 6
             ],
+            pending_error: None,
         })
     }
 
     fn py_vt(&self, vt: ValueType) -> &Bound<'py, PyAny> {
         &self.vt_objs[vt as usize]
     }
+
+    /// Call a Python method, storing the first error and short-circuiting thereafter.
+    fn call(&mut self, f: impl FnOnce(&Bound<'py, PyAny>) -> PyResult<()>) {
+        if self.pending_error.is_none() {
+            if let Err(e) = f(self.handler) {
+                self.pending_error = Some(e);
+            }
+        }
+    }
+
+    /// Re-raise any stored Python exception.
+    fn take_error(&mut self) -> PyResult<()> {
+        if let Some(e) = self.pending_error.take() { Err(e) } else { Ok(()) }
+    }
 }
 
 impl<'py> EventSink for PyEventSink<'py> {
-    fn on_data_block(&mut self, name: &str) -> PyResult<()> {
-        self.handler.call_method1("on_data_block", (name,))?;
-        Ok(())
+    fn on_data_block(&mut self, name: &str) {
+        self.call(|h| { h.call_method1("on_data_block", (name,))?; Ok(()) });
     }
-    fn on_save_frame_start(&mut self, name: &str) -> PyResult<()> {
-        self.handler.call_method1("on_save_frame_start", (name,))?;
-        Ok(())
+    fn on_save_frame_start(&mut self, name: &str) {
+        self.call(|h| { h.call_method1("on_save_frame_start", (name,))?; Ok(()) });
     }
-    fn on_save_frame_end(&mut self) -> PyResult<()> {
-        self.handler.call_method1("on_save_frame_end", ())?;
-        Ok(())
+    fn on_save_frame_end(&mut self) {
+        self.call(|h| { h.call_method1("on_save_frame_end", ())?; Ok(()) });
     }
-    fn add_tag(&mut self, tag: &str) -> PyResult<()> {
-        self.handler.call_method1("add_tag", (tag,))?;
-        Ok(())
+    fn add_tag(&mut self, tag: &str) {
+        self.call(|h| { h.call_method1("add_tag", (tag,))?; Ok(()) });
     }
-    fn add_value(&mut self, value: &str, vt: ValueType) -> PyResult<()> {
-        self.handler.call_method1("add_value", (value, self.py_vt(vt)))?;
-        Ok(())
+    fn add_value(&mut self, value: &str, vt: ValueType) {
+        let py_vt = self.py_vt(vt).clone();
+        self.call(|h| { h.call_method1("add_value", (value, &py_vt))?; Ok(()) });
     }
-    fn on_list_start(&mut self) -> PyResult<()> {
-        self.handler.call_method1("on_list_start", ())?;
-        Ok(())
+    fn on_list_start(&mut self) {
+        self.call(|h| { h.call_method1("on_list_start", ())?; Ok(()) });
     }
-    fn on_list_end(&mut self) -> PyResult<()> {
-        self.handler.call_method1("on_list_end", ())?;
-        Ok(())
+    fn on_list_end(&mut self) {
+        self.call(|h| { h.call_method1("on_list_end", ())?; Ok(()) });
     }
-    fn on_table_start(&mut self) -> PyResult<()> {
-        self.handler.call_method1("on_table_start", ())?;
-        Ok(())
+    fn on_table_start(&mut self) {
+        self.call(|h| { h.call_method1("on_table_start", ())?; Ok(()) });
     }
-    fn on_table_key(&mut self, key: &str, vt: ValueType) -> PyResult<()> {
-        self.handler.call_method1("on_table_key", (key, self.py_vt(vt)))?;
-        Ok(())
+    fn on_table_key(&mut self, key: &str, vt: ValueType) {
+        let py_vt = self.py_vt(vt).clone();
+        self.call(|h| { h.call_method1("on_table_key", (key, &py_vt))?; Ok(()) });
     }
-    fn on_table_end(&mut self) -> PyResult<()> {
-        self.handler.call_method1("on_table_end", ())?;
-        Ok(())
+    fn on_table_end(&mut self) {
+        self.call(|h| { h.call_method1("on_table_end", ())?; Ok(()) });
     }
-    fn on_loop_start(&mut self, tags: &[String]) -> PyResult<()> {
+    fn on_loop_start(&mut self, tags: &[String]) {
         let py_tags: Vec<&str> = tags.iter().map(String::as_str).collect();
-        self.handler.call_method1("on_loop_start", (py_tags,))?;
-        Ok(())
+        self.call(|h| { h.call_method1("on_loop_start", (py_tags,))?; Ok(()) });
     }
-    fn on_loop_end(&mut self) -> PyResult<()> {
-        self.handler.call_method1("on_loop_end", ())?;
-        Ok(())
+    fn on_loop_end(&mut self) {
+        self.call(|h| { h.call_method1("on_loop_end", ())?; Ok(()) });
     }
     fn on_parse_error(
         &mut self, etype: &'static str, msg: &str,
         line: u32, col: u32, context: &str, recovery: &str,
-    ) -> PyResult<()> {
-        let pe = self.parse_error_cls.call1((
+    ) {
+        if self.pending_error.is_some() { return; }
+        let pe = match self.parse_error_cls.call1((
             etype, msg, line as usize, col as usize, context, recovery,
-        ))?;
-        self.handler.call_method1("on_error", (pe,))?;
-        Ok(())
+        )) {
+            Ok(v) => v,
+            Err(e) => { self.pending_error = Some(e); return; }
+        };
+        if let Err(e) = self.handler.call_method1("on_error", (pe,)) {
+            self.pending_error = Some(e);
+        }
     }
 }
 
@@ -128,13 +140,14 @@ fn parse<'py>(
 
     let vr = detect_version(source);
     for e in &vr.errors {
-        sink.on_parse_error(e.error_type, &e.message, e.line, e.column, &e.context, &e.recovery_action)?;
+        sink.on_parse_error(e.error_type, &e.message, e.line, e.column, &e.context, &e.recovery_action);
     }
 
     let lexer  = Lexer::new(&vr.remaining, vr.version, vr.line_offset);
     let tokens = lexer.tokenise();
     let mut parser = Parser::new();
-    parser.parse(tokens, &mut sink)?;
+    parser.parse(tokens, &mut sink);
+    sink.take_error()?;
 
     let types_mod       = py.import("pycifparse.types")?;
     let cif_version_cls = types_mod.getattr("CifVersion")?;
@@ -169,7 +182,7 @@ fn parse_raw<'py>(py: Python<'py>, source: &str, mode: Option<&str>) -> PyResult
     let lexer  = Lexer::new(&vr.remaining, vr.version, vr.line_offset);
     let tokens = lexer.tokenise();
     let mut parser = Parser::new();
-    parser.parse(tokens, &mut builder)?;
+    parser.parse(tokens, &mut builder);
 
     builder.to_python(py)
 }
@@ -194,7 +207,7 @@ fn parse_cif<'py>(
     let lexer = Lexer::new(&vr.remaining, vr.version, vr.line_offset);
     let tokens = lexer.tokenise();
     let mut parser = Parser::new();
-    parser.parse(tokens, &mut builder)?;
+    parser.parse(tokens, &mut builder);
 
     let parsed = builder.finish();
 
@@ -231,7 +244,7 @@ fn parse_to_arrow<'py>(
     let lexer = Lexer::new(&vr.remaining, vr.version, vr.line_offset);
     let tokens = lexer.tokenise();
     let mut parser = Parser::new();
-    parser.parse(tokens, &mut builder)?;
+    parser.parse(tokens, &mut builder);
 
     let parsed = builder.finish();
 

@@ -340,10 +340,8 @@ fn block_to_python<'py>(
 // ─────────────────────────────────────────────────────────────────────────────
 
 impl EventSink for RawBuilder {
-    fn on_data_block(&mut self, name: &str) -> PyResult<()> {
-        if self.stopped {
-            return Ok(());
-        }
+    fn on_data_block(&mut self, name: &str) {
+        if self.stopped { return; }
         self.finish_current_block();
         let is_dup = !self.seen_block_names.insert(name.to_string());
         if is_dup {
@@ -361,13 +359,10 @@ impl EventSink for RawBuilder {
         self.container_stack.clear();
         self.seen_save_frame_names.clear();
         self.current_block = Some((name.to_string(), FrameData::default(), Vec::new()));
-        Ok(())
     }
 
-    fn on_save_frame_start(&mut self, name: &str) -> PyResult<()> {
-        if self.stopped || self.current_block.is_none() {
-            return Ok(());
-        }
+    fn on_save_frame_start(&mut self, name: &str) {
+        if self.stopped || self.current_block.is_none() { return; }
         let is_dup = !self.seen_save_frame_names.insert(name.to_string());
         if is_dup {
             self.semantic_error(
@@ -376,33 +371,24 @@ impl EventSink for RawBuilder {
             );
         }
         self.current_save_frame = Some((name.to_string(), FrameData::default()));
-        Ok(())
     }
 
-    fn on_save_frame_end(&mut self) -> PyResult<()> {
-        if self.stopped || self.current_block.is_none() {
-            return Ok(());
-        }
+    fn on_save_frame_end(&mut self) {
+        if self.stopped || self.current_block.is_none() { return; }
         if let Some((sf_name, sf_data)) = self.current_save_frame.take() {
             if let Some((_, _, ref mut sfs)) = self.current_block {
                 sfs.push(ParsedSaveFrame { name: sf_name, data: sf_data });
             }
         }
-        Ok(())
     }
 
-    fn add_tag(&mut self, tag: &str) -> PyResult<()> {
-        if self.stopped {
-            return Ok(());
-        }
+    fn add_tag(&mut self, tag: &str) {
+        if self.stopped { return; }
         self.active_tag = Some(tag.to_string());
-        Ok(())
     }
 
-    fn add_value(&mut self, value: &str, vtype: ValueType) -> PyResult<()> {
-        if self.stopped {
-            return Ok(());
-        }
+    fn add_value(&mut self, value: &str, vtype: ValueType) {
+        if self.stopped { return; }
         let stored = match vtype {
             ValueType::MultilineString => transform_multiline(value),
             ValueType::Placeholder => value.to_string(),
@@ -410,64 +396,46 @@ impl EventSink for RawBuilder {
             _ => value.to_string(),
         };
         self.dispatch_value(RawValue::Str(stored));
-        Ok(())
     }
 
-    fn on_list_start(&mut self) -> PyResult<()> {
-        if self.stopped {
-            return Ok(());
-        }
+    fn on_list_start(&mut self) {
+        if self.stopped { return; }
         self.container_stack.push(ContainerFrame::List(Vec::new()));
-        Ok(())
     }
 
-    fn on_list_end(&mut self) -> PyResult<()> {
-        if self.stopped {
-            return Ok(());
-        }
+    fn on_list_end(&mut self) {
+        if self.stopped { return; }
         if let Some(ContainerFrame::List(items)) = self.container_stack.pop() {
             self.dispatch_value(RawValue::List(items));
         }
-        Ok(())
     }
 
-    fn on_table_start(&mut self) -> PyResult<()> {
-        if self.stopped {
-            return Ok(());
-        }
+    fn on_table_start(&mut self) {
+        if self.stopped { return; }
         self.container_stack.push(ContainerFrame::Table {
             data: Vec::new(),
             current_key: None,
         });
-        Ok(())
     }
 
-    fn on_table_key(&mut self, key: &str, _vtype: ValueType) -> PyResult<()> {
-        if self.stopped {
-            return Ok(());
-        }
+    fn on_table_key(&mut self, key: &str, _vtype: ValueType) {
+        if self.stopped { return; }
         if let Some(ContainerFrame::Table { ref mut current_key, .. }) =
             self.container_stack.last_mut()
         {
             *current_key = Some(key.to_string());
         }
-        Ok(())
     }
 
-    fn on_table_end(&mut self) -> PyResult<()> {
-        if self.stopped {
-            return Ok(());
-        }
+    fn on_table_end(&mut self) {
+        if self.stopped { return; }
         if let Some(ContainerFrame::Table { data, .. }) = self.container_stack.pop() {
             self.dispatch_value(RawValue::Table(data));
         }
-        Ok(())
     }
 
-    fn on_loop_start(&mut self, tags: &[String]) -> PyResult<()> {
-        if self.stopped {
-            return Ok(());
-        }
+    fn on_loop_start(&mut self, tags: &[String]) {
+        if self.stopped { return; }
         self.in_loop = true;
         self.loop_tags = tags.to_vec();
         self.loop_value_index = 0;
@@ -475,19 +443,16 @@ impl EventSink for RawBuilder {
         for tag in tags {
             self.loop_buffers.entry(tag.clone()).or_default();
         }
-        Ok(())
     }
 
-    fn on_loop_end(&mut self) -> PyResult<()> {
-        if self.stopped {
-            return Ok(());
-        }
+    fn on_loop_end(&mut self) {
+        if self.stopped { return; }
         let n = self.loop_tags.len();
         let total = self.loop_value_index;
 
         if n == 0 {
             self.in_loop = false;
-            return Ok(());
+            return;
         }
 
         if total % n != 0 {
@@ -512,7 +477,7 @@ impl EventSink for RawBuilder {
                 self.loop_tags.clear();
                 self.loop_value_index = 0;
                 self.loop_buffers.clear();
-                return Ok(());
+                return;
             }
 
             // Pad mode: fill incomplete row with '?'
@@ -537,7 +502,6 @@ impl EventSink for RawBuilder {
 
         self.in_loop = false;
         self.loop_value_index = 0;
-        Ok(())
     }
 
     fn on_parse_error(
@@ -548,7 +512,7 @@ impl EventSink for RawBuilder {
         col: u32,
         context: &str,
         recovery: &str,
-    ) -> PyResult<()> {
+    ) {
         self.errors.push(RustParseError {
             error_type: etype,
             message: msg.to_string(),
@@ -557,7 +521,6 @@ impl EventSink for RawBuilder {
             context: context.to_string(),
             recovery_action: recovery.to_string(),
         });
-        Ok(())
     }
 }
 

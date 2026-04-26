@@ -5,7 +5,11 @@ edition = "2021"
 
 [lib]
 name = "pycifparse_core"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "profile_cif"
+path = "src/bin/profile_cif.rs"
 
 [dependencies]
 pyo3 = { version = "0.23", features = ["extension-module"] }

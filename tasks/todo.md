@@ -128,6 +128,216 @@ cif.deepcopy()            # → CifFile
 
 ---
 
+### Compiled Path Phase C — DuckDB merge + validate (replaces Python ingest hot path)
+
+**Goal:** Replace `_process_loop`, `_apply_fk`, and `_merge_into` in `ingest.py` with DuckDB SQL.
+Arrow RecordBatches from the Rust parser flow straight into DuckDB; Python touches only schema
+metadata and conflict flag columns, never row data. `ValidationReport` is unchanged.
+
+**Reference:** `prompts/compiled_path.md` § Component 3
+
+**Ordering requirement (must not be violated):**
+```
+1. Per-block implicit key resolution  (FK propagation within each block's namespace)
+2. Cross-block merge                  (needs complete key values to match rows)
+3. Validation                         (operates on fully-merged, key-complete data)
+4. Final SQLite push                  (only if no blocking failures)
+```
+
+#### Invariants that must be preserved
+
+- `ValidationReport` / `ValidationIssue` public API: unchanged
+- `ingest()` public signature: unchanged
+- SQLite schema (DDL, FK constraints, indices): unchanged — output identical to today
+- `_cif_fallback`, `_tag_presence`, `_block_order`, `_block_dataset_membership`: still written
+- `IngestionError` raised on blocking failures; advisory failures still push to SQLite
+
+#### What stays in Python (do NOT move)
+
+| Kept in Python | Reason |
+|---------------|--------|
+| `_select_blocks()` / `dataset_id` routing | Block selection logic, not a hot path |
+| `_fill_bridge_columns()` | Complex multi-hop lookup; SQL JOIN chains are harder to generate dynamically and this is not a bottleneck |
+| `_block_dataset_membership`, `_block_order` inserts | Metadata only; trivial to write from Python |
+| `encode_value()`, `split_su()`, `build_su_map()`, `build_tag_to_column()` | Still used by helpers and fallback |
+| `validate()` public function, `ValidationReport`, `ValidationIssue` | Pure data objects; public API |
+| `_db_validate.py` check logic (leaf-level type/range/state checks) | Re-used, not replaced |
+
+#### What gets deleted
+
+- `_process_loop()` and `_process_scalar()` in `_Ingester`
+- `_apply_fk()` (entire function, ~160 lines)
+- `_merge_into()` (entire function, ~50 lines)
+- `_loops_compatible()` — subsumed by DuckDB tag routing
+- Per-row UUID generation loop in `_process_loop`
+- `set_buffers`, `loop_scalar_buffers`, `all_iter_rows` accumulator patterns
+
+#### Phase C.1 — DuckDB setup + raw table loading from Arrow IR
+
+**New file: `src/pycifparse/ingestion/duckdb_ingest.py`**
+
+- `pip install duckdb` (add to project deps)
+- `build_duckdb(batches, schema) -> duckdb.DuckDBPyConnection`:
+  - Open `duckdb.connect(':memory:')`
+  - Register each `pa.RecordBatch` via `db.register(f'_ir_{batch_id}', batch)`
+  - For each schema table: `CREATE TABLE <tbl> AS SELECT ...` routing Arrow columns
+    to schema columns via `tag → (table, col)` mapping from `SchemaSpec`
+  - SU splitting expressed as SQL string manipulation (regex extract of `numeric(su)` form)
+  - Fallback routing: tags not in schema land in `_cif_fallback` DuckDB table
+  - Save frames: filter `_frame_idx IS NOT NULL`; routed to schema tables or fallback like blocks
+
+**Risk:** Tag routing — each Arrow batch has a different column set; the SQL must UNION
+the right columns across batches. The Python `tag_to_column` dict drives column selection;
+the generated SQL is structurally similar to `_process_loop` but expressed as `SELECT`.
+
+#### Phase C.2 — Per-block FK propagation in SQL
+
+All FK propagation runs against DuckDB tables that were just built in C.1.
+Python iterates the FK graph from `SchemaSpec` and generates SQL; DuckDB executes it.
+
+**Single-column key-FK fill (replaces primary use of `_apply_fk`):**
+```sql
+UPDATE child_table c
+SET fk_col = (
+    SELECT p.pk_col FROM parent_table p
+    WHERE p._block_id = c._block_id LIMIT 1
+)
+WHERE c.fk_col IS NULL
+  AND c._block_id IN (SELECT DISTINCT _block_id FROM parent_table);
+```
+This is executed once per FK edge in the graph, in topological order.
+
+**UUID generation for missing key-FKs (replaces `str(uuid.uuid4())` per row):**
+```sql
+UPDATE child_table
+SET fk_col = gen_random_uuid()::text
+WHERE fk_col IS NULL;
+```
+Multi-category loop UUID sharing (same UUID across sibling tables per iteration)
+requires a two-pass approach: assign UUIDs to one canonical table first, then
+propagate via the shared PK column name to sibling tables.
+
+**Composite FK propagation:** Expressed as multi-column UPDATE with correlated subquery
+or JOIN. Transitive lookup (current Python: up to 15-hop chain) is expressed as a
+sequence of JOIN steps generated from the FK graph.
+
+**Propagation links** (non-FK DDLm Link items): additional UPDATE statements generated
+from `schema.propagation_links`.
+
+**Stub row insertion** (parent row guaranteed to exist for deferred FK check):
+expressed as `INSERT INTO parent ... SELECT ... FROM child WHERE NOT EXISTS (SELECT 1 FROM parent ...)`.
+
+**Risk:** The current Python `_apply_fk` accumulates state across loop iterations via
+`fk_accumulator` (a dict keyed by `def_id`). SQL equivalents must express this as
+set-oriented operations. The accumulator pattern works because scalars are processed
+before loops within a block — the SQL ordering must reflect this (process scalar
+RecordBatches first, then loop batches, or use a CTE that selects scalar values).
+
+#### Phase C.3 — Cross-block merge in SQL
+
+After all blocks have been FK-propagated, merge rows across blocks by PK.
+
+**Merge rule (per table):**
+```sql
+-- Identify conflicts: same PK, different non-NULL non-PK value for same column
+SELECT pk_cols, col, MIN(value), MAX(value)
+FROM all_block_rows
+GROUP BY pk_cols, col
+HAVING COUNT(DISTINCT value) > 1 AND COUNT(value) > 1
+```
+
+**Merge result:**
+```sql
+-- Merged table: FIRST non-NULL wins per (pk, col)
+SELECT pk_cols, FIRST(col IGNORE NULLS ORDER BY _block_idx) AS col, ...
+FROM all_block_rows
+GROUP BY pk_cols
+```
+
+Conflicts are collected into the audit log / `ValidationIssue` list. Blocking conflicts
+raise `IngestionError` and abort the SQLite push (audit rows still committed).
+
+**Risk:** `_merge_into` tracks `_row_id` counters to give every row a stable integer ID.
+DuckDB uses `ROW_NUMBER() OVER (ORDER BY ...)` to assign `_row_id` equivalents.
+
+#### Phase C.4 — Validation in DuckDB
+
+Re-express `validate_database()` (`_db_validate.py`) as DuckDB queries against the merged
+tables, before the final SQLite push.
+
+- **Mandatory tags**: `SELECT ... WHERE col IS NULL AND ...` per required column
+- **Enumeration states**: `SELECT ... WHERE col NOT IN (...)` per constrained column  
+- **Enumeration range**: `SELECT ... WHERE TRY_CAST(col AS DOUBLE) NOT BETWEEN lo AND hi`
+- **Type checks**: DuckDB's `TRY_CAST` for real/integer validation; regex for datetime
+- **FK integrity**: `LEFT JOIN parent ... WHERE parent.pk IS NULL`
+
+Leaf-level check functions in `_db_checks.py` (type parsing, range parsing) are still called
+from Python to build the SQL WHERE clauses — they are not replaced, just called differently.
+
+Results are collected into `DbValidationResult` objects exactly as today, then converted to
+`ValidationIssue` via the existing `_db_result_to_issue()`. `ValidationReport` is unchanged.
+
+#### Phase C.5 — Final SQLite push from DuckDB
+
+```python
+for table_name in schema.tables:
+    arrow_table = db.execute(f'SELECT * FROM "{table_name}"').arrow()
+    # convert Arrow → rows, INSERT OR REPLACE into SQLite
+    cols = arrow_table.schema.names
+    placeholders = ', '.join('?' for _ in cols)
+    cur.executemany(
+        f'INSERT OR REPLACE INTO "{table_name}" ({", ".join(cols)}) VALUES ({placeholders})',
+        zip(*[col.to_pylist() for col in arrow_table.columns]),
+    )
+```
+
+Metadata tables (`_block_order`, `_block_dataset_membership`, `_tag_presence`,
+`_validation_result`, `_cif_fallback`) are still written from Python as today — these
+are not hot-path tables and their current implementation is correct.
+
+`_pycifparse_audit` table (from spec): deferred — write from Python for now,
+using the same `on_error` callback mechanism.
+
+#### Phase C.6 — Hot path deletion + verification
+
+**Delete:**
+- `_Ingester._process_loop`, `_Ingester._process_scalar`
+- `_apply_fk`, `_merge_into`, `_loops_compatible`
+
+**Keep (still used by C.1–C.5 or by other code):**
+- `_Ingester._process_block_no_schema` (fallback path, no DuckDB needed)
+- `encode_value`, `split_su`, `build_su_map`, `build_tag_to_column`
+- `_select_blocks`, `_read_dataset_ids`, `_id_regime`, `_record_membership`
+- `_fill_bridge_columns`
+
+**Verification:** Run both pipelines against the same test CIF files; dump both SQLite
+databases to sorted text and diff. All structured tables must match. `_cif_fallback`
+must match. `_tag_presence` and `_block_order` must match.
+
+#### Implementation order
+
+```
+C.1  →  C.2  →  C.3  →  C.4  →  C.5  →  C.6
+```
+
+Implement and test each step before advancing. After C.1, existing tests still pass
+(old Python path still runs). After C.6, the old path is deleted and tests validate
+the new path exclusively.
+
+#### Open questions (resolve before C.2)
+
+1. **FK graph ordering:** Does `SchemaSpec` expose the FK edges in topological order,
+   or must Phase C derive it? Check `schema.tables` and `TableDef.foreign_keys`.
+2. **fk_accumulator equivalent:** Scalar values that set FK context for later loops —
+   must the SQL use a CTE that selects the scalar RecordBatch first and joins to loop rows?
+   Or is the existing set-oriented merge sufficient?
+3. **Multi-category loop UUID sharing:** The Python shares one UUID per (col_name, iter_idx)
+   across sibling tables. SQL equivalent: generate UUID once in a CTE, JOIN to all tables.
+4. **`duckdb` version:** Confirm `gen_random_uuid()` is available (added in DuckDB 0.8).
+   Use `uuid()` as fallback if needed.
+
+---
+
 ### Performance optimisation — Phase 1 (partial, feature branch only)
 
 Profiling was done against `second.cif` (18 MB, 156 blocks, ~378k lines) with `cif_pow.dic`.
