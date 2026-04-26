@@ -31,10 +31,10 @@ pub enum RawValue {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Default)]
-struct FrameData {
-    tag_order: Vec<String>,
-    tags: HashMap<String, Vec<RawValue>>,
-    loops: Vec<Vec<String>>, // list of loop tag groups, in file order
+pub(crate) struct FrameData {
+    pub(crate) tag_order: Vec<String>,
+    pub(crate) tags: HashMap<String, Vec<RawValue>>,
+    pub(crate) loops: Vec<Vec<String>>,
 }
 
 impl FrameData {
@@ -62,15 +62,15 @@ impl FrameData {
 // Completed structures
 // ─────────────────────────────────────────────────────────────────────────────
 
-struct ParsedSaveFrame {
-    name: String,
-    data: FrameData,
+pub(crate) struct ParsedSaveFrame {
+    pub(crate) name: String,
+    pub(crate) data: FrameData,
 }
 
-struct ParsedBlock {
-    name: String,
-    data: FrameData,
-    save_frames: Vec<ParsedSaveFrame>,
+pub(crate) struct ParsedBlock {
+    pub(crate) name: String,
+    pub(crate) data: FrameData,
+    pub(crate) save_frames: Vec<ParsedSaveFrame>,
 }
 
 pub struct ParsedCif {
@@ -256,7 +256,7 @@ impl RawBuilder {
 // Python conversion helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn raw_value_to_python<'py>(py: Python<'py>, v: &RawValue) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn raw_value_to_python<'py>(py: Python<'py>, v: &RawValue) -> PyResult<Bound<'py, PyAny>> {
     match v {
         RawValue::Str(s) => Ok(PyString::new(py, s).into_any()),
         RawValue::List(items) => {

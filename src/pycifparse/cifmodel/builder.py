@@ -300,29 +300,10 @@ def build(
     Parse *source* and return ``(CifFile, errors)``.
 
     *errors* contains both parser-level and IR-level errors in emission order.
-    Uses the Rust IR builder (parse_raw) — no per-token Python callbacks.
+    Uses the Rust IR builder (parse_cif) — no per-token Python callbacks and
+    no intermediate Python dict.
     """
     from pycifparse import pycifparse_core  # noqa: PLC0415
-    raw = pycifparse_core.parse_raw(source, mode)
-
-    errors: list[ParseError] = [
-        ParseError(**e) for e in raw['errors']
-    ]
-    from pycifparse.types import CifVersion  # noqa: PLC0415
-    version = CifVersion[raw['version']]
-
-    cif = CifFile(version=version)
-    for rb in raw['blocks']:
-        block = CifBlock(rb['name'])
-        block._tag_order = list(rb['tag_order'])
-        block._loops     = [list(loop) for loop in rb['loops']]
-        block._tags      = dict(rb['tags'])
-        for rsf in rb['save_frames']:
-            sf = CifSaveFrame(rsf['name'])
-            sf._tag_order = list(rsf['tag_order'])
-            sf._loops     = [list(loop) for loop in rsf['loops']]
-            sf._tags      = dict(rsf['tags'])
-            block._add_save_frame(sf)
-        cif._add_block(block)
-
+    cif, error_dicts = pycifparse_core.parse_cif(source, mode)
+    errors = [ParseError(**e) for e in error_dicts]
     return cif, errors

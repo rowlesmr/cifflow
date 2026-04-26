@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 
+mod cif_model;
 mod error;
 mod event_sink;
 mod lexer;
@@ -9,6 +10,7 @@ mod raw_builder;
 mod textfield;
 mod version;
 
+use cif_model::{build_py_cif, PyCifBlock, PyCifFile, PyCifSaveFrame};
 use event_sink::EventSink;
 use lexer::{Lexer, ValueType};
 use parser::Parser;
@@ -173,6 +175,46 @@ fn parse_raw<'py>(py: Python<'py>, source: &str, mode: Option<&str>) -> PyResult
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// parse_cif — returns PyCifFile directly (no dict intermediary)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[pyfunction]
+#[pyo3(signature = (source, mode=None))]
+fn parse_cif<'py>(
+    py: Python<'py>,
+    source: &str,
+    mode: Option<&str>,
+) -> PyResult<(Py<PyCifFile>, Bound<'py, PyList>)> {
+    let mode_strict = mode == Some("strict");
+    let vr = detect_version(source);
+    let mut builder = RawBuilder::new(vr.version, mode_strict);
+    for e in &vr.errors {
+        builder.push_error(e);
+    }
+    let lexer = Lexer::new(&vr.remaining, vr.version, vr.line_offset);
+    let tokens = lexer.tokenise();
+    let mut parser = Parser::new();
+    parser.parse(tokens, &mut builder)?;
+
+    let parsed = builder.finish();
+
+    let errors = PyList::empty(py);
+    for e in &parsed.errors {
+        let d = PyDict::new(py);
+        d.set_item("error_type", e.error_type)?;
+        d.set_item("message", e.message.as_str())?;
+        d.set_item("line", e.line)?;
+        d.set_item("column", e.column)?;
+        d.set_item("context", e.context.as_str())?;
+        d.set_item("recovery_action", e.recovery_action.as_str())?;
+        errors.append(&d)?;
+    }
+
+    let cif = build_py_cif(py, &parsed)?;
+    Ok((cif, errors))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // parse_arrow — returns (list[bytes], list[error_dicts])
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -222,8 +264,12 @@ fn parse_arrow<'py>(
 
 #[pymodule]
 fn pycifparse_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PyCifSaveFrame>()?;
+    m.add_class::<PyCifBlock>()?;
+    m.add_class::<PyCifFile>()?;
     m.add_function(wrap_pyfunction!(parse, m)?)?;
     m.add_function(wrap_pyfunction!(parse_raw, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_cif, m)?)?;
     m.add_function(wrap_pyfunction!(parse_arrow, m)?)?;
     Ok(())
 }
