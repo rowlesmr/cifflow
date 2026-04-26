@@ -4,7 +4,7 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current state:** Phase B.3 complete — `CifFile`, `CifBlock`, `CifSaveFrame` are now PyO3 Rust types. `build()` calls `parse_cif()` directly (no dict intermediary). All 1836 tests pass. `model.py` is a thin re-export shim. Next: Phase C — DuckDB integration using Arrow RecordBatches from `build_arrow()`.
+**Current state:** Phase B complete — Arrow pipeline now hands `pa.RecordBatch` objects directly to Python (no IPC bytes). `build_arrow_file()` / `parse_arrow_file()` do file I/O entirely in Rust. `arrow` upgraded to v54. All 1836 tests pass. Next: Phase C — DuckDB integration using Arrow RecordBatches from `build_arrow()` / `build_arrow_file()`.
 
 **Test suite state (2026-04-26):**
 - 1836 tests pass (full suite)
@@ -95,6 +95,16 @@ cif.deepcopy()            # → CifFile
 - [x] `__init__.py`: `build_arrow` exported
 - [x] `debug_parquet.py`: rewritten to use `build_arrow`; writes one Parquet file per batch (per-loop schema, no union/NULL padding)
 - [x] 1836 tests pass; Lessons 103–104
+
+#### Phase B.4 — Direct Arrow handoff + Rust file I/O ✓ COMPLETE (2026-04-26)
+
+- [x] `arrow` upgraded from v53 → v54 (v54 uses pyo3 ^0.23; v53 uses ^0.22 — conflict)
+- [x] `raw_builder.rs`: `ParsedCif::to_py_batches()` using `arrow::pyarrow::ToPyArrow`; `to_ipc_batches`, `batch_to_ipc`, IPC imports removed
+- [x] `lib.rs`: `parse_arrow` uses `to_py_batches()` — returns `list[pa.RecordBatch]` directly; `parse_arrow_file(path, mode)` added (Rust `std::fs::read_to_string`); both registered in module
+- [x] `builder.py`: `build_arrow()` drops IPC deserialization; `build_arrow_file(path, *, mode)` added
+- [x] `__init__.py`: `build_arrow_file` exported
+- [x] `pycifparse_core.pyi`: `parse_arrow` return type updated; `parse_arrow_file` stub added
+- [x] 1836 tests pass; Lesson 107
 
 #### Phase B.3 — PyO3-exposed CifFile ✓ COMPLETE (2026-04-26)
 

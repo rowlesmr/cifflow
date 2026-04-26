@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyList};
+use pyo3::types::{PyDict, PyList};
 
 mod cif_model;
 mod error;
@@ -215,17 +215,14 @@ fn parse_cif<'py>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// parse_arrow — returns (list[bytes], list[error_dicts])
+// parse_arrow — returns (list[pa.RecordBatch], list[error_dicts])
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[pyfunction]
-#[pyo3(signature = (source, mode=None))]
-fn parse_arrow<'py>(
+fn parse_to_arrow<'py>(
     py: Python<'py>,
     source: &str,
-    mode: Option<&str>,
+    mode_strict: bool,
 ) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
-    let mode_strict = mode == Some("strict");
     let vr = detect_version(source);
     let mut builder = RawBuilder::new(vr.version, mode_strict);
     for e in &vr.errors {
@@ -250,12 +247,34 @@ fn parse_arrow<'py>(
         errors.append(&d)?;
     }
 
-    let ipc_list = PyList::empty(py);
-    for batch_bytes in parsed.to_ipc_batches() {
-        ipc_list.append(PyBytes::new(py, &batch_bytes))?;
+    let batches = PyList::empty(py);
+    for batch in parsed.to_py_batches(py)? {
+        batches.append(batch)?;
     }
 
-    Ok((ipc_list, errors))
+    Ok((batches, errors))
+}
+
+#[pyfunction]
+#[pyo3(signature = (source, mode=None))]
+fn parse_arrow<'py>(
+    py: Python<'py>,
+    source: &str,
+    mode: Option<&str>,
+) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
+    parse_to_arrow(py, source, mode == Some("strict"))
+}
+
+#[pyfunction]
+#[pyo3(signature = (path, mode=None))]
+fn parse_arrow_file<'py>(
+    py: Python<'py>,
+    path: &str,
+    mode: Option<&str>,
+) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+    parse_to_arrow(py, &source, mode == Some("strict"))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -271,5 +290,6 @@ fn pycifparse_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_raw, m)?)?;
     m.add_function(wrap_pyfunction!(parse_cif, m)?)?;
     m.add_function(wrap_pyfunction!(parse_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_arrow_file, m)?)?;
     Ok(())
 }

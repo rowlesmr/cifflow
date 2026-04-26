@@ -365,11 +365,24 @@ def build_arrow(
     tags of a block/save-frame or one loop within it.  The schema per batch
     contains only the five metadata columns plus the tags present in that batch.
     """
-    import io  # noqa: PLC0415
-    import pyarrow.ipc as ipc  # noqa: PLC0415
     from pycifparse import pycifparse_core  # noqa: PLC0415
-    ipc_batches, error_dicts = pycifparse_core.parse_arrow(source, mode)
-    batches = [ipc.open_file(io.BytesIO(bytes(b))).get_batch(0) for b in ipc_batches]
+    batches, error_dicts = pycifparse_core.parse_arrow(source, mode)
+    errors = [ParseError(**e) for e in error_dicts]
+    return batches, errors
+
+
+def build_arrow_file(
+    path: str,
+    *,
+    mode: Literal['strict', 'pad'] = 'pad',
+) -> tuple[list, list[ParseError]]:
+    """
+    Parse the CIF file at *path* and return ``(list[pa.RecordBatch], errors)``.
+
+    File I/O is performed entirely in Rust — no Python file objects are created.
+    """
+    from pycifparse import pycifparse_core  # noqa: PLC0415
+    batches, error_dicts = pycifparse_core.parse_arrow_file(path, mode)
     errors = [ParseError(**e) for e in error_dicts]
     return batches, errors
 

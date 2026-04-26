@@ -567,9 +567,7 @@ impl EventSink for RawBuilder {
 
 use arrow::array::{ArrayRef, Int32Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
-use arrow::ipc::writer::FileWriter;
 use arrow::record_batch::RecordBatch;
-use std::io::Cursor;
 use std::sync::Arc;
 
 fn raw_to_str(v: &RawValue) -> String {
@@ -663,18 +661,6 @@ fn make_batch(
     RecordBatch::try_new(schema, arrays).expect("schema/array length mismatch")
 }
 
-fn batch_to_ipc(batch: &RecordBatch) -> Vec<u8> {
-    let schema = batch.schema();
-    let mut buf = Cursor::new(Vec::<u8>::new());
-    {
-        let mut writer = FileWriter::try_new(&mut buf, schema.as_ref())
-            .expect("FileWriter creation failed");
-        writer.write(batch).expect("write failed");
-        writer.finish().expect("finish failed");
-    }
-    buf.into_inner()
-}
-
 fn frame_to_batches(
     data: &FrameData,
     block_idx: i32,
@@ -742,21 +728,22 @@ fn frame_to_batches(
 }
 
 impl ParsedCif {
-    pub fn to_ipc_batches(&self) -> Vec<Vec<u8>> {
+    pub fn to_py_batches<'py>(&self, py: Python<'py>) -> PyResult<Vec<PyObject>> {
+        use arrow::pyarrow::ToPyArrow;
         let mut result = Vec::new();
         for (block_idx, block) in self.blocks.iter().enumerate() {
             let bi = block_idx as i32;
             for batch in frame_to_batches(&block.data, bi, &block.name, None, None) {
-                result.push(batch_to_ipc(&batch));
+                result.push(batch.to_pyarrow(py)?);
             }
             let mut fi = 0i32;
             for sf in &block.save_frames {
                 for batch in frame_to_batches(&sf.data, bi, &block.name, Some(fi), Some(&sf.name)) {
-                    result.push(batch_to_ipc(&batch));
+                    result.push(batch.to_pyarrow(py)?);
                 }
                 fi += 1;
             }
         }
-        result
+        Ok(result)
     }
 }

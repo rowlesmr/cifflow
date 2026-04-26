@@ -1,16 +1,16 @@
 """
 Type stubs for the pycifparse_core Rust extension module.
 
-Four entry points are exposed:
+Five entry points are exposed:
 
-parse       — streaming path; calls Python CifParserEvents callbacks as tokens
-              are consumed.  Used by CifBuilder for programmatic construction.
-parse_raw   — zero-callback path; parses entirely in Rust and returns a single
-              Python dict.  Kept for compatibility.
-parse_cif   — zero-callback path; parses entirely in Rust and returns a
-              CifFile directly (no intermediate dict).  Used by build().
-parse_arrow — zero-callback path; returns Arrow IPC bytes per RecordBatch.
-              Used by build_arrow().
+parse            — streaming path; calls Python CifParserEvents callbacks as
+                   tokens are consumed.  Used by CifBuilder.
+parse_raw        — zero-callback path; returns a single Python dict.
+parse_cif        — zero-callback path; returns CifFile directly.  Used by build().
+parse_arrow      — zero-callback path; returns pa.RecordBatch list directly
+                   (no IPC round-trip).  Used by build_arrow().
+parse_arrow_file — same as parse_arrow but reads the file path in Rust.
+                   Used by build_arrow_file().
 
 Three PyO3 model types are also exposed:
 
@@ -18,6 +18,8 @@ CifSaveFrame, CifBlock, CifFile — the CIF model types backed by Rust data.
 """
 
 from typing import Any
+
+import pyarrow as pa
 
 from pycifparse.types import CifVersion
 
@@ -130,9 +132,20 @@ def parse_cif(
 def parse_arrow(
     source: str,
     mode: str | None = None,
-) -> tuple[list[bytes], list[dict[str, Any]]]:
+) -> tuple[list[pa.RecordBatch], list[dict[str, Any]]]:
     """
-    Parse *source* entirely in Rust.  Returns ``(list[ipc_bytes], error_dicts)``
-    where each bytes object is one Arrow IPC file (one RecordBatch).
+    Parse *source* entirely in Rust.  Returns ``(list[pa.RecordBatch], error_dicts)``
+    with direct Arrow memory handoff — no IPC bytes.
+    """
+    ...
+
+
+def parse_arrow_file(
+    path: str,
+    mode: str | None = None,
+) -> tuple[list[pa.RecordBatch], list[dict[str, Any]]]:
+    """
+    Read the CIF file at *path* in Rust and return ``(list[pa.RecordBatch], error_dicts)``.
+    No Python file objects or IPC bytes are created.
     """
     ...

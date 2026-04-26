@@ -1,5 +1,15 @@
 # pycifparse — Lessons Learned
 
+## Lesson 107 — `arrow-rs` `pyarrow` feature pyo3 version coupling: use arrow v54+ (2026-04-26)
+
+**Context:** Enabling `arrow = { version = "53", features = ["pyarrow"] }` pulls in `pyo3 v0.22.4` as a transitive dependency. Our crate already depends on `pyo3 = "^0.23"`. Both crates link to `python` via `pyo3-ffi`, so cargo rejects the graph with a `links` conflict.
+
+**Root cause:** Arrow 53's `pyarrow` feature declares `pyo3 = "^0.22"`. Arrow 54 bumped this to `pyo3 = "^0.23"`.
+
+**Rule:** When enabling `arrow`'s `pyarrow` feature alongside `pyo3 = "^0.23"`, use `arrow = { version = "54", ... }` or later. Mixing arrow 53 + pyo3 0.23 + pyarrow feature is a hard compile-time conflict.
+
+---
+
 ## Lesson 106 — PyO3 types that replace Python classes must expose mutable internal state as Python objects, not Rust-typed fields (2026-04-26)
 
 **Context:** Phase B.3 replaced `CifSaveFrame`/`CifBlock`/`CifFile` Python classes with PyO3 `#[pyclass]` types. `writer.py` and `clean.py` directly mutate `._tags`, `._loops`, `._tag_order` etc. as Python dicts/lists — `ns._tags[tag] = val`, `ns._loops[loop_idx].append(x)`, `del ns._tags[tag]`.
