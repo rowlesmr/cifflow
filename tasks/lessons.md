@@ -1,5 +1,23 @@
 # pycifparse — Lessons Learned
 
+## Lesson 106 — PyO3 types that replace Python classes must expose mutable internal state as Python objects, not Rust-typed fields (2026-04-26)
+
+**Context:** Phase B.3 replaced `CifSaveFrame`/`CifBlock`/`CifFile` Python classes with PyO3 `#[pyclass]` types. `writer.py` and `clean.py` directly mutate `._tags`, `._loops`, `._tag_order` etc. as Python dicts/lists — `ns._tags[tag] = val`, `ns._loops[loop_idx].append(x)`, `del ns._tags[tag]`.
+
+**Design decision:** Store `_tags`, `_tag_order`, `_loops`, `_save_frames`, `_save_frame_list`, `_blocks`, `_block_list` as `PyObject = Py<PyAny>` fields with `#[pyo3(get, set)]`. The `#[pyo3(get)]` getter returns the same Python object (not a copy), so mutations from Python propagate back into the Rust struct automatically.
+
+**Rule:** When replacing a Python class with a PyO3 type and the class has attributes that are mutated in place by external Python code, store those attributes as `PyObject` (live Python objects) rather than Rust-native types. Rust-native types require explicit getters/setters and cannot be mutated in-place from Python.
+
+---
+
+## Lesson 105 — `build()` optimisation: `parse_cif` eliminates the dict-unpacking pass (2026-04-26)
+
+**Context:** `build()` previously called `parse_raw()` (returns a Python dict) then iterated the dict to construct `CifBlock`/`CifSaveFrame` Python objects — two full passes over all data. With PyO3 types, `parse_cif()` constructs the `PyCifFile`/`PyCifBlock`/`PyCifSaveFrame` objects directly in Rust in one pass and returns them to Python.
+
+**Rule:** When the target model types are PyO3 classes, the parsing Rust function should construct and return those classes directly rather than going via a Python dict intermediary. The dict path exists only for legacy compatibility; new code should use the direct-construction path.
+
+---
+
 ## Lesson 104 — Arrow IPC is the correct Rust→Python transport for RecordBatches; avoid the `pyarrow` crate feature (2026-04-26)
 
 **Context:** Phase B.2 needed to return Arrow `RecordBatch` objects from Rust to Python. Two approaches exist in `arrow-rs`: the `pyarrow` feature on the `arrow` crate, which lets you hand a `RecordBatch` directly across the PyO3 boundary, and the IPC route, which serializes each batch to bytes in Rust and deserializes with `pyarrow.ipc` in Python.

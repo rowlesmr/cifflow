@@ -4,7 +4,7 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current state:** Phase B.2 complete — Arrow IR pipeline implemented. `build_arrow()` returns `list[pa.RecordBatch]` from Rust via Arrow IPC bytes; each batch has per-loop schema (only its own tag columns). `debug_parquet.py` writes one Parquet file per batch. All 1836 tests pass. Next: Phase B.3 — PyO3-exposed `CifFile`/`CifBlock`/`CifSaveFrame` backed by Arrow RecordBatches.
+**Current state:** Phase B.3 complete — `CifFile`, `CifBlock`, `CifSaveFrame` are now PyO3 Rust types. `build()` calls `parse_cif()` directly (no dict intermediary). All 1836 tests pass. `model.py` is a thin re-export shim. Next: Phase C — DuckDB integration using Arrow RecordBatches from `build_arrow()`.
 
 **Test suite state (2026-04-26):**
 - 1836 tests pass (full suite)
@@ -96,26 +96,18 @@ cif.deepcopy()            # → CifFile
 - [x] `debug_parquet.py`: rewritten to use `build_arrow`; writes one Parquet file per batch (per-loop schema, no union/NULL padding)
 - [x] 1836 tests pass; Lessons 103–104
 
-#### Phase B.3 — PyO3-exposed CifFile backed by Arrow RecordBatches — next
+#### Phase B.3 — PyO3-exposed CifFile ✓ COMPLETE (2026-04-26)
 
-#### Implementation steps
-
-- [ ] **Step 1** — `cif_model.rs`: PyO3 `#[pyclass]` types
-  - `PyCifFile` — holds `Vec<PyCifBlock>` + version
-  - `PyCifBlock` — holds scalar RecordBatch + loop RecordBatches + save frames
-  - `PyCifSaveFrame` — same as PyCifBlock minus save frames
-  - All `#[pymethods]` implementing the preserved API
-- [ ] **Step 2** — Update `lib.rs`:
-  - `parse_raw` returns `PyCifFile` directly (not a dict)
-  - Keep `parse` (callback path) unchanged
-- [ ] **Step 3** — Update `builder.py`:
-  - `build()` delegates to `pycifparse_core.build(source, mode)`
-  - Remove dict-unpacking code
-- [ ] **Step 4** — Update `model.py`:
-  - `CifFile`, `CifBlock`, `CifSaveFrame` become thin Python wrappers or are removed
-- [ ] **Step 5** — Update `.pyi` stubs for new PyO3 types
-- [ ] **Step 6** — Run full test suite; fix failures
-- [ ] **Step 7** — Benchmark: verify parse still ≤ 1s
+- [x] `cif_model.rs` (new): `PyCifSaveFrame`, `PyCifBlock`, `PyCifFile` `#[pyclass]` types
+  - Internal data stored as live Python objects (`Py<PyAny>`) so `writer.py`/`clean.py` mutation works unchanged
+  - Full public API: `__getitem__`, `__contains__`, `tags`, `loops`, `save_frames`, `get_all`, `deepcopy`
+  - Mutation methods: `_append_value`, `_add_loop`, `_add_save_frame`, `_add_block`
+  - `build_py_cif(ParsedCif, py)` converts in one pass — no dict intermediary
+- [x] `lib.rs`: `parse_cif(source, mode)` added; returns `(PyCifFile, list[error_dicts])` directly
+- [x] `builder.py`: `build()` calls `parse_cif` — dict-unpacking code removed
+- [x] `model.py`: replaced Python class definitions with PyO3 re-exports (`CifFile = _core.CifFile` etc.)
+- [x] `pycifparse_core.pyi`: full stubs for all three types + `parse_cif`
+- [x] 1836 tests pass; Lessons 105–106
 
 #### Risk areas
 

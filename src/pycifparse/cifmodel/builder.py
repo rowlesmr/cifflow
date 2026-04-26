@@ -270,6 +270,89 @@ class CifBuilder:
 # Convenience function
 # ─────────────────────────────────────────────────────────────────────────────
 
+def cif_to_arrow(cif: CifFile) -> list:
+    """
+    Convert any CifFile (parsed or programmatic) to Arrow RecordBatches.
+
+    Produces the same batch format as build_arrow(): five metadata columns
+    plus one Utf8 column per tag, one batch per scalar group and per loop.
+    Container values (Python list/dict) are encoded as ``\\x00`` + JSON.
+
+    Returns a plain list of RecordBatches (no errors — the CifFile is already
+    validated).
+    """
+    import json  # noqa: PLC0415
+    import pyarrow as pa  # noqa: PLC0415
+
+    def _enc(v) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return v
+        return '\x00' + json.dumps(v, separators=(',', ':'), ensure_ascii=False)
+
+    def _batch(block_idx, block_name, frame_idx, frame_name, loop_id, tags, tag_data, n):
+        fields = [
+            pa.field('_block_idx',  pa.int32(),  nullable=False),
+            pa.field('_block_name', pa.utf8(),   nullable=False),
+            pa.field('_frame_idx',  pa.int32(),  nullable=True),
+            pa.field('_frame_name', pa.utf8(),   nullable=True),
+            pa.field('_loop_id',    pa.utf8(),   nullable=False),
+        ]
+        for tag in tags:
+            fields.append(pa.field(tag, pa.utf8(), nullable=True))
+        schema = pa.schema(fields)
+        arrays = [
+            pa.array([block_idx]  * n, type=pa.int32()),
+            pa.array([block_name] * n, type=pa.utf8()),
+            pa.array([frame_idx]  * n, type=pa.int32()),
+            pa.array([frame_name] * n, type=pa.utf8()),
+            pa.array([loop_id]    * n, type=pa.utf8()),
+        ]
+        for tag in tags:
+            col = tag_data.get(tag, [None] * n)
+            arrays.append(pa.array(col, type=pa.utf8()))
+        return pa.RecordBatch.from_arrays(arrays, schema=schema)
+
+    def _ns_batches(ns, block_idx, block_name, frame_idx, frame_name):
+        result = []
+        loop_tag_set = {t for loop in ns.loops for t in loop}
+        scalar_tags = [t for t in ns.tags if t not in loop_tag_set]
+
+        if scalar_tags:
+            n = max(len(ns[t]) for t in scalar_tags)
+            if n > 0:
+                tag_data = {}
+                for tag in scalar_tags:
+                    col = [_enc(v) for v in ns[tag]]
+                    col += [None] * (n - len(col))
+                    tag_data[tag] = col
+                result.append(_batch(block_idx, block_name, frame_idx, frame_name,
+                                     '__scalars__', scalar_tags, tag_data, n))
+
+        for li, loop_tags in enumerate(ns.loops):
+            if not loop_tags:
+                continue
+            n = len(ns[loop_tags[0]])
+            if n == 0:
+                continue
+            tag_data = {t: [_enc(v) for v in ns[t]] for t in loop_tags}
+            result.append(_batch(block_idx, block_name, frame_idx, frame_name,
+                                 f'__loop_{li}__', loop_tags, tag_data, n))
+        return result
+
+    batches = []
+    for bi, block_name in enumerate(cif.blocks):
+        block = cif[block_name]
+        batches.extend(_ns_batches(block, bi, block_name, None, None))
+        fi = 0
+        for sf_name in dict.fromkeys(block.save_frames):
+            for sf in block.get_all(sf_name):
+                batches.extend(_ns_batches(sf, bi, block_name, fi, sf_name))
+                fi += 1
+    return batches
+
+
 def build_arrow(
     source: str,
     *,

@@ -1,17 +1,98 @@
 """
 Type stubs for the pycifparse_core Rust extension module.
 
-Two entry points are exposed:
+Four entry points are exposed:
 
-parse      — streaming path; calls Python CifParserEvents callbacks as tokens
-             are consumed.  Used by CifBuilder for programmatic construction.
-parse_raw  — zero-callback path; parses entirely in Rust and returns a single
-             Python dict.  Used by build() for maximum throughput.
+parse       — streaming path; calls Python CifParserEvents callbacks as tokens
+              are consumed.  Used by CifBuilder for programmatic construction.
+parse_raw   — zero-callback path; parses entirely in Rust and returns a single
+              Python dict.  Kept for compatibility.
+parse_cif   — zero-callback path; parses entirely in Rust and returns a
+              CifFile directly (no intermediate dict).  Used by build().
+parse_arrow — zero-callback path; returns Arrow IPC bytes per RecordBatch.
+              Used by build_arrow().
+
+Three PyO3 model types are also exposed:
+
+CifSaveFrame, CifBlock, CifFile — the CIF model types backed by Rust data.
 """
 
 from typing import Any
 
 from pycifparse.types import CifVersion
+
+
+class CifSaveFrame:
+    """A save_ frame backed by a PyO3 Rust struct."""
+
+    name: str
+    _id: int
+    _tags: dict[str, list]       # live Python dict — mutations reflected in Rust
+    _tag_order: list[str]        # live Python list
+    _loops: list[list[str]]      # live Python list
+
+    def __init__(self, name: str, id: int = 0) -> None: ...
+    def __getitem__(self, key: str) -> list: ...
+    def __contains__(self, key: str) -> bool: ...
+
+    @property
+    def tags(self) -> list[str]: ...
+    @property
+    def loops(self) -> list[list[str]]: ...
+
+    def _append_value(self, tag: str, value: Any) -> None: ...
+    def _add_loop(self, tags: list[str], buffers: dict[str, list]) -> None: ...
+
+
+class CifBlock:
+    """A data_ block backed by a PyO3 Rust struct."""
+
+    name: str
+    _id: int
+    _tags: dict[str, list]
+    _tag_order: list[str]
+    _loops: list[list[str]]
+    _save_frames: dict[str, CifSaveFrame]
+    _save_frame_list: list[CifSaveFrame]
+
+    def __init__(self, name: str, id: int = 0) -> None: ...
+    def __getitem__(self, key: str) -> list | CifSaveFrame: ...
+    def __contains__(self, key: str) -> bool: ...
+
+    @property
+    def tags(self) -> list[str]: ...
+    @property
+    def loops(self) -> list[list[str]]: ...
+    @property
+    def save_frames(self) -> list[str]: ...
+
+    def get_all(self, name: str) -> list[CifSaveFrame]: ...
+    def _append_value(self, tag: str, value: Any) -> None: ...
+    def _add_loop(self, tags: list[str], buffers: dict[str, list]) -> None: ...
+    def _add_save_frame(self, frame: CifSaveFrame) -> bool: ...
+
+
+class CifFile:
+    """Top-level CIF container backed by a PyO3 Rust struct."""
+
+    _blocks: dict[str, CifBlock]
+    _block_list: list[CifBlock]
+
+    def __init__(self, version: CifVersion | None = None) -> None: ...
+    def __getitem__(self, name: str) -> CifBlock: ...
+    def __contains__(self, name: str) -> bool: ...
+
+    @property
+    def version(self) -> CifVersion: ...
+    @version.setter
+    def version(self, v: CifVersion) -> None: ...
+    @property
+    def blocks(self) -> list[str]: ...
+
+    def get_all(self, name: str) -> list[CifBlock]: ...
+    def _add_block(self, block: CifBlock) -> bool: ...
+    def deepcopy(self) -> CifFile: ...
+
 
 def parse(
     source: str,
@@ -19,59 +100,39 @@ def parse(
 ) -> CifVersion:
     """
     Parse *source* CIF text, firing CifParserEvents callbacks on *handler*.
-
-    Returns the detected CifVersion.  All parser and lexer errors are
-    delivered via ``handler.on_error(ParseError)``.
+    Returns the detected CifVersion.
     """
     ...
+
 
 def parse_raw(
     source: str,
     mode: str | None = None,
 ) -> dict[str, Any]:
     """
-    Parse *source* CIF text entirely in Rust with no Python callbacks.
+    Parse *source* entirely in Rust.  Returns a Python dict with keys
+    ``"version"``, ``"errors"``, ``"blocks"``.
+    """
+    ...
 
-    *mode* is ``'pad'`` (default) or ``'strict'``.
 
-    Returns a dict::
+def parse_cif(
+    source: str,
+    mode: str | None = None,
+) -> tuple[CifFile, list[dict[str, Any]]]:
+    """
+    Parse *source* entirely in Rust.  Returns ``(CifFile, error_dicts)``
+    with no intermediate Python dict.
+    """
+    ...
 
-        {
-            "version": str,          # "CIF_1_1" or "CIF_2_0"
-            "errors": [              # parser + semantic errors in emission order
-                {
-                    "error_type":      str,   # "lexical" | "syntactic" | "semantic"
-                    "message":         str,
-                    "line":            int,
-                    "column":          int,
-                    "context":         str,
-                    "recovery_action": str,
-                },
-                ...
-            ],
-            "blocks": [
-                {
-                    "name":       str,
-                    "tag_order":  list[str],
-                    "loops":      list[list[str]],
-                    "tags":       dict[str, list],   # scalar values are (str, str) tuples
-                    "save_frames": [
-                        {
-                            "name":      str,
-                            "tag_order": list[str],
-                            "loops":     list[list[str]],
-                            "tags":      dict[str, list],
-                        },
-                        ...
-                    ],
-                },
-                ...
-            ],
-        }
 
-    Scalar tag values are stored as ``(value_str, value_type_name)`` 2-tuples
-    so that ``CifSaveFrame.__getitem__`` can reconstruct ``CifScalar`` objects
-    lazily on first access.  Container values (CIF lists and tables) are stored
-    as plain Python ``list`` / ``dict`` with ``str`` leaf values.
+def parse_arrow(
+    source: str,
+    mode: str | None = None,
+) -> tuple[list[bytes], list[dict[str, Any]]]:
+    """
+    Parse *source* entirely in Rust.  Returns ``(list[ipc_bytes], error_dicts)``
+    where each bytes object is one Arrow IPC file (one RecordBatch).
     """
     ...

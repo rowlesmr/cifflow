@@ -1,7 +1,7 @@
 from pycifparse.types import CifVersion
 from pycifparse.database import compactify_database, convert_database
 from pycifparse.cifmodel.model import CifFile, CifBlock, CifSaveFrame
-from pycifparse.cifmodel.builder import build, build_arrow, CifBuilder
+from pycifparse.cifmodel.builder import build, build_arrow, cif_to_arrow, CifBuilder
 from pycifparse.cifmodel.writer import CifWriter, BlockWriter, SaveFrameWriter, CifInput
 from pycifparse.cifmodel.clean import clean, CleanWarning
 from pycifparse.ingestion import ingest
@@ -44,7 +44,7 @@ from pycifparse.inspect import (
 
 __all__ = [
     # CIF model
-    'CifFile', 'CifBlock', 'CifSaveFrame', 'CifBuilder', 'build', 'build_arrow',
+    'CifFile', 'CifBlock', 'CifSaveFrame', 'CifBuilder', 'build', 'build_arrow', 'cif_to_arrow',
     # Version
     'CifVersion',
     # Writer
