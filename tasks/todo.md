@@ -4,9 +4,16 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current state:** Phase B complete — Arrow pipeline now hands `pa.RecordBatch` objects directly to Python (no IPC bytes). `build_arrow_file()` / `parse_arrow_file()` do file I/O entirely in Rust. `arrow` upgraded to v54. All 1836 tests pass. Next: Phase C — DuckDB integration using Arrow RecordBatches from `build_arrow()` / `build_arrow_file()`.
+**Current state (2026-04-27):** Phase C functionally complete. DuckDB ingest hot path replaces `_process_loop` / `_apply_fk` / `_merge_into`. All 1836 tests pass. Performance: `second.cif` ingest ~27.5s (target: ~2.7s for another 10×). Dead code (`_process_loop`, `_process_scalar`, `_apply_fk`, `_merge_into`, `_loops_compatible`) still present but unused — ready to delete.
 
-**Test suite state (2026-04-26):**
+**Next priority:** Implement 10× further speedup on ingest. Top candidates:
+1. Batch all blocks per table into a single Arrow insert (O(tables) not O(blocks × tables))
+2. `fetch_arrow_table()` instead of `fetchall()` in `extract_merged_rows`
+3. Column-oriented SQLite flush: `executemany(zip(*cols))` or ADBC
+4. `PRAGMA synchronous=OFF; journal_mode=MEMORY` during SQLite ingest writes
+5. Single FK UPDATE per edge (remove per-block filter)
+
+**Test suite state (2026-04-27):**
 - 1836 tests pass (full suite)
 - Run: `.venv/Scripts/python -m pytest -m "not slow" --tb=short -q`
 
@@ -401,6 +408,63 @@ Current ingest hot spots (from post-1.2 profile): `_apply_fk` 17.7 s (752 K call
 - **Branch merge**: performance work lives on a feature branch. Decide whether to merge to main before continuing with functional work, or keep separate.
 - **Emit optimisation**: emit now takes 35.2 s (32% of total). `quote()` + `_illegal_start` account for ~13 s combined (1.9 M calls). `_apply_decimal_align` is 4 s. Not yet in scope.
 - **Re-profile threshold**: re-profile after each of 1.3–1.5 before committing to 1.6.
+
+---
+
+### Phase C — DuckDB ingest hot path: performance work (2026-04-27)
+
+#### What was done this session
+
+Phase C (DuckDB integration) is functionally complete and all 1836 tests pass.
+This session focused entirely on performance after profiling revealed ingest dominated runtime.
+
+**Optimisations implemented:**
+
+| Optimisation | Component | Before | After |
+|---|---|---|---|
+| Arrow bulk insert (`_load_loop`) | `duckdb_ingest.py` | `executemany` per row | `pa.record_batch` → `db.register` + INSERT per table-per-block |
+| Eliminate GROUP BY + Python-side merge | `extract_merged_rows` | `FIRST(col ORDER BY ...) FILTER` × 60 cols | single `ORDER BY` fetch + Python winner dict |
+| First-occurrence fast path | `extract_merged_rows` | `[None]*n_cols` + 34-iter loop per row | `list(vals)` + `continue` |
+| Deferred `seen_losers` | `extract_merged_rows` | `[set()]*n_cols` per row | `setdefault` on first conflict only |
+| `_compute_id_regimes()` one-pass precompute | `ingest.py` | O(blocks × rows) per-block scan | O(rows) single pass → dict |
+| `tag_presence_rows` population (bug fix) | `extract_merged_rows` | never populated | populated for non-winning blocks |
+| Explicit `db.close(); del db` | `_run_schema_path` | deferred GC | controlled release |
+
+**Measured speedups (`multi_one.cif`, 41KB, 25 blocks):**
+- Ingest: 18.452s → 1.541s (12×)
+
+**Measured speedups (`second.cif`, 17MB, 156 blocks):**
+- Ingest: ~2680s (original Python) → 27.553s DuckDB (97× vs original)
+- `second.cif` clean run breakdown: Load ~10s, Merge ~5s, Flush ~8.5s, Propagate ~3s
+
+**Bug fixed:** `TestOriginalModeSharedSet::test_all_blocks_have_audit_dataset_id` — block2/block3 were missing `_audit_dataset.id` in ORIGINAL-mode output because `tag_presence_rows` was never populated by the DuckDB path. Now fixed (lessons 108–113).
+
+#### Current state
+
+- All 1836 tests pass
+- `second.cif` ingest: ~27.5s (target: ~2.7s for another 10×)
+- `multi_one.cif` ingest: ~1.5s (41KB — acceptable)
+- Phase C.6 (delete old Python hot path) still deferred — `_process_loop`, `_process_scalar`, `_apply_fk`, `_merge_into`, `_loops_compatible` still exist in `ingest.py`
+
+#### Next: another 10× improvement on `second.cif` ingest
+
+Target: 27.5s → ~2.7s. Remaining bottlenecks and candidate approaches:
+
+| Bottleneck | Current cost | Approach |
+|---|---|---|
+| Arrow inserts (Load phase) | ~10s — 156 register/execute/unregister per table | Batch all blocks per table into one Arrow insert (O(tables) not O(blocks × tables)) |
+| `fetchall()` in merge (Merge phase) | ~5s — 500K+ Python tuples created | `fetch_arrow_table()` → columnar access; avoids Python tuple construction |
+| SQLite `executemany` flush | ~8.5s — 126K+ rows per large table, row-by-row | Arrow → SQLite via ADBC or column-oriented `executemany(zip(*cols))` |
+| FK propagation UPDATEs | ~3s — one UPDATE per FK edge per block | Batch all blocks into a single UPDATE (remove `AND _block_id = ?` filter) |
+| SQLite pragmas during flush | free | `PRAGMA synchronous=OFF; PRAGMA journal_mode=MEMORY` inside ingest transaction |
+
+**Highest leverage:** batching Arrow inserts (single `pa.concat_tables` across all blocks per table, then one register/INSERT/unregister) and replacing `fetchall` with `fetch_arrow_table()`.
+
+#### Open decisions
+
+1. **Phase C.6 deletion:** `_process_loop`, `_process_scalar`, `_apply_fk`, `_merge_into`, `_loops_compatible` are dead code. Delete now or after 10× milestone?
+2. **SQLite ADBC:** `adbc_driver_sqlite` allows Arrow → SQLite without Python intermediary. Worth the new dependency if executemany flush becomes the bottleneck after other fixes.
+3. **FK propagation scope:** Current `propagate_fk_sql` emits one UPDATE per `(fk_edge, block)`. Removing the `_block_id` filter makes it one UPDATE per FK edge total — valid only if the JOIN is block-scoped anyway (it is, via parent/child sharing `_block_id`). Verify before changing.
 
 ---
 

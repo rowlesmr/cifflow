@@ -167,7 +167,9 @@ def phase_compactify(conn: sqlite3.Connection, schema: pcp.SchemaSpec) -> sqlite
 
 
 def phase_emit(conn: sqlite3.Connection, schema: pcp.SchemaSpec) -> None:
-    pcp.emit(conn, schema, mode=pcp.EmitMode.ORIGINAL)
+    text_to_save = pcp.emit(conn, schema, mode=pcp.EmitMode.ORIGINAL)
+    with open("cif_output.txt", "w") as file:
+        file.write(text_to_save)
 
 
 # ---------------------------------------------------------------------------

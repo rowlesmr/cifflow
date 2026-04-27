@@ -14,6 +14,12 @@ from typing import Any, Callable
 
 from pycifparse.cifmodel.model import CifBlock, CifFile
 from pycifparse.dictionary.schema import BridgeColumnDef, SchemaSpec, TableDef
+from pycifparse.ingestion.duckdb_ingest import (
+    extract_merged_rows,
+    load_block_data,
+    propagate_fk_sql,
+    setup_duckdb,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -727,17 +733,15 @@ class _Ingester:
         self.conn.isolation_level = None
         self.conn.execute('BEGIN')
         try:
-            for position, block in enumerate(blocks):
-                self._block_position = position
-                self._process_block(block)
+            if self.schema is not None:
+                self._run_schema_path(blocks)
+            else:
+                for position, block in enumerate(blocks):
+                    self._block_position = position
+                    self._process_block(block)
+
             if self._semantic_errors:
                 raise IngestionError(self._semantic_errors)
-            if self.schema and self.schema.bridge_columns:
-                _fill_bridge_columns(
-                    self.merged_rows, self.schema.bridge_columns,
-                    emit=self._emit,
-                    emit_info=self._emit_info,
-                )
             self._post_validate()
             self._flush()
             if _pre_commit_hook is not None:
@@ -745,8 +749,6 @@ class _Ingester:
             try:
                 self.conn.execute('COMMIT')
             except sqlite3.Error as commit_exc:
-                # Failed COMMIT leaves the transaction open in SQLite, so we can
-                # still interrogate the database before rolling back.
                 messages: list[str] = [f'COMMIT failed: {commit_exc}']
                 try:
                     for tbl, rowid, parent, fkid in self.conn.execute(
@@ -771,6 +773,47 @@ class _Ingester:
 
         return self.errors
 
+    def _run_schema_path(self, blocks: list[CifBlock]) -> None:
+        """DuckDB-based ingestion for schema-guided CIF files."""
+        db = setup_duckdb(self.schema)
+        populated: set[str] = set()
+
+        for position, block in enumerate(blocks):
+            self._block_position = position
+            self._current_block_id = block.name
+            fallback = load_block_data(
+                db, block, block.name, position,
+                self.schema, self.tag_to_column, self.su_map,
+                set(), self._emit, populated,
+            )
+            self.fallback_rows.extend(fallback)
+
+        propagate_fk_sql(db, self.schema, self.tag_to_column, self.propagate_fk, self._emit, populated)
+
+        self.merged_rows = extract_merged_rows(
+            db, self.schema, self._emit_error, self._emit, populated,
+            tag_presence_rows=self.tag_presence_rows,
+        )
+
+        db.close()
+        del db
+
+        if self.schema.bridge_columns:
+            _fill_bridge_columns(
+                self.merged_rows, self.schema.bridge_columns,
+                emit=self._emit,
+                emit_info=self._emit_info,
+            )
+
+        # Compute id_regime for all blocks in one pass (avoids O(n_blocks×n_rows) loop)
+        id_regimes = self._compute_id_regimes()
+
+        # Record block membership (deferred until merged_rows is available)
+        for position, block in enumerate(blocks):
+            self._block_position = position
+            self._current_block_id = block.name
+            self._record_membership(block, block.name, id_regimes.get(block.name, 'assumed'))
+
     def _emit(self, msg: str, *, table: str | None = None, column: str | None = None, key_values: dict[str, str | None] | None = None) -> None:
         self.errors.append(msg)
         if self._on_error:
@@ -791,113 +834,14 @@ class _Ingester:
         if self._on_error:
             self._on_error(msg, None, severity='Info', table=table, column=column, key_values=key_values)
 
-    # ── Block processing ──────────────────────────────────────────────────────
+    # ── Block processing (no-schema path only) ────────────────────────────────
 
     def _process_block(self, block: CifBlock) -> None:
+        """Called only when schema is None (no-schema fallback path)."""
         block_id = block.name
         self._current_block_id = block_id
-
-        # Per-block state
-        loop_id_counter = 1
-        set_buffers: dict[str, dict[str, Any]] = {}
-        set_row_reservations: dict[str, int] = {}
-        loop_scalar_buffers: dict[str, dict[str, Any]] = {}
-        loop_scalar_row_reservations: dict[str, int] = {}
-        fk_accumulator: dict[str, str] = {}
-        deprecated_warned: set[str] = set()
-
-        if self.schema is None:
-            loop_id_counter = self._process_block_no_schema(
-                block, block_id, loop_id_counter
-            )
-            self._record_membership(block, block_id, 'assumed')
-            return
-
-        # Map each loop tag to its loop index
-        loop_tag_to_idx: dict[str, int] = {}
-        for i, loop_tags in enumerate(block.loops):
-            for tag in loop_tags:
-                loop_tag_to_idx[tag] = i
-
-        processed_loops: set[int] = set()
-
-        for tag in block.tags:
-            if tag in loop_tag_to_idx:
-                loop_idx = loop_tag_to_idx[tag]
-                if loop_idx in processed_loops:
-                    continue
-                processed_loops.add(loop_idx)
-                loop_tags = block.loops[loop_idx]
-                loop_id_counter = self._process_loop(
-                    block, block_id, loop_tags, loop_id_counter,
-                    fk_accumulator, deprecated_warned,
-                )
-            else:
-                self._process_scalar(
-                    block, block_id, tag,
-                    set_buffers, set_row_reservations,
-                    loop_scalar_buffers, loop_scalar_row_reservations,
-                    fk_accumulator, deprecated_warned,
-                )
-
-        # Flush Set buffers accumulated during this block
-        for tbl_name, col_dict in set_buffers.items():
-            row: dict[str, Any] = dict(col_dict)
-            row['_block_id'] = block_id
-            row['_row_id'] = set_row_reservations[tbl_name]
-            table = self.schema.tables[tbl_name]
-            if table.primary_keys == ['_pycifparse_id']:
-                row['_pycifparse_id'] = str(_uuid_module.uuid4())
-            # Apply FK propagation before merging
-            _apply_fk(row, table, self.schema, None,
-                      fk_accumulator, self.propagate_fk, self._emit,
-                      block_id, self.merged_rows, self.row_id_counters)
-            if tbl_name not in self.merged_rows:
-                self.merged_rows[tbl_name] = {}
-            pk = _pk_tuple(row, table)
-            pk_json_str = json.dumps(list(pk))
-            for col, val in col_dict.items():
-                if val is not None:
-                    self.tag_presence_rows.append((block_id, tbl_name, col, pk_json_str))
-            if pk not in self.merged_rows[tbl_name]:
-                self.merged_rows[tbl_name][pk] = dict(row)
-            else:
-                existing = self.merged_rows[tbl_name][pk]
-                pk_values = dict(zip(table.primary_keys, pk))
-                for col, val in row.items():
-                    if col in ('_row_id', '_block_id') or val is None:
-                        continue
-                    if existing.get(col) is None:
-                        existing[col] = val
-                    elif existing[col] != val:
-                        msg = (
-                            f"merge conflict on '{tbl_name}'.'{col}': "
-                            f"keeping '{existing[col]}', ignoring '{val}'"
-                        )
-                        self._emit_error(msg, table=tbl_name, column=col, key_values=pk_values)
-
-        # Flush Loop-class scalar buffers accumulated during this block
-        for tbl_name, col_dict in loop_scalar_buffers.items():
-            row = dict(col_dict)
-            row['_block_id'] = block_id
-            row['_row_id'] = loop_scalar_row_reservations[tbl_name]
-            table = self.schema.tables[tbl_name]
-            if table.primary_keys == ['_pycifparse_id']:
-                row['_pycifparse_id'] = str(_uuid_module.uuid4())
-            _apply_fk(row, table, self.schema, None,
-                      fk_accumulator, self.propagate_fk, self._emit,
-                      block_id, self.merged_rows, self.row_id_counters)
-            pk = _pk_tuple(row, table)
-            pk_json_str = json.dumps(list(pk))
-            for col, val in col_dict.items():
-                if val is not None:
-                    self.tag_presence_rows.append((block_id, tbl_name, col, pk_json_str))
-            _merge_into(
-                self.merged_rows, tbl_name, row, table,
-                self.row_id_counters, self._emit, self._emit_error,
-            )
-
-        self._record_membership(block, block_id, self._id_regime(block_id))
+        loop_id_counter = self._process_block_no_schema(block, block_id, 1)
+        self._record_membership(block, block_id, 'assumed')
 
     # ── No-schema block processing ────────────────────────────────────────────
 
@@ -1280,9 +1224,37 @@ class _Ingester:
 
     # ── id_regime determination ───────────────────────────────────────────────
 
+    def _compute_id_regimes(self) -> dict[str, str]:
+        """Compute id_regime for every block in one O(n_total_rows) pass."""
+        block_all_uuid: dict[str, bool] = {}   # block_id → all PKs are UUIDs so far
+        block_has_pk: set[str] = set()         # block_ids that own at least one PK value
+
+        for tbl_name, tbl_rows in self.merged_rows.items():
+            table = self.schema.tables[tbl_name]
+            non_synthetic_pks = [
+                k for k in table.primary_keys
+                if k not in ('_block_id', '_row_id', '_pycifparse_id')
+            ]
+            if not non_synthetic_pks:
+                continue
+            for row in tbl_rows.values():
+                bid = row.get('_block_id')
+                if bid is None:
+                    continue
+                for pk_col in non_synthetic_pks:
+                    v = row.get(pk_col)
+                    if v is not None:
+                        block_has_pk.add(bid)
+                        if block_all_uuid.get(bid, True):
+                            block_all_uuid[bid] = _is_uuid(v)
+
+        return {
+            bid: ('uuid' if block_all_uuid.get(bid, False) else 'assumed')
+            for bid in block_has_pk
+        }
+
     def _id_regime(self, block_id: str) -> str:
         """Determine id_regime for a general block (no _audit_dataset.id)."""
-        # Collect PK values of rows first contributed by this block
         pk_values: list[str] = []
         for tbl_name, tbl_rows in self.merged_rows.items():
             table = self.schema.tables[tbl_name]
@@ -1299,7 +1271,6 @@ class _Ingester:
                     v = row.get(pk_col)
                     if v is not None:
                         pk_values.append(v)
-
         if not pk_values:
             return 'assumed'
         return 'uuid' if all(_is_uuid(v) for v in pk_values) else 'assumed'

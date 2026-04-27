@@ -1,5 +1,61 @@
 # pycifparse — Lessons Learned
 
+## Lesson 113 — DuckDB raw fetch: `fetchall()` creates Python tuples; for 500K+ rows use `fetch_arrow_table()` (2026-04-27)
+
+**Context:** `extract_merged_rows` calls `db.execute(...).fetchall()` to retrieve all raw staging rows for a table before the Python-side merge loop. For `pd_meas` in `second.cif` (~126K rows × 34 columns), this materialises ~4M Python strings as a list of tuples — significant allocation pressure before the merge loop even begins.
+
+**Rule:** When fetching large result sets from DuckDB for Python-side processing, prefer `fetch_arrow_table()` (returns a columnar `pa.Table`) over `fetchall()`. Column access is zero-copy from Arrow memory; iteration is either vectorised or at least avoids per-row tuple construction. Only fall back to `fetchall()` when the result is small (< ~10K rows) or column-at-a-time access would be awkward.
+
+---
+
+## Lesson 112 — DuckDB `FIRST(col ORDER BY ...) FILTER (WHERE col IS NOT NULL)` aggregate is catastrophically slow for wide tables (2026-04-27)
+
+**Context:** `extract_merged_rows` originally used a GROUP BY query with `FIRST(col ORDER BY _block_idx, _iter_idx) FILTER (WHERE col IS NOT NULL)` for every data column. For `cell` (3 rows, 60 columns), this query alone took 3067ms — despite only 3 rows. DuckDB's ordered-aggregate with filter has O(n_cols) per-execute overhead independent of row count.
+
+**Fix:** Eliminated GROUP BY entirely. A single `SELECT ... ORDER BY _block_idx, _loop_id, _iter_idx` plus a Python dict (`winner_blocks`, `winners_map`) replaces the aggregate. Python tracks the first occurrence (fast path: `list(vals)` + `continue`) and fills nulls from subsequent rows. No DuckDB aggregate needed.
+
+**Rule:** Never use DuckDB's `FIRST(col ORDER BY ...) FILTER (WHERE col IS NOT NULL)` in a wide table (> ~10 columns). Replace with a sorted fetch + Python-side winner tracking.
+
+---
+
+## Lesson 111 — First-occurrence rows in a merge loop: `list(vals)` + `continue` avoids millions of allocations (2026-04-27)
+
+**Context:** The merge loop for unique-PK tables (e.g. `pd_meas`, 126K rows) initialised every row as `w = [None]*n_cols` then ran a 34-iteration inner loop and allocated `[set() for _ in data_cols]` for `seen_losers` — even for rows that were first occurrences and could never have conflicts. For 126K unique-PK rows this created 4.3M Python object allocations before any conflict was possible.
+
+**Fix:** For first occurrences (`pk_key not in winner_blocks`): store `list(vals)` (a C-level tuple→list copy) and `continue`. The inner null-fill loop and `seen_losers` initialisation are skipped entirely. Deferred `seen_losers` to `setdefault` on the first actual conflict.
+
+**Rule:** In a merge loop where most rows are first occurrences, guard with `if pk_key not in winner_dict: ... continue` before any conflict bookkeeping. C-level `list(x)` is orders of magnitude cheaper than a Python-loop initialiser for the fast path.
+
+---
+
+## Lesson 110 — `tag_presence_rows` must be populated for non-winning blocks in DuckDB merge (2026-04-27)
+
+**Context:** ORIGINAL-mode emit uses the `_tag_presence` SQLite table to find which blocks contributed data to shared Set rows (e.g. `_audit_dataset.id` shared across block1/block2/block3 via a common UUID). The DuckDB `extract_merged_rows` path never populated `tag_presence_rows`, so non-winning blocks had no entries and appeared to have no data — causing `_audit_dataset.id` to be absent from block2 and block3 in ORIGINAL mode.
+
+**Fix:** Added `tag_presence_rows` parameter to `extract_merged_rows`. For every non-first occurrence of a `pk_key` from a different `block_id`, append `(block_id, tbl_name, col, pk_json)` for all PK columns and non-null data columns. Updated `_run_schema_path` to pass `tag_presence_rows=self.tag_presence_rows`.
+
+**Rule:** Any code path that produces merged rows must also populate `tag_presence_rows` for every non-winning block contribution. Omitting this breaks ORIGINAL-mode emit for all shared Set rows. Add an explicit test for each emit mode after implementing a new merge path.
+
+---
+
+## Lesson 109 — `_id_regime` O(blocks × rows) scan: precompute with one pass (2026-04-27)
+
+**Context:** `_record_membership` called `_id_regime(block_id)` once per block (156 calls for `second.cif`). Each call iterated all ~126K merged rows filtering by `_block_id`. Total cost: 9.81s.
+
+**Fix:** `_compute_id_regimes()` does one O(n_rows) pass over all merged rows, building a `dict[block_id, regime]`. `_record_membership` does a single dict lookup. Cost: 0.27s.
+
+**Rule:** Any per-block function that iterates all merged rows is O(blocks × rows) — quadratic. Detect the pattern by looking for `for block in blocks: for row in all_rows: if row['_block_id'] == block:`. Replace with a single precompute pass.
+
+---
+
+## Lesson 108 — Arrow bulk insert in DuckDB: one `register/execute/unregister` per table, not per block (2026-04-27)
+
+**Context:** The initial Arrow-insert path in `_load_loop` did one `db.register('__batch__', arrow_batch) + INSERT + db.unregister` per block per table. For `second.cif` (156 blocks × N tables), this meant 156 register/execute/unregister cycles per table. The DuckDB overhead per cycle is non-trivial regardless of batch size.
+
+**Rule:** Accumulate all blocks' rows per table first, then do a single Arrow insert per table (one `pa.record_batch` covering all blocks). This reduces the register/execute/unregister overhead from O(blocks × tables) to O(tables). The tradeoff is higher peak memory (all blocks' rows held before insert), which is acceptable for files that fit in RAM.
+
+---
+
 ## Lesson 107 — `arrow-rs` `pyarrow` feature pyo3 version coupling: use arrow v54+ (2026-04-26)
 
 **Context:** Enabling `arrow = { version = "53", features = ["pyarrow"] }` pulls in `pyo3 v0.22.4` as a transitive dependency. Our crate already depends on `pyo3 = "^0.23"`. Both crates link to `python` via `pyo3-ffi`, so cargo rejects the graph with a `links` conflict.
