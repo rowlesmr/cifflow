@@ -732,6 +732,8 @@ class _Ingester:
 
         old_isolation = self.conn.isolation_level
         self.conn.isolation_level = None
+        self.conn.execute('PRAGMA synchronous=OFF')
+        self.conn.execute('PRAGMA journal_mode=MEMORY')
         self.conn.execute('BEGIN')
         try:
             if self.schema is not None:
@@ -770,6 +772,8 @@ class _Ingester:
             self.conn.execute('ROLLBACK')
             raise
         finally:
+            self.conn.execute('PRAGMA synchronous=NORMAL')
+            self.conn.execute('PRAGMA journal_mode=WAL')
             self.conn.isolation_level = old_isolation
 
         return self.errors
@@ -1325,11 +1329,12 @@ class _Ingester:
             placeholders = ', '.join('?' for _ in cols)
             col_list = ', '.join(f'"{c}"' for c in cols)
             sql = (
-                f'INSERT OR REPLACE INTO "{tbl_name}" ({col_list}) '
+                f'INSERT INTO "{tbl_name}" ({col_list}) '
                 f'VALUES ({placeholders})'
             )
             try:
-                cur.executemany(sql, [[r.get(c) for c in cols] for r in rows])
+                col_arrays = [[r.get(c) for r in rows] for c in cols]
+                cur.executemany(sql, zip(*col_arrays))
             except sqlite3.Error as e:
                 self._emit(f"sqlite3 error inserting into '{tbl_name}': {e}")
 
