@@ -16,6 +16,7 @@ from pycifparse.cifmodel.model import CifBlock, CifFile
 from pycifparse.dictionary.schema import BridgeColumnDef, SchemaSpec, TableDef
 from pycifparse.ingestion.duckdb_ingest import (
     extract_merged_rows,
+    flush_table_batches,
     load_block_data,
     propagate_fk_sql,
     setup_duckdb,
@@ -777,16 +778,24 @@ class _Ingester:
         """DuckDB-based ingestion for schema-guided CIF files."""
         db = setup_duckdb(self.schema)
         populated: set[str] = set()
+        global_batch: dict[str, list[tuple]] = {}
 
         for position, block in enumerate(blocks):
             self._block_position = position
             self._current_block_id = block.name
-            fallback = load_block_data(
-                db, block, block.name, position,
+            fallback, table_batch = load_block_data(
+                block, block.name, position,
                 self.schema, self.tag_to_column, self.su_map,
-                set(), self._emit, populated,
+                set(), self._emit,
             )
             self.fallback_rows.extend(fallback)
+            for tbl, rows in table_batch.items():
+                if tbl in global_batch:
+                    global_batch[tbl].extend(rows)
+                else:
+                    global_batch[tbl] = rows
+
+        flush_table_batches(db, global_batch, populated)
 
         propagate_fk_sql(db, self.schema, self.tag_to_column, self.propagate_fk, self._emit, populated)
 

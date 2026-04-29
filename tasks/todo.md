@@ -6,12 +6,13 @@
 
 **Current state (2026-04-27):** Phase C functionally complete. DuckDB ingest hot path replaces `_process_loop` / `_apply_fk` / `_merge_into`. All 1836 tests pass. Performance: `second.cif` ingest ~27.5s (target: ~2.7s for another 10×). Dead code (`_process_loop`, `_process_scalar`, `_apply_fk`, `_merge_into`, `_loops_compatible`) still present but unused — ready to delete.
 
-**Next priority:** Implement 10× further speedup on ingest. Top candidates:
+**Next priority:** Implement 10× further speedup on ingest. Consider ADBC. Top candidates:
 1. Batch all blocks per table into a single Arrow insert (O(tables) not O(blocks × tables))
 2. `fetch_arrow_table()` instead of `fetchall()` in `extract_merged_rows`
-3. Column-oriented SQLite flush: `executemany(zip(*cols))` or ADBC
-4. `PRAGMA synchronous=OFF; journal_mode=MEMORY` during SQLite ingest writes
-5. Single FK UPDATE per edge (remove per-block filter)
+3. `INSERT` instead of `INSERT OR REPLACE` in flush (tables are empty at flush time)
+4. Column-oriented SQLite flush: `executemany(zip(*cols))` or ADBC
+5. `PRAGMA synchronous=OFF; journal_mode=MEMORY` during SQLite ingest writes
+6. Single FK UPDATE per edge (remove per-block filter)
 
 **Test suite state (2026-04-27):**
 - 1836 tests pass (full suite)

@@ -113,11 +113,7 @@ def _topo_order(schema: SchemaSpec) -> list[str]:
 
 
 def _sibling_groups(schema: SchemaSpec) -> list[list[str]]:
-    """Return groups of tables sharing identical non-synthetic PK column name sets.
-
-    Used for multi-category loop UUID sharing: all sibling tables in one CIF
-    loop iteration must receive the same UUID for their shared PK columns.
-    """
+    """Return groups of tables sharing identical non-synthetic PK column name sets."""
     by_pk: dict[frozenset, list[str]] = defaultdict(list)
     for tbl_name, table in schema.tables.items():
         pks = frozenset(_non_synthetic_pks(table))
@@ -174,7 +170,6 @@ def setup_duckdb(schema: SchemaSpec) -> duckdb.DuckDBPyConnection:
 # ---------------------------------------------------------------------------
 
 def load_block_data(
-    db: duckdb.DuckDBPyConnection,
     block: CifBlock,
     block_id: str,
     block_idx: int,
@@ -183,14 +178,16 @@ def load_block_data(
     su_map: dict[str, str],
     deprecated_warned: set[str],
     emit: Callable[..., None],
-    populated: set[str] | None = None,
-) -> list[dict]:
-    """Route block tag data into DuckDB staging tables.
+) -> tuple[list[dict], dict[str, list[tuple]]]:
+    """Route block tag data into per-table row lists.
 
-    Returns a list of fallback row dicts (for _cif_fallback) that could not
-    be routed to any structured schema table.
+    Returns (fallback_rows, table_batch) where table_batch maps each table
+    name to a list of (block_id, block_idx, loop_id, iter_idx, cols_dict) tuples.
+    The caller accumulates batches across all blocks then calls flush_table_batches
+    once — a single Arrow INSERT per table rather than one per block.
     """
     fallback_rows: list[dict] = []
+    table_batch: dict[str, list[tuple]] = {}
 
     loop_tag_to_idx: dict[str, int] = {}
     for i, loop_tags in enumerate(block.loops):
@@ -211,20 +208,31 @@ def load_block_data(
             loop_tags_list = block.loops[loop_idx]
             loop_id_counter += 1
             loop_id_str = f'__loop_{loop_id_counter}__'
-            _load_loop(db, block, block_id, block_idx, loop_id_str, loop_id_counter,
-                       loop_tags_list, schema, tag_to_column, su_map,
-                       deprecated_warned, emit, fallback_rows, populated)
+            loop_batch = _load_loop(
+                block, block_id, block_idx, loop_id_str, loop_id_counter,
+                loop_tags_list, schema, tag_to_column, su_map,
+                deprecated_warned, emit, fallback_rows,
+            )
+            for tbl, rows in loop_batch.items():
+                if tbl in table_batch:
+                    table_batch[tbl].extend(rows)
+                else:
+                    table_batch[tbl] = rows
         else:
             _load_scalar_tag(block, block_id, tag, schema, tag_to_column, su_map,
                              deprecated_warned, emit, set_bufs, loop_scalar_bufs, fallback_rows)
 
-    # Flush scalar buffers — one INSERT per table per block
+    # Scalar buffers → one table_batch entry per table per block
     for tbl_name, cols in set_bufs.items():
-        _insert_staging(db, tbl_name, block_id, block_idx, _SCALARS_LOOP_ID, 0, cols, populated)
+        table_batch.setdefault(tbl_name, []).append(
+            (block_id, block_idx, _SCALARS_LOOP_ID, 0, cols)
+        )
     for tbl_name, cols in loop_scalar_bufs.items():
-        _insert_staging(db, tbl_name, block_id, block_idx, _SCALARS_LOOP_ID, 0, cols, populated)
+        table_batch.setdefault(tbl_name, []).append(
+            (block_id, block_idx, _SCALARS_LOOP_ID, 0, cols)
+        )
 
-    return fallback_rows
+    return fallback_rows, table_batch
 
 
 def _route_tag(
@@ -294,7 +302,6 @@ def _load_scalar_tag(
 
 
 def _load_loop(
-    db: duckdb.DuckDBPyConnection,
     block: CifBlock,
     block_id: str,
     block_idx: int,
@@ -307,9 +314,12 @@ def _load_loop(
     deprecated_warned: set[str],
     emit: Callable[..., None],
     fallback_rows: list[dict],
-    populated: set[str] | None = None,
-) -> None:
-    # Route all loop tags
+) -> dict[str, list[tuple]]:
+    """Build per-table row lists for one CIF loop.
+
+    Returns table_batch: {tbl_name: [(block_id, block_idx, loop_id, iter_idx, cols_dict), ...]}
+    No DuckDB operations here — caller accumulates across all blocks and flushes once.
+    """
     routing: dict[str, tuple[str, tuple[str, str] | None]] = {}
     for tag in loop_tags:
         routing[tag] = _route_tag(tag, schema, tag_to_column, deprecated_warned, emit)
@@ -335,13 +345,11 @@ def _load_loop(
     n_iters = len(block[loop_tags[0]]) if loop_tags else 0
     first_tbl = table_names[0] if table_names else None
 
-    # Pre-fetch all tag value lists once — avoids repeated Rust→Python boundary
-    # crossings when block[tag] copies the full list each time it is called.
+    # Pre-fetch all tag value lists once
     tag_values: dict[str, list] = {tag: block[tag] for tag in loop_tags}
 
-    # Build per-table batch rows (all iterations at once)
-    table_batch: dict[str, list[tuple]] = {t: [] for t in table_names}
-
+    # Build per-table batch rows (single pass over iterations)
+    table_batch: dict[str, list[tuple]] = {}
     for iter_idx in range(n_iters):
         for tbl_name in table_names:
             cols: dict[str, Any] = {}
@@ -352,34 +360,10 @@ def _load_loop(
                 cols[col_name] = stored
                 if su_val is not None:
                     cols[su_map[canonical]] = su_val
-            table_batch[tbl_name].append(
+            table_batch.setdefault(tbl_name, []).append(
                 (block_id, block_idx, loop_id, iter_idx, cols)
             )
 
-    # Batch INSERT per table via Arrow (avoids per-row Python/DuckDB overhead)
-    for tbl_name, rows in table_batch.items():
-        if not rows:
-            continue
-        col_names = sorted({k for _, _, _, _, cols in rows for k in cols})
-        if not col_names:
-            continue
-        all_cols = ['_block_id', '_block_idx', '_loop_id', '_iter_idx'] + col_names
-        arrow_batch = pa.record_batch({
-            '_block_id':  pa.array([r[0] for r in rows], type=pa.string()),
-            '_block_idx': pa.array([r[1] for r in rows], type=pa.int32()),
-            '_loop_id':   pa.array([r[2] for r in rows], type=pa.string()),
-            '_iter_idx':  pa.array([r[3] for r in rows], type=pa.int32()),
-            **{c: pa.array([r[4].get(c) for r in rows], type=pa.string())
-               for c in col_names},
-        })
-        col_list = ', '.join(f'"{c}"' for c in all_cols)
-        db.register('__batch__', arrow_batch)
-        db.execute(f'INSERT INTO "_raw_{tbl_name}" ({col_list}) SELECT {col_list} FROM __batch__')
-        db.unregister('__batch__')
-        if populated is not None:
-            populated.add(tbl_name)
-
-    # Fallback rows — use integer loop_id_int to match old behaviour
     if fallback_tags:
         fallback_tag_values: dict[str, list] = {
             tag: block[tag] for tag, _, _ in fallback_tags
@@ -402,31 +386,56 @@ def _load_loop(
                     'ref_table': first_tbl,
                 })
 
+    return table_batch
 
-def _insert_staging(
+
+def flush_table_batches(
     db: duckdb.DuckDBPyConnection,
-    tbl_name: str,
-    block_id: str,
-    block_idx: int,
-    loop_id: str,
-    iter_idx: int,
-    cols: dict[str, Any],
+    global_batch: dict[str, list[tuple]],
     populated: set[str] | None = None,
 ) -> None:
-    if not cols:
-        return
-    col_names = sorted(cols.keys())
-    col_list = (
-        '_block_id, _block_idx, _loop_id, _iter_idx'
-        + ''.join(f', "{c}"' for c in col_names)
-    )
-    placeholders = ', '.join(['?'] * (4 + len(col_names)))
-    db.execute(
-        f'INSERT INTO "_raw_{tbl_name}" ({col_list}) VALUES ({placeholders})',
-        [block_id, block_idx, loop_id, iter_idx] + [cols[c] for c in col_names],
-    )
-    if populated is not None:
-        populated.add(tbl_name)
+    """Insert all accumulated row data into DuckDB staging tables.
+
+    One Arrow RecordBatch INSERT per table, regardless of block count.
+    Builds Arrow arrays in a single pass over rows (column-major) for efficiency.
+    """
+    for tbl_name, rows in global_batch.items():
+        if not rows:
+            continue
+        col_names = sorted({k for _, _, _, _, cols in rows for k in cols})
+        if not col_names:
+            continue
+
+        # Single pass over rows to build all column arrays
+        n = len(rows)
+        bid_list: list[str | None] = [None] * n
+        bidx_list: list[int] = [0] * n
+        lid_list: list[str | None] = [None] * n
+        iidx_list: list[int] = [0] * n
+        col_lists: dict[str, list[str | None]] = {c: [None] * n for c in col_names}
+
+        for i, (bid, bidx, lid, iidx, cols) in enumerate(rows):
+            bid_list[i] = bid
+            bidx_list[i] = bidx
+            lid_list[i] = lid
+            iidx_list[i] = iidx
+            for c, v in cols.items():
+                col_lists[c][i] = v
+
+        all_cols = ['_block_id', '_block_idx', '_loop_id', '_iter_idx'] + col_names
+        arrow_batch = pa.record_batch({
+            '_block_id':  pa.array(bid_list,  type=pa.string()),
+            '_block_idx': pa.array(bidx_list, type=pa.int32()),
+            '_loop_id':   pa.array(lid_list,  type=pa.string()),
+            '_iter_idx':  pa.array(iidx_list, type=pa.int32()),
+            **{c: pa.array(col_lists[c], type=pa.string()) for c in col_names},
+        })
+        col_list = ', '.join(f'"{c}"' for c in all_cols)
+        db.register('__batch__', arrow_batch)
+        db.execute(f'INSERT INTO "_raw_{tbl_name}" ({col_list}) SELECT {col_list} FROM __batch__')
+        db.unregister('__batch__')
+        if populated is not None:
+            populated.add(tbl_name)
 
 
 # ---------------------------------------------------------------------------
@@ -582,12 +591,7 @@ def _insert_key_fk_stubs(
     topo: list[str],
     populated: set[str] | None = None,
 ) -> None:
-    """For key-FK PK columns still NULL, insert one parent stub row per block.
-
-    This mirrors _apply_fk's UUID fallback: when no parent row exists for a
-    block, a stub with a fresh UUID is created so that FK fill (second pass)
-    can propagate the same UUID to all child rows in that block.
-    """
+    """For key-FK PK columns still NULL, insert one parent stub row per block."""
     for tbl_name in topo:
         if populated is not None and tbl_name not in populated:
             continue
@@ -604,7 +608,6 @@ def _insert_key_fk_stubs(
             tgt_tbl = fk.target_table
             if tgt_tbl not in schema.tables:
                 continue
-            # One stub per block where child rows exist but no parent row exists
             db.execute(f"""
                 INSERT INTO "_raw_{tgt_tbl}" (_block_id, _block_idx, _loop_id, _iter_idx, "{tgt_col}")
                 SELECT c._block_id, MIN(c._block_idx), '{_SCALARS_LOOP_ID}', 0, gen_random_uuid()::TEXT
@@ -630,15 +633,12 @@ def propagate_fk_sql(
     """Fill missing FK/PK columns in DuckDB staging tables."""
     topo = _topo_order(schema)
 
-    # Pass 1: fill FK columns from data already in staging tables
     _run_fk_fill_pass(db, schema, topo, tag_to_column, propagate_fk, emit, populated)
 
-    # Create parent stubs for key-FK columns still NULL (one UUID per block),
-    # then pass 2 propagates those UUIDs to all child rows in the same block.
     _insert_key_fk_stubs(db, schema, topo, populated)
     _run_fk_fill_pass(db, schema, topo, tag_to_column, propagate_fk, emit, populated)
 
-    # --- UUID generation for remaining NULL non-synthetic PKs (non-FK PKs only) ---
+    # --- UUID generation for remaining NULL non-synthetic PKs ---
     sibling_groups = _sibling_groups(schema)
     sibling_canonicals: dict[str, str] = {}
     for group in sibling_groups:
@@ -684,9 +684,7 @@ def propagate_fk_sql(
                     WHERE "{pk_col.name}" IS NULL
                 """)
 
-    # --- Create stub parent rows for non-null FK values (deferred FK integrity) ---
-    # Composite FKs first: so the resulting stubs are visible to the single-col
-    # pass below, which can then create grandparent stubs for them.
+    # --- Create stub parent rows for non-null FK values ---
     for tbl_name in topo:
         if populated is not None and tbl_name not in populated:
             continue
@@ -700,7 +698,6 @@ def propagate_fk_sql(
                 continue
             src_cols = fk.source_columns
             tgt_cols = fk.target_columns
-            # Skip if any source column is absent from the staging table schema
             if not all(sc in col_by_name for sc in src_cols):
                 continue
             src_notnull = ' AND '.join(f'c."{sc}" IS NOT NULL' for sc in src_cols)
@@ -720,7 +717,6 @@ def propagate_fk_sql(
             if populated is not None:
                 populated.add(tgt_tbl)
 
-    # Single-col FKs: creates grandparent stubs for any stubs created above.
     for tbl_name in topo:
         if populated is not None and tbl_name not in populated:
             continue
@@ -763,41 +759,41 @@ def extract_merged_rows(
 
     merged_rows format: {tbl_name: {pk_tuple: row_dict}}
     row_dict keys include _block_id, _row_id, and all column names.
-    _row_id is assigned globally across all tables (sequential within each table,
-    with continuity across blocks).
 
-    When tag_presence_rows is provided, entries are appended for non-winning blocks
-    that contributed to a shared PK — enabling ORIGINAL-mode emit to re-emit those
-    rows in each contributing block.
+    Uses fetch_arrow_table() instead of fetchall() to avoid Python tuple
+    allocation overhead for large result sets.
     """
     merged_rows: dict[str, dict[tuple, dict]] = {}
     row_id_counters: dict[str, int] = {}
 
     for tbl_name, table in schema.tables.items():
-        # Skip tables that definitely have no rows (fast path via populated set).
         if populated is not None and tbl_name not in populated:
-            continue
-        count = db.execute(
-            f'SELECT COUNT(*) FROM "_raw_{tbl_name}"'
-        ).fetchone()[0]
-        if not count:
             continue
 
         is_keyless = table.primary_keys == ['_pycifparse_id']
         ns_pks = _non_synthetic_pks(table)
         data_cols = _non_pk_data_cols(table)
+        n_pks = len(ns_pks)
+        n_data = len(data_cols)
 
         if is_keyless:
-            # No cross-block merge — each row is independent
             data_sel = ', '.join(f'"{c}"' for c in data_cols) if data_cols else 'NULL AS _dummy'
-            rows = db.execute(
+            arrow_tbl = db.execute(
                 f'SELECT _block_id, {data_sel}'
                 f' FROM "_raw_{tbl_name}" ORDER BY _block_idx, _iter_idx'
-            ).fetchall()
-            col_names = ['_block_id'] + data_cols
+            ).fetch_arrow_table()
+            n_rows = len(arrow_tbl)
+            if n_rows == 0:
+                continue
+
+            block_ids = arrow_tbl.column(0).to_pylist()
+            data_arrays = [arrow_tbl.column(1 + j).to_pylist() for j in range(n_data)]
+
             tbl_rows: dict[tuple, dict] = {}
-            for row in rows:
-                row_dict = dict(zip(col_names, row))
+            for i in range(n_rows):
+                row_dict = {'_block_id': block_ids[i]}
+                for j, col in enumerate(data_cols):
+                    row_dict[col] = data_arrays[j][i]
                 pid = str(_uuid_module.uuid4())
                 rid = _next_rid(row_id_counters, tbl_name)
                 row_dict['_pycifparse_id'] = pid
@@ -807,63 +803,67 @@ def extract_merged_rows(
             continue
 
         if not ns_pks:
-            continue  # no way to key the merge
+            continue
 
         pk_sel = ', '.join(f'"{pk}"' for pk in ns_pks)
-        n_pks = len(ns_pks)
-
-        # One query: fetch all raw rows ordered by (block_idx, loop_id, iter_idx).
-        # This single pass handles conflict detection, tag-presence tracking, and
-        # merge — eliminating the separate GROUP BY query with expensive FIRST aggregates.
         data_sel_part = (', ' + ', '.join(f'"{c}"' for c in data_cols)) if data_cols else ''
-        raw_rows = db.execute(
+
+        # Single query: fetch all raw rows via Arrow (avoids Python tuple allocation).
+        # Ordered so first occurrence of each pk_key wins (no GROUP BY needed).
+        arrow_tbl = db.execute(
             f'SELECT _block_id, _block_idx, _loop_id, _iter_idx, {pk_sel}{data_sel_part}'
             f' FROM "_raw_{tbl_name}" ORDER BY _block_idx, _loop_id, _iter_idx'
-        ).fetchall()
+        ).fetch_arrow_table()
+        n_rows = len(arrow_tbl)
+        if n_rows == 0:
+            continue
 
-        winner_blocks: dict[tuple, str] = {}    # pk_key → first-seen block_id
-        winner_order: dict[tuple, tuple] = {}   # pk_key → (block_idx, loop_id, iter_idx)
-        winners_map: dict[tuple, list] = {}     # pk_key → [first non-null per data col]
-        seen_losers: dict[tuple, list[set]] = {}  # only allocated on first conflict
-        seen_tp: set[tuple] = set()             # dedup (block_id, col, pk_json) triples
+        # Materialise column arrays once (C-level; much cheaper than 500K Python tuples)
+        block_id_col  = arrow_tbl.column(0).to_pylist()
+        block_idx_col = arrow_tbl.column(1).to_pylist()
+        loop_id_col   = arrow_tbl.column(2).to_pylist()
+        iter_idx_col  = arrow_tbl.column(3).to_pylist()
+        pk_arrays  = [arrow_tbl.column(4 + j).to_pylist() for j in range(n_pks)]
+        dat_arrays = [arrow_tbl.column(4 + n_pks + j).to_pylist() for j in range(n_data)]
 
-        for row in raw_rows:
-            row_block_id: str = row[0]
-            pk_key = row[4:4 + n_pks]
-            vals = row[4 + n_pks:]              # data col values (may be empty tuple)
+        winner_blocks: dict[tuple, str] = {}
+        winner_order: dict[tuple, tuple] = {}
+        winners_map: dict[tuple, list] = {}
+        seen_losers: dict[tuple, list[set]] = {}
+        seen_tp: set[tuple] = set()
+
+        for i in range(n_rows):
+            row_block_id: str = block_id_col[i]
+            pk_key = tuple(pk_arrays[j][i] for j in range(n_pks))
+            vals = tuple(dat_arrays[j][i] for j in range(n_data))
 
             if pk_key not in winner_blocks:
-                # First occurrence: initialise winner state directly from this row.
-                # list(vals) is a C-level copy — far cheaper than [None]*n + inner loop.
                 winner_blocks[pk_key] = row_block_id
-                winner_order[pk_key] = (row[1], row[2], row[3])
+                winner_order[pk_key] = (block_idx_col[i], loop_id_col[i], iter_idx_col[i])
                 winners_map[pk_key] = list(vals)
-                continue  # No conflict possible; tag_presence only for non-first rows
+                continue
 
-            # Non-first occurrence: update winners and detect conflicts
             w = winners_map[pk_key]
-            for i, val in enumerate(vals):
+            for k, val in enumerate(vals):
                 if val is None:
                     continue
-                if w[i] is None:
-                    w[i] = val
-                elif w[i] != val:
+                if w[k] is None:
+                    w[k] = val
+                elif w[k] != val:
                     sl = seen_losers.get(pk_key)
                     if sl is None:
                         sl = [set() for _ in data_cols]
                         seen_losers[pk_key] = sl
-                    if val not in sl[i]:
-                        sl[i].add(val)
+                    if val not in sl[k]:
+                        sl[k].add(val)
                         emit_error(
-                            f"merge conflict on '{tbl_name}'.'{data_cols[i]}': "
-                            f"keeping '{w[i]}', ignoring '{val}'",
+                            f"merge conflict on '{tbl_name}'.'{data_cols[k]}': "
+                            f"keeping '{w[k]}', ignoring '{val}'",
                             table=tbl_name,
-                            column=data_cols[i],
+                            column=data_cols[k],
                             key_values=dict(zip(ns_pks, pk_key)),
                         )
 
-            # Tag-presence: record non-winning contributions so ORIGINAL mode
-            # can re-emit Set rows in every contributing block.
             if (tag_presence_rows is not None
                     and row_block_id != winner_blocks[pk_key]):
                 pk_json = json.dumps(list(pk_key))
@@ -872,22 +872,20 @@ def extract_merged_rows(
                     if tp_key not in seen_tp:
                         seen_tp.add(tp_key)
                         tag_presence_rows.append((row_block_id, tbl_name, pk_col, pk_json))
-                for i, col in enumerate(data_cols):
-                    if vals[i] is not None:
+                for k, col in enumerate(data_cols):
+                    if vals[k] is not None:
                         tp_key = (row_block_id, col, pk_json)
                         if tp_key not in seen_tp:
                             seen_tp.add(tp_key)
                             tag_presence_rows.append((row_block_id, tbl_name, col, pk_json))
 
-        # Build merged rows from Python data — no GROUP BY needed.
-        # Sort pk_keys by their first-occurrence order to match the original output ordering.
         tbl_rows = {}
         for pk_key in sorted(winner_blocks, key=lambda k: winner_order[k]):
             row_dict = dict(zip(ns_pks, pk_key))
             row_dict['_block_id'] = winner_blocks[pk_key]
             w = winners_map[pk_key]
-            for i, col in enumerate(data_cols):
-                row_dict[col] = w[i]
+            for k, col in enumerate(data_cols):
+                row_dict[col] = w[k]
             rid = _next_rid(row_id_counters, tbl_name)
             row_dict['_row_id'] = rid
             pk = tuple(row_dict.get(k) for k in table.primary_keys)
