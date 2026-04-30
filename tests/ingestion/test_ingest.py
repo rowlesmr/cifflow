@@ -1739,3 +1739,72 @@ class TestTransitiveBridgeFallback:
             "pattern_1 peaks should resolve radiation_id via pd_instr path"
         assert peak_radiation.get('pattern_2') == 'copper', \
             "pattern_2 peaks should resolve radiation_id via diffrn path"
+
+
+# ===========================================================================
+# TestAdbcFileBacked — ADBC Arrow bulk-insert path (file-backed SQLite only)
+# ===========================================================================
+
+class TestAdbcFileBacked:
+    """Verify that the ADBC code path correctly writes structured tables to a
+    file-backed SQLite database.  The :memory: path (executemany) is covered
+    by all other tests; this class targets the branch in _flush() that
+    is only reachable when sqlite_path is non-empty."""
+
+    def test_structured_data_written_via_adbc(self, tmp_path):
+        schema = _schema_a()
+        db_file = tmp_path / 'adbc_test.db'
+        conn = sqlite3.connect(str(db_file))
+        apply_schema(conn, schema)
+        apply_fallback_schema(conn)
+
+        f = _file(_block('B', scalars={
+            '_structure.id': _s('S1'),
+            '_cell.structure_id': _s('S1'),
+            '_cell.length_a': _s('5.4'),
+        }))
+        errors = ingest(f, conn, schema)
+        assert errors == []
+
+        cell_rows = conn.execute('SELECT * FROM "cell"').fetchall()
+        assert len(cell_rows) == 1
+        row = dict(zip([d[0] for d in conn.execute('SELECT * FROM "cell"').description], cell_rows[0]))
+        assert row['structure_id'] == 'S1'
+        assert row['length_a'] == '5.4'
+        conn.close()
+
+    def test_data_visible_from_fresh_connection(self, tmp_path):
+        schema = _schema_a()
+        db_file = tmp_path / 'adbc_test2.db'
+        conn = sqlite3.connect(str(db_file))
+        apply_schema(conn, schema)
+        apply_fallback_schema(conn)
+
+        f = _file(_block('B', scalars={
+            '_structure.id': _s('S1'),
+            '_cell.structure_id': _s('S1'),
+            '_cell.length_a': _s('5.4'),
+        }))
+        ingest(f, conn, schema)
+        conn.close()
+
+        conn2 = sqlite3.connect(str(db_file))
+        cell_rows = conn2.execute('SELECT * FROM "cell"').fetchall()
+        assert len(cell_rows) == 1
+        conn2.close()
+
+    def test_adbc_error_emitted_when_table_missing(self, tmp_path):
+        """If the structured table was dropped before ingest, ADBC fails and
+        the error is returned in the errors list (not raised)."""
+        schema = _schema_a()
+        db_file = tmp_path / 'adbc_test3.db'
+        conn = sqlite3.connect(str(db_file))
+        apply_schema(conn, schema)
+        apply_fallback_schema(conn)
+        conn.execute('DROP TABLE "structure"')
+        conn.commit()
+
+        f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
+        errors = ingest(f, conn, schema)
+        assert any('ADBC error' in e for e in errors)
+        conn.close()

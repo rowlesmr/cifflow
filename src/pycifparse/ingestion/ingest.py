@@ -12,6 +12,8 @@ import sqlite3
 import uuid as _uuid_module
 from typing import Any, Callable
 
+import pyarrow as pa
+
 from pycifparse.cifmodel.model import CifBlock, CifFile
 from pycifparse.dictionary.schema import BridgeColumnDef, SchemaSpec, TableDef
 from pycifparse.ingestion.duckdb_ingest import (
@@ -819,7 +821,7 @@ class _Ingester:
             )
 
         # Compute id_regime for all blocks in one pass (avoids O(n_blocks×n_rows) loop)
-        id_regimes = self._compute_id_regimes()
+        id_regimes = self._compute_id_regimes([b.name for b in blocks])
 
         # Record block membership (deferred until merged_rows is available)
         for position, block in enumerate(blocks):
@@ -1237,12 +1239,21 @@ class _Ingester:
 
     # ── id_regime determination ───────────────────────────────────────────────
 
-    def _compute_id_regimes(self) -> dict[str, str]:
-        """Compute id_regime for every block in one O(n_total_rows) pass."""
+    def _compute_id_regimes(self, block_ids: list[str]) -> dict[str, str]:
+        """Compute id_regime for every block.
+
+        Scans merged_rows until every block is confirmed 'assumed' (first
+        non-UUID PK found) or all rows are exhausted (uuid blocks need a full
+        scan).  Blocks confirmed 'assumed' are skipped in all subsequent rows
+        and tables, so the common all-assumed case exits very early.
+        """
+        remaining: set[str] = set(block_ids)   # blocks not yet confirmed 'assumed'
         block_all_uuid: dict[str, bool] = {}   # block_id → all PKs are UUIDs so far
-        block_has_pk: set[str] = set()         # block_ids that own at least one PK value
+        block_has_pk: set[str] = set()
 
         for tbl_name, tbl_rows in self.merged_rows.items():
+            if not remaining:
+                break
             table = self.schema.tables[tbl_name]
             non_synthetic_pks = [
                 k for k in table.primary_keys
@@ -1251,15 +1262,21 @@ class _Ingester:
             if not non_synthetic_pks:
                 continue
             for row in tbl_rows.values():
+                if not remaining:
+                    break
                 bid = row.get('_block_id')
-                if bid is None:
+                if bid is None or bid not in remaining:
                     continue
                 for pk_col in non_synthetic_pks:
                     v = row.get(pk_col)
                     if v is not None:
                         block_has_pk.add(bid)
                         if block_all_uuid.get(bid, True):
-                            block_all_uuid[bid] = _is_uuid(v)
+                            if not _is_uuid(v):
+                                block_all_uuid[bid] = False
+                                remaining.discard(bid)
+                                break  # done with this block; skip remaining pk_cols
+                            block_all_uuid[bid] = True
 
         return {
             bid: ('uuid' if block_all_uuid.get(bid, False) else 'assumed')
@@ -1310,33 +1327,90 @@ class _Ingester:
                 'id_regime': id_regime,
             })
 
-    # ── Flush ─────────────────────────────────────────────────────────────────
+    # ── Flush helpers ─────────────────────────────────────────────────────────
 
-    def _flush(self) -> None:
-        cur = self.conn.cursor()
+    def _build_arrow_for_table(
+        self, tbl_rows: dict[tuple, dict]
+    ) -> tuple[list[str], pa.Table]:
+        """Build an Arrow Table from a table's merged row dicts.
 
-        # Structured tables
+        Returns (cols, arrow_table).  All CIF value columns are string-typed;
+        _row_id is int64 so SQLite stores it as INTEGER.
+        """
+        rows = list(tbl_rows.values())
+        seen: dict[str, None] = {}
+        for r in rows:
+            seen.update(dict.fromkeys(r.keys()))
+        cols = list(seen)
+        arrays: dict[str, pa.Array] = {}
+        for c in cols:
+            vals = [r.get(c) for r in rows]
+            if c == '_row_id':
+                arrays[c] = pa.array(vals, type=pa.int64())
+            else:
+                arrays[c] = pa.array(
+                    [str(v) if v is not None else None for v in vals],
+                    type=pa.string(),
+                )
+        return cols, pa.table(arrays)
+
+    def _flush_structured_adbc(self, sqlite_path: str) -> None:
+        """Write structured tables to a file-backed SQLite via ADBC Arrow bulk insert.
+
+        ADBC opens its own connection to the same file.  Because the sqlite3
+        connection is in a deferred transaction (no DML yet), both connections
+        can acquire the WAL write lock sequentially without conflict.
+        """
+        import adbc_driver_sqlite.dbapi as _adbc_sqlite  # noqa: PLC0415
+
+        with _adbc_sqlite.connect(sqlite_path) as adbc_conn:
+            with adbc_conn.cursor() as adbc_cur:
+                for tbl_name, tbl_rows in self.merged_rows.items():
+                    if not tbl_rows:
+                        continue
+                    _, arrow_tbl = self._build_arrow_for_table(tbl_rows)
+                    try:
+                        adbc_cur.adbc_ingest(tbl_name, arrow_tbl, mode='append')
+                    except Exception as e:
+                        self._emit(
+                            f"ADBC error inserting into '{tbl_name}': {e}"
+                        )
+            adbc_conn.commit()
+
+    def _flush_structured_executemany(self, cur: sqlite3.Cursor) -> None:
+        """Write structured tables via sqlite3 executemany (fallback for :memory:)."""
         for tbl_name, tbl_rows in self.merged_rows.items():
             if not tbl_rows:
                 continue
             rows = list(tbl_rows.values())
-            # Determine columns as the union of all row keys (rows merged from stubs
-            # may have fewer keys than fully-populated rows).
-            seen: dict[str, None] = {}
-            for r in rows:
-                seen.update(dict.fromkeys(r.keys()))
-            cols = list(seen)
-            placeholders = ', '.join('?' for _ in cols)
+            # All rows share the same key set; use the first row to get column order.
+            cols = list(rows[0].keys())
             col_list = ', '.join(f'"{c}"' for c in cols)
+            placeholders = ', '.join('?' for _ in cols)
             sql = (
                 f'INSERT INTO "{tbl_name}" ({col_list}) '
                 f'VALUES ({placeholders})'
             )
             try:
-                col_arrays = [[r.get(c) for r in rows] for c in cols]
-                cur.executemany(sql, zip(*col_arrays))
+                cur.executemany(sql, (tuple(r.values()) for r in rows))
             except sqlite3.Error as e:
                 self._emit(f"sqlite3 error inserting into '{tbl_name}': {e}")
+
+    # ── Flush ─────────────────────────────────────────────────────────────────
+
+    def _flush(self) -> None:
+        cur = self.conn.cursor()
+
+        # Structured tables — use ADBC (Arrow bulk insert) for file-backed SQLite;
+        # fall back to executemany for :memory: connections (ADBC can't share them).
+        sqlite_path = next(
+            (r[2] for r in self.conn.execute('PRAGMA database_list') if r[1] == 'main'),
+            '',
+        )
+        if sqlite_path:
+            self._flush_structured_adbc(sqlite_path)
+        else:
+            self._flush_structured_executemany(cur)
 
         # _cif_fallback
         if self.fallback_rows:

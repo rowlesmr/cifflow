@@ -348,18 +348,28 @@ def _load_loop(
     # Pre-fetch all tag value lists once
     tag_values: dict[str, list] = {tag: block[tag] for tag in loop_tags}
 
+    # Pre-compute per-column su_col (None when column has no SU partner)
+    # to avoid repeated su_map lookups and _maybe_split_su call overhead in the hot loop
+    loop_tables_su: dict[str, list[tuple[str, str, str | None]]] = {
+        tbl: [(col, tag, su_map.get(canonical)) for col, tag, canonical in cols]
+        for tbl, cols in loop_tables.items()
+    }
+
     # Build per-table batch rows (single pass over iterations)
     table_batch: dict[str, list[tuple]] = {}
     for iter_idx in range(n_iters):
         for tbl_name in table_names:
             cols: dict[str, Any] = {}
-            for col_name, tag, canonical in loop_tables[tbl_name]:
+            for col_name, tag, su_col in loop_tables_su[tbl_name]:
                 val = tag_values[tag][iter_idx]
                 stored, _ = encode_value(val)
-                stored, su_val = _maybe_split_su(stored, canonical, su_map)
+                if su_col is not None and stored is not None:
+                    parts = split_su(stored)
+                    if parts:
+                        cols[col_name] = parts[0]
+                        cols[su_col] = parts[1]
+                        continue
                 cols[col_name] = stored
-                if su_val is not None:
-                    cols[su_map[canonical]] = su_val
             table_batch.setdefault(tbl_name, []).append(
                 (block_id, block_idx, loop_id, iter_idx, cols)
             )
@@ -778,26 +788,23 @@ def extract_merged_rows(
 
         if is_keyless:
             data_sel = ', '.join(f'"{c}"' for c in data_cols) if data_cols else 'NULL AS _dummy'
-            arrow_tbl = db.execute(
+            rows = db.execute(
                 f'SELECT _block_id, {data_sel}'
                 f' FROM "_raw_{tbl_name}" ORDER BY _block_idx, _iter_idx'
-            ).fetch_arrow_table()
-            n_rows = len(arrow_tbl)
-            if n_rows == 0:
+            ).fetchall()
+            if not rows:
                 continue
 
-            block_ids = arrow_tbl.column(0).to_pylist()
-            data_arrays = [arrow_tbl.column(1 + j).to_pylist() for j in range(n_data)]
-
             tbl_rows: dict[tuple, dict] = {}
-            for i in range(n_rows):
-                row_dict = {'_block_id': block_ids[i]}
+            rid = 1
+            for row in rows:
+                row_dict: dict = {'_block_id': row[0]}
                 for j, col in enumerate(data_cols):
-                    row_dict[col] = data_arrays[j][i]
+                    row_dict[col] = row[1 + j]
                 pid = str(_uuid_module.uuid4())
-                rid = _next_rid(row_id_counters, tbl_name)
                 row_dict['_pycifparse_id'] = pid
                 row_dict['_row_id'] = rid
+                rid += 1
                 tbl_rows[(pid,)] = row_dict
             merged_rows[tbl_name] = tbl_rows
             continue
@@ -808,48 +815,45 @@ def extract_merged_rows(
         pk_sel = ', '.join(f'"{pk}"' for pk in ns_pks)
         data_sel_part = (', ' + ', '.join(f'"{c}"' for c in data_cols)) if data_cols else ''
 
-        # Single query: fetch all raw rows via Arrow (avoids Python tuple allocation).
-        # Ordered so first occurrence of each pk_key wins (no GROUP BY needed).
-        arrow_tbl = db.execute(
-            f'SELECT _block_id, _block_idx, _loop_id, _iter_idx, {pk_sel}{data_sel_part}'
+        # fetchall() avoids Arrow buffer allocation; tuple slices give pk_key/vals directly
+        rows = db.execute(
+            f'SELECT _block_id, {pk_sel}{data_sel_part}'
             f' FROM "_raw_{tbl_name}" ORDER BY _block_idx, _loop_id, _iter_idx'
-        ).fetch_arrow_table()
-        n_rows = len(arrow_tbl)
-        if n_rows == 0:
+        ).fetchall()
+        if not rows:
             continue
 
-        # Materialise column arrays once (C-level; much cheaper than 500K Python tuples)
-        block_id_col  = arrow_tbl.column(0).to_pylist()
-        block_idx_col = arrow_tbl.column(1).to_pylist()
-        loop_id_col   = arrow_tbl.column(2).to_pylist()
-        iter_idx_col  = arrow_tbl.column(3).to_pylist()
-        pk_arrays  = [arrow_tbl.column(4 + j).to_pylist() for j in range(n_pks)]
-        dat_arrays = [arrow_tbl.column(4 + n_pks + j).to_pylist() for j in range(n_data)]
+        pk_end = 1 + n_pks  # first pk col is at index 1
 
-        winner_blocks: dict[tuple, str] = {}
-        winner_order: dict[tuple, tuple] = {}
-        winners_map: dict[tuple, list] = {}
+        tbl_rows: dict[tuple, dict] = {}
         seen_losers: dict[tuple, list[set]] = {}
         seen_tp: set[tuple] = set()
+        rid = 1
 
-        for i in range(n_rows):
-            row_block_id: str = block_id_col[i]
-            pk_key = tuple(pk_arrays[j][i] for j in range(n_pks))
-            vals = tuple(dat_arrays[j][i] for j in range(n_data))
+        for row in rows:
+            row_block_id: str = row[0]
+            pk_key = row[1:pk_end]
+            vals = row[pk_end:]
 
-            if pk_key not in winner_blocks:
-                winner_blocks[pk_key] = row_block_id
-                winner_order[pk_key] = (block_idx_col[i], loop_id_col[i], iter_idx_col[i])
-                winners_map[pk_key] = list(vals)
+            if pk_key not in tbl_rows:
+                row_dict: dict = dict(zip(ns_pks, pk_key))
+                row_dict['_block_id'] = row_block_id
+                for k, col in enumerate(data_cols):
+                    row_dict[col] = vals[k]
+                row_dict['_row_id'] = rid
+                rid += 1
+                tbl_rows[pk_key] = row_dict
                 continue
 
-            w = winners_map[pk_key]
+            row_dict = tbl_rows[pk_key]
             for k, val in enumerate(vals):
                 if val is None:
                     continue
-                if w[k] is None:
-                    w[k] = val
-                elif w[k] != val:
+                col = data_cols[k]
+                existing = row_dict.get(col)
+                if existing is None:
+                    row_dict[col] = val
+                elif existing != val:
                     sl = seen_losers.get(pk_key)
                     if sl is None:
                         sl = [set() for _ in data_cols]
@@ -857,15 +861,15 @@ def extract_merged_rows(
                     if val not in sl[k]:
                         sl[k].add(val)
                         emit_error(
-                            f"merge conflict on '{tbl_name}'.'{data_cols[k]}': "
-                            f"keeping '{w[k]}', ignoring '{val}'",
+                            f"merge conflict on '{tbl_name}'.'{col}': "
+                            f"keeping '{existing}', ignoring '{val}'",
                             table=tbl_name,
-                            column=data_cols[k],
+                            column=col,
                             key_values=dict(zip(ns_pks, pk_key)),
                         )
 
             if (tag_presence_rows is not None
-                    and row_block_id != winner_blocks[pk_key]):
+                    and row_block_id != row_dict['_block_id']):
                 pk_json = json.dumps(list(pk_key))
                 for pk_col in ns_pks:
                     tp_key = (row_block_id, pk_col, pk_json)
@@ -879,17 +883,6 @@ def extract_merged_rows(
                             seen_tp.add(tp_key)
                             tag_presence_rows.append((row_block_id, tbl_name, col, pk_json))
 
-        tbl_rows = {}
-        for pk_key in sorted(winner_blocks, key=lambda k: winner_order[k]):
-            row_dict = dict(zip(ns_pks, pk_key))
-            row_dict['_block_id'] = winner_blocks[pk_key]
-            w = winners_map[pk_key]
-            for k, col in enumerate(data_cols):
-                row_dict[col] = w[k]
-            rid = _next_rid(row_id_counters, tbl_name)
-            row_dict['_row_id'] = rid
-            pk = tuple(row_dict.get(k) for k in table.primary_keys)
-            tbl_rows[pk] = row_dict
         merged_rows[tbl_name] = tbl_rows
 
     return merged_rows
