@@ -3,8 +3,9 @@ Unit and integration tests for check_fidelity().
 """
 
 import pathlib
-import sqlite3
 from unittest.mock import MagicMock, patch
+
+import duckdb
 
 import pytest
 
@@ -676,7 +677,7 @@ def test_table_present_operational_error():
         primary_keys=['id'],
     )
     mock_conn = MagicMock()
-    mock_conn.execute.side_effect = sqlite3.OperationalError('no such table')
+    mock_conn.execute.side_effect = Exception('no such table')
     result = _table_present(mock_conn, 'test', tdef)
     assert result is False
 
@@ -692,7 +693,7 @@ def test_normalised_rows_operational_error():
         primary_keys=['id'],
     )
     mock_conn = MagicMock()
-    mock_conn.execute.side_effect = sqlite3.OperationalError('no such table')
+    mock_conn.execute.side_effect = Exception('no such table')
     result = _normalised_rows(mock_conn, 'test', tdef, {}, {}, {}, set())
     assert result == []
 
@@ -797,8 +798,8 @@ def test_compare_schema_mismatch_reverse_direction():
 def test_compare_fallback_no_table():
     """_compare_fallback returns [] when _cif_fallback table does not exist."""
     from pycifparse.fidelity.check import _compare_fallback
-    conn_a = sqlite3.connect(':memory:')
-    conn_b = sqlite3.connect(':memory:')
+    conn_a = duckdb.connect()
+    conn_b = duckdb.connect()
     result = _compare_fallback(conn_a, conn_b)
     conn_a.close()
     conn_b.close()
@@ -868,11 +869,9 @@ def test_normalised_rows_synthetic_set_skipped():
         primary_keys=['id'],
     )
 
-    conn = sqlite3.connect(':memory:')
-    conn.row_factory = sqlite3.Row
-    conn.execute('CREATE TABLE "atom" (id TEXT, x REAL, _row_id TEXT)')
+    conn = duckdb.connect()
+    conn.execute('CREATE TABLE "atom" (id TEXT, x DOUBLE, _row_id TEXT)')
     conn.execute("INSERT INTO atom VALUES ('A1', 1.5, 'ROW1')")
-    conn.commit()
 
     # synthetic_set says ('atom', 'ROW1', 'x') is default-filled → should be skipped
     synthetic_set = {('atom', 'ROW1', 'x')}
@@ -892,12 +891,11 @@ def test_normalised_rows_synthetic_set_skipped():
 def test_load_synthetic_set_with_data():
     """_load_synthetic_set returns set of tuples when _cif_synthetic exists and has rows."""
     from pycifparse.fidelity.check import _load_synthetic_set
-    conn = sqlite3.connect(':memory:')
+    conn = duckdb.connect()
     conn.execute(
         'CREATE TABLE _cif_synthetic (table_name TEXT, row_id TEXT, column_name TEXT)'
     )
     conn.execute("INSERT INTO _cif_synthetic VALUES ('cell', 'R1', 'length_a')")
-    conn.commit()
     result = _load_synthetic_set(conn)
     conn.close()
     assert ('cell', 'R1', 'length_a') in result
@@ -911,8 +909,8 @@ def test_compare_schema_mismatch_no_fallback_table():
     """_fallback_tags returns [] when _cif_fallback does not exist (lines 672-673)."""
     from pycifparse.fidelity.check import _compare_schema_mismatch
     schema = _simple_set_schema()
-    conn_a = sqlite3.connect(':memory:')
-    conn_b = sqlite3.connect(':memory:')
+    conn_a = duckdb.connect()
+    conn_b = duckdb.connect()
     # Neither connection has _cif_fallback or structured tables
     result = _compare_schema_mismatch(conn_a, conn_b, schema)
     conn_a.close()

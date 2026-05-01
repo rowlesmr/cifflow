@@ -1,5 +1,17 @@
 # pycifparse — Lessons Learned
 
+## Lesson 117 — DuckDB migration audit: most modules were already DuckDB; only test_check_fidelity.py needed changes (2026-05-01)
+
+**Context:** A post-migration audit swept every non-ingest file for SQLite patterns. Files checked: `fidelity/check.py`, `database/compact.py`, `database/__init__.py`, `inspect/_ingest.py`, `validation/_db_validate.py`, `validation/_validate.py`, `tests/fidelity/test_check_fidelity.py`, `tests/dictionary/test_schema.py`.
+
+**Finding:** All source files were already fully DuckDB. Only `test_check_fidelity.py` retained SQLite: 6 test helpers used `sqlite3.connect(':memory:')` as a duck-typed substitute for DuckDB connections, and two mock `side_effect` used `sqlite3.OperationalError`.
+
+**Fix:** In `test_check_fidelity.py`: replaced `sqlite3.connect(':memory:')` with `duckdb.connect()`, removed `row_factory` lines (unused by DuckDB cursor), replaced `sqlite3.OperationalError` mock side-effects with plain `Exception`, and changed `REAL` column type to `DOUBLE`. Import changed from `sqlite3` to `duckdb`. `test_schema.py` kept as-is — its `_execute_schema` helper correctly uses SQLite to validate `emit_create_statements` SQLite DDL (a public API function, not the ingest path).
+
+**Rule:** When using a DB connection in a test purely as a duck-typed fixture (no DB-specific API), prefer the actual target DB type. Duck typing works until a function adds a DB-specific API call, at which point every test using the wrong type silently breaks.
+
+---
+
 ## Lesson 116 — Pre-fetch all rows at the start of an emit pass to eliminate N+1 DuckDB queries (2026-05-01)
 
 **Context:** `emit.py` collection functions (`_collect_original`, `_collect_grouped`, `_collect_one_block`) previously called `_fetch_rows(conn, table_name, '"_block_id" = ?', ...)` once per block per table — an N+1 pattern. For `second.cif` (156 blocks × ~125 populated tables) this produced 19,500 individual DuckDB queries.

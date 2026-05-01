@@ -4,7 +4,29 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current state (2026-05-01, rust branch):** DuckDB migration complete. All 1749 tests pass. Performance after two sessions of optimization on `second.cif` (18 MB, 156 blocks, `cif_pow.dic`, 163 tables):
+**Current state (2026-05-01, rust branch):** DuckDB migration fully complete and audited. All 1749 tests pass. Lessons 114–117.
+
+### What was done this session (2026-05-01)
+
+**DuckDB migration audit** — swept every non-ingest source file and test for remaining SQLite patterns:
+
+| File | Result |
+|------|--------|
+| `fidelity/check.py` | Already DuckDB — no changes |
+| `database/compact.py` | Already DuckDB — no changes |
+| `inspect/_ingest.py` | Already DuckDB — no changes |
+| `validation/_db_validate.py` | Already DuckDB — no changes |
+| `validation/_validate.py` | Already DuckDB — no changes |
+| `tests/fidelity/test_check_fidelity.py` | **Changed** — replaced 6× `sqlite3.connect` with `duckdb.connect()`, 2× `sqlite3.OperationalError` mock with `Exception`, removed `row_factory`, `REAL` → `DOUBLE` |
+| `tests/dictionary/test_schema.py` | Left as-is — correctly uses SQLite to validate `emit_create_statements` SQLite DDL output |
+
+**Ingest dead code** — confirmed stale entries in the previous RESUME section removed (`_process_loop`, `_process_scalar`, `_apply_fk`, `_merge_into` were already deleted in an earlier session). `_loops_compatible` is live.
+
+**Emit optimization** — `_EmitCache` added to `emit.py`; eliminated 19,500 → ~125 DuckDB queries per emit pass. Emit: 82s → 12s. Lesson 116.
+
+**`_merge_keyed_fast` removed** — dead code; benchmarks showed no improvement over GROUP BY path (both bottleneck on `ROW_NUMBER() OVER (ORDER BY ...)`). Lesson 114.
+
+### Performance summary (`second.cif`, 18 MB, 156 blocks, `cif_pow.dic`, 163 tables)
 
 | Phase | Time |
 |-------|------|
@@ -13,19 +35,37 @@
 | Emit | ~12s |
 | **Total** | **~25s** |
 
-**Ingest bottlenecks (hard to optimize further):**
-- `create_final_tables` ~5.6s — dominated by `ROW_NUMBER() OVER (ORDER BY ...)` sort in `_merge_keyed` for large tables (pd_meas, pd_calc_component: 100K–240K rows). No easy fix: the sort is inherent to assigning sequential `_row_id` values.
-- `propagate_fk_sql` ~2.4s — FK fill passes (first pass ~1.4s, second ~0.3s, stubs ~0.1s, UUID gen ~0.1s).
+**Ingest bottlenecks (hard to optimize further without architectural change):**
+- `create_final_tables` ~5.6s — `ROW_NUMBER() OVER (ORDER BY ...)` sort in `_merge_keyed` for large tables (pd_meas, pd_calc_component: 100K–240K rows). Sort is inherent to assigning sequential `_row_id` values.
+- `propagate_fk_sql` ~2.4s — FK fill passes.
 - `flush_table_batches` ~0.9s, `load_block_data` ~1.2s.
 
-**Emit optimization done (2026-05-01):** Added `_EmitCache` in `emit.py` that pre-fetches all table rows once, eliminating N+1 DuckDB query pattern (19,500 → ~125 queries). Emit: 82s → 12s. Lessons 114–116.
+### Test suite state
 
-**Ingest dead code:** `_process_loop`, `_process_scalar`, `_apply_fk`, `_merge_into`, `_loops_compatible` in `ingest.py` are still present but never called. Delete when convenient.
-
-**Test suite state (2026-05-01):**
-- 1749 tests pass (full suite, rust branch)
+- **1749 tests pass** (full suite, rust branch, 2026-05-01)
 - Run: `.venv/Scripts/python -m pytest -x -q`
 - Profiler: `.venv/Scripts/python profile_pipeline.py --input second`
+
+### Open decisions
+
+1. **`emit_create_statements` DDL target** — this function generates SQLite DDL (`TEXT`, `INTEGER`, `DEFERRABLE INITIALLY DEFERRED`) and is still exported as public API. The ingest path no longer uses it (DuckDB ingest has its own DDL). Decision needed: should `emit_create_statements` be updated to generate DuckDB DDL, or kept as SQLite DDL for backward compatibility? Currently tested with SQLite in `test_schema.py`.
+
+2. **`_block_id`/`_row_id` rename** — todo.md documents a pervasive rename to `_pycifparse_block_id`/`_pycifparse_row_id`. This is a large mechanical change touching schema generation, ingest, output, compactification, fidelity, inspect, all tests, and prompts. Decide when/whether to do this before or after the rust branch merges to main.
+
+3. **rust branch merge to main** — the rust branch contains: PyO3-backed `CifFile` (Phase B), Arrow IR pipeline, DuckDB ingest (Phase C), and all associated performance work. Main branch is still on the old Python CifFile + SQLite path. Decide merge timing relative to remaining functional work (severity unification, `_cif_synthetic` table, `CifBuilder` cross-type duplicates).
+
+4. **Ingest further optimization** — current 12s ingest is already 97× faster than the original Python path. The main remaining bottleneck (`ROW_NUMBER()` sort for 100K+ row tables) would require pre-computing a sort key during `flush_table_batches`. Not in scope unless a specific use case requires it.
+
+5. **`_validation_result` table** — created for two UUID-regime checks but its ongoing role is unclear now that the content validator uses a report-object approach. Scope whether to extend, retain, or remove it before adding further validation.
+
+### What's next
+
+The DuckDB migration and performance optimization work is complete. Remaining work in `tasks/todo.md` (see "Remaining items" section):
+- Expand tests for file-based loading
+- Unify severity levels across parser/ingest/validation
+- `CifBuilder` cross-type duplicate tag detection
+- `_cif_synthetic` scoping and `_validation_result` table decision
+- `source_line`/`source_col` propagation to `ValidationIssue`
 
 ---
 
@@ -472,9 +512,8 @@ Target: 27.5s → ~2.7s. Remaining bottlenecks and candidate approaches:
 
 #### Open decisions
 
-1. **Phase C.6 deletion:** `_process_loop`, `_process_scalar`, `_apply_fk`, `_merge_into`, `_loops_compatible` are dead code. Delete now or after 10× milestone?
-2. **SQLite ADBC:** `adbc_driver_sqlite` allows Arrow → SQLite without Python intermediary. Worth the new dependency if executemany flush becomes the bottleneck after other fixes.
-3. **FK propagation scope:** Current `propagate_fk_sql` emits one UPDATE per `(fk_edge, block)`. Removing the `_block_id` filter makes it one UPDATE per FK edge total — valid only if the JOIN is block-scoped anyway (it is, via parent/child sharing `_block_id`). Verify before changing.
+1. **SQLite ADBC:** `adbc_driver_sqlite` allows Arrow → SQLite without Python intermediary. Worth the new dependency if executemany flush becomes the bottleneck after other fixes.
+2. **FK propagation scope:** Current `propagate_fk_sql` emits one UPDATE per `(fk_edge, block)`. Removing the `_block_id` filter makes it one UPDATE per FK edge total — valid only if the JOIN is block-scoped anyway (it is, via parent/child sharing `_block_id`). Verify before changing.
 
 ---
 
