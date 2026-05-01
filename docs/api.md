@@ -11,15 +11,16 @@ otherwise noted.
 pycifparse/
 ├── __init__.py           # Top-level re-exports (all public symbols)
 ├── types.py              # CifVersion, ValueType, ParseError, CifParserEvents
+├── pycifparse_core/      # PyO3 Rust extension (CifFile, CifBlock, CifSaveFrame,
+│                         #   parse_cif, parse_arrow, parse_arrow_file)
 ├── lexer/
 │   ├── lexer.py          # Lexer (internal)
 │   └── tokens.py         # Token, LexerError (internal)
 ├── parser/
 │   └── parser.py         # CifParser
 ├── cifmodel/
-│   ├── model.py          # CifFile, CifBlock, CifSaveFrame, CifValue
-│   ├── scalar.py         # CifScalar
-│   ├── builder.py        # CifBuilder, build()
+│   ├── model.py          # CifFile, CifBlock, CifSaveFrame, CifValue (re-exports from Rust)
+│   ├── builder.py        # CifBuilder, build(), build_arrow(), build_arrow_file(), cif_to_arrow()
 │   ├── writer.py         # CifWriter, BlockWriter, SaveFrameWriter, CifInput
 │   ├── clean.py          # clean, CleanWarning
 │   └── textfield.py      # transform_multiline (internal)
@@ -31,14 +32,15 @@ pycifparse/
 │   ├── schema.py         # ForeignKeyDef, ColumnDef, TableDef, SchemaSpec,
 │   │                     #   generate_schema, emit_create_statements,
 │   │                     #   emit_fallback_create_statements
-│   ├── schema_apply.py   # apply_schema, apply_fallback_schema
+│   ├── schema_apply.py   # (stub — apply_schema/apply_fallback_schema removed; setup is internal to ingest())
 │   ├── resolver.py       # ResolvedTag, resolve_tag
 │   ├── visualise.py      # visualise_schema, visualise_schema_html
 │   └── js/               # bundled JS package data (viz.js 2.1.2, svg-pan-zoom 3.6.1)
 ├── ingestion/
-│   └── ingest.py         # ingest()
+│   ├── ingest.py         # ingest(), IngestionError
+│   └── duckdb_ingest.py  # DuckDB table setup and bulk-load helpers (internal)
 ├── database/
-│   └── compact.py        # compactify_database(), convert_database()
+│   └── compact.py        # convert_database()
 ├── output/
 │   ├── emit.py           # emit()
 │   ├── plan.py           # EmitMode, OutputPlan, BlockSpec
@@ -65,25 +67,23 @@ as-is from the repository root and demonstrate the full public API in context.
 ### `example_workflow.py`
 
 Full pipeline demonstration: dictionary loading → schema generation → CIF parsing
-→ SQLite ingestion → compactification → CIF emission in all four modes.
+→ DuckDB ingestion → CIF emission in all four modes.
 
 Steps covered:
 1. Load `cif_pow.dic` via `DictionaryLoader` (with JSON cache)
 2. Spot-check a tag via `resolve_tag`
 3. Generate schema via `generate_schema`
 4. Parse a CIF file via `build`
-5. Create a database and apply schema via `apply_schema` + `apply_fallback_schema`
-6. Ingest via `ingest`
-7. Compact export via `compactify_database`
-8. Emit in `ORIGINAL` mode
-9. Emit in `GROUPED` mode
-10. Emit in `ONE_BLOCK` mode with a custom `OutputPlan`
-11. Emit in `ALL_BLOCKS` mode
-12. Type-cast export via `convert_database`
-13. Fidelity checks for all four emit modes via `check_fidelity`
+5. Ingest via `ingest` (returns a `duckdb.DuckDBPyConnection`; schema setup is internal)
+6. Emit in `ORIGINAL` mode
+7. Emit in `GROUPED` mode
+8. Emit in `ONE_BLOCK` mode with a custom `OutputPlan`
+9. Emit in `ALL_BLOCKS` mode
+10. Type-cast export via `convert_database`
+11. Fidelity checks for all four emit modes via `check_fidelity`
 
-Output files written: `output.db`, `output_compact.db`, `output_original.cif`,
-`output_grouped.cif`, `output_one_block.cif`, `output_all_blocks.cif`.
+Output files written: `output_original.cif`, `output_grouped.cif`,
+`output_one_block.cif`, `output_all_blocks.cif`.
 
 ### `example_fidelity.py`
 
@@ -201,30 +201,25 @@ exception on malformed input.
 ### `CifValue`
 
 ```python
-CifValue = Union[CifScalar, list, dict]
+CifValue = Union[str, list, dict]
 ```
 
 The type of a single value element stored in the model:
-- `CifScalar` — a scalar value (all types including PLACEHOLDER, stored as raw string with `value_type`)
+- `str` — a scalar value; plain Python string exactly as it appeared in the source
 - `list` — a CIF 2.0 list value (`[1 2 3]`), stored as `list[CifValue]`
 - `dict` — a CIF 2.0 table value (`{"k": v}`), stored as `dict[str, CifValue]`
 
-All values are stored as raw strings exactly as they appeared in the source.
+**Encoding conventions for scalars:**
 
----
+| Stored string | Meaning | Emit behaviour |
+|---|---|---|
+| `'.'` or `'?'` (1 char) | PLACEHOLDER — inapplicable or unknown | bare, unquoted |
+| `'"."'` or `'"?"'` (3 chars, with quotes) | Quoted dot/question-mark | emit with quotes |
+| `'\x00[...]'` / `'\x00{...}'` | CIF container (JSON, `\x00` prefix) | decode JSON |
+| anything else | raw CIF value | re-quote based on content |
 
-### `CifScalar`
-
-```python
-class CifScalar(str):
-    value_type: ValueType
-    def __new__(cls, value: str, value_type: ValueType = ValueType.STRING) -> 'CifScalar': ...
-```
-
-A CIF scalar value.  Subclasses `str` so all string operations and
-`isinstance(v, str)` checks work unchanged.  The `value_type` attribute carries
-the original lexical form assigned by the lexer and is never modified after
-construction.
+`ValueType` is no longer exposed in the Python API; encoding conventions carry
+the quoting semantics.
 
 ---
 
@@ -254,7 +249,8 @@ frame.loops            # → list[list[str]]  each inner list is one loop's tags
 - `tags` includes both scalar tags and loop tags, in file order.
 - `loops` lists only the grouped loop structures; use it to determine which
   tags belong to which loop.
-- Scalar values are returned as `CifScalar` instances (a `str` subclass) carrying the original `ValueType` assigned by the lexer.  List and table container values are plain `list` and `dict`.
+- Scalar values are plain Python `str`.  Container values are plain `list` and `dict`.
+  See `CifValue` encoding conventions for how PLACEHOLDER and quoted sentinels are represented.
 
 ---
 
@@ -391,6 +387,57 @@ for block_name in cif.blocks:
 
 ---
 
+### `build_arrow(source, *, mode)` / `build_arrow_file(path, *, mode)`
+
+```python
+def build_arrow(
+    source: str,
+    *,
+    mode: Literal['strict', 'pad'] = 'pad',
+) -> tuple[list[pa.RecordBatch], list[ParseError]]: ...
+
+def build_arrow_file(
+    path: str,
+    *,
+    mode: Literal['strict', 'pad'] = 'pad',
+) -> tuple[list[pa.RecordBatch], list[ParseError]]: ...
+```
+
+Parse CIF source (or a file path) and return Arrow RecordBatches directly.
+`build_arrow_file` performs file I/O in Rust — no Python file objects are created.
+
+Each `RecordBatch` covers one logical namespace section:
+
+- **Scalar batch** — all scalar tags in a block/save-frame; `_loop_id = '__scalars__'`
+- **Loop batch** — one loop; `_loop_id = '__loop_0__'`, `'__loop_1__'`, …
+
+Every batch carries five metadata columns:
+
+| Column | Type | Notes |
+|---|---|---|
+| `_block_idx` | `Int32` | Block index in file order |
+| `_block_name` | `Utf8` | Block name |
+| `_frame_idx` | `Int32` (nullable) | Save frame index; `NULL` for block-level |
+| `_frame_name` | `Utf8` (nullable) | Save frame name; `NULL` for block-level |
+| `_loop_id` | `Utf8` | `'__scalars__'` or `'__loop_N__'` |
+
+Followed by one `Utf8` column per tag in that batch.  Container values are
+stored as `\x00` + JSON.
+
+---
+
+### `cif_to_arrow(cif)`
+
+```python
+def cif_to_arrow(cif: CifFile) -> list[pa.RecordBatch]: ...
+```
+
+Convert any `CifFile` (whether from `build()` or constructed via `CifWriter`)
+to the same Arrow RecordBatch format as `build_arrow()`.  No errors are
+returned — the `CifFile` is already validated.
+
+---
+
 ## CIF model — construction and editing (`pycifparse.cifmodel.writer`)
 
 All symbols are importable from `pycifparse.cifmodel.writer` or the top-level `pycifparse` package.
@@ -398,16 +445,15 @@ All symbols are importable from `pycifparse.cifmodel.writer` or the top-level `p
 ### `CifInput`
 
 ```python
-CifInput = Union[int, float, str, bool, CifScalar, list, dict]
+CifInput = Union[int, float, str, list, dict]
 ```
 
 Accepted input type for all value-setting methods.  Conversion rules:
-- `CifScalar` — used as-is; `value_type` preserved
-- `bool` → `CifScalar("true"/"false", STRING)`
-- `int` / `float` → `CifScalar(str(v), STRING)`
-- `'.'` or `'?'` (unquoted) → `CifScalar(v, PLACEHOLDER)`
-- other `str` → `CifScalar(v, STRING)`
-- `list` / `dict` → recursively converted (CIF 2.0 containers)
+- `bool` → `"true"` / `"false"`
+- `int` / `float` → `str(v)`
+- `'.'` or `'?'` (unquoted single char) → stored as PLACEHOLDER sentinel
+- other `str` → stored as raw string
+- `list` / `dict` → recursively converted (CIF 2.0 containers), stored as `\x00` + JSON
 
 ---
 
@@ -693,7 +739,7 @@ Pass an `OutputPlan` to `emit()` to control category and column ordering.
 
 ```python
 def emit(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
     *,
     mode: EmitMode = EmitMode.ORIGINAL,
@@ -741,7 +787,7 @@ CIF string.
 
 | Parameter | Type | Notes |
 |---|---|---|
-| `conn` | `sqlite3.Connection` | Populated by `ingest()`; read-only during emission |
+| `conn` | `duckdb.DuckDBPyConnection` | Returned by `ingest()`; read-only during emission |
 | `schema` | `SchemaSpec` | The schema used when `conn` was ingested |
 | `mode` | `EmitMode` | Block partitioning strategy; default `ORIGINAL` |
 | `version` | `CifVersion` | Controls magic line and quoting strategy |
@@ -1222,7 +1268,11 @@ Returns one `CREATE TABLE IF NOT EXISTS` string per table.  All value columns
 are declared `TEXT` regardless of `ColumnDef.type_contents`.  All FK constraints
 carry `DEFERRABLE INITIALLY DEFERRED`.  On tables where `_row_id` is not already
 part of the `PRIMARY KEY`, a table-level `UNIQUE ("_block_id", "_row_id")`
-constraint is emitted.  Output is valid SQLite DDL.
+constraint is emitted.
+
+This function generates SQLite-compatible DDL for inspection and documentation
+purposes.  The DuckDB ingest path (`ingest()`) creates its own tables internally
+and does not use this function.
 
 ---
 
@@ -1232,9 +1282,12 @@ constraint is emitted.  Output is valid SQLite DDL.
 def emit_fallback_create_statements() -> list[str]:
 ```
 
-Returns four SQL strings: the `CREATE TABLE IF NOT EXISTS` for `_cif_fallback`,
-its lookup index, `CREATE TABLE IF NOT EXISTS` for `_block_dataset_membership`,
-and `CREATE TABLE IF NOT EXISTS` for `_validation_result`.
+Returns SQL strings describing the infrastructure tables created internally
+by `ingest()`: the `CREATE TABLE IF NOT EXISTS` for `_cif_fallback`, its
+lookup index, `_block_dataset_membership`, and `_validation_result`.
+
+This function is for inspection and documentation purposes.  The DuckDB ingest
+path creates these tables internally; callers do not need to call this function.
 
 **`_cif_fallback`** — stores all tag/value pairs not routed to a structured table.
 PK: `(_block_id, _row_id, tag)`.
@@ -1268,43 +1321,6 @@ PK: `(_block_id, _audit_dataset_id)`.
 | `block_id` | TEXT | nullable |
 | `detail` | TEXT | nullable |
 | `id_regime` | TEXT | nullable |
-
----
-
-### `apply_schema(conn, schema, *, drop_existing=False)`
-
-```python
-def apply_schema(
-    conn: sqlite3.Connection,
-    schema: SchemaSpec,
-    *,
-    drop_existing: bool = False,
-) -> None:
-```
-
-Executes all `CREATE TABLE` statements against `conn` in a single transaction.
-Enables `PRAGMA foreign_keys = ON` and WAL journal mode beforehand.
-If `drop_existing=True`, drops each table before recreating it.
-Rolls back the entire operation on any failure.
-
----
-
-### `apply_fallback_schema(conn, *, drop_existing=False)`
-
-```python
-def apply_fallback_schema(
-    conn: sqlite3.Connection,
-    *,
-    drop_existing: bool = False,
-) -> None:
-```
-
-Creates `_cif_fallback`, its index, `_block_dataset_membership`, and
-`_validation_result` on `conn` in a single transaction.  Must be called on
-every database that will receive CIF data, whether or not a dictionary schema
-has also been applied.  Call `apply_schema` first when using both tiers.
-
-If `drop_existing=True`, drops all four objects before recreating them.
 
 ---
 
@@ -1388,27 +1404,33 @@ else:
 
 ## Ingestion layer (`pycifparse.ingestion`)
 
-### `ingest(cif, conn, schema, ...)`
+### `ingest(cif, db, schema, ...)`
 
 ```python
 def ingest(
     cif: CifFile,
-    conn: sqlite3.Connection,
+    db: duckdb.DuckDBPyConnection | str | pathlib.Path | None = None,
     schema: SchemaSpec | None = None,
     *,
     propagate_fk: bool = False,
     dataset_id: str | None = None,
-    on_error: Callable[[str], None] | None = None,
-) -> list[str]:
+) -> tuple[duckdb.DuckDBPyConnection, list[str]]:
 ```
 
-Reads a parsed `CifFile` and writes its contents into a SQLite database
-that has already had `apply_schema` and `apply_fallback_schema` called on it.
+Reads a parsed `CifFile` and ingests its contents into a DuckDB database.
+Schema setup (table creation, infrastructure tables) is performed internally —
+no separate `apply_schema` call is required.
 
 Tags known to the schema are written to their structured tables; unknown tags
-(or all tags when `schema=None`) are written to `_cif_fallback`.  The entire
-operation runs inside a single transaction; any fatal error rolls back all
-writes.
+(or all tags when `schema=None`) are written to `_cif_fallback`.
+
+**`db` parameter:**
+- `None` (default) — create an in-memory DuckDB connection.
+- `str` or `pathlib.Path` — open (or create) a file-backed DuckDB database.
+- `duckdb.DuckDBPyConnection` — use the caller-supplied connection directly.
+
+The returned connection is the same object supplied or created.  The caller owns
+the lifecycle when passing an existing connection.
 
 **Tag routing:**
 
@@ -1424,134 +1446,91 @@ writes.
 
 | Stored value | CIF meaning |
 |---|---|
-| `NULL` | tag absent |
+| `NULL` | tag absent from this block / row |
 | `'.'` | inapplicable (PLACEHOLDER) |
 | `'?'` | unknown (PLACEHOLDER) |
-| `'"."'` | quoted dot (any non-PLACEHOLDER type) |
+| `'"."'` | quoted dot |
 | `'"?"'` | quoted question mark |
-| JSON text | CIF list or table container |
+| `'\x00' + JSON` | CIF list or table container |
 | raw string | real scalar value |
 
-Container values (CIF 2.0 `list` and `table`) are stored as JSON TEXT in all
-tables.  `_cif_fallback.value_type` is `'list'` or `'table'`; for structured
-table columns use `json_valid(column)` to detect containers at query time.
-
-**SU splitting:** `STRING` values matching `{numeric}({digits})` are split into
-the measurand column (bare numeric) and the linked SU column (digit string).
-The SU column is identified via `ColumnDef.linked_item_id`.  Quoted values are
-never SU candidates.
+**SU splitting:** Values matching `{numeric}({digits})` are split into the
+measurand column (bare numeric) and the linked SU column (digit string),
+identified via `ColumnDef.linked_item_id`.
 
 **FK propagation and parent-row stub creation:**
 
-Key-FK columns (PK + FK) are always resolved from:
-1. A value present in the same loop iteration for the FK target column.
-2. `fk_accumulator`: values from scalar Set tags or single-iteration loops
-   encountered in the same block.
-3. If no source is found, a UUID is generated, stored in `fk_accumulator`,
-   and a warning is emitted.
+Key-FK columns are resolved from (in order): the same loop iteration → scalar
+context from the same block (`fk_accumulator`) → a fresh UUID with warning.
 
-Non-key FK columns are propagated from `fk_accumulator` only when
-`propagate_fk=True`; otherwise they are left at whatever value the CIF
-data provides (which may be `NULL`).
+Non-key FK columns are propagated only when `propagate_fk=True`.
 
-For every FK column that ends up with a non-NULL value, `ingest` ensures the
-referenced parent table contains a row with that value as its primary key.  If
-the parent row does not already exist, a minimal stub is inserted with only
-`_block_id` and the PK column populated; all other columns are `NULL`.
+For every resolved FK value, `ingest` ensures the referenced parent row exists;
+if absent, a stub row is inserted with only the PK populated.
 
-**Cross-block merging:** Rows with the same PK across different blocks are
-merged into one row (first value wins; conflict → error emitted).  `_block_id`
-records the first contributing block.  `_row_id` is global per table — never
-resets between blocks.
+**Cross-block merging:** Rows with the same PK across blocks are merged (first
+value wins; conflict → warning).  `_block_id` records the first contributing
+block.
 
 **Dataset namespace:**
 
-Before any writes, `ingest` performs a pre-ingestion check:
-- Computes the intersection of `_audit_dataset.id` values across all dataset
-  blocks (blocks carrying at least one `_audit_dataset.id`).
-- Raises `ValueError` if the intersection is empty and at least one dataset
-  block exists — nothing is written.
+`ingest` computes the intersection of `_audit_dataset.id` values across all
+dataset blocks.  Raises `ValueError` if the intersection is empty and at least
+one dataset block exists.
 
-`dataset_id`: when provided, bypasses the intersection check and ingests only
-blocks whose `_audit_dataset.id` set contains that value, plus all general
-blocks.  Raises `ValueError` if no dataset block contains `dataset_id`.
+`dataset_id`: when provided, ingests only blocks whose `_audit_dataset.id` set
+contains that value, plus all general blocks.
 
 **Parameters:**
 
 | Parameter | Type | Notes |
 |---|---|---|
 | `cif` | `CifFile` | Parsed CIF; duplicate tags are undefined behaviour |
-| `conn` | `sqlite3.Connection` | Schema already applied; caller owns lifecycle |
+| `db` | `DuckDBPyConnection \| str \| Path \| None` | Target database; `None` → new in-memory DB |
 | `schema` | `SchemaSpec \| None` | `None` → all tags to `_cif_fallback` |
 | `propagate_fk` | `bool` | Propagate non-key FK columns from block context |
 | `dataset_id` | `str \| None` | Select one dataset from a multi-dataset file |
-| `on_error` | `Callable[[str], None] \| None` | Non-fatal error callback |
 
-**Returns:** `list[str]` — semantic error/warning strings in emission order.
+**Returns:** `tuple[duckdb.DuckDBPyConnection, list[str]]` — the database
+connection and semantic error/warning strings in emission order.
 
-**Raises:** `IngestionError` for fatal errors (key collisions, FK violations at COMMIT).
+**Raises:** `IngestionError` for fatal errors (key collisions, FK violations).
 `ValueError` for incompatible datasets or unknown `dataset_id`.
 
 ---
 
 ## Database utilities (`pycifparse.database`)
 
-### `compactify_database(src, dst, schema) -> list[str]`
-
-One-way export that copies *src* into *dst*, dropping empty tables and all-NULL columns.
-
-```python
-from pycifparse import compactify_database
-
-messages = compactify_database(
-    src=conn,           # source connection (already populated by ingest)
-    dst=compact_conn,   # destination connection (must be empty)
-    schema=schema,      # SchemaSpec used when src was populated
-)
-```
-
-**Parameters:**
-- `src` — source `sqlite3.Connection`; schema and data already applied via `apply_schema` / `ingest`.
-- `dst` — destination `sqlite3.Connection`; must be empty.
-- `schema` — the `SchemaSpec` used when *src* was populated.
-
-**Returns:** `list[str]` — info messages for every dropped table and column.
-Empty list when nothing was dropped.
-
-**Dropping rules:**
-- A table is dropped when it contains zero rows.
-- A column is dropped when every value in that column is NULL.
-- Primary-key columns and synthetic columns (`_block_id`, `_row_id`) are never dropped.
-- FK constraints are preserved only when both the source and target tables are kept.
-- The three fallback-tier tables are always copied with their full schema.
-
----
-
 ### `convert_database(src, dst, schema, on_coercion_failure='null') -> list[str]`
 
-One-way export that copies *src* into *dst*, casting columns to typed SQLite storage
-(`INTEGER`, `REAL`) based on `ColumnDef.type_contents`.  All tables and columns are
-preserved (contrast with `compactify_database`, which strips empty tables/columns).
+One-way export that copies *src* into *dst*, casting columns to typed DuckDB
+storage (`INTEGER`, `DOUBLE`, `VARCHAR`) based on `ColumnDef.type_contents`.
+All tables and columns are preserved.  The source database must have been
+populated by `ingest()`; all its columns are `VARCHAR`.
 
 ```python
 from pycifparse import convert_database
+import duckdb
+
+src_conn, _ = ingest(cif, schema=schema)
+dst_conn = duckdb.connect()
 
 warnings = convert_database(
-    src=conn,                        # source TEXT-storage connection
-    dst=typed_conn,                  # destination connection (must be empty)
-    schema=schema,                   # SchemaSpec for type information
-    on_coercion_failure='null',      # 'null' | 'keep' | 'error'
+    src=src_conn,
+    dst=dst_conn,
+    schema=schema,
+    on_coercion_failure='null',   # 'null' | 'keep' | 'error'
 )
 ```
 
 **Type mapping** (from `ColumnDef.type_contents` and `ColumnDef.type_container`):
 
-| Condition | SQLite affinity |
+| Condition | DuckDB type |
 |---|---|
-| `type_container` is not `"Single"` (e.g. `"Matrix"`, `"List"`) | `TEXT` (JSON) |
+| `type_container` is not `"Single"` (e.g. `"Matrix"`, `"List"`) | `VARCHAR` (JSON) |
 | `type_contents == "Integer"` | `INTEGER` |
-| `type_contents` in `("Real", "Float")` | `REAL` |
-| anything else / `None` | `TEXT` |
+| `type_contents` in `("Real", "Float")` | `DOUBLE` |
+| anything else / `None` | `VARCHAR` |
 
 **Special value handling:**
 
@@ -1559,14 +1538,14 @@ warnings = convert_database(
 - **SU suffixes** — values like `'1.23(5)'` have their trailing `(\d+)` stripped
   before numeric casting, always with a warning.
 - **Non-Single containers** — JSON is decoded, each string leaf cast to the leaf type,
-  then re-serialised.  The column retains `TEXT` affinity in *dst*.
+  then re-serialised.  The column retains `VARCHAR` type in *dst*.
 
 **`on_coercion_failure` policy:**
 
 | Value | Behaviour |
 |---|---|
 | `'null'` (default) | Store `NULL`; append warning |
-| `'keep'` | Leave original `TEXT` value; append warning |
+| `'keep'` | Leave original value as `NULL` (DuckDB enforces column types); append warning |
 | `'error'` | Raise `ValueError` immediately |
 
 **Returns:** `list[str]` — warning messages for SU-dropped values and coercion failures.
@@ -1626,7 +1605,7 @@ def check_fidelity(
 ```
 
 Compares two CIF sources for semantic equivalence by ingesting both into
-in-memory SQLite databases and comparing the resulting data at the row level.
+in-memory DuckDB databases and comparing the resulting data at the row level.
 Never raises — all errors (parse, ingest) are captured as `FidelityMismatch`
 entries in the returned report.
 
@@ -1791,7 +1770,7 @@ from pycifparse import validate, ValidationReport, ValidationIssue
 @dataclass
 class ValidationIssue:
     stage:      Literal['parse', 'ingest', 'database']
-    severity:   Literal['Error', 'Warning']
+    severity:   Literal['Error', 'Warning', 'Info']
     check:      str           # machine-readable check name (see table below)
     message:    str           # human-readable description
     block:      str | None    # data block name; None for parse-stage issues
@@ -1799,8 +1778,8 @@ class ValidationIssue:
     value:      str | None    # failing value as stored in the database
     line:       int | None    # source line (parse stage only)
     col:        int | None    # source column (parse stage only)
-    table:      str | None    # SQLite table name (database stage only)
-    column:     str | None    # SQLite column name (database stage only)
+    table:      str | None    # DuckDB table name (database stage only)
+    column:     str | None    # DuckDB column name (database stage only)
     row_id:     int | None    # _row_id of the failing row (database stage only)
     key_values: dict[str, str | None] | None  # PK tag → value for the row
 ```
@@ -1834,7 +1813,7 @@ class ValidationIssue:
 class ValidationReport:
     passed:   bool                    # True iff no Error-severity issues
     issues:   list[ValidationIssue]
-    database: sqlite3.Connection | None  # in-memory DB; None if ingest failed
+    database: duckdb.DuckDBPyConnection | None  # in-memory DB; None if ingest failed
 ```
 
 `passed` is `True` when `issues` contains no `'Error'`-severity entry.
@@ -1867,7 +1846,7 @@ Never raises; all exceptions are captured as `internal_error` issues.
    supply a pre-collected `parse_errors` list; a `UserWarning` is emitted if
    `parse_errors` is supplied alongside a `str`/`Path` source (it would be ignored).
 
-2. **Ingest** — the `CifFile` is ingested into an in-memory SQLite database via
+2. **Ingest** — the `CifFile` is ingested into an in-memory DuckDB database via
    `ingest()`.  Messages sent to `on_error` become `Warning` issues; an `IngestionError`
    causes those same messages to be classified as `Error` where appropriate, and
    `database` is set to `None`.
