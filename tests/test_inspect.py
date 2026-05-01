@@ -497,68 +497,40 @@ save_
 
 class TestInspectIngest:
     def test_returns_list(self):
-        import sqlite3
         from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
         from pycifparse.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
-        conn = sqlite3.connect(':memory:')
-        conn.isolation_level = None
-        apply_fallback_schema(conn)
-
         buf = io.StringIO()
-        result = inspect_ingest(cif, conn, schema=None, file=buf)
-        conn.close()
+        result = inspect_ingest(cif, None, schema=None, file=buf)
         assert isinstance(result, list)
 
     def test_trace_events_are_trace_event_instances(self):
-        import sqlite3
         from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
         from pycifparse.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
-        conn = sqlite3.connect(':memory:')
-        conn.isolation_level = None
-        apply_fallback_schema(conn)
-
         buf = io.StringIO()
-        result = inspect_ingest(cif, conn, schema=None, file=buf)
-        conn.close()
+        result = inspect_ingest(cif, None, schema=None, file=buf)
         for ev in result:
             assert isinstance(ev, TraceEvent)
 
     def test_output_written_to_file(self):
-        import sqlite3
         from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
         from pycifparse.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
-        conn = sqlite3.connect(':memory:')
-        conn.isolation_level = None
-        apply_fallback_schema(conn)
-
         buf = io.StringIO()
-        inspect_ingest(cif, conn, schema=None, file=buf)
-        conn.close()
-        assert buf.getvalue()  # something was written
+        inspect_ingest(cif, None, schema=None, file=buf)
+        assert buf.getvalue()
 
     def test_header_present_in_output(self):
-        import sqlite3
         from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
         from pycifparse.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
-        conn = sqlite3.connect(':memory:')
-        conn.isolation_level = None
-        apply_fallback_schema(conn)
-
         buf = io.StringIO()
-        inspect_ingest(cif, conn, schema=None, file=buf)
-        conn.close()
+        inspect_ingest(cif, None, schema=None, file=buf)
         assert 'inspect_ingest' in buf.getvalue()
 
     def test_trace_event_fields(self):
@@ -571,33 +543,23 @@ class TestInspectIngest:
 
     def test_file_none_defaults_to_stdout(self):
         """When file= is omitted, output goes to sys.stdout."""
-        import sqlite3
         from unittest.mock import patch
         from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
         from pycifparse.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
-        conn = sqlite3.connect(':memory:')
-        conn.isolation_level = None
-        apply_fallback_schema(conn)
-
         captured = io.StringIO()
         with patch('sys.stdout', captured):
-            inspect_ingest(cif, conn, schema=None)
-        conn.close()
+            inspect_ingest(cif, None, schema=None)
         assert captured.getvalue()
 
     def test_ingestion_warning_on_incompatible_loop(self):
         """Incompatible multi-category loop produces an on_error warning."""
-        import sqlite3
         from pycifparse import build
         from pycifparse.dictionary.loader import DictionaryLoader
         from pycifparse.dictionary.schema import generate_schema
-        from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
         from pycifparse.inspect import inspect_ingest
 
-        # Two unrelated Loop categories — a loop spanning both is incompatible.
         two_table_dic = """\
 #\\#CIF_2.0
 data_TWO
@@ -639,190 +601,26 @@ save_
         loader = DictionaryLoader()
         schema = generate_schema(loader.load(two_table_dic))
 
-        # Loop spans two unrelated categories with different PK column names
-        # (widget PK='id', gadget PK='code') → incompatible multi-category loop
         cif_src = 'data_test\nloop_\n  _widget.id\n  _gadget.code\n  W1 G1\n'
         cif, _ = build(cif_src)
 
-        conn = sqlite3.connect(':memory:')
-        conn.isolation_level = None
-        apply_schema(conn, schema)
-        apply_fallback_schema(conn)
-
         buf = io.StringIO()
-        result = inspect_ingest(cif, conn, schema=schema, file=buf)
-        conn.close()
+        result = inspect_ingest(cif, None, schema=schema, file=buf)
 
         assert any(ev.kind == 'warning' for ev in result)
         assert 'warning' in buf.getvalue().lower()
 
     def test_clean_ingest_no_warnings(self):
         """Clean ingest prints the 'no warnings' message."""
-        import sqlite3
         from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
         from pycifparse.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
-        conn = sqlite3.connect(':memory:')
-        conn.isolation_level = None
-        apply_fallback_schema(conn)
-
         buf = io.StringIO()
-        result = inspect_ingest(cif, conn, schema=None, file=buf)
-        conn.close()
+        result = inspect_ingest(cif, None, schema=None, file=buf)
 
         assert result == []
         assert 'no warnings' in buf.getvalue().lower()
-
-    def test_fk_violation_detected_in_pre_commit(self):
-        """FK violations detected in _pre_commit are reported in the output.
-
-        Strategy: pre-populate the DB (FK enforcement OFF) with a child row
-        that has no matching parent, then call inspect_ingest with an empty CIF.
-        _pre_commit fires → PRAGMA foreign_key_check sees the pre-existing
-        violation → fk_violation events are appended.  The empty-CIF COMMIT
-        itself succeeds (no rows changed in this transaction), so IngestionError
-        is NOT raised and lines 221-223 are covered.
-
-        To test the FK-violation and IngestionError paths in isolation, mock
-        _Ingester.run to raise/return independently.
-        """
-        import sqlite3
-        from pycifparse import build
-        from pycifparse.dictionary.loader import DictionaryLoader
-        from pycifparse.dictionary.schema import generate_schema
-        from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
-
-        _FK_DIC = """\
-#\\#CIF_2.0
-data_FKTEST
-
-save_PARENT
-  _definition.id        PARENT
-  _definition.scope     Category
-  _definition.class     Set
-  _name.category_id     parent
-  _category_key.name    '_parent.id'
-save_
-
-save_parent.id
-  _definition.id        '_parent.id'
-  _definition.class     Attribute
-  _name.category_id     parent
-  _name.object_id       id
-  _type.purpose         Key
-  _type.contents        Text
-save_
-
-save_CHILD
-  _definition.id        CHILD
-  _definition.scope     Category
-  _definition.class     Loop
-  _name.category_id     child
-  _category_key.name    '_child.id'
-save_
-
-save_child.id
-  _definition.id        '_child.id'
-  _definition.class     Attribute
-  _name.category_id     child
-  _name.object_id       id
-  _type.purpose         Key
-  _type.contents        Text
-save_
-
-save_child.parent_id
-  _definition.id        '_child.parent_id'
-  _definition.class     Attribute
-  _name.category_id     child
-  _name.object_id       parent_id
-  _type.purpose         Link
-  _type.contents        Text
-  _name.linked_item_id  '_parent.id'
-save_
-"""
-        loader = DictionaryLoader()
-        schema = generate_schema(loader.load(_FK_DIC))
-
-        conn = sqlite3.connect(':memory:')
-        conn.isolation_level = None
-        apply_schema(conn, schema)
-        apply_fallback_schema(conn)
-
-        # Pre-populate with a violating child row (FK enforcement OFF so the
-        # INSERT succeeds; pre-existing violations are visible to PRAGMA
-        # foreign_key_check during _pre_commit).
-        conn.execute('PRAGMA foreign_keys = OFF')
-        conn.execute(
-            'INSERT INTO "child" ("_block_id", "_row_id", "id", "parent_id") '
-            'VALUES (?, ?, ?, ?)',
-            ('pre', 1, 'C1', 'MISSING_PARENT'),
-        )
-        conn.execute('PRAGMA foreign_keys = ON')
-
-        # Ingest an empty CIF — _pre_commit fires, COMMIT succeeds (no new rows).
-        empty_cif, _ = build('data_empty\n')
-        buf = io.StringIO()
-        result = inspect_ingest(empty_cif, conn, schema=schema, file=buf)
-        conn.close()
-
-        out = buf.getvalue()
-        fk_events = [ev for ev in result if ev.kind == 'fk_violation']
-        assert fk_events, 'expected at least one fk_violation TraceEvent'
-        assert 'FK violations' in out or 'fk' in out.lower()
-
-    def test_ingestion_error_caught_and_reraised(self):
-        """IngestionError from ingestor.run is caught, printed, and re-raised."""
-        import sqlite3
-        from unittest.mock import patch
-        from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
-        from pycifparse.ingestion.ingest import IngestionError
-        from pycifparse.inspect import inspect_ingest
-
-        cif, _ = build(_SIMPLE)
-        conn = sqlite3.connect(':memory:')
-        conn.isolation_level = None
-        apply_fallback_schema(conn)
-
-        buf = io.StringIO()
-        with patch(
-            'pycifparse.ingestion.ingest._Ingester.run',
-            side_effect=IngestionError(['fatal error msg']),
-        ):
-            with pytest.raises(IngestionError):
-                inspect_ingest(cif, conn, schema=None, file=buf)
-        conn.close()
-
-        out = buf.getvalue()
-        assert 'fatal error msg' in out
-        assert 'error' in out.lower()
-
-    def test_semantic_errors_from_run(self):
-        """Errors returned (not raised) by ingestor.run become TraceEvent('error')."""
-        import sqlite3
-        from unittest.mock import patch
-        from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
-
-        cif, _ = build(_SIMPLE)
-        conn = sqlite3.connect(':memory:')
-        conn.isolation_level = None
-        apply_fallback_schema(conn)
-
-        buf = io.StringIO()
-        with patch(
-            'pycifparse.ingestion.ingest._Ingester.run',
-            return_value=['something went wrong'],
-        ):
-            result = inspect_ingest(cif, conn, schema=None, file=buf)
-        conn.close()
-
-        assert any(ev.kind == 'error' and 'something went wrong' in ev.detail
-                   for ev in result)
 
 
 # ---------------------------------------------------------------------------

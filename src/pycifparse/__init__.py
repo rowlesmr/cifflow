@@ -1,5 +1,5 @@
 from pycifparse.types import CifVersion
-from pycifparse.database import compactify_database, convert_database
+from pycifparse.database import convert_database
 from pycifparse.cifmodel.model import CifFile, CifBlock, CifSaveFrame
 from pycifparse.cifmodel.builder import build, build_arrow, build_arrow_file, cif_to_arrow, CifBuilder
 from pycifparse.cifmodel.writer import CifWriter, BlockWriter, SaveFrameWriter, CifInput
@@ -20,8 +20,6 @@ from pycifparse.dictionary import (
     generate_schema,
     emit_create_statements,
     emit_fallback_create_statements,
-    apply_schema,
-    apply_fallback_schema,
     ResolvedTag,
     resolve_tag,
     save_dictionary,
@@ -54,13 +52,12 @@ __all__ = [
     # Ingestion
     'ingest', 'IngestionError',
     # Database
-    'compactify_database', 'convert_database',
+    'convert_database',
     # Dictionary
     'DdlmItem', 'DdlmDictionary',
     'DictionaryLoader', 'SourceResolver', 'directory_resolver', 'directory_path_resolver',
     'ForeignKeyDef', 'ColumnDef', 'TableDef', 'SchemaSpec',
     'generate_schema', 'emit_create_statements', 'emit_fallback_create_statements',
-    'apply_schema', 'apply_fallback_schema',
     'ResolvedTag', 'resolve_tag',
     'save_dictionary', 'load_dictionary',
     'visualise_schema', 'visualise_schema_html',

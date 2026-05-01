@@ -916,14 +916,37 @@ def emit_fallback_create_statements() -> list[str]:
     return [fallback, index, membership, validation, block_order, tag_presence]
 
 
+def _topo_sort_tables(tables: dict) -> list:
+    """Return TableDef objects in topological order (FK parents before children)."""
+    deps: dict[str, set[str]] = {name: set() for name in tables}
+    for name, tbl in tables.items():
+        for fk in tbl.foreign_keys:
+            if fk.target_table in tables and fk.target_table != name:
+                deps[name].add(fk.target_table)
+    order: list[str] = []
+    seen: set[str] = set()
+
+    def _visit(name: str) -> None:
+        if name in seen:
+            return
+        seen.add(name)
+        for parent in sorted(deps[name]):
+            _visit(parent)
+        order.append(name)
+
+    for name in sorted(tables):
+        _visit(name)
+    return [tables[name] for name in order]
+
+
 def emit_create_statements(schema: SchemaSpec) -> list[str]:
     """
     Render each :class:`TableDef` in *schema* as a ``CREATE TABLE`` statement.
 
-    Returns one SQL string per table.  The statements use
-    ``CREATE TABLE IF NOT EXISTS`` and include inline ``PRIMARY KEY`` and
-    ``FOREIGN KEY`` clauses.  All FK constraints carry
-    ``DEFERRABLE INITIALLY DEFERRED``.
+    Returns one SQL string per table in topological order (FK parents before
+    children).  The statements use ``CREATE TABLE IF NOT EXISTS`` and include
+    inline ``PRIMARY KEY`` and ``FOREIGN KEY`` clauses.  All FK constraints
+    carry ``DEFERRABLE INITIALLY DEFERRED``.
 
     All value columns are declared ``TEXT`` regardless of
     ``ColumnDef.type_contents``; ``_row_id`` is always ``INTEGER``.
@@ -940,7 +963,7 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
     """
     stmts: list[str] = []
 
-    for table in schema.tables.values():
+    for table in _topo_sort_tables(schema.tables):
         parts: list[str] = []
 
         row_id_col = next((c for c in table.columns if c.name == '_row_id'), None)

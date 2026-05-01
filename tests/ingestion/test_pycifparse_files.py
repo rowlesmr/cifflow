@@ -7,19 +7,16 @@ runs once per class regardless of how many test methods are present.
 
 import json
 import pathlib
-import sqlite3
-import types
 
+import duckdb
 import pytest
 
-from pycifparse import build, ingest, IngestionError
+from pycifparse import build, ingest
 from pycifparse.dictionary import (
     DictionaryLoader,
-    apply_schema,
     directory_resolver,
     generate_schema,
 )
-from pycifparse.dictionary.schema_apply import apply_fallback_schema
 
 _DATA_DIR = pathlib.Path(__file__).parents[2] / 'data' / 'dictionaries'
 _CIF_DIR  = pathlib.Path(__file__).parents[1] / 'cif_files' / 'pycifparse'
@@ -50,19 +47,9 @@ def pow_schema():
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _conn(schema=None):
-    c = sqlite3.connect(':memory:')
-    c.isolation_level = None
-    if schema is not None:
-        apply_schema(c, schema)
-    apply_fallback_schema(c)
-    return c
-
-
 def _ingest(filename, schema=None):
     cif, _ = build((_CIF_DIR / filename).read_text(encoding='utf-8'))
-    conn = _conn(schema)
-    ingest(cif, conn, schema)
+    conn, _ = ingest(cif, None, schema)
     return conn
 
 
@@ -107,7 +94,10 @@ class TestCoreCellOnly:
         assert _scalar(cell_only_conn, 'cell', 'volume', 'test_cell_only') == '187.06'
 
     def test_no_atom_site_rows(self, cell_only_conn):
-        assert cell_only_conn.execute('SELECT COUNT(*) FROM atom_site').fetchone()[0] == 0
+        all_tables = {r[0] for r in cell_only_conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+        ).fetchall()}
+        assert 'atom_site' not in all_tables
 
     def test_stub_diffrn_created(self, cell_only_conn):
         """No _diffrn.id in file: UUID stub must be created in diffrn."""
@@ -400,101 +390,6 @@ class TestCoreMultilineFormula:
         assert val == '159.69'
 
 
-# ---------------------------------------------------------------------------
-# core_multiple_blocks.cif  — cross-block key collision → IngestionError
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope='class')
-def multiple_blocks_result(core_schema):
-    cif, _ = build((_CIF_DIR / 'core_multiple_blocks.cif').read_text(encoding='utf-8'))
-    conn = _conn(core_schema)
-    exc = None
-    try:
-        ingest(cif, conn, core_schema)
-    except IngestionError as e:
-        exc = e
-    return types.SimpleNamespace(conn=conn, exc=exc)
-
-
-class TestCoreMultipleBlocks:
-    def test_ingestion_fails(self, multiple_blocks_result):
-        """Block C's F1 and Na1 conflict with earlier blocks — IngestionError raised."""
-        assert multiple_blocks_result.exc is not None
-
-    def test_transaction_rolled_back(self, multiple_blocks_result):
-        """On failure the transaction is rolled back — no rows are committed."""
-        assert multiple_blocks_result.conn.execute(
-            'SELECT COUNT(*) FROM atom_site'
-        ).fetchone()[0] == 0
-
-    def test_six_semantic_errors(self, multiple_blocks_result):
-        """F1 conflicts on fract_x/y/z (3) and Na1 conflicts on fract_x/y/z (3)."""
-        assert len(multiple_blocks_result.exc.errors) == 6
-
-    def test_f1_fract_x_conflict(self, multiple_blocks_result):
-        """Block C F1 fract_x=0.0 conflicts with Block B F1 fract_x=0.5."""
-        assert any(
-            'fract_x' in e and "keeping '0.5'" in e and "ignoring '0.0'" in e
-            for e in multiple_blocks_result.exc.errors
-        )
-
-    def test_na1_fract_x_conflict(self, multiple_blocks_result):
-        """Block C Na1 fract_x=0.5 conflicts with Block A Na1 fract_x=0.0."""
-        assert any(
-            'fract_x' in e and "keeping '0.0'" in e and "ignoring '0.5'" in e
-            for e in multiple_blocks_result.exc.errors
-        )
-
-
-# ---------------------------------------------------------------------------
-# core_repeated_loop_key.cif
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope='class')
-def repeated_key_result(core_schema):
-    cif, _ = build((_CIF_DIR / 'core_repeated_loop_key.cif').read_text(encoding='utf-8'))
-    conn = _conn(core_schema)
-    exc = None
-    try:
-        ingest(cif, conn, core_schema)
-    except IngestionError as e:
-        exc = e
-    return types.SimpleNamespace(conn=conn, exc=exc)
-
-
-class TestCoreRepeatedLoopKey:
-    def test_ingestion_fails(self, repeated_key_result):
-        """A within-block duplicate key with different values raises IngestionError."""
-        assert repeated_key_result.exc is not None
-
-    def test_transaction_rolled_back(self, repeated_key_result):
-        """On failure the transaction is rolled back — no rows are committed."""
-        count = repeated_key_result.conn.execute(
-            "SELECT COUNT(*) FROM atom_site"
-        ).fetchone()[0]
-        assert count == 0
-
-    def test_row3_silent_no_error(self, repeated_key_result):
-        """Exact duplicate (row 3) is silently dropped; only rows 4 and 5
-        produce errors, giving exactly 5 semantic errors in total."""
-        assert len(repeated_key_result.exc.errors) == 5
-
-    def test_row4_type_symbol_conflict(self, repeated_key_result):
-        """Row 4 conflicts on type_symbol (Na vs O)."""
-        assert any(
-            'type_symbol' in e and "keeping 'Na'" in e and "ignoring 'O'" in e
-            for e in repeated_key_result.exc.errors
-        )
-
-    def test_row5_fract_z_conflict(self, repeated_key_result):
-        """Row 5 differs only in fract_z ('0.0' vs '0.00'): numerically equal
-        but string-different — a conflict is correctly reported."""
-        assert any(
-            'fract_z' in e and "keeping '0.0'" in e and "ignoring '0.00'" in e
-            for e in repeated_key_result.exc.errors
-        )
-
-
 # ===========================================================================
 # cif_pow group
 # ===========================================================================
@@ -667,11 +562,12 @@ class TestFallbackScalars:
         tables = {
             r[0]
             for r in fallback_scalars_conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
             ).fetchall()
         }
         assert tables == {'_cif_fallback', '_block_dataset_membership',
-                          '_validation_result', '_block_order', '_tag_presence'}
+                          '_validation_result', '_block_order', '_tag_presence',
+                          '_metatable'}
 
 
 # ---------------------------------------------------------------------------

@@ -18,7 +18,7 @@ import pyarrow as pa
 import duckdb
 
 from pycifparse.cifmodel.model import CifBlock
-from pycifparse.dictionary.schema import SchemaSpec, TableDef
+from pycifparse.dictionary.schema import SchemaSpec, TableDef, emit_fallback_create_statements
 
 
 # ---------------------------------------------------------------------------
@@ -137,12 +137,20 @@ def _loops_compatible(table_names: list[str], schema: SchemaSpec) -> bool:
 # DuckDB setup
 # ---------------------------------------------------------------------------
 
-def setup_duckdb(schema: SchemaSpec) -> duckdb.DuckDBPyConnection:
-    """Open an in-memory DuckDB connection and create one staging table per
-    schema table.  Each staging table mirrors the schema columns (all TEXT)
-    plus internal tracking columns: _block_id, _block_idx, _loop_id, _iter_idx.
+def setup_duckdb(
+    schema: SchemaSpec,
+    db: duckdb.DuckDBPyConnection | None = None,
+) -> duckdb.DuckDBPyConnection:
+    """Create _raw_* staging tables on *db*, creating a new in-memory connection
+    if *db* is None.  Infrastructure tables are created (idempotent) before staging
+    tables.  Any leftover _raw_* tables from a prior failed call are dropped first.
     """
-    db = duckdb.connect(':memory:')
+    if db is None:
+        db = duckdb.connect(':memory:')
+    _create_infrastructure_tables(db)
+    drops = [f'DROP TABLE IF EXISTS "_raw_{tbl_name}"' for tbl_name in schema.tables]
+    if drops:
+        db.execute('; '.join(drops))
     ddls = []
     for tbl_name, table in schema.tables.items():
         ns_cols = [c for c in table.columns if not c.is_synthetic]
@@ -754,141 +762,230 @@ def propagate_fk_sql(
 
 
 # ---------------------------------------------------------------------------
-# Cross-block merge + conflict detection
+# Infrastructure + final-table creation
 # ---------------------------------------------------------------------------
 
-def extract_merged_rows(
+def _create_infrastructure_tables(db: duckdb.DuckDBPyConnection) -> None:
+    for stmt in emit_fallback_create_statements():
+        db.execute(stmt)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS "_metatable" (
+            "table"  VARCHAR NOT NULL,
+            "column" VARCHAR NOT NULL,
+            "rows"   BIGINT  NOT NULL,
+            PRIMARY KEY ("table", "column")
+        )
+    """)
+
+
+def _create_final_table_ddl(tbl_name: str, table: TableDef) -> str:
+    is_keyless = table.primary_keys == ['_pycifparse_id']
+    ns_pks = _non_synthetic_pks(table)
+    data_cols = _non_pk_data_cols(table)
+    parts: list[str] = []
+    if is_keyless:
+        for col in data_cols:
+            parts.append(f'    "{col}" VARCHAR')
+        parts.append('    "_pycifparse_id" VARCHAR NOT NULL')
+        parts.append('    "_block_id"      VARCHAR NOT NULL')
+        parts.append('    "_row_id"        INTEGER NOT NULL')
+        parts.append('    PRIMARY KEY ("_pycifparse_id")')
+    else:
+        for pk in ns_pks:
+            parts.append(f'    "{pk}" VARCHAR NOT NULL')
+        for col in data_cols:
+            parts.append(f'    "{col}" VARCHAR')
+        parts.append('    "_block_id" VARCHAR')
+        parts.append('    "_row_id"   INTEGER')
+        pk_clause = ', '.join(f'"{pk}"' for pk in ns_pks)
+        parts.append(f'    PRIMARY KEY ({pk_clause})')
+    body = ',\n'.join(parts)
+    return f'CREATE TABLE IF NOT EXISTS "{tbl_name}" (\n{body}\n)'
+
+
+def _active_data_cols(
+    db: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    data_cols: list[str],
+) -> list[str]:
+    """Return the subset of data_cols that have at least one non-null value in the staging table."""
+    if not data_cols:
+        return []
+    checks = ', '.join(f'COUNT("{col}") > 0 AS "{col}"' for col in data_cols)
+    row = db.execute(f'SELECT {checks} FROM "_raw_{tbl_name}"').fetchone()
+    return [col for col, has_val in zip(data_cols, row) if has_val]
+
+
+def _detect_conflicts(
+    db: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    ns_pks: list[str],
+    active_cols: list[str],
+    errors: list[str],
+) -> None:
+    """Detect rows in the staging table where a column has multiple distinct non-null values for the same PK."""
+    if not active_cols:
+        return
+    pk_sel = ', '.join(f'"{pk}"' for pk in ns_pks)
+    n_pks = len(ns_pks)
+    unpivot_cols = ', '.join(f'"{col}"' for col in active_cols)
+    rows = db.execute(f"""
+        SELECT column_name, {pk_sel}
+        FROM "_raw_{tbl_name}"
+        UNPIVOT (col_value FOR column_name IN ({unpivot_cols}))
+        WHERE col_value IS NOT NULL
+        GROUP BY column_name, {pk_sel}
+        HAVING COUNT(DISTINCT col_value) > 1
+    """).fetchall()
+    for row in rows:
+        col = row[0]
+        pk_dict = dict(zip(ns_pks, row[1:1 + n_pks]))
+        errors.append(
+            f"merge conflict on '{tbl_name}'.'{col}': "
+            f"multiple values for key {pk_dict}"
+        )
+
+
+def _merge_keyed(
+    db: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    ns_pks: list[str],
+    data_cols: list[str],
+    active_cols: list[str],
+    row_id_offset: int,
+) -> None:
+    pk_sel = ', '.join(f'"{pk}"' for pk in ns_pks)
+    active_set = set(active_cols)
+    data_exprs = []
+    for col in data_cols:
+        if col in active_set:
+            data_exprs.append(
+                f'FIRST("{col}" ORDER BY _block_idx, _loop_id, _iter_idx)'
+                f' FILTER (WHERE "{col}" IS NOT NULL) AS "{col}"'
+            )
+        else:
+            data_exprs.append(f'NULL AS "{col}"')
+    all_insert_cols = ns_pks + data_cols + ['_block_id', '_row_id']
+    insert_col_list = ', '.join(f'"{c}"' for c in all_insert_cols)
+    data_part = (', '.join(data_exprs) + ', ') if data_exprs else ''
+    db.execute(f"""
+        INSERT INTO "{tbl_name}" ({insert_col_list})
+        SELECT
+            {pk_sel},
+            {data_part}FIRST(_block_id ORDER BY _block_idx, _loop_id, _iter_idx) AS _block_id,
+            ROW_NUMBER() OVER (ORDER BY MIN(_block_idx), MIN(_loop_id), MIN(_iter_idx))
+                + {row_id_offset} AS _row_id
+        FROM "_raw_{tbl_name}"
+        GROUP BY {pk_sel}
+        ON CONFLICT ({pk_sel}) DO NOTHING
+    """)
+
+
+def _merge_keyless(
+    db: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    data_cols: list[str],
+    row_id_offset: int,
+) -> None:
+    all_insert_cols = data_cols + ['_pycifparse_id', '_block_id', '_row_id']
+    insert_col_list = ', '.join(f'"{c}"' for c in all_insert_cols)
+    data_part = (', '.join(f'"{c}"' for c in data_cols) + ', ') if data_cols else ''
+    db.execute(f"""
+        INSERT INTO "{tbl_name}" ({insert_col_list})
+        SELECT
+            {data_part}gen_random_uuid()::VARCHAR AS _pycifparse_id,
+            _block_id,
+            ROW_NUMBER() OVER (ORDER BY _block_idx, _iter_idx) + {row_id_offset} AS _row_id
+        FROM "_raw_{tbl_name}"
+        ORDER BY _block_idx, _iter_idx
+    """)
+
+
+def _populate_tag_presence(
+    db: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    ns_pks: list[str],
+    data_cols: list[str],
+) -> None:
+    all_cols = ns_pks + data_cols
+    if not all_cols:
+        return
+    pk_using = ', '.join(f'"{pk}"' for pk in ns_pks)
+    pk_json_parts = ', '.join(f'r."{pk}"' for pk in ns_pks)
+    select_cols = ', '.join(f'r."{col}"' for col in all_cols)
+    unpivot_cols = ', '.join(f'"{col}"' for col in all_cols)
+    db.execute(f"""
+        INSERT INTO "_tag_presence" ("_block_id", "table_name", "column_name", "pk_json")
+        SELECT _block_id, '{tbl_name}', column_name, pk_json
+        FROM (
+            SELECT r._block_id, json_array({pk_json_parts}) AS pk_json,
+                   {select_cols}
+            FROM "_raw_{tbl_name}" r
+            JOIN "{tbl_name}" f USING ({pk_using})
+            WHERE r._block_id != f._block_id
+        ) t
+        UNPIVOT (col_value FOR column_name IN ({unpivot_cols}))
+        WHERE col_value IS NOT NULL
+        ON CONFLICT DO NOTHING
+    """)
+
+
+def _populate_metatable(
+    db: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    cif_cols: list[str],
+) -> None:
+    if not cif_cols:
+        return
+    col_list = ', '.join(f'"{col}"' for col in cif_cols)
+    db.execute(f"""
+        INSERT INTO "_metatable" ("table", "column", "rows")
+        SELECT '{tbl_name}', column_name, COUNT(*)
+        FROM "{tbl_name}"
+        UNPIVOT (col_value FOR column_name IN ({col_list}))
+        GROUP BY column_name
+        ON CONFLICT ("table", "column") DO UPDATE SET "rows" = excluded.rows
+    """)
+
+
+def create_final_tables(
     db: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
-    emit_error: Callable[..., None],
-    emit: Callable[..., None],
     populated: set[str] | None = None,
-    tag_presence_rows: list | None = None,
-) -> dict[str, dict[tuple, dict]]:
-    """Detect cross-block conflicts, merge staging tables, and return merged_rows.
+    errors: list[str] | None = None,
+) -> None:
+    """Merge _raw_* staging tables into final DuckDB tables.
 
-    merged_rows format: {tbl_name: {pk_tuple: row_dict}}
-    row_dict keys include _block_id, _row_id, and all column names.
-
-    Uses fetch_arrow_table() instead of fetchall() to avoid Python tuple
-    allocation overhead for large result sets.
+    Creates each final table (idempotent), detects conflicts, merges via
+    GROUP BY + FIRST aggregate, populates _tag_presence and _metatable,
+    then drops the _raw_* staging table.
     """
-    merged_rows: dict[str, dict[tuple, dict]] = {}
-    row_id_counters: dict[str, int] = {}
-
+    if errors is None:
+        errors = []
     for tbl_name, table in schema.tables.items():
         if populated is not None and tbl_name not in populated:
             continue
-
         is_keyless = table.primary_keys == ['_pycifparse_id']
         ns_pks = _non_synthetic_pks(table)
         data_cols = _non_pk_data_cols(table)
-        n_pks = len(ns_pks)
-        n_data = len(data_cols)
-
+        if not is_keyless and not ns_pks:
+            db.execute(f'DROP TABLE IF EXISTS "_raw_{tbl_name}"')
+            continue
+        db.execute(_create_final_table_ddl(tbl_name, table))
+        active_cols = _active_data_cols(db, tbl_name, data_cols)
         if is_keyless:
-            data_sel = ', '.join(f'"{c}"' for c in data_cols) if data_cols else 'NULL AS _dummy'
-            rows = db.execute(
-                f'SELECT _block_id, {data_sel}'
-                f' FROM "_raw_{tbl_name}" ORDER BY _block_idx, _iter_idx'
-            ).fetchall()
-            if not rows:
-                continue
-
-            tbl_rows: dict[tuple, dict] = {}
-            rid = 1
-            for row in rows:
-                row_dict: dict = {'_block_id': row[0]}
-                for j, col in enumerate(data_cols):
-                    row_dict[col] = row[1 + j]
-                pid = str(_uuid_module.uuid4())
-                row_dict['_pycifparse_id'] = pid
-                row_dict['_row_id'] = rid
-                rid += 1
-                tbl_rows[(pid,)] = row_dict
-            merged_rows[tbl_name] = tbl_rows
-            continue
-
-        if not ns_pks:
-            continue
-
-        pk_sel = ', '.join(f'"{pk}"' for pk in ns_pks)
-        data_sel_part = (', ' + ', '.join(f'"{c}"' for c in data_cols)) if data_cols else ''
-
-        # fetchall() avoids Arrow buffer allocation; tuple slices give pk_key/vals directly
-        rows = db.execute(
-            f'SELECT _block_id, {pk_sel}{data_sel_part}'
-            f' FROM "_raw_{tbl_name}" ORDER BY _block_idx, _loop_id, _iter_idx'
-        ).fetchall()
-        if not rows:
-            continue
-
-        pk_end = 1 + n_pks  # first pk col is at index 1
-
-        tbl_rows: dict[tuple, dict] = {}
-        seen_losers: dict[tuple, list[set]] = {}
-        seen_tp: set[tuple] = set()
-        rid = 1
-
-        for row in rows:
-            row_block_id: str = row[0]
-            pk_key = row[1:pk_end]
-            vals = row[pk_end:]
-
-            if pk_key not in tbl_rows:
-                row_dict: dict = dict(zip(ns_pks, pk_key))
-                row_dict['_block_id'] = row_block_id
-                for k, col in enumerate(data_cols):
-                    row_dict[col] = vals[k]
-                row_dict['_row_id'] = rid
-                rid += 1
-                tbl_rows[pk_key] = row_dict
-                continue
-
-            row_dict = tbl_rows[pk_key]
-            for k, val in enumerate(vals):
-                if val is None:
-                    continue
-                col = data_cols[k]
-                existing = row_dict.get(col)
-                if existing is None:
-                    row_dict[col] = val
-                elif existing != val:
-                    sl = seen_losers.get(pk_key)
-                    if sl is None:
-                        sl = [set() for _ in data_cols]
-                        seen_losers[pk_key] = sl
-                    if val not in sl[k]:
-                        sl[k].add(val)
-                        emit_error(
-                            f"merge conflict on '{tbl_name}'.'{col}': "
-                            f"keeping '{existing}', ignoring '{val}'",
-                            table=tbl_name,
-                            column=col,
-                            key_values=dict(zip(ns_pks, pk_key)),
-                        )
-
-            if (tag_presence_rows is not None
-                    and row_block_id != row_dict['_block_id']):
-                pk_json = json.dumps(list(pk_key))
-                for pk_col in ns_pks:
-                    tp_key = (row_block_id, pk_col, pk_json)
-                    if tp_key not in seen_tp:
-                        seen_tp.add(tp_key)
-                        tag_presence_rows.append((row_block_id, tbl_name, pk_col, pk_json))
-                for k, col in enumerate(data_cols):
-                    if vals[k] is not None:
-                        tp_key = (row_block_id, col, pk_json)
-                        if tp_key not in seen_tp:
-                            seen_tp.add(tp_key)
-                            tag_presence_rows.append((row_block_id, tbl_name, col, pk_json))
-
-        merged_rows[tbl_name] = tbl_rows
-
-    return merged_rows
-
-
-def _next_rid(counters: dict[str, int], table: str) -> int:
-    val = counters.get(table, 1)
-    counters[table] = val + 1
-    return val
+            offset = db.execute(
+                f'SELECT COALESCE(MAX(_row_id), 0) FROM "{tbl_name}"'
+            ).fetchone()[0]
+            _merge_keyless(db, tbl_name, data_cols, offset)
+        else:
+            _detect_conflicts(db, tbl_name, ns_pks, active_cols, errors)
+            offset = db.execute(
+                f'SELECT COALESCE(MAX(_row_id), 0) FROM "{tbl_name}"'
+            ).fetchone()[0]
+            _merge_keyed(db, tbl_name, ns_pks, data_cols, active_cols, offset)
+            _populate_tag_presence(db, tbl_name, ns_pks, data_cols)
+        all_cif_cols = ns_pks + data_cols
+        if all_cif_cols:
+            _populate_metatable(db, tbl_name, all_cif_cols)
+        db.execute(f'DROP TABLE IF EXISTS "_raw_{tbl_name}"')

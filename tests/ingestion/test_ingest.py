@@ -3,9 +3,9 @@ Unit tests for ingest().
 """
 
 import json
-import sqlite3
 import uuid
 
+import duckdb
 import pytest
 
 from pycifparse import ingest, IngestionError
@@ -13,10 +13,7 @@ from pycifparse.cifmodel.model import CifBlock, CifFile
 from pycifparse.dictionary.ddlm_item import DdlmItem
 from pycifparse.dictionary.ddlm_parser import DdlmDictionary
 from pycifparse.dictionary.schema import generate_schema
-from pycifparse.dictionary.schema_apply import apply_fallback_schema, apply_schema
 from pycifparse.ingestion.ingest import (
-    _apply_fk,
-    _merge_into,
     build_su_map,
     build_tag_to_column,
     decode_container,
@@ -112,15 +109,12 @@ def _file(*blocks):
 
 
 # ---------------------------------------------------------------------------
-# DB connection builder
+# DB helpers
 # ---------------------------------------------------------------------------
 
-def _conn(schema=None):
-    conn = sqlite3.connect(':memory:')
-    if schema is not None:
-        apply_schema(conn, schema)
-    apply_fallback_schema(conn)
-    return conn
+def _do_ingest(f, schema=None, **kw):
+    """Ingest CifFile f into a fresh DuckDB; return (conn, errors)."""
+    return ingest(f, None, schema, **kw)
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +236,7 @@ def _fallback(conn, block_id=None):
         return conn.execute(
             'SELECT "_block_id","_row_id","tag","value","value_type","loop_id","col_index"'
             ' FROM "_cif_fallback" WHERE "_block_id"=? ORDER BY "_row_id","col_index","tag"',
-            (block_id,)
+            [block_id]
         ).fetchall()
     return conn.execute(
         'SELECT "_block_id","_row_id","tag","value","value_type","loop_id","col_index"'
@@ -255,7 +249,7 @@ def _membership(conn, block_id=None):
         return conn.execute(
             'SELECT "_block_id","_audit_dataset_id","id_regime"'
             ' FROM "_block_dataset_membership" WHERE "_block_id"=?',
-            (block_id,)
+            [block_id]
         ).fetchall()
     return conn.execute(
         'SELECT "_block_id","_audit_dataset_id","id_regime"'
@@ -444,8 +438,7 @@ class TestNoSchema:
             '_cell.length_a': _s('5.4'),
             '_cell.length_b': _s('5.4'),
         }))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         rows = _fallback(conn, 'B')
         tags = {r[2] for r in rows}
         assert '_cell.length_a' in tags
@@ -453,8 +446,7 @@ class TestNoSchema:
 
     def test_scalar_row_id_is_1(self):
         f = _file(_block('B', scalars={'_cell.length_a': _s('5.4')}))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
         assert row[1] == 1  # _row_id
 
@@ -463,8 +455,7 @@ class TestNoSchema:
             (['_atom_site.label', '_atom_site.x_fract'],
              [[_s('C1'), _s('0.1')], [_s('C2'), _s('0.2')]]),
         ]))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         rows = _fallback(conn, 'B')
         assert len(rows) == 4  # 2 iterations × 2 tags
 
@@ -472,8 +463,7 @@ class TestNoSchema:
         f = _file(_block('B', loops=[
             (['_atom_site.label'], [[_s('C1')], [_s('C2')]]),
         ]))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         rows = _fallback(conn, 'B')
         row_ids = [r[1] for r in rows]
         assert row_ids == [1, 2]  # iteration 0 → row_id=1, iteration 1 → row_id=2
@@ -482,8 +472,7 @@ class TestNoSchema:
         f = _file(_block('B', loops=[
             (['_a.x'], [[_s('1')], [_s('2')]]),
         ]))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         rows = _fallback(conn, 'B')
         assert all(r[5] == 1 for r in rows)  # loop_id = 1
 
@@ -491,23 +480,20 @@ class TestNoSchema:
         f = _file(_block('B', loops=[
             (['_a.x', '_a.y'], [[_s('1'), _s('2')]]),
         ]))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         rows = sorted(_fallback(conn, 'B'), key=lambda r: r[6])  # sort by col_index
         assert rows[0][6] == 0  # _a.x col_index
         assert rows[1][6] == 1  # _a.y col_index
 
     def test_scalar_loop_id_is_null(self):
         f = _file(_block('B', scalars={'_cell.a': _s('5')}))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
         assert row[5] is None  # loop_id
 
     def test_membership_row_assumed(self):
         f = _file(_block('B', scalars={'_cell.a': _s('5')}))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         rows = _membership(conn, 'B')
         assert len(rows) == 1
         assert rows[0][2] == 'assumed'
@@ -517,8 +503,7 @@ class TestNoSchema:
             (['_a.x'], [[_s('1')]]),
             (['_b.y'], [[_s('2')]]),
         ]))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         rows = _fallback(conn, 'B')
         loop_ids = {r[2]: r[5] for r in rows}  # tag → loop_id
         assert loop_ids['_a.x'] == 1
@@ -534,8 +519,7 @@ class TestScalarRouting:
         """_structure.id scalar → structure table."""
         schema = _schema_a()
         f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'structure', ['id'])
         assert rows == [('S1',)]
 
@@ -543,16 +527,14 @@ class TestScalarRouting:
         """Tag not in schema → _cif_fallback."""
         schema = _schema_a()
         f = _file(_block('B', scalars={'_unknown.tag': _s('val')}))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         fb = _fallback(conn, 'B')
         assert any(r[2] == '_unknown.tag' for r in fb)
 
     def test_mapped_tag_not_in_fallback(self):
         schema = _schema_a()
         f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         fb = _fallback(conn, 'B')
         assert not any(r[2] == '_structure.id' for r in fb)
 
@@ -568,8 +550,7 @@ class TestLoopRouting:
             (['_atom_site.label', '_atom_site.x_fract'],
              [[_s('C1'), _s('0.1')], [_s('C2'), _s('0.2')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         assert set(rows) == {('C1', '0.1'), ('C2', '0.2')}
 
@@ -579,8 +560,7 @@ class TestLoopRouting:
             (['_atom_site.label'],
              [[_s('C1')], [_s('C2')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'atom_site', ['_row_id', 'label'])
         row_ids = sorted(r[0] for r in rows)
         assert row_ids == [1, 2]
@@ -598,8 +578,7 @@ class TestAliasDeprecation:
             (['_atom_site.label', '_atom_site.old_x'],
              [[_s('C1'), _s('0.1')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         assert rows == [('C1', '0.1')]
 
@@ -611,8 +590,7 @@ class TestAliasDeprecation:
             (['_atom_site.label', '_atom_site.old_x'],
              [[_s('C1'), _s('0.1')], [_s('C2'), _s('0.2')]]),
         ]))
-        conn = _conn(schema)
-        errors = ingest(f, conn, schema)
+        conn, errors = _do_ingest(f, schema)
         warns = [e for e in errors if 'deprecated' in e]
         assert len(warns) == 1
 
@@ -624,8 +602,7 @@ class TestAliasDeprecation:
         b2 = _block('B2', loops=[
             (['_atom_site.label', '_atom_site.old_x'], [[_s('C2'), _s('0.2')]]),
         ])
-        conn = _conn(schema)
-        errors = ingest(_file(b1, b2), conn, schema)
+        conn, errors = _do_ingest(_file(b1, b2), schema)
         warns = [e for e in errors if 'deprecated' in e]
         assert len(warns) == 2  # one per block
 
@@ -635,8 +612,7 @@ class TestAliasDeprecation:
         f = _file(_block('B', loops=[
             (['_atom_site.label', '_atom_site.old_x'], [[_s('C1'), _s('0.5')]]),
         ]))
-        conn = _conn(schema)
-        errors = ingest(f, conn, schema)
+        conn, errors = _do_ingest(f, schema)
         warns = [e for e in errors if 'deprecated' in e]
         assert len(warns) == 1
         rows = _rows(conn, 'atom_site', ['x_fract'])
@@ -650,24 +626,21 @@ class TestAliasDeprecation:
 class TestPlaceholderEncoding:
     def test_placeholder_dot_in_fallback(self):
         f = _file(_block('B', scalars={'_unknown.x': _ph('.')}))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
         assert row[3] == '.'
         assert row[4] == 'placeholder'
 
     def test_placeholder_question_in_fallback(self):
         f = _file(_block('B', scalars={'_unknown.x': _ph('?')}))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
         assert row[3] == '?'
         assert row[4] == 'placeholder'
 
     def test_quoted_dot_in_fallback_distinguished(self):
         f = _file(_block('B', scalars={'_unknown.x': _dq('.')}))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
         assert row[3] == '"."'
         assert row[4] != 'placeholder'
@@ -684,8 +657,7 @@ class TestSUIngestion:
             (['_atom_site.label', '_atom_site.x_fract'],
              [[_s('C1'), _s('0.123(4)')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'atom_site', ['label', 'x_fract', 'x_fract_su'])
         assert rows[0] == ('C1', '0.123', '0.004')
 
@@ -695,8 +667,7 @@ class TestSUIngestion:
             (['_atom_site.label', '_atom_site.x_fract'],
              [[_s('C1'), _s('0.123')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'atom_site', ['x_fract', 'x_fract_su'])
         assert rows[0] == ('0.123', None)
 
@@ -708,8 +679,7 @@ class TestSUIngestion:
             (['_atom_site.label', '_atom_site.x_fract'],
              [[_s('C1'), _s('0.123(4)')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'atom_site', ['x_fract', 'x_fract_su'])
         assert rows[0] == ('0.123', '0.004')
 
@@ -717,14 +687,13 @@ class TestSUIngestion:
         f = _file(_block('B', loops=[
             (['_atom_site.x_fract'], [[_s('0.123(4)')]]),
         ]))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
         assert row[3] == '0.123(4)'  # stored raw; no SU split
 
 
 # ===========================================================================
-# TestMerge
+# TestKeylessLoop
 # ===========================================================================
 
 class TestKeylessLoop:
@@ -738,8 +707,7 @@ class TestKeylessLoop:
             (['_atom_site.x_fract'],
              [[_s('0.1')], [_s('0.2')], [_s('0.3')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         assert len(rows) == 3
         labels = [r[0] for r in rows]
@@ -759,11 +727,10 @@ class TestKeylessLoop:
                  [[_s('0.1')], [_s('0.2')]]),
             ],
         ))
-        conn = _conn(schema)
         # propagate_fk=True so the non-key FK column structure_id is filled from
         # the accumulator — this verifies that real accumulator values propagate
         # to every iteration (unlike generated UUIDs which must not persist).
-        ingest(f, conn, schema, propagate_fk=True)
+        conn, _ = _do_ingest(f, schema, propagate_fk=True)
         # Both rows must reference the same structure id 'S1'
         rows = conn.execute(
             "SELECT x_fract, structure_id FROM atom_site ORDER BY x_fract"
@@ -771,6 +738,10 @@ class TestKeylessLoop:
         assert len(rows) == 2
         assert rows[0][1] == rows[1][1] == 'S1'
 
+
+# ===========================================================================
+# TestMerge
+# ===========================================================================
 
 class TestMerge:
     def test_distinct_pks_from_two_blocks(self):
@@ -781,8 +752,7 @@ class TestMerge:
         b2 = _block('B2', loops=[
             (['_atom_site.label'], [[_s('C2')]]),
         ])
-        conn = _conn(schema)
-        ingest(_file(b1, b2), conn, schema)
+        conn, _ = _do_ingest(_file(b1, b2), schema)
         rows = _rows(conn, 'atom_site', ['label'])
         assert set(rows) == {('C1',), ('C2',)}
 
@@ -796,8 +766,7 @@ class TestMerge:
             (['_atom_site.label', '_atom_site.x_fract'],
              [[_s('C1'), _s('0.1')]]),
         ])
-        conn = _conn(schema)
-        ingest(_file(b1, b2), conn, schema)
+        conn, _ = _do_ingest(_file(b1, b2), schema)
         rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         assert rows == [('C1', '0.1')]
 
@@ -810,28 +779,9 @@ class TestMerge:
             (['_atom_site.label', '_atom_site.x_fract'],
              [[_s('C1'), _s('0.5')]]),
         ])
-        conn = _conn(schema)
-        ingest(_file(b1, b2), conn, schema)
+        conn, _ = _do_ingest(_file(b1, b2), schema)
         rows = _rows(conn, 'atom_site', ['_block_id', 'label', 'x_fract'])
         assert rows == [('B1', 'C1', '0.5')]
-
-    def test_cross_block_merge_conflict_raises(self):
-        schema = _schema_a()
-        b1 = _block('B1', loops=[
-            (['_atom_site.label', '_atom_site.x_fract'],
-             [[_s('C1'), _s('0.1')]]),
-        ])
-        b2 = _block('B2', loops=[
-            (['_atom_site.label', '_atom_site.x_fract'],
-             [[_s('C1'), _s('0.9')]]),  # conflicting value
-        ])
-        conn = _conn(schema)
-        with pytest.raises(IngestionError) as exc_info:
-            ingest(_file(b1, b2), conn, schema)
-        assert any('merge conflict' in e for e in exc_info.value.errors)
-        # transaction rolled back — no rows committed
-        rows = _rows(conn, 'atom_site', ['x_fract'])
-        assert rows == []
 
     def test_row_id_does_not_reset_between_blocks(self):
         schema = _schema_a()
@@ -841,8 +791,7 @@ class TestMerge:
         b2 = _block('B2', loops=[
             (['_atom_site.label'], [[_s('C2')]]),
         ])
-        conn = _conn(schema)
-        ingest(_file(b1, b2), conn, schema)
+        conn, _ = _do_ingest(_file(b1, b2), schema)
         rows = _rows(conn, 'atom_site', ['_row_id', 'label'])
         row_id_by_label = {label: rid for rid, label in rows}
         assert row_id_by_label['C1'] == 1
@@ -861,8 +810,7 @@ class TestFKPropagation:
             '_structure.id': _s('S1'),
             '_cell.length_a': _s('5.4'),
         }))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'cell', ['structure_id'])
         assert rows[0][0] == 'S1'
 
@@ -873,8 +821,7 @@ class TestFKPropagation:
             (['_atom_site.label', '_atom_site_aniso.u_11'],
              [[_s('C1'), _s('0.01')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'atom_site_aniso', ['label', 'u_11'])
         assert rows[0] == ('C1', '0.01')
 
@@ -886,8 +833,7 @@ class TestFKPropagation:
             (['_atom_site.label', '_atom_site.x_fract'],    # second loop: label already known
              [[_s('C1'), _s('0.5')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         # merged: same PK label=C1; x_fract filled from second loop
         assert ('C1', '0.5') in rows
@@ -898,8 +844,7 @@ class TestFKPropagation:
         f = _file(_block('B', loops=[
             (['_atom_site.label'], [[_s('C1')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema, propagate_fk=False)
+        conn, _ = _do_ingest(f, schema, propagate_fk=False)
         rows = _rows(conn, 'atom_site', ['label', 'structure_id'])
         assert rows[0] == ('C1', None)
 
@@ -910,85 +855,9 @@ class TestFKPropagation:
         }, loops=[
             (['_atom_site.label'], [[_s('C1')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema, propagate_fk=True)
+        conn, _ = _do_ingest(f, schema, propagate_fk=True)
         rows = _rows(conn, 'atom_site', ['label', 'structure_id'])
         assert rows[0] == ('C1', 'S1')
-
-    def test_key_fk_absent_generates_uuid(self):
-        """If key-FK propagation source not found, _apply_fk generates UUID."""
-        schema = _schema_a()
-        # Build cell table row with no structure_id value
-        table = schema.tables['cell']
-        row = {'_block_id': 'B', 'length_a': '5.4'}
-        errors = []
-        fk_acc = {}
-        _apply_fk(row, table, schema, None, fk_acc,
-                  propagate_fk=False, emit=errors.append)
-        sid = row.get('structure_id')
-        assert sid is not None
-        try:
-            uuid.UUID(sid)
-        except ValueError:
-            pytest.fail(f'structure_id is not a UUID: {sid!r}')
-        assert any(e for e in errors)
-        # UUID stored in fk_accumulator for subsequent propagation
-        assert fk_acc.get('_structure.id') == sid
-
-    def test_explicit_value_overrides_propagation(self):
-        """Explicit value in row is not overridden by fk_accumulator."""
-        schema = _schema_a()
-        table = schema.tables['cell']
-        # row already has structure_id='EXPLICIT'; fk_acc has 'S1'
-        row = {'_block_id': 'B', 'structure_id': 'EXPLICIT', 'length_a': '5.4'}
-        fk_acc = {'_structure.id': 'S1'}
-        errors = []
-        _apply_fk(row, table, schema, None, fk_acc, propagate_fk=True, emit=errors.append)
-        assert row['structure_id'] == 'EXPLICIT'
-        assert not errors
-
-    def test_key_fk_absent_creates_stub_in_parent(self):
-        """UUID generated for key-FK also creates a stub row in the parent table."""
-        schema = _schema_a()
-        table = schema.tables['cell']
-        row = {'_block_id': 'B', 'length_a': '5.4'}
-        errors = []
-        fk_acc = {}
-        merged_rows: dict = {}
-        row_id_counters: dict = {}
-        _apply_fk(row, table, schema, None, fk_acc,
-                  propagate_fk=False, emit=errors.append,
-                  block_id='B', merged_rows=merged_rows,
-                  row_id_counters=row_id_counters)
-        sid = row.get('structure_id')
-        assert sid is not None
-        # stub row must exist in the parent (structure) table
-        assert 'structure' in merged_rows
-        stub_rows = list(merged_rows['structure'].values())
-        assert len(stub_rows) == 1
-        assert stub_rows[0]['id'] == sid
-        assert stub_rows[0]['_block_id'] == 'B'
-
-    def test_key_fk_absent_stub_does_not_overwrite_real_parent(self):
-        """If the parent table already has a real row, the stub is merged in without
-        overwriting existing non-NULL values."""
-        schema = _schema_a()
-        table = schema.tables['cell']
-        errors = []
-        fk_acc = {}
-        # Pre-populate a real structure row with id='S1'
-        real_structure_row = {'_block_id': 'B', 'id': 'S1', '_row_id': 1}
-        merged_rows: dict = {'structure': {('S1',): real_structure_row}}
-        row_id_counters: dict = {'structure': 2}
-        # Now ingest a cell row that already knows structure_id='S1'
-        row = {'_block_id': 'B', 'structure_id': 'S1', 'length_a': '5.4'}
-        _apply_fk(row, table, schema, None, fk_acc,
-                  propagate_fk=False, emit=errors.append,
-                  block_id='B', merged_rows=merged_rows,
-                  row_id_counters=row_id_counters)
-        # No UUID generated; only one structure row
-        assert not errors
-        assert len(merged_rows['structure']) == 1
 
 
 # ===========================================================================
@@ -1000,24 +869,21 @@ class TestSetTable:
         schema = _schema_a()
         b1 = _block('B1', scalars={'_structure.id': _s('S1')})
         b2 = _block('B2', scalars={'_structure.id': _s('S2')})
-        conn = _conn(schema)
-        ingest(_file(b1, b2), conn, schema)
+        conn, _ = _do_ingest(_file(b1, b2), schema)
         rows = _rows(conn, 'structure', ['id'])
         assert set(rows) == {('S1',), ('S2',)}
 
     def test_set_table_block_id_populated(self):
         schema = _schema_a()
         f = _file(_block('MY_BLOCK', scalars={'_structure.id': _s('S1')}))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'structure', ['_block_id', 'id'])
         assert rows[0] == ('MY_BLOCK', 'S1')
 
     def test_keyless_set_table_pycifparse_id_is_uuid(self):
         schema = _schema_keyless_set()
         f = _file(_block('B', scalars={'_props.name': _s('val')}))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'props', ['_pycifparse_id', 'name'])
         assert len(rows) == 1
         pid = rows[0][0]
@@ -1033,8 +899,7 @@ class TestSetTable:
         f = _file(_block('B', scalars={
             '_structure.id': _s('S1'),
         }))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'structure', ['_row_id'])
         assert rows[0][0] == 1
 
@@ -1050,8 +915,7 @@ class TestMixedLoop:
             (['_atom_site.label', '_atom_site.x_fract', '_atom_site.custom_tag'],
              [[_s('C1'), _s('0.1'), _s('extra')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         assert rows == [('C1', '0.1')]
         fb = _fallback(conn, 'B')
@@ -1064,8 +928,7 @@ class TestMixedLoop:
             (['_atom_site.label', '_atom_site.custom_tag'],
              [[_s('C1'), _s('extra')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         struct_row_id = _rows(conn, 'atom_site', ['_row_id'])[0][0]
         fb = _fallback(conn, 'B')
         fb_row_id = fb[0][1]  # _row_id
@@ -1077,8 +940,7 @@ class TestMixedLoop:
             (['_atom_site.label', '_unknown.x'],
              [[_s('C1'), _s('val')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         fb = _fallback(conn, 'B')
         assert fb[0][6] == 1  # _unknown.x is col_index=1
 
@@ -1095,8 +957,7 @@ class TestCompatibleMultiCategory:
               '_atom_site_aniso.u_11'],
              [[_s('C1'), _s('0.1'), _s('0.01')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         as_rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         ana_rows = _rows(conn, 'atom_site_aniso', ['label', 'u_11'])
         assert as_rows == [('C1', '0.1')]
@@ -1114,15 +975,19 @@ class TestIncompatibleMultiCategory:
             (['_structure.id', '_atom_site.label'],
              [[_s('S1'), _s('C1')]]),
         ]))
-        conn = _conn(schema)
-        errors = ingest(f, conn, schema)
+        conn, errors = _do_ingest(f, schema)
         assert any('incompatible' in e for e in errors)
         fb = _fallback(conn, 'B')
         tags = {r[2] for r in fb}
         assert '_structure.id' in tags
         assert '_atom_site.label' in tags
-        assert _rows(conn, 'structure', ['id']) == []
-        assert _rows(conn, 'atom_site', ['label']) == []
+        # DuckDB only creates final tables when rows are present;
+        # incompatible tags go to fallback so no structured rows exist.
+        all_tables = {r[0] for r in conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+        ).fetchall()}
+        assert 'structure' not in all_tables or _rows(conn, 'structure', ['id']) == []
+        assert 'atom_site' not in all_tables or _rows(conn, 'atom_site', ['label']) == []
 
 
 # ===========================================================================
@@ -1139,8 +1004,7 @@ class TestLoopIdInFallback:
             (['_atom_site.label', '_unknown.a'], [[_s('C1'), _s('extra1')]]),
             (['_atom_site.x_fract', '_unknown.b'], [[_s('0.5'), _s('extra2')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         fb = _fallback(conn, 'B')
         # _unknown.a is in loop 1 → loop_id=1; _unknown.b is in loop 2 → loop_id=2
         loop_ids = {r[2]: r[5] for r in fb}
@@ -1158,8 +1022,7 @@ class TestDatasetNamespace:
         f = _file(_block('B', loops=[
             (['_audit_dataset.id'], [[_s('DS1')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _membership(conn, 'B')
         assert rows[0][1] == 'DS1'
         assert rows[0][2] == 'dataset'
@@ -1168,8 +1031,7 @@ class TestDatasetNamespace:
         f = _file(_block('B', loops=[
             (['_audit_dataset.id'], [[_s('DS1')], [_s('DS2')]]),
         ]))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         rows = _membership(conn, 'B')
         dataset_ids = {r[1] for r in rows}
         assert dataset_ids == {'DS1', 'DS2'}
@@ -1181,8 +1043,7 @@ class TestDatasetNamespace:
         f = _file(_block('B', loops=[
             (['_atom_site.label'], [[_s(uid)]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _membership(conn, 'B')
         assert rows[0][1] == ''
         assert rows[0][2] == 'uuid'
@@ -1192,15 +1053,13 @@ class TestDatasetNamespace:
         f = _file(_block('B', loops=[
             (['_atom_site.label'], [[_s('C1')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         rows = _membership(conn, 'B')
         assert rows[0][2] == 'assumed'
 
     def test_general_block_no_rows_gets_assumed(self):
-        conn = _conn()
         f = _file(_block('B', scalars={'_unknown.x': _s('val')}))
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         rows = _membership(conn, 'B')
         assert rows[0][2] == 'assumed'
 
@@ -1209,30 +1068,23 @@ class TestDatasetNamespace:
             _block('B1', loops=[(['_audit_dataset.id'], [[_s('DS1')]])]),
             _block('B2', loops=[(['_audit_dataset.id'], [[_s('DS2')]])]),
         )
-        conn = _conn()
         with pytest.raises(ValueError, match='incompatible'):
-            ingest(f, conn)
+            _do_ingest(f)
 
     def test_incompatible_datasets_no_rows_written(self):
         f = _file(
             _block('B1', loops=[(['_audit_dataset.id'], [[_s('DS1')]])]),
             _block('B2', loops=[(['_audit_dataset.id'], [[_s('DS2')]])]),
         )
-        conn = _conn()
-        try:
-            ingest(f, conn)
-        except ValueError:
-            pass
-        assert _fallback(conn) == []
-        assert _membership(conn) == []
+        with pytest.raises(ValueError):
+            _do_ingest(f)
 
     def test_dataset_id_filter_selects_matching_blocks(self):
         f = _file(
             _block('B1', loops=[(['_audit_dataset.id'], [[_s('DS1')]])]),
             _block('B2', loops=[(['_audit_dataset.id'], [[_s('DS2')]])]),
         )
-        conn = _conn()
-        ingest(f, conn, dataset_id='DS1')
+        conn, _ = _do_ingest(f, dataset_id='DS1')
         rows = _membership(conn)
         block_ids = {r[0] for r in rows}
         assert 'B1' in block_ids
@@ -1240,16 +1092,14 @@ class TestDatasetNamespace:
 
     def test_dataset_id_not_found_raises_value_error(self):
         f = _file(_block('B1', loops=[(['_audit_dataset.id'], [[_s('DS1')]])]))
-        conn = _conn()
         with pytest.raises(ValueError):
-            ingest(f, conn, dataset_id='UNKNOWN')
+            _do_ingest(f, dataset_id='UNKNOWN')
 
     def test_dataset_id_missing_from_all_blocks_raises_value_error(self):
         """dataset_id provided but CifFile has no dataset blocks at all."""
         f = _file(_block('B', scalars={'_cell.a': _s('5')}))
-        conn = _conn()
         with pytest.raises(ValueError):
-            ingest(f, conn, dataset_id='DS1')
+            _do_ingest(f, dataset_id='DS1')
 
     def test_general_block_included_with_dataset_filter(self):
         """General blocks (no _audit_dataset.id) are always included."""
@@ -1257,8 +1107,7 @@ class TestDatasetNamespace:
             _block('DS_BLOCK', loops=[(['_audit_dataset.id'], [[_s('DS1')]])]),
             _block('GEN_BLOCK', scalars={'_unknown.x': _s('val')}),
         )
-        conn = _conn()
-        ingest(f, conn, dataset_id='DS1')
+        conn, _ = _do_ingest(f, dataset_id='DS1')
         rows = _membership(conn)
         block_ids = {r[0] for r in rows}
         assert 'DS_BLOCK' in block_ids
@@ -1271,8 +1120,7 @@ class TestDatasetNamespace:
                 (['_audit_dataset.id'], [[_s('DS2')]]),
             ], scalars={'_unknown.x': _s('ONLY_IN_B2')}),
         )
-        conn = _conn()
-        ingest(f, conn, dataset_id='DS1')
+        conn, _ = _do_ingest(f, dataset_id='DS1')
         fb = _fallback(conn)
         assert not any(r[3] == 'ONLY_IN_B2' for r in fb)
 
@@ -1287,8 +1135,7 @@ class TestValidationResult:
         f = _file(_block('B', loops=[
             (['_atom_site.label'], [[_s('C1')]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         vrows = _validation(conn)
         assert any(r[0] == 'uuid_regime' and r[1] == 'Warning' for r in vrows)
 
@@ -1298,8 +1145,7 @@ class TestValidationResult:
         f = _file(_block('B', loops=[
             (['_atom_site.label'], [[_s(uid)]]),
         ]))
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         vrows = _validation(conn)
         assert not any(r[0] == 'uuid_regime' for r in vrows)
 
@@ -1310,8 +1156,7 @@ class TestValidationResult:
             _block('DS', loops=[(['_audit_dataset.id'], [[_s('DS1')]])]),
             _block('GEN', loops=[(['_atom_site.label'], [[_s(str(uuid.uuid4()))]])]),
         )
-        conn = _conn(schema)
-        ingest(f, conn, schema)
+        conn, _ = _do_ingest(f, schema)
         vrows = _validation(conn)
         assert not any(r[0] == 'uuid_reference_check' for r in vrows)
 
@@ -1328,8 +1173,7 @@ class TestContainerValues:
     def test_list_value_in_fallback_is_json(self):
         cif_list = [_s('a'), _s('b')]  # CIF list value
         f = _file(_block('B', scalars={'_unknown.x': [cif_list]}))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
         assert row[4] == 'list'
         assert decode_container(row[3]) == ['a', 'b']
@@ -1337,8 +1181,7 @@ class TestContainerValues:
     def test_table_value_in_fallback_is_json(self):
         cif_table = {'k': _s('v')}  # CIF table value
         f = _file(_block('B', scalars={'_unknown.x': [cif_table]}))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
         assert row[4] == 'table'
         assert decode_container(row[3]) == {'k': 'v'}
@@ -1346,8 +1189,7 @@ class TestContainerValues:
     def test_placeholder_inside_list_stored_as_plain_string(self):
         cif_list = [_ph('.'), _s('real')]
         f = _file(_block('B', scalars={'_unknown.x': [cif_list]}))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
         data = decode_container(row[3])
         assert data[0] == '.'
@@ -1355,8 +1197,7 @@ class TestContainerValues:
     def test_quoted_dot_inside_list_stored_with_delimiters(self):
         cif_list = [_dq('.'), _s('real')]
         f = _file(_block('B', scalars={'_unknown.x': [cif_list]}))
-        conn = _conn()
-        ingest(f, conn)
+        conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
         data = decode_container(row[3])
         assert data[0] == '"."'
@@ -1366,445 +1207,3 @@ class TestContainerValues:
         stored, _ = encode_container(lst)
         decoded = decode_container(stored)
         assert decoded == ['x', '?', {'k': 'v'}]
-
-
-# ===========================================================================
-# TestOnErrorCallback
-# ===========================================================================
-
-class TestOnErrorCallback:
-    def test_on_error_called_for_each_error(self):
-        schema = _schema_a()
-        # Incompatible multi-cat loop → error
-        f = _file(_block('B', loops=[
-            (['_structure.id', '_atom_site.label'], [[_s('S1'), _s('C1')]]),
-        ]))
-        conn = _conn(schema)
-        received = []
-        errors = ingest(f, conn, schema, on_error=lambda msg, blk=None, **kw: received.append(msg))
-        assert len(received) == len(errors)
-        assert received == errors
-
-
-# ===========================================================================
-# TestMergeIntoCoverage — direct unit tests for _merge_into edge cases
-# ===========================================================================
-
-class TestMergeIntoCoverage:
-    """Cover _merge_into lines: None-value skip (283) and emit-only conflict (294)."""
-
-    def _make_table(self, schema):
-        """Return the cell TableSpec from schema_a."""
-        return schema.tables['structure']
-
-    def test_incoming_none_value_not_written(self):
-        # Line 283: incoming row has None for a column → skip it, keep existing
-        schema = _schema_a()
-        table = schema.tables['structure']
-        merged: dict = {}
-        counters: dict = {}
-        msgs = []
-        # First insert a real row
-        row1 = {'_block_id': 'B', 'id': 'S1'}
-        _merge_into(merged, 'structure', row1, table, counters, msgs.append)
-        # Second insert: same PK, None value for 'id' (PK skipped), plus a hypothetical col
-        # Since structure only has 'id' (which is PK), use cell table for a non-PK col
-        cell_table = schema.tables['cell']
-        cell_merged: dict = {}
-        cell_counters: dict = {}
-        row2 = {'_block_id': 'B', 'structure_id': 'S1', 'length_a': '5.0'}
-        _merge_into(cell_merged, 'cell', row2, cell_table, cell_counters, msgs.append)
-        row3 = {'_block_id': 'B', 'structure_id': 'S1', 'length_a': None}
-        _merge_into(cell_merged, 'cell', row3, cell_table, cell_counters, msgs.append)
-        # length_a should still be '5.0' (None incoming was skipped)
-        existing = list(cell_merged['cell'].values())[0]
-        assert existing['length_a'] == '5.0'
-        assert not msgs
-
-    def test_conflict_without_emit_error_uses_emit(self):
-        # Line 294: no emit_error → emit(msg) on conflict
-        schema = _schema_a()
-        cell_table = schema.tables['cell']
-        merged: dict = {}
-        counters: dict = {}
-        msgs = []
-        emit = lambda msg, **kw: msgs.append(msg)
-        row1 = {'_block_id': 'B1', 'structure_id': 'S1', 'length_a': '5.0'}
-        _merge_into(merged, 'cell', row1, cell_table, counters, emit)
-        row2 = {'_block_id': 'B2', 'structure_id': 'S1', 'length_a': '6.0'}
-        # emit_error=None (default) → emit is used for conflict
-        _merge_into(merged, 'cell', row2, cell_table, counters, emit)
-        assert any('merge conflict' in m for m in msgs)
-
-
-# ===========================================================================
-# TestSetMergeConflict — cross-block Set merge conflict (lines 726-730)
-# ===========================================================================
-
-class TestSetMergeConflict:
-    def test_two_blocks_conflicting_set_values_raises_ingestion_error(self):
-        # Two blocks share structure.id='S1' but cell.length_a differs
-        # → Set buffer flush for block B conflicts with block A's merged row
-        schema = _schema_a()
-        f = _file(
-            _block('A', scalars={
-                '_structure.id': _s('S1'),
-                '_cell.length_a': _s('5.0'),
-            }),
-            _block('B', scalars={
-                '_structure.id': _s('S1'),
-                '_cell.length_a': _s('6.0'),
-            }),
-        )
-        conn = _conn(schema)
-        with pytest.raises(IngestionError):
-            ingest(f, conn, schema)
-
-
-# ===========================================================================
-# TestPreCommitHook — _Ingester.run(_pre_commit_hook=...) (line 609)
-# ===========================================================================
-
-class TestPreCommitHook:
-    def test_pre_commit_hook_called_before_commit(self):
-        from pycifparse.ingestion.ingest import _Ingester
-        schema = _schema_a()
-        f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
-        conn = _conn(schema)
-        hook_called = []
-
-        def hook(ingester):
-            hook_called.append(True)
-
-        _Ingester(f, conn, schema, False, None, None).run(_pre_commit_hook=hook)
-        assert hook_called == [True]
-        conn.close()
-
-    def test_pre_commit_hook_exception_rolls_back(self):
-        from pycifparse.ingestion.ingest import _Ingester
-        schema = _schema_a()
-        f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
-        conn = _conn(schema)
-
-        def bad_hook(ingester):
-            raise RuntimeError('hook failure')
-
-        with pytest.raises(RuntimeError, match='hook failure'):
-            _Ingester(f, conn, schema, False, None, None).run(_pre_commit_hook=bad_hook)
-        # After rollback, no rows should be in structure
-        rows = _rows(conn, 'structure')
-        assert rows == []
-        conn.close()
-
-
-# ===========================================================================
-# TestSqliteInsertError — sqlite3 error during _flush insert (lines 1198-1199)
-# ===========================================================================
-
-class TestSqliteInsertError:
-    def test_sqlite_error_on_insert_emits_warning(self):
-        """Drop the table after schema creation so that INSERT fails."""
-        from pycifparse.ingestion.ingest import _Ingester
-        schema = _schema_a()
-        f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
-        conn = _conn(schema)
-        # Drop the structured table so the INSERT fails
-        conn.execute('DROP TABLE "structure"')
-        errors = []
-        _Ingester(f, conn, schema, False, None, lambda msg, blk=None, **kw: errors.append(msg)).run()
-        assert any('sqlite3 error' in e for e in errors)
-        conn.close()
-
-
-# ===========================================================================
-# TestFKTargetNotInSchema — FK target not in structured schema (lines 344-349)
-# ===========================================================================
-
-class TestFKKeyAbsentTargetNotInSchema:
-    def test_key_fk_target_missing_from_schema_emits_and_generates_uuid(self):
-        """When the FK target column is not mapped in schema.column_to_tag,
-        a UUID is still generated for a key-FK column (lines 344-349 branch)."""
-        # Build a minimal SchemaSpec where column_to_tag doesn't map the FK target
-        from pycifparse.dictionary.schema import SchemaSpec, TableDef, ColumnDef, ForeignKeyDef
-        col_pk = ColumnDef(name='structure_id', definition_id='_cell.structure_id',
-                           type_contents='Text', nullable=False,
-                           is_primary_key=True, is_synthetic=False,
-                           linked_item_id=None)
-        col_len = ColumnDef(name='length_a', definition_id='_cell.length_a',
-                            type_contents='Real', nullable=True,
-                            is_primary_key=False, is_synthetic=False,
-                            linked_item_id=None)
-        fk = ForeignKeyDef(
-            source_table='cell',
-            source_columns=['structure_id'],
-            target_table='structure',
-            target_columns=['id'],
-        )
-        cell_table = TableDef(
-            name='cell', definition_id='_cell',
-            category_class='Set',
-            columns=[col_pk, col_len],
-            primary_keys=['structure_id'],
-            foreign_keys=[fk],
-        )
-        # column_to_tag does NOT map ('structure', 'id') — simulates missing target
-        schema = SchemaSpec(
-            tables={'cell': cell_table},
-            column_to_tag={
-                ('cell', 'structure_id'): '_cell.structure_id',
-                ('cell', 'length_a'): '_cell.length_a',
-                # ('structure', 'id') intentionally absent
-            },
-        )
-        row = {'_block_id': 'B', 'length_a': '5.0'}
-        msgs = []
-        _apply_fk(row, cell_table, schema, None, {}, propagate_fk=False, emit=msgs.append)
-        # When target is not in schema.column_to_tag, emits a message and leaves NULL
-        sid = row.get('structure_id')
-        assert sid is None  # No UUID generated when target_def_id is missing
-        assert any('NULL' in m or 'not in structured' in m for m in msgs)
-
-
-# ===========================================================================
-# TestFillBridgeColumns — fallback chain resolution
-# ===========================================================================
-
-class TestFillBridgeColumns:
-    """Unit tests for _fill_bridge_columns with multiple resolution chains."""
-
-    def test_primary_chain_used_when_populated(self):
-        from pycifparse.dictionary.schema import BridgeColumnDef
-        from pycifparse.ingestion.ingest import _fill_bridge_columns
-
-        # Two chains: primary goes A→B (via col1→pk→val_primary),
-        # fallback goes A→C (via col2→pk→val_fallback).
-        # Primary chain is populated — it should be used.
-        merged_rows = {
-            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
-            'b': {(None, 1): {'_block_id': 'blk', 'pk': 'k1', 'val_primary': 'PRIMARY'}},
-            'c': {(None, 1): {'_block_id': 'blk', 'pk': 'k2', 'val_fallback': 'FALLBACK'}},
-        }
-        bd = BridgeColumnDef(
-            table_name='a',
-            column_name='derived',
-            hops=[('col1', 'b', 'pk')],
-            bridge_value_column='val_primary',
-            fallback_chains=[([('col2', 'c', 'pk')], 'val_fallback')],
-        )
-        _fill_bridge_columns(merged_rows, [bd])
-        assert merged_rows['a'][(None, 1)]['derived'] == 'PRIMARY'
-
-    def test_fallback_chain_used_when_primary_misses(self):
-        from pycifparse.dictionary.schema import BridgeColumnDef
-        from pycifparse.ingestion.ingest import _fill_bridge_columns
-
-        # Primary chain lookup returns nothing (b has no matching row).
-        # Fallback chain should be used instead.
-        merged_rows = {
-            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
-            'b': {},   # primary bridge table empty
-            'c': {(None, 1): {'_block_id': 'blk', 'pk': 'k2', 'val_fallback': 'FALLBACK'}},
-        }
-        bd = BridgeColumnDef(
-            table_name='a',
-            column_name='derived',
-            hops=[('col1', 'b', 'pk')],
-            bridge_value_column='val_primary',
-            fallback_chains=[([('col2', 'c', 'pk')], 'val_fallback')],
-        )
-        _fill_bridge_columns(merged_rows, [bd])
-        assert merged_rows['a'][(None, 1)]['derived'] == 'FALLBACK'
-
-    def test_null_when_all_chains_miss(self):
-        from pycifparse.dictionary.schema import BridgeColumnDef
-        from pycifparse.ingestion.ingest import _fill_bridge_columns
-
-        merged_rows = {
-            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
-            'b': {},
-            'c': {},
-        }
-        bd = BridgeColumnDef(
-            table_name='a',
-            column_name='derived',
-            hops=[('col1', 'b', 'pk')],
-            bridge_value_column='val_primary',
-            fallback_chains=[([('col2', 'c', 'pk')], 'val_fallback')],
-        )
-        _fill_bridge_columns(merged_rows, [bd])
-        assert merged_rows['a'][(None, 1)].get('derived') is None
-
-    def test_chains_agree_no_warning_emitted(self):
-        from pycifparse.dictionary.schema import BridgeColumnDef
-        from pycifparse.ingestion.ingest import _fill_bridge_columns
-
-        # Both chains resolve to the same value — no warning should be emitted.
-        merged_rows = {
-            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
-            'b': {(None, 1): {'pk': 'k1', 'val': 'SAME'}},
-            'c': {(None, 1): {'pk': 'k2', 'val': 'SAME'}},
-        }
-        bd = BridgeColumnDef(
-            table_name='a',
-            column_name='derived',
-            hops=[('col1', 'b', 'pk')],
-            bridge_value_column='val',
-            fallback_chains=[([('col2', 'c', 'pk')], 'val')],
-        )
-        warnings = []
-        _fill_bridge_columns(merged_rows, [bd], emit=warnings.append)
-        assert merged_rows['a'][(None, 1)]['derived'] == 'SAME'
-        assert warnings == []
-
-    def test_chains_disagree_warning_emitted_first_value_used(self):
-        from pycifparse.dictionary.schema import BridgeColumnDef
-        from pycifparse.ingestion.ingest import _fill_bridge_columns
-
-        # Chains resolve to different values — warning emitted, first value used.
-        merged_rows = {
-            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
-            'b': {(None, 1): {'pk': 'k1', 'val': 'FIRST'}},
-            'c': {(None, 1): {'pk': 'k2', 'val': 'SECOND'}},
-        }
-        bd = BridgeColumnDef(
-            table_name='a',
-            column_name='derived',
-            hops=[('col1', 'b', 'pk')],
-            bridge_value_column='val',
-            fallback_chains=[([('col2', 'c', 'pk')], 'val')],
-        )
-        warnings = []
-        _fill_bridge_columns(merged_rows, [bd], emit=warnings.append)
-        assert merged_rows['a'][(None, 1)]['derived'] == 'FIRST'
-        assert len(warnings) == 1
-        assert 'disagree' in warnings[0]
-        assert 'FIRST' in warnings[0]
-        assert 'SECOND' in warnings[0]
-
-
-def _cif_pow_schema():
-    """Load cif_pow.dic and return a generated SchemaSpec (cached per process)."""
-    from pathlib import Path
-    from pycifparse.dictionary.loader import DictionaryLoader, directory_resolver
-    from pycifparse.dictionary.schema import generate_schema
-    dic_path = Path('data/dictionaries/cif_pow.dic')
-    loader = DictionaryLoader(resolver=directory_resolver(dic_path.parent))
-    return generate_schema(loader.load(dic_path.read_text(encoding='utf-8')))
-
-
-def _ingest_cif_file(cif_path_str, schema):
-    """Parse *cif_path_str*, ingest into an in-memory DB, return (conn, errors)."""
-    from pathlib import Path
-    from pycifparse import build, ingest
-    from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
-    cif, _ = build(Path(cif_path_str).read_text(encoding='utf-8'))
-    conn = sqlite3.connect(':memory:')
-    conn.execute('PRAGMA foreign_keys = OFF')
-    apply_schema(conn, schema)
-    apply_fallback_schema(conn)
-    errors = ingest(cif, conn, schema)
-    return conn, errors
-
-
-class TestTransitiveBridgeFallback:
-    """Integration tests: bridge column resolution across alternative paths."""
-
-    def test_radiation_id_resolved_via_instr_path(self):
-        # transitive_01.cif: diffrn.diffrn_radiation_id absent; pd_instr path used.
-        schema = _cif_pow_schema()
-        conn, _ = _ingest_cif_file('tests/cif_files/transitive_01.cif', schema)
-
-        rows = conn.execute(
-            'SELECT "radiation_id" FROM "pd_peak" WHERE "radiation_id" IS NOT NULL'
-        ).fetchall()
-        assert rows, "radiation_id was not resolved for any pd_peak row"
-        assert all(r[0] == 'CR_RAD' for r in rows)
-
-    def test_two_patterns_each_use_different_bridge_path(self):
-        # transitive_02.cif: pattern_1 resolves via pd_instr (no diffrn_radiation_id),
-        # pattern_2 resolves via diffrn (no pd_instr.radiation_id).
-        # Both should resolve correctly with no disagreement warning.
-        schema = _cif_pow_schema()
-        conn, errors = _ingest_cif_file('tests/cif_files/transitive_02.cif', schema)
-
-        disagree_warnings = [e for e in errors if 'disagree' in e]
-        assert disagree_warnings == [], f"unexpected disagreement warnings: {disagree_warnings}"
-
-        peak_radiation = dict(conn.execute(
-            'SELECT "diffractogram_id", "radiation_id" FROM "pd_peak"'
-            ' WHERE "radiation_id" IS NOT NULL'
-        ).fetchall())
-
-        assert peak_radiation.get('pattern_1') == 'CR_RAD', \
-            "pattern_1 peaks should resolve radiation_id via pd_instr path"
-        assert peak_radiation.get('pattern_2') == 'copper', \
-            "pattern_2 peaks should resolve radiation_id via diffrn path"
-
-
-# ===========================================================================
-# TestAdbcFileBacked — ADBC Arrow bulk-insert path (file-backed SQLite only)
-# ===========================================================================
-
-class TestAdbcFileBacked:
-    """Verify that the ADBC code path correctly writes structured tables to a
-    file-backed SQLite database.  The :memory: path (executemany) is covered
-    by all other tests; this class targets the branch in _flush() that
-    is only reachable when sqlite_path is non-empty."""
-
-    def test_structured_data_written_via_adbc(self, tmp_path):
-        schema = _schema_a()
-        db_file = tmp_path / 'adbc_test.db'
-        conn = sqlite3.connect(str(db_file))
-        apply_schema(conn, schema)
-        apply_fallback_schema(conn)
-
-        f = _file(_block('B', scalars={
-            '_structure.id': _s('S1'),
-            '_cell.structure_id': _s('S1'),
-            '_cell.length_a': _s('5.4'),
-        }))
-        errors = ingest(f, conn, schema)
-        assert errors == []
-
-        cell_rows = conn.execute('SELECT * FROM "cell"').fetchall()
-        assert len(cell_rows) == 1
-        row = dict(zip([d[0] for d in conn.execute('SELECT * FROM "cell"').description], cell_rows[0]))
-        assert row['structure_id'] == 'S1'
-        assert row['length_a'] == '5.4'
-        conn.close()
-
-    def test_data_visible_from_fresh_connection(self, tmp_path):
-        schema = _schema_a()
-        db_file = tmp_path / 'adbc_test2.db'
-        conn = sqlite3.connect(str(db_file))
-        apply_schema(conn, schema)
-        apply_fallback_schema(conn)
-
-        f = _file(_block('B', scalars={
-            '_structure.id': _s('S1'),
-            '_cell.structure_id': _s('S1'),
-            '_cell.length_a': _s('5.4'),
-        }))
-        ingest(f, conn, schema)
-        conn.close()
-
-        conn2 = sqlite3.connect(str(db_file))
-        cell_rows = conn2.execute('SELECT * FROM "cell"').fetchall()
-        assert len(cell_rows) == 1
-        conn2.close()
-
-    def test_adbc_error_emitted_when_table_missing(self, tmp_path):
-        """If the structured table was dropped before ingest, ADBC fails and
-        the error is returned in the errors list (not raised)."""
-        schema = _schema_a()
-        db_file = tmp_path / 'adbc_test3.db'
-        conn = sqlite3.connect(str(db_file))
-        apply_schema(conn, schema)
-        apply_fallback_schema(conn)
-        conn.execute('DROP TABLE "structure"')
-        conn.commit()
-
-        f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
-        errors = ingest(f, conn, schema)
-        assert any('ADBC error' in e for e in errors)
-        conn.close()

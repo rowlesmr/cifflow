@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import pathlib
-import sqlite3
 import warnings
 from dataclasses import dataclass, field
 from typing import Literal
 
+import duckdb
+
 from pycifparse.cifmodel.builder import build
 from pycifparse.cifmodel.model import CifFile
 from pycifparse.dictionary.schema import SchemaSpec
-from pycifparse.dictionary.schema_apply import apply_fallback_schema, apply_schema
-from pycifparse.ingestion.ingest import IngestionError, ingest
+from pycifparse.ingestion.ingest import ingest
 from pycifparse.types import ParseError
 from pycifparse.validation._db_validate import DbValidationResult, validate_database
 
@@ -42,7 +42,7 @@ class ValidationIssue:
 class ValidationReport:
     passed:   bool
     issues:   list[ValidationIssue]
-    database: sqlite3.Connection | None
+    database: duckdb.DuckDBPyConnection | None
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +135,6 @@ def validate(
     the schema.  Returns a unified ValidationReport.  Never raises.
     """
     issues: list[ValidationIssue] = []
-    conn: sqlite3.Connection | None = None
 
     # ------------------------------------------------------------------ #
     # Stage 1 — Parse                                                      #
@@ -186,68 +185,29 @@ def validate(
             database=None,
         )
 
-    collected: list[tuple[str, str | None, Literal['Error', 'Warning', 'Info'], str | None, str | None, dict[str, str | None] | None]] = []
-
-    def _collect(msg: str, block_id: str | None = None, *, severity: Literal['Error', 'Warning', 'Info'] = 'Warning', table: str | None = None, column: str | None = None, key_values: dict[str, str | None] | None = None) -> None:
-        collected.append((msg, block_id, severity, table, column, key_values))
-
     ingest_ok = False
+    db: duckdb.DuckDBPyConnection | None = None
     try:
-        conn = sqlite3.connect(':memory:')
-        apply_fallback_schema(conn)
-        if schema is not None:
-            apply_schema(conn, schema)
-
-        ingest(
-            cif, conn, schema,
-            on_error=_collect,
+        db, ingest_errors = ingest(
+            cif, schema=schema,
             dataset_id=dataset_id,
             propagate_fk=propagate_fk,
         )
+        for msg in ingest_errors:
+            issues.append(_ingest_msg_to_issue(msg, 'Warning'))
         ingest_ok = True
 
-        for msg, blk, sev, tbl, col, kv in collected:
-            issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
-
-    except IngestionError as exc:
-        error_set = set(exc.errors)
-        for msg, blk, sev, tbl, col, kv in collected:
-            effective_sev: Literal['Error', 'Warning', 'Info'] = 'Error' if msg in error_set else sev
-            issues.append(_ingest_msg_to_issue(msg, effective_sev, blk, tbl, col, kv))
-        conn = None
-
-    except sqlite3.IntegrityError as exc:
-        if 'FOREIGN KEY' in str(exc):
-            for msg, blk, sev, tbl, col, kv in collected:
-                issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
-            issues.append(_ingest_exc_to_issue(
-                'fk_violation',
-                "FK constraint violated during ingestion; this likely indicates "
-                "a bug in stub row creation",
-            ))
-        else:
-            for msg, blk, sev, tbl, col, kv in collected:
-                issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
-            issues.append(_ingest_exc_to_issue('internal_error', str(exc)))
-        conn = None
-
     except ValueError as exc:
-        for msg, blk, sev, tbl, col, kv in collected:
-            issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
         issues.append(_ingest_exc_to_issue('dataset_error', str(exc)))
-        conn = None
 
     except Exception as exc:
-        for msg, blk, sev, tbl, col, kv in collected:
-            issues.append(_ingest_msg_to_issue(msg, sev, blk, tbl, col, kv))
         issues.append(_ingest_exc_to_issue('internal_error', str(exc)))
-        conn = None
 
     # ------------------------------------------------------------------ #
     # Stage 3 — Database                                                   #
     # ------------------------------------------------------------------ #
-    if ingest_ok and schema is not None and conn is not None:
-        db_results = validate_database(conn, schema, block_id=block_id, strict_container_nulls=True)
+    if ingest_ok and schema is not None and db is not None:
+        db_results = validate_database(db, schema, block_id=block_id, strict_container_nulls=True)
         has_internal_error = any(r.check == 'internal_error' for r in db_results)
         for r in db_results:
             if r.check == 'internal_error':
@@ -261,10 +221,10 @@ def validate(
             else:
                 issues.append(_db_result_to_issue(r))
         if has_internal_error:
-            conn = None
+            db = None
 
     return ValidationReport(
         passed=not any(i.severity == 'Error' for i in issues),
         issues=issues,
-        database=conn,
+        database=db,
     )

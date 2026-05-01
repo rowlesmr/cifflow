@@ -13,8 +13,8 @@ All tests use in-memory SQLite databases.
 from __future__ import annotations
 
 import pathlib
-import sqlite3
 
+import duckdb
 import pytest
 
 from pycifparse import (
@@ -22,8 +22,6 @@ from pycifparse import (
     ingest,
     emit,
     EmitMode,
-    apply_schema,
-    apply_fallback_schema,
     generate_schema,
     directory_resolver,
 )
@@ -48,15 +46,11 @@ def _make_schema(ddl_source: str) -> SchemaSpec:
     return generate_schema(d)
 
 
-def _ingest_src(cif_source: str, schema: SchemaSpec | None = None) -> sqlite3.Connection:
-    """Parse *cif_source* and ingest into a fresh in-memory DB."""
+def _ingest_src(cif_source: str, schema: SchemaSpec | None = None) -> duckdb.DuckDBPyConnection:
+    """Parse *cif_source* and ingest into a fresh in-memory DuckDB."""
     cif, errors = build(cif_source)
     assert not errors, errors
-    conn = sqlite3.connect(':memory:')
-    if schema:
-        apply_schema(conn, schema)
-    apply_fallback_schema(conn)
-    ingest(cif, conn, schema=schema)
+    conn, _ = ingest(cif, None, schema)
     return conn
 
 
@@ -1410,7 +1404,7 @@ class TestNullHandling:
 _ADMIN_COLS = {'_block_id', '_row_id', '_pycifparse_id'}
 
 
-def _data_cols(conn: sqlite3.Connection, table_name: str, schema: SchemaSpec) -> list[str]:
+def _data_cols(conn: duckdb.DuckDBPyConnection, table_name: str, schema: SchemaSpec) -> list[str]:
     """Return column names in *table_name* that carry real CIF data.
 
     Excludes administrative columns (_block_id, _row_id, _pycifparse_id) and
@@ -1419,8 +1413,12 @@ def _data_cols(conn: sqlite3.Connection, table_name: str, schema: SchemaSpec) ->
     synthetic: set[str] = set()
     if table_name in schema.tables:
         synthetic = {c.name for c in schema.tables[table_name].columns if c.is_synthetic}
-    pragma = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
-    all_cols = [row[1] for row in pragma]
+    rows = conn.execute(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name=? ORDER BY ordinal_position",
+        [table_name],
+    ).fetchall()
+    all_cols = [row[0] for row in rows]
     return [c for c in all_cols if c not in _ADMIN_COLS and c not in synthetic]
 
 
@@ -1436,7 +1434,7 @@ def _norm(v: object) -> object:
 
 
 def _sorted_rows(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     table_name: str,
     cols: list[str],
 ) -> list[tuple]:
@@ -1449,8 +1447,8 @@ def _sorted_rows(
 
 
 def _assert_same_data(
-    conn_orig: sqlite3.Connection,
-    conn_emit: sqlite3.Connection,
+    conn_orig: duckdb.DuckDBPyConnection,
+    conn_emit: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
     exclude_tables: set[str] | None = None,
 ) -> None:
@@ -1494,20 +1492,16 @@ def _assert_same_data(
 
 
 def _emit_and_reingest(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
     mode: EmitMode,
     **emit_kwargs,
-) -> sqlite3.Connection:
+) -> duckdb.DuckDBPyConnection:
     """Emit *conn* in *mode*, parse the result, and ingest into a fresh connection."""
     cif_text = emit(conn, schema, mode=mode, **emit_kwargs)
     cif_rt, errors = build(cif_text)
     assert not errors, f'Re-parse produced errors: {errors}'
-    conn2 = sqlite3.connect(':memory:')
-    conn2.isolation_level = None
-    apply_schema(conn2, schema)
-    apply_fallback_schema(conn2)
-    ingest(cif_rt, conn2, schema=schema)
+    conn2, _ = ingest(cif_rt, None, schema)
     return conn2
 
 
@@ -1621,14 +1615,10 @@ def _load_schema(dic_file: pathlib.Path) -> SchemaSpec:
     return generate_schema(d)
 
 
-def _ingest_file(cif_path: pathlib.Path, schema: SchemaSpec) -> sqlite3.Connection:
+def _ingest_file(cif_path: pathlib.Path, schema: SchemaSpec) -> duckdb.DuckDBPyConnection:
     cif, errors = build(cif_path.read_text(encoding='utf-8'))
     assert not errors, f'Parse errors in {cif_path.name}: {errors}'
-    conn = sqlite3.connect(':memory:')
-    conn.isolation_level = None
-    apply_schema(conn, schema)
-    apply_fallback_schema(conn)
-    ingest(cif, conn, schema=schema)
+    conn, _ = ingest(cif, None, schema)
     return conn
 
 

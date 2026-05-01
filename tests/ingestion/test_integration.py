@@ -5,18 +5,16 @@ Marked @pytest.mark.slow — run with: pytest -m slow
 """
 
 import pathlib
-import sqlite3
 
+import duckdb
 import pytest
 
 from pycifparse import build, ingest, IngestionError
 from pycifparse.dictionary import (
     DictionaryLoader,
-    apply_schema,
     directory_resolver,
     generate_schema,
 )
-from pycifparse.dictionary.schema_apply import apply_fallback_schema
 
 _DATA_DIR = pathlib.Path(__file__).parents[2] / 'data' / 'dictionaries'
 _CIF_DIR = pathlib.Path(__file__).parents[1] / 'cif_files'
@@ -62,12 +60,7 @@ def second_short_cif():
 # ---------------------------------------------------------------------------
 
 def _conn_with_schema(schema=None):
-    c = sqlite3.connect(':memory:')
-    c.isolation_level = None
-    if schema is not None:
-        apply_schema(c, schema)
-    apply_fallback_schema(c)
-    return c
+    return duckdb.connect()
 
 
 # ---------------------------------------------------------------------------
@@ -77,8 +70,7 @@ def _conn_with_schema(schema=None):
 @pytest.fixture(scope='class')
 def one_structure_conn(core_schema, one_structure_cif):
     """Ingest one_structure.cif once per class; all tests share the connection."""
-    conn = _conn_with_schema(core_schema)
-    ingest(one_structure_cif, conn, core_schema)
+    conn, _ = ingest(one_structure_cif, None, core_schema)
     return conn
 
 
@@ -154,8 +146,7 @@ class TestIngestWithSchema:
 @pytest.fixture(scope='class')
 def one_structure_conn_no_schema(one_structure_cif):
     """Ingest one_structure.cif (no schema) once per class; all tests share the connection."""
-    conn = _conn_with_schema(schema=None)
-    ingest(one_structure_cif, conn, None)
+    conn, _ = ingest(one_structure_cif, None, None)
     return conn
 
 
@@ -187,10 +178,10 @@ class TestIngestNoSchema:
         tables = {
             row[0]
             for row in one_structure_conn_no_schema.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
             ).fetchall()
         }
-        assert tables == {'_cif_fallback', '_block_dataset_membership', '_validation_result', '_block_order', '_tag_presence'}
+        assert tables == {'_cif_fallback', '_block_dataset_membership', '_validation_result', '_block_order', '_tag_presence', '_metatable'}
 
 
 # ---------------------------------------------------------------------------
@@ -202,8 +193,7 @@ class TestIngestMultiBlock:
     def test_multi_block_row_counts(self, pow_schema):
         """multi_one.cif has multiple instrument blocks; each should produce rows."""
         cif, _ = build((_CIF_DIR / 'multi_one.cif').read_text(encoding='utf-8'))
-        conn = _conn_with_schema(pow_schema)
-        errors = ingest(cif, conn, pow_schema)
+        conn, errors = ingest(cif, None, pow_schema)
         assert isinstance(errors, list)
 
         # Three instrument blocks → three pd_instr rows
@@ -219,8 +209,7 @@ class TestIngestMultiBlock:
 @pytest.fixture(scope='class')
 def second_short_conn(pow_schema, second_short_cif):
     """Ingest second_short.cif once per class; all tests share the connection."""
-    conn = _conn_with_schema(pow_schema)
-    ingest(second_short_cif, conn, pow_schema)
+    conn, _ = ingest(second_short_cif, None, pow_schema)
     return conn
 
 

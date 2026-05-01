@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from dataclasses import dataclass
 from typing import Any, Literal
+
+import duckdb
 
 from pycifparse.dictionary.schema import ColumnDef, SchemaSpec, TableDef
 from pycifparse.validation._db_checks import (
@@ -37,21 +38,26 @@ class DbValidationResult:
     message:    str
 
 
+def _fetchall_dicts(cursor) -> list[dict]:
+    cols = [d[0] for d in cursor.description]
+    return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+
 def validate_database(
-    conn: sqlite3.Connection,
+    db: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
     *,
     block_id: str | None = None,
     strict_container_nulls: bool = True,
 ) -> list[DbValidationResult]:
     """
-    Validate a SQLite database against a schema.
+    Validate a DuckDB database against a schema.
 
     Never raises; unexpected exceptions are returned as 'internal_error' results.
     """
     results: list[DbValidationResult] = []
     try:
-        _run_validation(conn, schema, block_id, strict_container_nulls, results)
+        _run_validation(db, schema, block_id, strict_container_nulls, results)
     except Exception as exc:
         results.append(DbValidationResult(
             table='', column='', tag='', block_id='', row_id=0,
@@ -63,26 +69,24 @@ def validate_database(
 
 
 def _run_validation(
-    conn: sqlite3.Connection,
+    db: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
     block_id: str | None,
     strict: bool,
     results: list[DbValidationResult],
 ) -> None:
-    conn.row_factory = sqlite3.Row
-
     # Step 0 — unknown_tag check
     if block_id is not None:
-        rows = conn.execute(
+        rows = _fetchall_dicts(db.execute(
             'SELECT DISTINCT "tag", "_block_id" FROM "_cif_fallback" '
             'WHERE "_block_id" = ? ORDER BY "_block_id", "tag"',
-            (block_id,),
-        ).fetchall()
+            [block_id],
+        ))
     else:
-        rows = conn.execute(
+        rows = _fetchall_dicts(db.execute(
             'SELECT DISTINCT "tag", "_block_id" FROM "_cif_fallback" '
             'ORDER BY "_block_id", "tag"',
-        ).fetchall()
+        ))
 
     for row in rows:
         tag = row['tag']
@@ -106,7 +110,7 @@ def _run_validation(
 
         # Step 2 — keyless Set cardinality check
         if pk_cols == ['_pycifparse_id']:
-            _check_keyless_cardinality(conn, table_name, block_id, results)
+            _check_keyless_cardinality(db, table_name, block_id, results)
 
         # Non-synthetic PK column names (used to build key_values)
         ns_pks = [pk for pk in pk_cols if pk not in _SYNTHETIC]
@@ -116,28 +120,28 @@ def _run_validation(
             if col_def.is_synthetic:
                 continue
             _check_column(
-                conn, schema, table_name, col_def, ns_pks,
+                db, schema, table_name, col_def, ns_pks,
                 block_id, strict, results,
             )
 
 
 def _check_keyless_cardinality(
-    conn: sqlite3.Connection,
+    db: duckdb.DuckDBPyConnection,
     table_name: str,
     block_id: str | None,
     results: list[DbValidationResult],
 ) -> None:
     if block_id is not None:
-        rows = conn.execute(
+        rows = _fetchall_dicts(db.execute(
             f'SELECT "_block_id", COUNT(*) AS cnt FROM "{table_name}" '
             f'WHERE "_block_id" = ? GROUP BY "_block_id" HAVING COUNT(*) > 1',
-            (block_id,),
-        ).fetchall()
+            [block_id],
+        ))
     else:
-        rows = conn.execute(
+        rows = _fetchall_dicts(db.execute(
             f'SELECT "_block_id", COUNT(*) AS cnt FROM "{table_name}" '
             f'GROUP BY "_block_id" HAVING COUNT(*) > 1',
-        ).fetchall()
+        ))
 
     for row in rows:
         bid = row['_block_id']
@@ -160,7 +164,7 @@ def _check_keyless_cardinality(
 
 
 def _check_column(
-    conn: sqlite3.Connection,
+    db: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
     table_name: str,
     col_def: ColumnDef,
@@ -181,12 +185,12 @@ def _check_column(
     else:
         query = f'SELECT "_block_id", "_row_id", "{col_name}" FROM "{table_name}"'
 
-    params: tuple = ()
+    params: list = []
     if block_id is not None:
         query += ' WHERE "_block_id" = ?'
-        params = (block_id,)
+        params = [block_id]
 
-    rows = conn.execute(query, params).fetchall()
+    rows = _fetchall_dicts(db.execute(query, params))
 
     for row in rows:
         bid = row['_block_id']

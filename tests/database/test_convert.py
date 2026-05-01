@@ -4,19 +4,21 @@ Unit tests for convert_database().
 
 from __future__ import annotations
 
-import sqlite3
-
+import duckdb
 import pytest
 
 from pycifparse import convert_database
 from pycifparse.dictionary.ddlm_item import DdlmItem
 from pycifparse.dictionary.ddlm_parser import DdlmDictionary
-from pycifparse.dictionary.schema import generate_schema
-from pycifparse.dictionary.schema_apply import apply_fallback_schema, apply_schema
+from pycifparse.dictionary.schema import (
+    emit_create_statements,
+    emit_fallback_create_statements,
+    generate_schema,
+)
 
 
 # ---------------------------------------------------------------------------
-# Helpers — mirrors test_compact.py
+# Helpers
 # ---------------------------------------------------------------------------
 
 def _item(definition_id, category_id, object_id, *,
@@ -118,27 +120,23 @@ def _schema_matrix():
 
 
 def _src(schema, rows):
-    """Return a populated :memory: src connection with given TEXT rows."""
-    c = sqlite3.connect(':memory:')
-    c.isolation_level = None
-    apply_schema(c, schema)
-    apply_fallback_schema(c)
-    c.execute('PRAGMA foreign_keys = OFF')
-    c.execute('BEGIN')
+    """Return a populated DuckDB src connection with given TEXT rows."""
+    c = duckdb.connect()
+    for stmt in emit_create_statements(schema):
+        c.execute(stmt)
+    for stmt in emit_fallback_create_statements():
+        c.execute(stmt)
     for blk, row_id, label, count, length, name in rows:
         c.execute(
             'INSERT INTO "vals" ("_block_id","_row_id","label","count","length","name") '
             'VALUES (?,?,?,?,?,?)',
-            (blk, row_id, label, count, length, name),
+            [blk, row_id, label, count, length, name],
         )
-    c.execute('COMMIT')
     return c
 
 
 def _dst():
-    c = sqlite3.connect(':memory:')
-    c.isolation_level = None
-    return c
+    return duckdb.connect()
 
 
 def _fetch(conn, tbl, cols):
@@ -147,12 +145,13 @@ def _fetch(conn, tbl, cols):
 
 
 def _col_type(conn, tbl, col):
-    """Return the declared type of *col* in *tbl* from sqlite_master DDL."""
-    rows = conn.execute(f'PRAGMA table_info("{tbl}")').fetchall()
-    for row in rows:
-        if row[1] == col:
-            return row[2]
-    return None
+    """Return the declared type of *col* in *tbl* from information_schema."""
+    rows = conn.execute(
+        "SELECT data_type FROM information_schema.columns "
+        "WHERE table_name=? AND column_name=?",
+        [tbl, col]
+    ).fetchall()
+    return rows[0][0] if rows else None
 
 
 # ===========================================================================
@@ -167,19 +166,19 @@ class TestColumnTypes:
         convert_database(src, dst, schema)
         assert _col_type(dst, 'vals', 'count') == 'INTEGER'
 
-    def test_real_column_declared_real(self):
+    def test_real_column_declared_double(self):
         schema = _schema_typed()
         src = _src(schema, [('B', 1, 'x', '5', '1.0', 'hello')])
         dst = _dst()
         convert_database(src, dst, schema)
-        assert _col_type(dst, 'vals', 'length') == 'REAL'
+        assert _col_type(dst, 'vals', 'length') == 'DOUBLE'
 
-    def test_text_column_declared_text(self):
+    def test_text_column_declared_varchar(self):
         schema = _schema_typed()
         src = _src(schema, [('B', 1, 'x', '5', '1.0', 'hello')])
         dst = _dst()
         convert_database(src, dst, schema)
-        assert _col_type(dst, 'vals', 'name') == 'TEXT'
+        assert _col_type(dst, 'vals', 'name') == 'VARCHAR'
 
 
 # ===========================================================================
@@ -219,7 +218,7 @@ class TestCasting:
         dst = _dst()
         convert_database(src, dst, schema)
         tables = {r[0] for r in dst.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
         ).fetchall()}
         assert 'vals' in tables
 
@@ -307,13 +306,15 @@ class TestCoercionFailure:
         assert rows == [(None,)]
         assert any('coercion failed' in m for m in msgs)
 
-    def test_keep_policy_bad_value_preserved(self):
+    def test_keep_policy_bad_value_stored_as_null(self):
+        # DuckDB enforces INTEGER column types; non-castable values cannot be
+        # kept as strings.  The keep policy stores NULL and emits a warning.
         schema = _schema_typed()
         src = _src(schema, [('B', 1, 'x', 'not_a_number', '1.0', 'n')])
         dst = _dst()
         msgs = convert_database(src, dst, schema, on_coercion_failure='keep')
         rows = _fetch(dst, 'vals', ['count'])
-        assert rows == [('not_a_number',)]
+        assert rows == [(None,)]
         assert any('coercion failed' in m for m in msgs)
 
     def test_error_policy_raises(self):
@@ -332,18 +333,16 @@ class TestFallbackTables:
     def test_fallback_table_created_in_dst(self):
         schema = _schema_typed()
         src = _src(schema, [])
-        apply_fallback_schema(src)  # already applied in _src, idempotent
         src.execute(
             'INSERT INTO "_cif_fallback" '
             '("_block_id","_row_id","tag","value","value_type") '
             'VALUES (?,?,?,?,?)',
-            ('B', 1, '_some.tag', 'hello', 'STRING'),
+            ['B', 1, '_some.tag', 'hello', 'STRING'],
         )
-        src.commit()
         dst = _dst()
         convert_database(src, dst, schema)
         tables = {r[0] for r in dst.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
         ).fetchall()}
         assert '_cif_fallback' in tables
 
@@ -354,9 +353,8 @@ class TestFallbackTables:
             'INSERT INTO "_cif_fallback" '
             '("_block_id","_row_id","tag","value","value_type") '
             'VALUES (?,?,?,?,?)',
-            ('B', 1, '_some.tag', '42', 'STRING'),
+            ['B', 1, '_some.tag', '42', 'STRING'],
         )
-        src.commit()
         dst = _dst()
         convert_database(src, dst, schema)
         rows = dst.execute(
@@ -373,30 +371,28 @@ class TestFallbackTables:
 
 def _src_matrix(schema, rows):
     """Populate the 'mat' table with (blk, row_id, label, hkl, xyz) rows."""
-    c = sqlite3.connect(':memory:')
-    c.isolation_level = None
-    apply_schema(c, schema)
-    apply_fallback_schema(c)
-    c.execute('PRAGMA foreign_keys = OFF')
-    c.execute('BEGIN')
+    c = duckdb.connect()
+    for stmt in emit_create_statements(schema):
+        c.execute(stmt)
+    for stmt in emit_fallback_create_statements():
+        c.execute(stmt)
     for blk, row_id, label, hkl, xyz in rows:
         c.execute(
             'INSERT INTO "mat" ("_block_id","_row_id","label","hkl","xyz") '
             'VALUES (?,?,?,?,?)',
-            (blk, row_id, label, hkl, xyz),
+            [blk, row_id, label, hkl, xyz],
         )
-    c.execute('COMMIT')
     return c
 
 
 class TestContainerColumns:
-    def test_matrix_column_stays_text(self):
-        """A Matrix/Integer column has TEXT affinity in the destination."""
+    def test_matrix_column_stays_varchar(self):
+        """A Matrix/Integer column has VARCHAR affinity in the destination."""
         schema = _schema_matrix()
         src = _src_matrix(schema, [('B', 1, 'x', '["1","2","3"]', '[1.0,2.0]')])
         dst = _dst()
         convert_database(src, dst, schema)
-        assert _col_type(dst, 'mat', 'hkl') == 'TEXT'
+        assert _col_type(dst, 'mat', 'hkl') == 'VARCHAR'
 
     def test_matrix_integer_leaves_cast(self):
         """Integer leaves inside a JSON list are cast to Python int."""

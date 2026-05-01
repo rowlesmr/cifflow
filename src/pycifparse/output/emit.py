@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 import uuid
 import warnings as _warnings
 from collections import deque
 from dataclasses import dataclass
+
+import duckdb
 
 from pycifparse.dictionary.schema import ForeignKeyDef, SchemaSpec, TableDef
 from pycifparse.output.plan import BlockSpec, EmitMode, OutputPlan
@@ -93,7 +94,7 @@ def _make_block_data(
 # ---------------------------------------------------------------------------
 
 def emit(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
     *,
     mode: EmitMode = EmitMode.ORIGINAL,
@@ -110,7 +111,7 @@ def emit(
     Parameters
     ----------
     conn:
-        Open ``sqlite3.Connection`` populated by ``ingest()``.  Read-only
+        Open ``duckdb.DuckDBPyConnection`` populated by ``ingest()``.  Read-only
         during emission.
     schema:
         The ``SchemaSpec`` used when the database was ingested.
@@ -343,29 +344,31 @@ def _replace_name(block: _BlockData, name: str) -> _BlockData:
 # ---------------------------------------------------------------------------
 
 def _collect_original(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
 ) -> list[_BlockData]:
     """ORIGINAL: one output block per distinct ``_block_id``."""
+    cache = _EmitCache(conn, schema)
     block_ids = _all_block_ids(conn, schema)
     result = []
     for bid in block_ids:
         table_rows = {}
         for table_name, table_def in schema.tables.items():
-            rows = _fetch_rows_for_block(conn, bid, table_name, table_def)
+            rows = _fetch_rows_for_block(conn, bid, table_name, table_def, cache=cache)
             if rows:
                 table_rows[table_name] = rows
 
-        fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
+        fallback = cache.fallback_for_block(bid)
         result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True, suppress_loop_fk_pk=True))
     return result
 
 
 def _collect_grouped(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
 ) -> list[_BlockData]:
     """GROUPED: one block per distinct Set-anchor key combination."""
+    cache = _EmitCache(conn, schema)
     table_to_anchor: dict[str, str | None] = {
         t: _find_set_anchor(t, schema) for t in schema.tables
     }
@@ -408,7 +411,7 @@ def _collect_grouped(
     for anchor_name in sorted(keyed_anchor_to_tables):
         anchor_def = schema.tables[anchor_name]
         domain_pks = [pk for pk in anchor_def.primary_keys if pk not in _SYNTHETIC]
-        anchor_rows = _fetch_rows(conn, anchor_name)
+        anchor_rows = cache.all_rows(anchor_name)
 
         if not anchor_rows:
             block_id_tables.extend(keyed_anchor_to_tables[anchor_name])
@@ -449,7 +452,7 @@ def _collect_grouped(
                     continue
                 rows = []
                 for bid in sorted(covered_block_ids):
-                    rows.extend(_fetch_rows(conn, table_name, '"_block_id" = ?', (bid,)))
+                    rows.extend(cache.rows_for_block(table_name, bid))
                 if rows:
                     table_rows[table_name] = rows
 
@@ -459,13 +462,13 @@ def _collect_grouped(
             for t in block_id_tables:
                 rows = []
                 for bid in sorted(covered_block_ids):
-                    rows.extend(_fetch_rows(conn, t, '"_block_id" = ?', (bid,)))
+                    rows.extend(cache.rows_for_block(t, bid))
                 if rows:
                     table_rows[t] = rows
 
             fallback: list[dict] = []
             for bid in sorted(covered_block_ids):
-                fallback.extend(_fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,)))
+                fallback.extend(cache.fallback_for_block(bid))
 
             # Block name: from anchor key dict (default rule), falling back to _block_id.
             anchor_kd: dict[str, list[str]] = {
@@ -488,7 +491,7 @@ def _collect_grouped(
         bid for bid in _all_block_ids_for_tables(conn, all_table_names)
         if bid not in absorbed_all
     ]
-    for bid_row in _fetch_rows(conn, '_cif_fallback'):
+    for bid_row in cache.all_fallback():
         bid = bid_row.get('_block_id')
         if bid and bid not in absorbed_all and bid not in remaining_block_ids:
             remaining_block_ids.append(bid)
@@ -497,10 +500,10 @@ def _collect_grouped(
     for bid in remaining_block_ids:
         table_rows = {}
         for t in all_table_names:
-            rows = _fetch_rows(conn, t, '"_block_id" = ?', (bid,))
+            rows = cache.rows_for_block(t, bid)
             if rows:
                 table_rows[t] = rows
-        fallback = _fetch_rows(conn, '_cif_fallback', '"_block_id" = ?', (bid,))
+        fallback = cache.fallback_for_block(bid)
         if table_rows or fallback:
             result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True))
 
@@ -508,7 +511,7 @@ def _collect_grouped(
 
 
 def _collect_one_block(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
 ) -> list[_BlockData]:
     """ONE_BLOCK: all data in a single block.
@@ -518,12 +521,13 @@ def _collect_one_block(
     database).  The name is resolved by block_namer if provided, otherwise
     falls back to ``'output'``.
     """
+    cache = _EmitCache(conn, schema)
     table_rows = {}
     for table_name in schema.tables:
-        rows = _fetch_rows(conn, table_name)
+        rows = cache.all_rows(table_name)
         if rows:
             table_rows[table_name] = rows
-    fallback = _fetch_rows(conn, '_cif_fallback')
+    fallback = cache.all_fallback()
 
     # Build conformance tags — only inject when dictionary metadata is available
     # and the relevant tables are not already present in the database.
@@ -658,7 +662,7 @@ def _ordered_tables_all_blocks(
 
 
 def _resolve_dataset_id(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     block_ids: set[str],
     fallback: 'str | None',
 ) -> 'str | list[str] | None':
@@ -676,20 +680,20 @@ def _resolve_dataset_id(
             rows = conn.execute(
                 f'SELECT DISTINCT "_audit_dataset_id" FROM "_block_dataset_membership" '
                 f'WHERE "_block_id" IN ({placeholders})',
-                tuple(sorted(real_bids)),
+                list(sorted(real_bids)),
             ).fetchall()
             ids = sorted(r[0] for r in rows if r[0])
             if len(ids) == 1:
                 return ids[0]
             if len(ids) > 1:
                 return ids
-        except sqlite3.OperationalError:
+        except Exception:
             pass
     return fallback
 
 
 def _collect_all_blocks(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
     version: CifVersion,
     plan: 'OutputPlan | None' = None,
@@ -1917,11 +1921,84 @@ def _merge_su(measurand: str, scaled_su: str) -> str:
 # Database helpers
 # ---------------------------------------------------------------------------
 
+class _EmitCache:
+    """Pre-fetched row data for all schema tables, eliminating N+1 DuckDB queries.
+
+    Built once at the start of a collection pass; all subsequent lookups are
+    in-memory dict operations instead of individual DuckDB queries.
+    """
+
+    def __init__(
+        self,
+        conn: duckdb.DuckDBPyConnection,
+        schema: 'SchemaSpec',
+    ) -> None:
+        self._all: dict[str, list[dict]] = {}
+        self._by_block: dict[str, dict[str, list[dict]]] = {}
+        self._by_pk: dict[str, dict[tuple, dict]] = {}
+        self._tag_presence: dict[tuple[str, str], list[tuple[str, str]]] = {}
+        self._fallback: dict[str, list[dict]] = {}
+
+        for tbl_name, table_def in schema.tables.items():
+            rows = _fetch_rows(conn, tbl_name)
+            if not rows:
+                continue
+            self._all[tbl_name] = rows
+            pks = table_def.primary_keys
+            by_block: dict[str, list[dict]] = {}
+            by_pk: dict[tuple, dict] = {}
+            for row in rows:
+                pk_key = tuple(row.get(pk) for pk in pks)
+                by_pk[pk_key] = row
+                bid = row.get('_block_id')
+                if bid is not None:
+                    by_block.setdefault(bid, []).append(row)
+            self._by_block[tbl_name] = by_block
+            self._by_pk[tbl_name] = by_pk
+
+        try:
+            tp_rows = conn.execute(
+                'SELECT "_block_id", "table_name", "column_name", "pk_json" '
+                'FROM "_tag_presence"'
+            ).fetchall()
+            for bid, tbl, col, pk_json in tp_rows:
+                self._tag_presence.setdefault((bid, tbl), []).append((col, pk_json))
+        except Exception:
+            pass
+
+        for row in _fetch_rows(conn, '_cif_fallback'):
+            bid = row.get('_block_id')
+            if bid:
+                self._fallback.setdefault(bid, []).append(row)
+
+    def all_rows(self, tbl_name: str) -> list[dict]:
+        return self._all.get(tbl_name, [])
+
+    def rows_for_block(self, tbl_name: str, block_id: str) -> list[dict]:
+        return self._by_block.get(tbl_name, {}).get(block_id, [])
+
+    def row_by_pk(self, tbl_name: str, pk_key: tuple) -> 'dict | None':
+        return self._by_pk.get(tbl_name, {}).get(pk_key)
+
+    def tag_presence(self, block_id: str, tbl_name: str) -> list[tuple[str, str]]:
+        return self._tag_presence.get((block_id, tbl_name), [])
+
+    def fallback_for_block(self, block_id: str) -> list[dict]:
+        return self._fallback.get(block_id, [])
+
+    def all_fallback(self) -> list[dict]:
+        result: list[dict] = []
+        for rows in self._fallback.values():
+            result.extend(rows)
+        return result
+
+
 def _fetch_rows_for_block(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     block_id: str,
     table_name: str,
     table_def: 'TableDef',
+    cache: '_EmitCache | None' = None,
 ) -> list[dict]:
     """Return rows that *block_id* contributed to, for ORIGINAL mode emission.
 
@@ -1930,18 +2007,26 @@ def _fetch_rows_for_block(
     scalar tag but does not own (a later block contributed to a shared Set/Loop
     scalar key) are returned with non-contributed columns masked to None.
     """
+    if cache is not None:
+        owned_block_rows = cache.rows_for_block(table_name, block_id)
+        presence = cache.tag_presence(block_id, table_name)
+    else:
+        owned_block_rows = _fetch_rows(conn, table_name, '"_block_id" = ?', (block_id,))
+        try:
+            presence = conn.execute(
+                'SELECT "column_name", "pk_json" FROM "_tag_presence" '
+                'WHERE "_block_id" = ? AND "table_name" = ?',
+                [block_id, table_name],
+            ).fetchall()
+        except Exception:
+            return [dict(r) for r in owned_block_rows]
+
     owned_rows: dict[tuple, dict] = {
         tuple(row.get(pk) for pk in table_def.primary_keys): row
-        for row in _fetch_rows(conn, table_name, '"_block_id" = ?', (block_id,))
+        for row in owned_block_rows
     }
 
-    try:
-        presence = conn.execute(
-            'SELECT "column_name", "pk_json" FROM "_tag_presence" '
-            'WHERE "_block_id" = ? AND "table_name" = ?',
-            (block_id, table_name),
-        ).fetchall()
-    except sqlite3.OperationalError:
+    if not presence:
         return list(owned_rows.values())
 
     pk_to_cols: dict[str, set[str]] = {}
@@ -1949,14 +2034,19 @@ def _fetch_rows_for_block(
         pk_to_cols.setdefault(pk_json, set()).add(col_name)
 
     result: list[dict] = list(owned_rows.values())
+    pk_set = set(table_def.primary_keys)
     for pk_json, contrib_cols in pk_to_cols.items():
         pk_vals = json.loads(pk_json)
         pk_key = tuple(pk_vals)
         if pk_key in owned_rows:
             continue  # Already included unmasked
-        where = ' AND '.join(f'"{c}" = ?' for c in table_def.primary_keys)
-        pk_set = set(table_def.primary_keys)
-        for row in _fetch_rows(conn, table_name, where, tuple(pk_vals)):
+        if cache is not None:
+            row = cache.row_by_pk(table_name, pk_key)
+            rows = [row] if row is not None else []
+        else:
+            where = ' AND '.join(f'"{c}" = ?' for c in table_def.primary_keys)
+            rows = _fetch_rows(conn, table_name, where, tuple(pk_vals))
+        for row in rows:
             masked = {
                 k: (v if k in contrib_cols or k in _SYNTHETIC or k in pk_set else None)
                 for k, v in row.items()
@@ -1967,20 +2057,21 @@ def _fetch_rows_for_block(
 
 
 def _fetch_rows(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     table_name: str,
     where: str | None = None,
-    params: tuple = (),
+    params: list | tuple = (),
 ) -> list[dict]:
     """Fetch all rows from *table_name* as a list of column→value dicts."""
     try:
         sql = f'SELECT * FROM "{table_name}"'
         if where:
             sql += f' WHERE {where}'
-        cursor = conn.execute(sql, params)
+        sql += ' ORDER BY "_row_id"'
+        cursor = conn.execute(sql, list(params))
         col_names = [d[0] for d in cursor.description]
         return [dict(zip(col_names, row)) for row in cursor.fetchall()]
-    except sqlite3.OperationalError:
+    except Exception:
         return []
 
 
@@ -2048,7 +2139,7 @@ def _fk_chain(from_table: str, to_table: str, schema: SchemaSpec) -> list[Foreig
 
 
 def _fetch_rows_via_fk_path(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     from_table: str,
     fk_path: list[ForeignKeyDef],
     anchor_pk_cols: list[str],
@@ -2071,33 +2162,33 @@ def _fetch_rows_via_fk_path(
 
     anchor_alias = aliases[-1]
     where = ' AND '.join(f'{anchor_alias}."{col}" = ?' for col in anchor_pk_cols)
-    sql += f' WHERE {where}'
+    sql += f' WHERE {where} ORDER BY {aliases[0]}."_row_id"'
 
     try:
-        cursor = conn.execute(sql, anchor_pk_vals)
+        cursor = conn.execute(sql, list(anchor_pk_vals))
         col_names = [d[0] for d in cursor.description]
         return [dict(zip(col_names, row)) for row in cursor.fetchall()]
-    except sqlite3.OperationalError:
+    except Exception:
         return []
 
 
-def _all_block_ids_for_tables(conn: sqlite3.Connection, table_names: list[str]) -> list[str]:
+def _all_block_ids_for_tables(conn: duckdb.DuckDBPyConnection, table_names: list[str]) -> list[str]:
     """Return sorted distinct ``_block_id`` values across the given tables."""
     seen: set[str] = set()
     ids: list[str] = []
     for table_name in table_names:
         try:
             cursor = conn.execute(f'SELECT DISTINCT "_block_id" FROM "{table_name}"')
-            for (bid,) in cursor:
+            for (bid,) in cursor.fetchall():
                 if bid not in seen:
                     seen.add(bid)
                     ids.append(bid)
-        except sqlite3.OperationalError:
+        except Exception:
             pass
     return sorted(ids)
 
 
-def _all_block_ids(conn: sqlite3.Connection, schema: SchemaSpec) -> list[str]:
+def _all_block_ids(conn: duckdb.DuckDBPyConnection, schema: SchemaSpec) -> list[str]:
     """Return all distinct ``_block_id`` values in original ingestion order.
 
     Falls back to sorted order if ``_block_order`` is absent (e.g. legacy databases).
@@ -2105,7 +2196,7 @@ def _all_block_ids(conn: sqlite3.Connection, schema: SchemaSpec) -> list[str]:
     try:
         cursor = conn.execute('SELECT "_block_id" FROM "_block_order" ORDER BY "position"')
         return [row[0] for row in cursor.fetchall()]
-    except sqlite3.OperationalError:
+    except Exception:
         pass
 
     # Legacy fallback: collect from all tables and sort
@@ -2114,10 +2205,10 @@ def _all_block_ids(conn: sqlite3.Connection, schema: SchemaSpec) -> list[str]:
     for table_name in list(schema.tables.keys()) + ['_cif_fallback']:
         try:
             cursor = conn.execute(f'SELECT DISTINCT "_block_id" FROM "{table_name}"')
-            for (bid,) in cursor:
+            for (bid,) in cursor.fetchall():
                 if bid not in seen:
                     seen.add(bid)
                     ids.append(bid)
-        except sqlite3.OperationalError:
+        except Exception:
             pass
     return sorted(ids)

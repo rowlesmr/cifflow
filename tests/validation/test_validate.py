@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import sqlite3
 import warnings
 from unittest.mock import MagicMock, patch
 
+import duckdb
 import pytest
 
 from pycifparse.cifmodel.builder import build
@@ -151,70 +151,45 @@ class TestIngestStage:
     def test_schema_none_fallback_tables_exist(self):
         report = validate(_MINIMAL_CIF)
         conn = report.database
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        tables = {r[0] for r in conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+        ).fetchall()}
         assert '_cif_fallback' in tables
         conn.close()
 
     def test_ingest_warning_messages_become_warning_issues(self):
-        # Patch ingest to fire on_error with a non-fatal message.
-        original_ingest = __import__('pycifparse.ingestion.ingest', fromlist=['ingest']).ingest
-
-        def _fake_ingest(cif, conn, schema, *, on_error=None, **kw):
-            if on_error:
-                on_error('some warning message')
-            return original_ingest(cif, conn, None, on_error=None, **kw)
+        def _fake_ingest(cif, db=None, schema=None, **kw):
+            return (duckdb.connect(), ['some warning message'])
 
         with patch('pycifparse.validation._validate.ingest', side_effect=_fake_ingest):
             report = validate(_MINIMAL_CIF)
 
         ingest_issues = [i for i in report.issues if i.stage == 'ingest']
-        # At least one warning from our fake
         warning_msgs = [i for i in ingest_issues if i.severity == 'Warning' and 'some warning message' in i.message]
         assert len(warning_msgs) >= 1
         report.database.close()
 
-    def test_ingestion_error_errors_become_error_issues(self):
-        def _fail_ingest(cif, conn, schema, *, on_error=None, **kw):
-            if on_error:
-                on_error('semantic conflict A')
-                on_error('non-semantic warning B')
+    def test_ingestion_error_becomes_internal_error(self):
+        def _fail(cif, db=None, schema=None, **kw):
             raise IngestionError(['semantic conflict A'])
 
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fail_ingest):
+        with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
             report = validate(_MINIMAL_CIF)
 
         assert report.database is None
-        ingest_issues = [i for i in report.issues if i.stage == 'ingest']
-        error_issues = [i for i in ingest_issues if i.severity == 'Error']
-        warning_issues = [i for i in ingest_issues if i.severity == 'Warning']
-        assert any('semantic conflict A' in i.message for i in error_issues)
-        assert any('non-semantic warning B' in i.message for i in warning_issues)
-        #
+        ie = [i for i in report.issues if i.check == 'internal_error' and i.stage == 'ingest']
+        assert len(ie) == 1
 
     def test_ingestion_error_does_not_raise(self):
-        def _fail(cif, conn, schema, *, on_error=None, **kw):
+        def _fail(cif, db=None, schema=None, **kw):
             raise IngestionError(['conflict'])
 
         with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
             report = validate(_MINIMAL_CIF)  # must not raise
         assert report is not None
-        #report.database.close()
-
-    def test_fk_violation_produces_fk_violation_issue(self):
-        def _fail(cif, conn, schema, *, on_error=None, **kw):
-            raise sqlite3.IntegrityError('FOREIGN KEY constraint failed')
-
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
-            report = validate(_MINIMAL_CIF)
-
-        assert report.database is None
-        fk_issues = [i for i in report.issues if i.check == 'fk_violation']
-        assert len(fk_issues) == 1
-        assert fk_issues[0].stage == 'ingest'
-        assert fk_issues[0].severity == 'Error'
 
     def test_value_error_produces_dataset_error_issue(self):
-        def _fail(cif, conn, schema, *, on_error=None, **kw):
+        def _fail(cif, db=None, schema=None, **kw):
             raise ValueError('unknown dataset_id')
 
         with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
@@ -227,7 +202,7 @@ class TestIngestStage:
         assert 'unknown dataset_id' in de_issues[0].message
 
     def test_unexpected_ingest_exception_becomes_internal_error(self):
-        def _fail(cif, conn, schema, *, on_error=None, **kw):
+        def _fail(cif, db=None, schema=None, **kw):
             raise RuntimeError('unexpected boom')
 
         with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
@@ -237,21 +212,6 @@ class TestIngestStage:
         ie = [i for i in report.issues if i.check == 'internal_error' and i.stage == 'ingest']
         assert len(ie) == 1
         assert 'unexpected boom' in ie[0].message
-
-    def test_pre_exception_on_error_messages_included_as_warnings(self):
-        def _fail(cif, conn, schema, *, on_error=None, **kw):
-            if on_error:
-                on_error('warning before crash')
-            raise ValueError('crash')
-
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
-            report = validate(_MINIMAL_CIF)
-
-        warn_issues = [
-            i for i in report.issues
-            if i.stage == 'ingest' and i.severity == 'Warning' and 'warning before crash' in i.message
-        ]
-        assert len(warn_issues) == 1
 
 
 # ---------------------------------------------------------------------------

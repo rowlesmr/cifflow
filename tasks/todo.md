@@ -4,19 +4,28 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current state (2026-04-27):** Phase C functionally complete. DuckDB ingest hot path replaces `_process_loop` / `_apply_fk` / `_merge_into`. All 1836 tests pass. Performance: `second.cif` ingest ~27.5s (target: ~2.7s for another 10×). Dead code (`_process_loop`, `_process_scalar`, `_apply_fk`, `_merge_into`, `_loops_compatible`) still present but unused — ready to delete.
+**Current state (2026-05-01, rust branch):** DuckDB migration complete. All 1749 tests pass. Performance after two sessions of optimization on `second.cif` (18 MB, 156 blocks, `cif_pow.dic`, 163 tables):
 
-**Next priority:** Implement 10× further speedup on ingest. Consider ADBC. Top candidates:
-1. Batch all blocks per table into a single Arrow insert (O(tables) not O(blocks × tables))
-2. `fetch_arrow_table()` instead of `fetchall()` in `extract_merged_rows`
-3. `INSERT` instead of `INSERT OR REPLACE` in flush (tables are empty at flush time)
-4. Column-oriented SQLite flush: `executemany(zip(*cols))` or ADBC
-5. `PRAGMA synchronous=OFF; journal_mode=MEMORY` during SQLite ingest writes
-6. Single FK UPDATE per edge (remove per-block filter)
+| Phase | Time |
+|-------|------|
+| CIF parse | ~0.7s |
+| Ingest (DuckDB) | ~12s |
+| Emit | ~12s |
+| **Total** | **~25s** |
 
-**Test suite state (2026-04-27):**
-- 1836 tests pass (full suite)
-- Run: `.venv/Scripts/python -m pytest -m "not slow" --tb=short -q`
+**Ingest bottlenecks (hard to optimize further):**
+- `create_final_tables` ~5.6s — dominated by `ROW_NUMBER() OVER (ORDER BY ...)` sort in `_merge_keyed` for large tables (pd_meas, pd_calc_component: 100K–240K rows). No easy fix: the sort is inherent to assigning sequential `_row_id` values.
+- `propagate_fk_sql` ~2.4s — FK fill passes (first pass ~1.4s, second ~0.3s, stubs ~0.1s, UUID gen ~0.1s).
+- `flush_table_batches` ~0.9s, `load_block_data` ~1.2s.
+
+**Emit optimization done (2026-05-01):** Added `_EmitCache` in `emit.py` that pre-fetches all table rows once, eliminating N+1 DuckDB query pattern (19,500 → ~125 queries). Emit: 82s → 12s. Lessons 114–116.
+
+**Ingest dead code:** `_process_loop`, `_process_scalar`, `_apply_fk`, `_merge_into`, `_loops_compatible` in `ingest.py` are still present but never called. Delete when convenient.
+
+**Test suite state (2026-05-01):**
+- 1749 tests pass (full suite, rust branch)
+- Run: `.venv/Scripts/python -m pytest -x -q`
+- Profiler: `.venv/Scripts/python profile_pipeline.py --input second`
 
 ---
 

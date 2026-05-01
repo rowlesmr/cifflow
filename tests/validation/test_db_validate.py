@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from dataclasses import dataclass, field
 
+import duckdb
 import pytest
 
-from pycifparse.dictionary.schema import ColumnDef, SchemaSpec, TableDef
-from pycifparse.dictionary.schema_apply import apply_fallback_schema
+from pycifparse.dictionary.schema import (
+    ColumnDef, SchemaSpec, TableDef, emit_fallback_create_statements,
+)
 from pycifparse.validation._db_checks import (
     _NULL_LEAF,
     check_enumeration_range_leaf,
@@ -118,11 +119,11 @@ def _setup_db(
     *,
     extra_tables: dict[str, TableDef] | None = None,
     fallback_rows: list[dict] | None = None,
-) -> tuple[sqlite3.Connection, SchemaSpec]:
-    """Create an in-memory SQLite DB with the given table populated."""
-    conn = sqlite3.connect(':memory:')
-    conn.row_factory = sqlite3.Row
-    apply_fallback_schema(conn)
+) -> tuple[duckdb.DuckDBPyConnection, SchemaSpec]:
+    """Create an in-memory DuckDB with the given table populated."""
+    conn = duckdb.connect()
+    for stmt in emit_fallback_create_statements():
+        conn.execute(stmt)
 
     schema = _make_schema(table_def, extra_tables=extra_tables)
 
@@ -133,7 +134,7 @@ def _setup_db(
     for tbl_name, tbl_def in all_tables.items():
         col_parts = []
         for c in tbl_def.columns:
-            typ = 'INTEGER' if c.name == '_row_id' else 'TEXT'
+            typ = 'INTEGER' if c.name == '_row_id' else 'VARCHAR'
             null_clause = '' if c.nullable else ' NOT NULL'
             col_parts.append(f'"{c.name}" {typ}{null_clause}')
         pk_clause = ', '.join(f'"{pk}"' for pk in tbl_def.primary_keys)
@@ -141,7 +142,6 @@ def _setup_db(
         conn.execute(f'CREATE TABLE IF NOT EXISTS "{tbl_name}" ({", ".join(col_parts)})')
 
     # Insert rows.
-    tbl_cols = [c.name for c in table_def.columns]
     for row in rows:
         cols = list(row.keys())
         placeholders = ', '.join('?' for _ in cols)
@@ -157,10 +157,9 @@ def _setup_db(
             conn.execute(
                 'INSERT INTO "_cif_fallback" ("_block_id", "_row_id", "tag", "value", "value_type") '
                 'VALUES (?, ?, ?, ?, ?)',
-                (fr['_block_id'], fr['_row_id'], fr['tag'], fr.get('value'), fr.get('value_type', 'string')),
+                [fr['_block_id'], fr['_row_id'], fr['tag'], fr.get('value'), fr.get('value_type', 'string')],
             )
 
-    conn.commit()
     return conn, schema
 
 
@@ -842,11 +841,11 @@ class TestKeyValues:
             primary_keys=['id'],
         )
         schema = _make_schema(tbl)
-        conn = sqlite3.connect(':memory:')
-        apply_fallback_schema(conn)
-        conn.execute('CREATE TABLE "t" ("_block_id" TEXT NOT NULL, "_row_id" INTEGER NOT NULL, "id" TEXT, "num" TEXT)')
-        conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ('b', 1, 'row1', 'bad'))
-        conn.commit()
+        conn = duckdb.connect()
+        for stmt in emit_fallback_create_statements():
+            conn.execute(stmt)
+        conn.execute('CREATE TABLE "t" ("_block_id" VARCHAR NOT NULL, "_row_id" INTEGER NOT NULL, "id" VARCHAR, "num" VARCHAR)')
+        conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ['b', 1, 'row1', 'bad'])
 
         results = validate_database(conn, schema)
         conn.close()
@@ -859,14 +858,14 @@ class TestKeyValues:
         col = _col('val', type_contents='Integer')
         tbl = _make_table('t', [col], keyless_set=True, category_class='Set')
 
-        conn = sqlite3.connect(':memory:')
-        apply_fallback_schema(conn)
+        conn = duckdb.connect()
+        for stmt in emit_fallback_create_statements():
+            conn.execute(stmt)
         conn.execute(
-            'CREATE TABLE "t" ("_block_id" TEXT NOT NULL, "_pycifparse_id" TEXT NOT NULL, '
-            '"_row_id" INTEGER NOT NULL, "val" TEXT, PRIMARY KEY ("_pycifparse_id"))'
+            'CREATE TABLE "t" ("_block_id" VARCHAR NOT NULL, "_pycifparse_id" VARCHAR NOT NULL, '
+            '"_row_id" INTEGER NOT NULL, "val" VARCHAR, PRIMARY KEY ("_pycifparse_id"))'
         )
-        conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ('b', 'id1', 1, 'bad'))
-        conn.commit()
+        conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ['b', 'id1', 1, 'bad'])
 
         schema = _make_schema(tbl)
         results = validate_database(conn, schema)
@@ -975,16 +974,16 @@ class TestKeylessSetCardinality:
         return _make_table('t', [col], keyless_set=True, category_class='Set')
 
     def _create_keyless_db(self, tbl_def, rows):
-        conn = sqlite3.connect(':memory:')
-        apply_fallback_schema(conn)
+        conn = duckdb.connect()
+        for stmt in emit_fallback_create_statements():
+            conn.execute(stmt)
         conn.execute(
-            'CREATE TABLE "t" ("_block_id" TEXT NOT NULL, "_pycifparse_id" TEXT NOT NULL, '
-            '"_row_id" INTEGER NOT NULL, "val" TEXT, PRIMARY KEY ("_pycifparse_id"))'
+            'CREATE TABLE "t" ("_block_id" VARCHAR NOT NULL, "_pycifparse_id" VARCHAR NOT NULL, '
+            '"_row_id" INTEGER NOT NULL, "val" VARCHAR, PRIMARY KEY ("_pycifparse_id"))'
         )
         for row in rows:
             conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)',
-                         (row['_block_id'], row['id'], row['_row_id'], row.get('val')))
-        conn.commit()
+                         [row['_block_id'], row['id'], row['_row_id'], row.get('val')])
         schema = _make_schema(tbl_def)
         return conn, schema
 
@@ -1060,12 +1059,12 @@ class TestKeylessSetCardinality:
             primary_keys=['id'],
         )
         schema = _make_schema(tbl)
-        conn = sqlite3.connect(':memory:')
-        apply_fallback_schema(conn)
-        conn.execute('CREATE TABLE "t" ("_block_id" TEXT NOT NULL, "_row_id" INTEGER NOT NULL, "id" TEXT, "val" TEXT, PRIMARY KEY ("id"))')
-        conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ('b', 1, 'id1', 'v1'))
-        conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ('b', 2, 'id2', 'v2'))
-        conn.commit()
+        conn = duckdb.connect()
+        for stmt in emit_fallback_create_statements():
+            conn.execute(stmt)
+        conn.execute('CREATE TABLE "t" ("_block_id" VARCHAR NOT NULL, "_row_id" INTEGER NOT NULL, "id" VARCHAR, "val" VARCHAR, PRIMARY KEY ("id"))')
+        conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ['b', 1, 'id1', 'v1'])
+        conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ['b', 2, 'id2', 'v2'])
         results = validate_database(conn, schema)
         conn.close()
         assert [r for r in results if r.check == 'keyless_set_cardinality'] == []

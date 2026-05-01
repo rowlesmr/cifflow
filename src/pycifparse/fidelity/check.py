@@ -38,17 +38,17 @@ from __future__ import annotations
 
 import pathlib
 import re
-import sqlite3
 from collections import Counter
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Literal
 
+import duckdb
+
 from pycifparse.cifmodel.model import CifFile
 from pycifparse.cifmodel.builder import build
 from pycifparse.dictionary.schema import SchemaSpec, TableDef, ColumnDef
-from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
-from pycifparse.ingestion.ingest import ingest, IngestionError
+from pycifparse.ingestion.ingest import ingest
 from pycifparse.types import CifVersion
 
 
@@ -133,19 +133,6 @@ def _load_source(source, _version: CifVersion) -> tuple[CifFile | None, list]:
 
 
 # ---------------------------------------------------------------------------
-# DB setup and ingestion
-# ---------------------------------------------------------------------------
-
-def _setup_db(schema: SchemaSpec | None) -> sqlite3.Connection:
-    conn = sqlite3.connect(':memory:')
-    conn.row_factory = sqlite3.Row
-    if schema is not None:
-        apply_schema(conn, schema)
-    apply_fallback_schema(conn)
-    return conn
-
-
-# ---------------------------------------------------------------------------
 # Real / SU normalisation helpers
 # ---------------------------------------------------------------------------
 
@@ -215,6 +202,25 @@ def _child_map(
 
 
 # ---------------------------------------------------------------------------
+# DuckDB row-dict helpers
+# ---------------------------------------------------------------------------
+
+def _fetchall_dicts(cursor) -> list[dict]:
+    """Convert DuckDB cursor results to list of column-keyed dicts."""
+    cols = [d[0] for d in cursor.description]
+    return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+
+def _fetchone_dict(cursor) -> dict | None:
+    """Fetch one row from DuckDB cursor as a dict, or None."""
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    cols = [d[0] for d in cursor.description]
+    return dict(zip(cols, row))
+
+
+# ---------------------------------------------------------------------------
 # Step 2: UUID fingerprint maps
 # ---------------------------------------------------------------------------
 
@@ -228,7 +234,7 @@ def _canonical_for_fp(col: ColumnDef | None, val: str) -> str:
 def _fingerprint_uuid(
     u: str,
     tname: str,
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
     fk_cols: dict[str, frozenset[str]],
     cmap: dict[tuple[str, str], ColumnDef],
@@ -248,14 +254,14 @@ def _fingerprint_uuid(
     pk_col_used: str | None = None
     for pk in tdef.primary_keys:
         try:
-            r = conn.execute(
-                f'SELECT * FROM "{tname}" WHERE "{pk}" = ?', (u,)
-            ).fetchone()
-            if r is not None:
-                row = dict(r)
+            cursor = conn.execute(
+                f'SELECT * FROM "{tname}" WHERE "{pk}" = ?', [u]
+            )
+            row = _fetchone_dict(cursor)
+            if row is not None:
                 pk_col_used = pk
                 break
-        except sqlite3.OperationalError:
+        except Exception:
             pass
 
     if row is None or pk_col_used is None:
@@ -294,14 +300,13 @@ def _fingerprint_uuid(
 
         for src_col in matching_src:
             try:
-                child_rows = conn.execute(
-                    f'SELECT * FROM "{child_tname}" WHERE "{src_col}" = ?', (u,)
-                ).fetchall()
-            except sqlite3.OperationalError:
+                child_rows = _fetchall_dicts(conn.execute(
+                    f'SELECT * FROM "{child_tname}" WHERE "{src_col}" = ?', [u]
+                ))
+            except Exception:
                 continue
 
-            for crow_raw in child_rows:
-                crow = dict(crow_raw)
+            for crow in child_rows:
                 for col_name, val in crow.items():
                     if col_name in _SYNTHETIC_COLS or col_name in child_pk_cols:
                         continue
@@ -335,7 +340,7 @@ def _fingerprint_uuid(
 
 
 def _build_fingerprint_map(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
 ) -> dict[str, frozenset]:
     """Build ``{uuid → fingerprint}`` for all UUID PKs in structured tables."""
@@ -349,7 +354,7 @@ def _build_fingerprint_map(
         for pk in tdef.primary_keys:
             try:
                 rows = conn.execute(f'SELECT "{pk}" FROM "{tname}"').fetchall()
-            except sqlite3.OperationalError:
+            except Exception:
                 continue
             for (val,) in rows:
                 if val is None:
@@ -369,7 +374,7 @@ def _build_fingerprint_map(
 # Step 3 helpers
 # ---------------------------------------------------------------------------
 
-def _load_synthetic_set(conn: sqlite3.Connection) -> set[tuple]:
+def _load_synthetic_set(conn: duckdb.DuckDBPyConnection) -> set[tuple]:
     """Return ``{(table_name, row_id, column_name)}`` from ``_cif_synthetic``.
 
     Returns an empty set if the table does not exist (not yet implemented in
@@ -380,12 +385,12 @@ def _load_synthetic_set(conn: sqlite3.Connection) -> set[tuple]:
             'SELECT "table_name", "row_id", "column_name" FROM "_cif_synthetic"'
         ).fetchall()
         return {(r[0], r[1], r[2]) for r in rows}
-    except sqlite3.OperationalError:
+    except Exception:
         return set()
 
 
 def _table_present(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     tname: str,
     tdef: TableDef,
 ) -> bool:
@@ -398,12 +403,12 @@ def _table_present(
         return conn.execute(
             f'SELECT 1 FROM "{tname}" WHERE {conditions} LIMIT 1'
         ).fetchone() is not None
-    except sqlite3.OperationalError:
+    except Exception:
         return False
 
 
 def _normalised_rows(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     tname: str,
     tdef: TableDef,
     fingerprints: dict[str, frozenset],
@@ -416,13 +421,12 @@ def _normalised_rows(
     row_fk_cols = fk_cols.get(tname, frozenset())
 
     try:
-        all_rows = conn.execute(f'SELECT * FROM "{tname}"').fetchall()
-    except sqlite3.OperationalError:
+        all_rows = _fetchall_dicts(conn.execute(f'SELECT * FROM "{tname}"'))
+    except Exception:
         return []
 
     result = []
-    for raw_row in all_rows:
-        row = dict(raw_row)
+    for row in all_rows:
         row_id = row.get('_row_id')
         normalised: dict[str, object] = {}
 
@@ -487,8 +491,8 @@ def _row_diff_hint(row: frozenset, candidates: list[frozenset]) -> str:
 
 
 def _compare_structured(
-    conn_a: sqlite3.Connection,
-    conn_b: sqlite3.Connection,
+    conn_a: duckdb.DuckDBPyConnection,
+    conn_b: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
     fp_a: dict[str, frozenset],
     fp_b: dict[str, frozenset],
@@ -553,18 +557,16 @@ def _compare_structured(
 # ---------------------------------------------------------------------------
 
 def _compare_fallback(
-    conn_a: sqlite3.Connection,
-    conn_b: sqlite3.Connection,
+    conn_a: duckdb.DuckDBPyConnection,
+    conn_b: duckdb.DuckDBPyConnection,
 ) -> list[FidelityMismatch]:
-    def _fetch(conn: sqlite3.Connection) -> list[tuple[str, str, str]]:
+    def _fetch(conn: duckdb.DuckDBPyConnection) -> list[tuple[str, str, str]]:
         try:
-            return [
-                (r['tag'], r['value'], r['value_type'])
-                for r in conn.execute(
-                    'SELECT "tag", "value", "value_type" FROM "_cif_fallback"'
-                ).fetchall()
-            ]
-        except sqlite3.OperationalError:
+            rows = conn.execute(
+                'SELECT "tag", "value", "value_type" FROM "_cif_fallback"'
+            ).fetchall()
+            return [(r[0], r[1], r[2]) for r in rows]
+        except Exception:
             return []
 
     tuples_a = _fetch(conn_a)
@@ -639,8 +641,8 @@ def _compare_fallback(
 # ---------------------------------------------------------------------------
 
 def _compare_schema_mismatch(
-    conn_a: sqlite3.Connection,
-    conn_b: sqlite3.Connection,
+    conn_a: duckdb.DuckDBPyConnection,
+    conn_b: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
 ) -> list[FidelityMismatch]:
     # Build reverse map: canonical_tag → [(table_name, col_name)]
@@ -648,7 +650,7 @@ def _compare_schema_mismatch(
     for (tname, cname), defid in schema.column_to_tag.items():
         defid_to_cols.setdefault(defid, []).append((tname, cname))
 
-    def _in_structured(conn: sqlite3.Connection, tag: str) -> bool:
+    def _in_structured(conn: duckdb.DuckDBPyConnection, tag: str) -> bool:
         """Return True if *tag* has at least one non-NULL value in a structured table."""
         defid = schema.alias_to_definition_id.get(tag, tag)
         for tname, cname in defid_to_cols.get(defid, []):
@@ -658,18 +660,18 @@ def _compare_schema_mismatch(
                 ).fetchone()
                 if r is not None:
                     return True
-            except sqlite3.OperationalError:
+            except Exception:
                 pass
         return False
 
-    def _fallback_tags(conn: sqlite3.Connection) -> list[str]:
+    def _fallback_tags(conn: duckdb.DuckDBPyConnection) -> list[str]:
         try:
             return [
                 r[0] for r in conn.execute(
                     'SELECT "tag" FROM "_cif_fallback"'
                 ).fetchall()
             ]
-        except sqlite3.OperationalError:
+        except Exception:
             return []
 
     mismatches: list[FidelityMismatch] = []
@@ -841,35 +843,31 @@ def check_fidelity(
         return _finish(mismatches)
 
     # --- Step 1 (continued): ingest ---
-    conn_a = _setup_db(schema_spec)
-    conn_b = _setup_db(schema_spec)
+    conn_a = duckdb.connect()
+    conn_b = duckdb.connect()
 
     ingest_ok_a = True
     ingest_ok_b = True
 
     try:
-        ingest(cif_a, conn_a, schema_spec)
-    except IngestionError as exc:
-        ingest_ok_a = False
-        for msg in exc.errors:
+        conn_a, errors_a = ingest(cif_a, conn_a, schema=schema_spec)
+        for msg in errors_a:
             mismatches.append(FidelityMismatch(
                 kind='ingest_error', source='a', description=msg,
             ))
-    except (ValueError, Exception) as exc:
+    except Exception as exc:
         ingest_ok_a = False
         mismatches.append(FidelityMismatch(
             kind='ingest_error', source='a', description=str(exc),
         ))
 
     try:
-        ingest(cif_b, conn_b, schema_spec)
-    except IngestionError as exc:
-        ingest_ok_b = False
-        for msg in exc.errors:
+        conn_b, errors_b = ingest(cif_b, conn_b, schema=schema_spec)
+        for msg in errors_b:
             mismatches.append(FidelityMismatch(
                 kind='ingest_error', source='b', description=msg,
             ))
-    except (ValueError, Exception) as exc:
+    except Exception as exc:
         ingest_ok_b = False
         mismatches.append(FidelityMismatch(
             kind='ingest_error', source='b', description=str(exc),

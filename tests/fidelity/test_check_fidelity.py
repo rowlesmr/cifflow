@@ -424,10 +424,7 @@ def test_second_short_vs_itself():
 def test_round_trip_one_structure():
     """Parse → ingest → emit → parse → ingest; original and round-trip pass."""
     from pycifparse import emit, ingest as _ingest
-    from pycifparse.dictionary import (
-        DictionaryLoader, directory_resolver, generate_schema, apply_schema,
-    )
-    from pycifparse.dictionary.schema_apply import apply_fallback_schema
+    from pycifparse.dictionary import DictionaryLoader, directory_resolver, generate_schema
 
     path = _CIF_DIR / 'one_structure.cif'
     dic_path = _DATA_DIR / 'cif_core.dic'
@@ -440,11 +437,8 @@ def test_round_trip_one_structure():
     original_text = path.read_text(encoding='utf-8')
     cif_orig, _ = _build(original_text)
 
-    # Ingest into a DB, then emit
-    conn = sqlite3.connect(':memory:')
-    apply_schema(conn, schema)
-    apply_fallback_schema(conn)
-    _ingest(cif_orig, conn, schema)
+    # Ingest into a DuckDB, then emit
+    conn, _ = _ingest(cif_orig, None, schema)
     emitted = emit(conn, schema=schema)
 
     # Parse the emitted string back
@@ -765,28 +759,18 @@ def test_row_diff_hint_many_diffs():
 
 def test_compare_schema_mismatch_tag_in_fallback_a_structured_b():
     from pycifparse.fidelity.check import _compare_schema_mismatch
-    from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
     from pycifparse.ingestion.ingest import ingest
 
     schema = _simple_set_schema()
     cif = "data_b\n_cell.id 1\n_cell.a 5.0\n"
 
     # conn_a: ingested without schema → _cell.a lands in fallback
-    conn_a = sqlite3.connect(':memory:')
-    conn_a.row_factory = sqlite3.Row
-    apply_fallback_schema(conn_a)
-    ingest(_build(cif)[0], conn_a, None)
+    conn_a, _ = ingest(_build(cif)[0], None, None)
 
     # conn_b: ingested with schema → _cell.a lands in structured table
-    conn_b = sqlite3.connect(':memory:')
-    conn_b.row_factory = sqlite3.Row
-    apply_schema(conn_b, schema)
-    apply_fallback_schema(conn_b)
-    ingest(_build(cif)[0], conn_b, schema)
+    conn_b, _ = ingest(_build(cif)[0], None, schema)
 
     mismatches = _compare_schema_mismatch(conn_a, conn_b, schema)
-    conn_a.close()
-    conn_b.close()
 
     assert any(m.kind == 'schema_mismatch' for m in mismatches)
 
@@ -794,28 +778,18 @@ def test_compare_schema_mismatch_tag_in_fallback_a_structured_b():
 def test_compare_schema_mismatch_reverse_direction():
     """Tag in fallback in B but structured in A — exercises the second loop (line 688)."""
     from pycifparse.fidelity.check import _compare_schema_mismatch
-    from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
     from pycifparse.ingestion.ingest import ingest
 
     schema = _simple_set_schema()
     cif = "data_b\n_cell.id 1\n_cell.a 5.0\n"
 
     # conn_a: WITH schema → _cell.a in structured table
-    conn_a = sqlite3.connect(':memory:')
-    conn_a.row_factory = sqlite3.Row
-    apply_schema(conn_a, schema)
-    apply_fallback_schema(conn_a)
-    ingest(_build(cif)[0], conn_a, schema)
+    conn_a, _ = ingest(_build(cif)[0], None, schema)
 
     # conn_b: WITHOUT schema → _cell.a in fallback
-    conn_b = sqlite3.connect(':memory:')
-    conn_b.row_factory = sqlite3.Row
-    apply_fallback_schema(conn_b)
-    ingest(_build(cif)[0], conn_b, None)
+    conn_b, _ = ingest(_build(cif)[0], None, None)
 
     mismatches = _compare_schema_mismatch(conn_a, conn_b, schema)
-    conn_a.close()
-    conn_b.close()
 
     assert any(m.kind == 'schema_mismatch' for m in mismatches)
 
@@ -947,39 +921,37 @@ def test_compare_schema_mismatch_no_fallback_table():
 
 
 def test_compare_schema_mismatch_structured_table_missing_in_b():
-    """_in_structured swallows OperationalError when table missing in conn_b (lines 661-662)."""
+    """_in_structured swallows CatalogException when table missing in conn_b."""
+    import duckdb as _duckdb
     from pycifparse.fidelity.check import _compare_schema_mismatch
-    from pycifparse.dictionary.schema_apply import apply_fallback_schema
+    from pycifparse.dictionary.schema import emit_fallback_create_statements
 
     schema = _simple_set_schema()
 
     # conn_a: _cif_fallback has a schema-known tag (_cell.a)
-    conn_a = sqlite3.connect(':memory:')
-    conn_a.row_factory = sqlite3.Row
-    apply_fallback_schema(conn_a)
+    conn_a = _duckdb.connect()
+    for stmt in emit_fallback_create_statements():
+        conn_a.execute(stmt)
     conn_a.execute(
         "INSERT INTO _cif_fallback (_block_id, _row_id, tag, value, value_type) "
         "VALUES ('B', 1, '_cell.a', '5.0', 'string')"
     )
-    conn_a.commit()
 
-    # conn_b: _cif_fallback exists but structured tables do NOT (no apply_schema)
-    conn_b = sqlite3.connect(':memory:')
-    conn_b.row_factory = sqlite3.Row
-    apply_fallback_schema(conn_b)
+    # conn_b: _cif_fallback exists but structured tables do NOT
+    conn_b = _duckdb.connect()
+    for stmt in emit_fallback_create_statements():
+        conn_b.execute(stmt)
 
-    # Should not raise; OperationalError on missing table is caught silently
+    # Should not raise; CatalogException on missing table is caught silently
     result = _compare_schema_mismatch(conn_a, conn_b, schema)
-    conn_a.close()
-    conn_b.close()
     assert isinstance(result, list)
 
 
 def test_compare_schema_mismatch_in_structured_multi_table_mapping():
-    """_in_structured loops over multiple (table, col) pairs for same defid (line 659->654)."""
+    """_in_structured loops over multiple (table, col) pairs for same defid."""
+    import duckdb as _duckdb
     from pycifparse.fidelity.check import _compare_schema_mismatch
-    from pycifparse.dictionary.schema import SchemaSpec, TableDef, ColumnDef
-    from pycifparse.dictionary.schema_apply import apply_fallback_schema
+    from pycifparse.dictionary.schema import SchemaSpec, TableDef, ColumnDef, emit_fallback_create_statements
 
     # Build an artificial schema where _item.val maps to two tables
     col_id = ColumnDef(name='id', definition_id='_item.id', type_contents='Text',
@@ -992,7 +964,6 @@ def test_compare_schema_mismatch_in_structured_multi_table_mapping():
                      columns=[col_id, col_val], primary_keys=['id'])
     tdef2 = TableDef(name='table2', definition_id='_cat2', category_class='Loop',
                      columns=[col_id, col_val], primary_keys=['id'])
-    # Both tables map 'val' to the same defid → defid_to_cols has two entries
     schema = SchemaSpec(
         tables={'table1': tdef1, 'table2': tdef2},
         column_to_tag={
@@ -1004,27 +975,22 @@ def test_compare_schema_mismatch_in_structured_multi_table_mapping():
     )
 
     # conn_a has _cif_fallback with _item.val
-    conn_a = sqlite3.connect(':memory:')
-    conn_a.row_factory = sqlite3.Row
-    apply_fallback_schema(conn_a)
+    conn_a = _duckdb.connect()
+    for stmt in emit_fallback_create_statements():
+        conn_a.execute(stmt)
     conn_a.execute(
         "INSERT INTO _cif_fallback (_block_id, _row_id, tag, value, value_type) "
         "VALUES ('B', 1, '_item.val', 'foo', 'string')"
     )
-    conn_a.commit()
 
-    # conn_b: table1 exists but empty (fetchone returns None → line 659->654)
-    #         table2 exists with non-NULL data → _in_structured returns True
-    conn_b = sqlite3.connect(':memory:')
-    conn_b.row_factory = sqlite3.Row
-    apply_fallback_schema(conn_b)
-    conn_b.execute('CREATE TABLE "table1" (id TEXT, val TEXT)')
-    conn_b.execute('CREATE TABLE "table2" (id TEXT, val TEXT)')
+    # conn_b: table1 exists but empty, table2 has non-NULL data → _in_structured returns True
+    conn_b = _duckdb.connect()
+    for stmt in emit_fallback_create_statements():
+        conn_b.execute(stmt)
+    conn_b.execute('CREATE TABLE "table1" (id VARCHAR, val VARCHAR)')
+    conn_b.execute('CREATE TABLE "table2" (id VARCHAR, val VARCHAR)')
     conn_b.execute("INSERT INTO \"table2\" VALUES ('1', 'foo')")
-    conn_b.commit()
 
     result = _compare_schema_mismatch(conn_a, conn_b, schema)
-    conn_a.close()
-    conn_b.close()
     # table2 has data → _in_structured eventually returns True → schema_mismatch emitted
     assert any(m.kind == 'schema_mismatch' for m in result)

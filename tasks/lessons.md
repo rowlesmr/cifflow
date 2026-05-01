@@ -1,5 +1,44 @@
 # pycifparse — Lessons Learned
 
+## Lesson 116 — Pre-fetch all rows at the start of an emit pass to eliminate N+1 DuckDB queries (2026-05-01)
+
+**Context:** `emit.py` collection functions (`_collect_original`, `_collect_grouped`, `_collect_one_block`) previously called `_fetch_rows(conn, table_name, '"_block_id" = ?', ...)` once per block per table — an N+1 pattern. For `second.cif` (156 blocks × ~125 populated tables) this produced 19,500 individual DuckDB queries.
+
+**Fix:** Added `_EmitCache` class that pre-fetches all rows from all schema tables once at the start of each collection pass (using `_fetch_rows(conn, tbl_name)` per table). Rows are indexed three ways: by block_id (`_by_block`), by PK tuple (`_by_pk`), and as a flat list (`_all`). `_tag_presence` and `_cif_fallback` are also pre-fetched. All subsequent lookups in `_fetch_rows_for_block` and per-bid loops are pure in-memory dict operations. Emit dropped from 82s → 12s on `second.cif`.
+
+**Rule:** Any emit/collection pass that loops (blocks × tables) and queries DuckDB per iteration is O(blocks × tables) queries. Pre-fetch all tables once and serve lookups from an in-memory index. The memory cost (loading 600K+ rows into Python dicts) is acceptable for files that fit in RAM; the time savings are typically an order of magnitude.
+
+---
+
+## Lesson 115 — On Windows, each DuckDB query triggers Python import machinery, adding AV-scanning overhead (2026-05-01)
+
+**Context:** cProfile of the emit phase showed 156,278 calls to `_find_and_load` (Python importlib) tracing back exclusively to `_fetch_rows`. Each of the 19,500 `_fetch_rows` calls triggered ~8 import lookups; each lookup triggered ~7 `FileFinder.find_spec` calls each doing `nt.stat()` (Windows file-system stat). Total overhead from import machinery: ~45s of the 82s emit time.
+
+**Root cause:** DuckDB's Python layer triggers Python import lookups for type-conversion modules on each query execution (likely lazy-loading per result-set schema). On Windows, each `sys.path` search is intercepted by antivirus, making each `nt.stat()` call ~60μs instead of < 10μs.
+
+**Fix:** Eliminating 19,500 → 125 queries (Lesson 116) reduced the import overhead proportionally — from ~45s to near-zero.
+
+**Rule:** On Windows, minimise the number of DuckDB `execute()` calls in hot loops. The Windows AV overhead per query is 200–500μs regardless of query complexity. The same optimisation that removes N+1 query patterns also removes the Windows import overhead.
+
+---
+
+## Lesson 114 — `_merge_keyed_fast` (no GROUP BY) was no faster than GROUP BY for large tables (2026-05-01)
+
+**Context:** After the `_active_data_cols` optimization, the remaining merge bottleneck for large tables (pd_meas, pd_calc_component: 100K–240K rows) was the `ROW_NUMBER() OVER (ORDER BY _block_idx, _loop_id, _iter_idx)` window sort. A "fast path" `_merge_keyed_fast` was added that skips GROUP BY for tables where all PKs are unique, using a direct INSERT instead.
+
+**Benchmark result:** Direct INSERT without GROUP BY was identical in speed to `_merge_keyed` with GROUP BY:
+```
+pd_calc_component: group_by=0.836s  fast=0.879s
+pd_proc:           group_by=0.521s  fast=0.539s
+```
+Both paths include `ROW_NUMBER() OVER (ORDER BY ...)` — the window sort is the bottleneck in both, not the GROUP BY hash aggregation.
+
+**Conclusion:** The fast path added code complexity with no benefit. It was removed. `ROW_NUMBER() OVER (ORDER BY ...)` on 100K+ rows costs ~0.4–0.8s per table; eliminating it would require pre-computing a sort key during `flush_table_batches` (before the staging table is finalized).
+
+**Rule:** Before adding an alternative implementation, benchmark it against the original. If the bottleneck is in a shared sub-expression (like the window sort), alternative paths that still include it will show no improvement.
+
+---
+
 ## Lesson 113 — DuckDB raw fetch: `fetchall()` creates Python tuples; for 500K+ rows use `fetch_arrow_table()` (2026-04-27)
 
 **Context:** `extract_merged_rows` calls `db.execute(...).fetchall()` to retrieve all raw staging rows for a table before the Python-side merge loop. For `pd_meas` in `second.cif` (~126K rows × 34 columns), this materialises ~4M Python strings as a list of tuples — significant allocation pressure before the merge loop even begins.
