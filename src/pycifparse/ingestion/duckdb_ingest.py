@@ -161,6 +161,7 @@ def setup_duckdb(
             f'CREATE TABLE "_raw_{tbl_name}" ('
             f'_block_id TEXT NOT NULL, _block_idx INTEGER NOT NULL, '
             f'_loop_id TEXT NOT NULL, _iter_idx INTEGER NOT NULL, '
+            f'_row_id INTEGER NOT NULL, '
             f'{extra}'
         )
         if col_defs:
@@ -440,12 +441,13 @@ def flush_table_batches(
             for c, v in cols.items():
                 col_lists[c][i] = v
 
-        all_cols = ['_block_id', '_block_idx', '_loop_id', '_iter_idx'] + col_names
+        all_cols = ['_block_id', '_block_idx', '_loop_id', '_iter_idx', '_row_id'] + col_names
         arrow_batch = pa.record_batch({
             '_block_id':  pa.array(bid_list,  type=pa.string()),
             '_block_idx': pa.array(bidx_list, type=pa.int32()),
             '_loop_id':   pa.array(lid_list,  type=pa.string()),
             '_iter_idx':  pa.array(iidx_list, type=pa.int32()),
+            '_row_id':    pa.array(list(range(1, n + 1)), type=pa.int32()),
             **{c: pa.array(col_lists[c], type=pa.string()) for c in col_names},
         })
         col_list = ', '.join(f'"{c}"' for c in all_cols)
@@ -627,8 +629,10 @@ def _insert_key_fk_stubs(
             if tgt_tbl not in schema.tables:
                 continue
             db.execute(f"""
-                INSERT INTO "_raw_{tgt_tbl}" (_block_id, _block_idx, _loop_id, _iter_idx, "{tgt_col}")
-                SELECT c._block_id, MIN(c._block_idx), '{_SCALARS_LOOP_ID}', 0, gen_random_uuid()::TEXT
+                INSERT INTO "_raw_{tgt_tbl}" (_block_id, _block_idx, _loop_id, _iter_idx, _row_id, "{tgt_col}")
+                SELECT c._block_id, MIN(c._block_idx), '{_SCALARS_LOOP_ID}', 0,
+                    COALESCE((SELECT MAX(_row_id) FROM "_raw_{tgt_tbl}"), 0) + ROW_NUMBER() OVER (),
+                    gen_random_uuid()::TEXT
                 FROM "_raw_{tbl_name}" c
                 WHERE c."{src_col}" IS NULL
                   AND NOT EXISTS (
@@ -723,8 +727,10 @@ def propagate_fk_sql(
             tgt_col_list = ', '.join(f'"{tc}"' for tc in tgt_cols)
             src_col_ref = ', '.join(f'c."{sc}"' for sc in src_cols)
             db.execute(f"""
-                INSERT INTO "_raw_{tgt_tbl}" (_block_id, _block_idx, _loop_id, _iter_idx, {tgt_col_list})
-                SELECT DISTINCT c._block_id, c._block_idx, '{_SCALARS_LOOP_ID}', 0, {src_col_ref}
+                INSERT INTO "_raw_{tgt_tbl}" (_block_id, _block_idx, _loop_id, _iter_idx, _row_id, {tgt_col_list})
+                SELECT DISTINCT c._block_id, c._block_idx, '{_SCALARS_LOOP_ID}', 0,
+                    COALESCE((SELECT MAX(_row_id) FROM "_raw_{tgt_tbl}"), 0) + ROW_NUMBER() OVER (),
+                    {src_col_ref}
                 FROM "_raw_{tbl_name}" c
                 WHERE {src_notnull}
                   AND NOT EXISTS (
@@ -748,8 +754,10 @@ def propagate_fk_sql(
             if tgt_tbl not in schema.tables:
                 continue
             db.execute(f"""
-                INSERT INTO "_raw_{tgt_tbl}" (_block_id, _block_idx, _loop_id, _iter_idx, "{tgt_col}")
-                SELECT DISTINCT c._block_id, c._block_idx, '{_SCALARS_LOOP_ID}', 0, c."{src_col}"
+                INSERT INTO "_raw_{tgt_tbl}" (_block_id, _block_idx, _loop_id, _iter_idx, _row_id, "{tgt_col}")
+                SELECT DISTINCT c._block_id, c._block_idx, '{_SCALARS_LOOP_ID}', 0,
+                    COALESCE((SELECT MAX(_row_id) FROM "_raw_{tgt_tbl}"), 0) + ROW_NUMBER() OVER (),
+                    c."{src_col}"
                 FROM "_raw_{tbl_name}" c
                 WHERE c."{src_col}" IS NOT NULL
                   AND NOT EXISTS (
@@ -860,7 +868,7 @@ def _merge_keyed(
     for col in data_cols:
         if col in active_set:
             data_exprs.append(
-                f'FIRST("{col}" ORDER BY _block_idx, _loop_id, _iter_idx)'
+                f'FIRST("{col}" ORDER BY _row_id)'
                 f' FILTER (WHERE "{col}" IS NOT NULL) AS "{col}"'
             )
         else:
@@ -872,9 +880,8 @@ def _merge_keyed(
         INSERT INTO "{tbl_name}" ({insert_col_list})
         SELECT
             {pk_sel},
-            {data_part}FIRST(_block_id ORDER BY _block_idx, _loop_id, _iter_idx) AS _block_id,
-            ROW_NUMBER() OVER (ORDER BY MIN(_block_idx), MIN(_loop_id), MIN(_iter_idx))
-                + {row_id_offset} AS _row_id
+            {data_part}FIRST(_block_id ORDER BY _row_id) AS _block_id,
+            MIN(_row_id) + {row_id_offset} AS _row_id
         FROM "_raw_{tbl_name}"
         GROUP BY {pk_sel}
         ON CONFLICT ({pk_sel}) DO NOTHING
@@ -895,9 +902,9 @@ def _merge_keyless(
         SELECT
             {data_part}gen_random_uuid()::VARCHAR AS _pycifparse_id,
             _block_id,
-            ROW_NUMBER() OVER (ORDER BY _block_idx, _iter_idx) + {row_id_offset} AS _row_id
+            _row_id + {row_id_offset} AS _row_id
         FROM "_raw_{tbl_name}"
-        ORDER BY _block_idx, _iter_idx
+        ORDER BY _row_id
     """)
 
 
