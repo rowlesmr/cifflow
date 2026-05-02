@@ -1548,6 +1548,19 @@ warnings = convert_database(
 | `'keep'` | Leave original value as `NULL` (DuckDB enforces column types); append warning |
 | `'error'` | Raise `ValueError` immediately |
 
+**Structural behaviour:**
+
+- Destination tables are created **without** `NOT NULL` or `PRIMARY KEY` constraints.
+  DuckDB enforces `NOT NULL` implicitly on `PRIMARY KEY` columns; omitting both avoids
+  constraint violations caused by bugs in the source dictionary (e.g. a column declared
+  mandatory that real files leave absent).  All standard SQL joins and queries work
+  without these constraints.
+- All tables are created in *dst* (including empty ones).
+- Fallback-tier tables (`_cif_fallback`, `_block_dataset_membership`,
+  `_validation_result`, `_block_order`, `_tag_presence`, `_metatable`) are copied
+  verbatim with `VARCHAR` storage.
+- Table creation follows FK dependency order (parent before child).
+
 **Returns:** `list[str]` — warning messages for SU-dropped values and coercion failures.
 
 ---
