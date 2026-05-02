@@ -70,6 +70,58 @@ def split_su(raw: str):
             scaled = s[:pos] + '.' + s[pos:]
     return measurand, scaled
 
+
+def _split_su_json(obj):
+    """Recursively split SU notation from a JSON-decoded structure.
+
+    Returns (measurand_obj, su_obj, any_su_found).
+    String elements without SU get '0' in the SU tree so both trees are
+    structurally identical.  JSON null (None) maps to None on both sides.
+    """
+    if isinstance(obj, list):
+        ms, ss, any_su = [], [], False
+        for elem in obj:
+            m, s, found = _split_su_json(elem)
+            ms.append(m); ss.append(s); any_su = any_su or found
+        return ms, ss, any_su
+    if isinstance(obj, dict):
+        ms, ss, any_su = {}, {}, False
+        for k, v in obj.items():
+            m, s, found = _split_su_json(v)
+            ms[k] = m; ss[k] = s; any_su = any_su or found
+        return ms, ss, any_su
+    if isinstance(obj, str):
+        parts = split_su(obj)
+        if parts:
+            return parts[0], parts[1], True
+        return obj, '0', False
+    return obj, None, False  # JSON null or bare numeric
+
+
+def split_su_container(stored: str):
+    """Split SU notation from a container-encoded JSON array, preserving nesting.
+
+    Returns (measurands_encoded, sus_encoded) if any leaf carries SU notation,
+    None otherwise.  Both output strings use the _CONTAINER_PREFIX encoding of
+    encode_value and are structurally identical to the input.
+    """
+    if not stored or stored[0] != _CONTAINER_PREFIX or len(stored) < 2 or stored[1] != '[':
+        return None
+    try:
+        elements = json.loads(stored[1:])
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(elements, list):
+        return None
+    measurands, sus, any_su = _split_su_json(elements)
+    if not any_su:
+        return None
+    return (
+        _CONTAINER_PREFIX + json.dumps(measurands, separators=(',', ':'), ensure_ascii=False),
+        _CONTAINER_PREFIX + json.dumps(sus,        separators=(',', ':'), ensure_ascii=False),
+    )
+
+
 _SCALARS_LOOP_ID = '__scalars__'
 _SYNTHETIC = frozenset({'_block_id', '_row_id', '_pycifparse_id'})
 
@@ -373,7 +425,7 @@ def _load_loop(
                 val = tag_values[tag][iter_idx]
                 stored, _ = encode_value(val)
                 if su_col is not None and stored is not None:
-                    parts = split_su(stored)
+                    parts = split_su(stored) or split_su_container(stored)
                     if parts:
                         cols[col_name] = parts[0]
                         cols[su_col] = parts[1]
