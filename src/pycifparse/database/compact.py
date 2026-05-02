@@ -4,7 +4,6 @@ convert_database — one-way export that casts DuckDB columns to typed storage.
 
 from __future__ import annotations
 
-import json as _json
 from typing import TYPE_CHECKING, Literal
 
 import duckdb
@@ -50,11 +49,11 @@ def _leaf_sql_type(col: 'ColumnDef') -> str:
 
 
 # ---------------------------------------------------------------------------
-# SQL-path helpers (fast: casting done inside DuckDB engine)
+# SQL-path helpers
 # ---------------------------------------------------------------------------
 
-def _sql_cast_expr(col_name: str, sql_type: str, cast_fn: str) -> str:
-    """SQL SELECT expression that casts a VARCHAR source column to *sql_type*.
+def _sql_cast_expr(col_name: str, sql_type: str, leaf_type: str, cast_fn: str) -> str:
+    """SQL SELECT expression that casts a VARCHAR source column to its target type.
 
     *cast_fn* is ``'TRY_CAST'`` (null on failure) or ``'CAST'`` (raise on failure).
     ``_row_id`` is already INTEGER in src and is passed through unchanged.
@@ -63,12 +62,28 @@ def _sql_cast_expr(col_name: str, sql_type: str, cast_fn: str) -> str:
         return f'"{col_name}"'
     q = f'"{col_name}"'
     sentinel = f"{q} IN ('.', '?')"
-    if sql_type == 'VARCHAR':
+
+    if sql_type == 'VARCHAR' and leaf_type == 'VARCHAR':
+        # Plain string column — only strip sentinels.
         return f'CASE WHEN {sentinel} THEN NULL ELSE {q} END'
-    # Numeric: only apply regexp_replace (slow) when the value actually contains
-    # a parenthesis — i.e. has an SU suffix like '1.23(5)'.  The LIKE pre-filter
-    # is a fast vectorised string scan; most values won't match and take the
-    # cheaper direct-cast branch.
+
+    if sql_type == 'VARCHAR' and leaf_type != 'VARCHAR':
+        # JSON container column with numeric leaves.
+        # Strip all SU suffixes (nn) from the raw JSON string, parse as a typed
+        # array via from_json, then re-serialise to VARCHAR with to_json.
+        # The LIKE guard routes plain scalar fallbacks through without JSON parsing.
+        json_leaf = 'DOUBLE' if leaf_type == 'DOUBLE' else 'INTEGER'
+        su_stripped = f"regexp_replace({q}, '\\(\\d+\\)', '', 'g')"
+        parsed = f"from_json({su_stripped}, '\"VARCHAR[]\"')"
+        cast_elem = f"list_transform({parsed}, x -> {cast_fn}(x AS {json_leaf}))"
+        return (
+            f'CASE WHEN {sentinel} THEN NULL'
+            f" WHEN {q} LIKE '[%' THEN to_json({cast_elem})::VARCHAR"
+            f' ELSE {q} END'
+        )
+
+    # Scalar numeric column.
+    # Only apply regexp_replace when the value contains a parenthesis (SU suffix).
     stripped = f"regexp_replace({q}, '\\(\\d+\\)$', '')"
     has_su   = f"{q} LIKE '%(%'"
     direct   = f'{cast_fn}({q} AS {sql_type})'
@@ -96,66 +111,6 @@ def _transfer_arrow(src: duckdb.DuckDBPyConnection,
 
 
 # ---------------------------------------------------------------------------
-# Python-path helpers (slow: used only for JSON containers with numeric leaves)
-# ---------------------------------------------------------------------------
-
-import re as _re
-import time as _time
-_SU_RE = _re.compile(r'\(\d+\)$')
-
-
-def _cast_scalar(raw, leaf_type, tbl, col_name, on_failure, messages):
-    if raw in ('.', '?'):
-        return None
-    if leaf_type == 'VARCHAR':
-        return raw
-    stripped = _SU_RE.sub('', raw)
-    if stripped != raw:
-        messages.append(f"SU dropped: {tbl!r}.{col_name!r} = {raw!r} -> {stripped!r}")
-    try:
-        return int(stripped) if leaf_type == 'INTEGER' else float(stripped)
-    except (ValueError, TypeError):
-        msg = (f"coercion failed: {tbl!r}.{col_name!r} = {raw!r} "
-               f"could not be cast to {leaf_type}")
-        if on_failure == 'error':
-            raise ValueError(msg) from None
-        messages.append(msg)
-        if on_failure == 'keep':
-            messages.append(f"coercion failed: {tbl!r}.{col_name!r} = {raw!r} stored as NULL"
-                            f" (keep unsupported for {leaf_type} columns in DuckDB)")
-        return None
-
-
-def _cast_json_leaves(obj, leaf_type, tbl, col_name, on_failure, messages):
-    if isinstance(obj, list):
-        return [_cast_json_leaves(v, leaf_type, tbl, col_name, on_failure, messages)
-                for v in obj]
-    if isinstance(obj, dict):
-        return {k: _cast_json_leaves(v, leaf_type, tbl, col_name, on_failure, messages)
-                for k, v in obj.items()}
-    if isinstance(obj, str):
-        return _cast_scalar(obj, leaf_type, tbl, col_name, on_failure, messages)
-    return obj
-
-
-def _cast_value(raw, sql_type, leaf_type, tbl, col_name, on_failure, messages):
-    if not isinstance(raw, str):
-        return raw
-    if raw in ('.', '?'):
-        return None
-    if sql_type == 'VARCHAR' and leaf_type != 'VARCHAR' and raw and raw[0] in ('[', '{'):
-        try:
-            decoded = _json.loads(raw)
-        except _json.JSONDecodeError:
-            return raw
-        casted = _cast_json_leaves(decoded, leaf_type, tbl, col_name, on_failure, messages)
-        return _json.dumps(casted, separators=(',', ':'))
-    if sql_type == 'VARCHAR':
-        return raw
-    return _cast_scalar(raw, sql_type, tbl, col_name, on_failure, messages)
-
-
-# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -172,14 +127,10 @@ def convert_database(
     tables with proper ``INTEGER`` / ``DOUBLE`` / ``VARCHAR`` types and casts
     each value on the way across.
 
-    Casting is performed inside DuckDB's SQL engine via ``TRY_CAST`` and
-    ``regexp_replace`` for the common case (scalar columns).  JSON container
-    columns whose leaves need numeric casting fall back to Python-level
-    processing.  Destination tables are created without ``NOT NULL`` or
+    Casting is performed entirely inside DuckDB's SQL engine via ``TRY_CAST``,
+    ``regexp_replace``, and ``from_json`` / ``to_json`` for JSON container
+    columns.  Destination tables are created without ``NOT NULL`` or
     ``PRIMARY KEY`` constraints; all SQL joins and queries work normally.
-
-    Per-value SU-dropped and coercion-failure warnings are only emitted on
-    the Python path (JSON container columns).  The SQL path silently coerces.
 
     Parameters
     ----------
@@ -198,7 +149,7 @@ def convert_database(
     Returns
     -------
     list[str]
-        Warning messages from the Python path (JSON container coercions).
+        Reserved for future warning messages; currently always empty.
     """
     messages: list[str] = []
 
@@ -280,83 +231,27 @@ def convert_database(
         raise
 
     # Phase 2 — Data: one transaction per populated table, skipping empty ones.
-    _phase2_times: list[tuple[str, float, int, str]] = []  # (table, seconds, rows, path)
     for tbl_name in ordered_tables:
-        # Quick existence check — avoids full scan on empty tables.
-        row_count = src.execute(f'SELECT COUNT(*) FROM "{tbl_name}"').fetchone()[0]
-        if row_count == 0:
+        if src.execute(f'SELECT 1 FROM "{tbl_name}" LIMIT 1').fetchone() is None:
             continue
 
         cols, sql_types, leaf_types = table_meta[tbl_name]
-        col_names = [c.name for c in cols]
+        cast_exprs = [
+            _sql_cast_expr(c.name, sql_types[c.name], leaf_types[c.name], cast_fn)
+            for c in cols
+        ]
+        select_sql = f'SELECT {", ".join(cast_exprs)} FROM "{tbl_name}"'
 
-        python_cols = {
-            c.name for c in cols
-            if sql_types[c.name] == 'VARCHAR' and leaf_types[c.name] != 'VARCHAR'
-        }
-
-        _t0 = _time.perf_counter()
         dst.begin()
         try:
-            if not python_cols:
-                # Fast path: casting done inside DuckDB via SQL.
-                cast_exprs = [
-                    _sql_cast_expr(c.name, sql_types[c.name], cast_fn)
-                    for c in cols
-                ]
-                select_sql = f'SELECT {", ".join(cast_exprs)} FROM "{tbl_name}"'
-                try:
-                    _transfer_arrow(src, dst, select_sql, tbl_name)
-                except Exception as exc:
-                    raise type(exc)(f"converting '{tbl_name}': {exc}") from exc
-
-            else:
-                # Slow path: JSON containers with numeric leaves.
-                q_cols = ', '.join(f'"{c}"' for c in col_names)
-                rows = src.execute(f'SELECT {q_cols} FROM "{tbl_name}"').fetchall()
-                if rows:
-                    casted: list[tuple] = []
-                    for row in rows:
-                        casted.append(tuple(
-                            _cast_value(
-                                raw,
-                                sql_types[col_names[i]],
-                                leaf_types[col_names[i]],
-                                tbl_name,
-                                col_names[i],
-                                on_coercion_failure,
-                                messages,
-                            ) if raw is not None else None
-                            for i, raw in enumerate(row)
-                        ))
-                    placeholders = ', '.join('?' * len(col_names))
-                    col_list_sql = ', '.join(f'"{c}"' for c in col_names)
-                    try:
-                        dst.executemany(
-                            f'INSERT INTO "{tbl_name}" ({col_list_sql}) VALUES ({placeholders})',
-                            casted,
-                        )
-                    except Exception as exc:
-                        raise type(exc)(f"inserting into '{tbl_name}': {exc}") from exc
-
+            try:
+                _transfer_arrow(src, dst, select_sql, tbl_name)
+            except Exception as exc:
+                raise type(exc)(f"converting '{tbl_name}': {exc}") from exc
             dst.commit()
         except Exception:
             dst.rollback()
             raise
-
-        _elapsed = _time.perf_counter() - _t0
-        _path = 'python' if python_cols else 'sql'
-        _phase2_times.append((tbl_name, _elapsed, row_count, _path))
-        _py_info = f"  python_cols={sorted(python_cols)}" if python_cols else ""
-        print(f"  {tbl_name:<50} {_path:<6} {row_count:>8} rows  {_elapsed:>8.3f}s{_py_info}", flush=True)
-
-    _phase2_times.sort(key=lambda x: x[1], reverse=True)
-    print(f"\n{'Table':<50} {'Path':<6} {'Rows':>8} {'Time (s)':>10}")
-    print('-' * 78)
-    for _tbl, _secs, _rows, _path in _phase2_times[:30]:
-        print(f"{_tbl:<50} {_path:<6} {_rows:>8} {_secs:>10.3f}")
-    _total = sum(s for _, s, _, _ in _phase2_times)
-    print(f"\nTotal (populated tables): {_total:.3f}s  ({len(_phase2_times)} tables)")
 
     # Fallback-tier data: one transaction per non-empty table.
     for tbl in _FALLBACK_TABLES:
