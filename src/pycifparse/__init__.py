@@ -29,7 +29,7 @@ from pycifparse.dictionary import (
 )
 from pycifparse.output import emit, quote, EmitMode, OutputPlan, BlockSpec
 from pycifparse.fidelity import check_fidelity, FidelityReport, FidelityMismatch
-from pycifparse.validation import validate, ValidationReport, ValidationIssue
+from pycifparse.validation import validate, validate_database, ValidationReport, ValidationIssue, DbValidationResult
 from pycifparse.inspect import (
     inspect_lexer,
     inspect_parse,
@@ -66,7 +66,7 @@ __all__ = [
     # Fidelity
     'check_fidelity', 'FidelityReport', 'FidelityMismatch',
     # Validation
-    'validate', 'ValidationReport', 'ValidationIssue',
+    'validate', 'validate_database', 'ValidationReport', 'ValidationIssue', 'DbValidationResult',
     # Inspect
     'inspect_lexer', 'inspect_parse', 'ParseHandler',
     'inspect_model', 'inspect_schema', 'inspect_ingest', 'TraceEvent',
