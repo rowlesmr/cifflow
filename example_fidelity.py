@@ -33,9 +33,9 @@ ROOT     = pathlib.Path(__file__).parent
 DIC_DIR  = ROOT / 'data' / 'dictionaries'
 DIC_FILE = DIC_DIR / 'cif_pow.dic'
 
-CIF_A = ROOT / 'tests' / 'cif_files' / 'multi_one.cif'
-CIF_B = ROOT / 'tests' / 'cif_files' / 'multi_one_as_oneblock.cif'
-CIF_B = ROOT / 'output_grouped.cif'
+CIF_A = ROOT / 'tests' / 'cif_files' / 'second_short.cif'
+#CIF_B = ROOT / 'tests' / 'cif_files' / 'multi_one_as_oneblock.cif'
+CIF_B = ROOT / 'output_all_blocks.cif'
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +79,7 @@ report: FidelityReport = check_fidelity(
 if report.passed:
     print('  Result : PASSED — sources are semantically identical')
 else:
+    print_fails = 100
     print(f'  Result : FAILED — {len(report.mismatches)} mismatch(es)')
     # Group mismatches by kind for a concise summary
     by_kind: dict[str, list[FidelityMismatch]] = {}
@@ -86,10 +87,10 @@ else:
         by_kind.setdefault(m.kind, []).append(m)
     for kind, items in sorted(by_kind.items()):
         print(f'    {kind:20s}  {len(items):>4} occurrence(s)')
-        for m in items[:3]:
+        for m in items[:print_fails]:
             print(f'      [{m.source}] {m.description}')
-        if len(items) > 3:
-            print(f'      ... and {len(items) - 3} more')
+        if len(items) > print_fails:
+            print(f'      ... and {len(items) - print_fails} more')
 
 
 # ---------------------------------------------------------------------------

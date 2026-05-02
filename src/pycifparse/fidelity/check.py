@@ -32,6 +32,14 @@ Known limitations
     The ``version`` parameter is not yet propagated to the parser as a
     fallback default.  Version detection uses the file magic line; files
     without a magic line are parsed as CIF 1.1 regardless of ``version``.
+
+**UUID-keyed tables**
+    When comparing sources where one uses natural primary keys and another
+    uses generated UUID keys (e.g. ALL_BLOCKS output merging multiple CIF
+    blocks), all PK columns of UUID-keyed tables and all FK columns pointing
+    to those tables are stripped from the row representation in *both*
+    connections.  This allows content comparison without key-structure
+    comparison.
 """
 
 from __future__ import annotations
@@ -39,7 +47,7 @@ from __future__ import annotations
 import pathlib
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Literal
 
@@ -158,17 +166,6 @@ def _canonical_real(value: str, is_su: bool) -> str:
 # Schema precomputation helpers
 # ---------------------------------------------------------------------------
 
-def _fk_cols_by_table(schema: SchemaSpec) -> dict[str, frozenset[str]]:
-    """Return ``{table_name: frozenset({fk_source_col, ...})}``."""
-    result: dict[str, frozenset[str]] = {}
-    for tname, tdef in schema.tables.items():
-        cols: set[str] = set()
-        for fkdef in tdef.foreign_keys:
-            cols.update(fkdef.source_columns)
-        result[tname] = frozenset(cols)
-    return result
-
-
 def _is_su_col(col: ColumnDef) -> bool:
     """Return True if *col* is a SU column (has linked_item_id pointing to its measurand)."""
     return col.linked_item_id is not None
@@ -183,21 +180,50 @@ def _col_map(schema: SchemaSpec) -> dict[tuple[str, str], ColumnDef]:
     }
 
 
-def _child_map(
-    schema: SchemaSpec,
-) -> dict[str, list[tuple[str, list[str], list[str]]]]:
-    """Return ``{parent_table: [(child_table, src_cols, tgt_cols), ...]}``.
+# ---------------------------------------------------------------------------
+# UUID-keyed table detection
+# ---------------------------------------------------------------------------
 
-    Each entry means *child_table* has a FK pointing to *parent_table*,
-    where *src_cols[i]* in *child_table* references *tgt_cols[i]* in
-    *parent_table*.
+def _uuid_pk_tables(
+    conn_a: duckdb.DuckDBPyConnection,
+    conn_b: duckdb.DuckDBPyConnection,
+    schema: SchemaSpec,
+) -> frozenset[str]:
+    """Return table names where either connection has UUID values in any PK column.
+
+    Samples up to 500 rows per PK column; sufficient for detection since UUID
+    PKs are generated uniformly per row.
     """
-    result: dict[str, list[tuple[str, list[str], list[str]]]] = {}
+    result: set[str] = set()
     for tname, tdef in schema.tables.items():
+        for pk in tdef.primary_keys:
+            for conn in (conn_a, conn_b):
+                try:
+                    rows = conn.execute(
+                        f'SELECT "{pk}" FROM "{tname}" LIMIT 500'
+                    ).fetchall()
+                    if any(_is_uuid(str(v)) for (v,) in rows if v is not None):
+                        result.add(tname)
+                        break
+                except Exception:
+                    pass
+            if tname in result:
+                break
+    return frozenset(result)
+
+
+def _fk_to_uuid_cols(
+    schema: SchemaSpec,
+    uuid_tbls: frozenset[str],
+) -> dict[str, frozenset[str]]:
+    """Return ``{table: frozenset(FK columns pointing to a UUID-PK table)}``."""
+    result: dict[str, frozenset[str]] = {}
+    for tname, tdef in schema.tables.items():
+        cols: set[str] = set()
         for fkdef in tdef.foreign_keys:
-            result.setdefault(fkdef.target_table, []).append(
-                (tname, fkdef.source_columns, fkdef.target_columns)
-            )
+            if fkdef.target_table in uuid_tbls:
+                cols.update(fkdef.source_columns)
+        result[tname] = frozenset(cols)
     return result
 
 
@@ -211,167 +237,8 @@ def _fetchall_dicts(cursor) -> list[dict]:
     return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
 
-def _fetchone_dict(cursor) -> dict | None:
-    """Fetch one row from DuckDB cursor as a dict, or None."""
-    row = cursor.fetchone()
-    if row is None:
-        return None
-    cols = [d[0] for d in cursor.description]
-    return dict(zip(cols, row))
-
-
 # ---------------------------------------------------------------------------
-# Step 2: UUID fingerprint maps
-# ---------------------------------------------------------------------------
-
-def _canonical_for_fp(col: ColumnDef | None, val: str) -> str:
-    """Canonical value for a fingerprint tuple."""
-    if col is not None and col.type_contents == 'Real':
-        return _canonical_real(val, _is_su_col(col))
-    return val
-
-
-def _fingerprint_uuid(
-    u: str,
-    tname: str,
-    conn: duckdb.DuckDBPyConnection,
-    schema: SchemaSpec,
-    fk_cols: dict[str, frozenset[str]],
-    cmap: dict[tuple[str, str], ColumnDef],
-    children: dict[str, list[tuple[str, list[str], list[str]]]],
-    visited: set[str],
-) -> frozenset:
-    """Recursively compute the fingerprint for UUID *u* in table *tname*."""
-    tdef = schema.tables.get(tname)
-    if tdef is None:
-        return frozenset()
-
-    pk_cols = set(tdef.primary_keys)
-    row_fk_cols = fk_cols.get(tname, frozenset())
-
-    # Find the row where some PK column = u
-    row: dict | None = None
-    pk_col_used: str | None = None
-    for pk in tdef.primary_keys:
-        try:
-            cursor = conn.execute(
-                f'SELECT * FROM "{tname}" WHERE "{pk}" = ?', [u]
-            )
-            row = _fetchone_dict(cursor)
-            if row is not None:
-                pk_col_used = pk
-                break
-        except Exception:
-            pass
-
-    if row is None or pk_col_used is None:
-        return frozenset()
-
-    tuples: set = set()
-
-    # Step 2.2 — collect non-synthetic, non-PK, non-UUID-FK columns
-    for col_name, val in row.items():
-        if col_name in _SYNTHETIC_COLS or col_name in pk_cols:
-            continue
-        if val is None:
-            continue
-        str_val = str(val)
-        if str_val in ('.', '?'):
-            continue
-        if col_name in row_fk_cols and _is_uuid(str_val):
-            continue  # handled in step 2.3
-        col_def = cmap.get((tname, col_name))
-        tuples.add((tname, col_name, _canonical_for_fp(col_def, str_val)))
-
-    # Step 2.3 — traverse child tables
-    for child_tname, src_cols, tgt_cols in children.get(tname, []):
-        # Find src_col that points to pk_col_used
-        matching_src = [
-            sc for sc, tc in zip(src_cols, tgt_cols) if tc == pk_col_used
-        ]
-        if not matching_src:
-            continue
-
-        child_tdef = schema.tables.get(child_tname)
-        if child_tdef is None:
-            continue
-        child_pk_cols = set(child_tdef.primary_keys)
-        child_fk_cols = fk_cols.get(child_tname, frozenset())
-
-        for src_col in matching_src:
-            try:
-                child_rows = _fetchall_dicts(conn.execute(
-                    f'SELECT * FROM "{child_tname}" WHERE "{src_col}" = ?', [u]
-                ))
-            except Exception:
-                continue
-
-            for crow in child_rows:
-                for col_name, val in crow.items():
-                    if col_name in _SYNTHETIC_COLS or col_name in child_pk_cols:
-                        continue
-                    if val is None:
-                        continue
-                    str_val = str(val)
-                    if str_val in ('.', '?'):
-                        continue
-                    if col_name in child_fk_cols and _is_uuid(str_val):
-                        # Recursively fingerprint child UUID FK values
-                        if str_val not in visited:
-                            visited.add(str_val)
-                            # Find the target table for this FK
-                            for fkdef in child_tdef.foreign_keys:
-                                if col_name in fkdef.source_columns:
-                                    sub_fp = _fingerprint_uuid(
-                                        str_val, fkdef.target_table,
-                                        conn, schema, fk_cols, cmap,
-                                        children, visited,
-                                    )
-                                    tuples.update(sub_fp)
-                                    break
-                    else:
-                        col_def = cmap.get((child_tname, col_name))
-                        tuples.add((
-                            child_tname, col_name,
-                            _canonical_for_fp(col_def, str_val),
-                        ))
-
-    return frozenset(tuples)
-
-
-def _build_fingerprint_map(
-    conn: duckdb.DuckDBPyConnection,
-    schema: SchemaSpec,
-) -> dict[str, frozenset]:
-    """Build ``{uuid → fingerprint}`` for all UUID PKs in structured tables."""
-    fk_cols = _fk_cols_by_table(schema)
-    cmap = _col_map(schema)
-    children = _child_map(schema)
-
-    fingerprints: dict[str, frozenset] = {}
-
-    for tname, tdef in schema.tables.items():
-        for pk in tdef.primary_keys:
-            try:
-                rows = conn.execute(f'SELECT "{pk}" FROM "{tname}"').fetchall()
-            except Exception:
-                continue
-            for (val,) in rows:
-                if val is None:
-                    continue
-                str_val = str(val)
-                if _is_uuid(str_val) and str_val not in fingerprints:
-                    visited = {str_val}
-                    fingerprints[str_val] = _fingerprint_uuid(
-                        str_val, tname, conn, schema,
-                        fk_cols, cmap, children, visited,
-                    )
-
-    return fingerprints
-
-
-# ---------------------------------------------------------------------------
-# Step 3 helpers
+# Row normalisation
 # ---------------------------------------------------------------------------
 
 def _load_synthetic_set(conn: duckdb.DuckDBPyConnection) -> set[tuple]:
@@ -411,14 +278,20 @@ def _normalised_rows(
     conn: duckdb.DuckDBPyConnection,
     tname: str,
     tdef: TableDef,
-    fingerprints: dict[str, frozenset],
-    fk_cols: dict[str, frozenset[str]],
+    uuid_tbls: frozenset[str],
+    uuid_fk_cols: dict[str, frozenset[str]],
     cmap: dict[tuple[str, str], ColumnDef],
     synthetic_set: set[tuple],
 ) -> list[frozenset]:
-    """Return normalised rows for *tname* as a list of frozensets."""
-    pk_cols = set(tdef.primary_keys)
-    row_fk_cols = fk_cols.get(tname, frozenset())
+    """Return normalised rows for *tname* as a list of frozensets.
+
+    For tables in *uuid_tbls*, all PK columns are stripped from both
+    connections so that generated UUID keys don't prevent content matching.
+    FK columns pointing to UUID-PK tables are also stripped for the same
+    reason.
+    """
+    strip_pks: set[str] = set(tdef.primary_keys) if tname in uuid_tbls else set()
+    strip_fks: frozenset[str] = uuid_fk_cols.get(tname, frozenset())
 
     try:
         all_rows = _fetchall_dicts(conn.execute(f'SELECT * FROM "{tname}"'))
@@ -433,25 +306,22 @@ def _normalised_rows(
         for col_name, val in row.items():
             if col_name in _SYNTHETIC_COLS:
                 continue
-            # Strip UUID PK columns
-            if col_name in pk_cols and val is not None and _is_uuid(str(val)):
+            if col_name in strip_pks:
+                continue
+            if col_name in strip_fks:
                 continue
             if val is None:
                 continue
             str_val = str(val)
             if str_val in ('.', '?'):
                 continue
-            # Strip default-filled values
             if row_id is not None and (tname, row_id, col_name) in synthetic_set:
                 continue
-            if col_name in row_fk_cols and _is_uuid(str_val):
-                normalised[col_name] = fingerprints.get(str_val, frozenset())
+            col_def = cmap.get((tname, col_name))
+            if col_def is not None and col_def.type_contents == 'Real':
+                normalised[col_name] = _canonical_real(str_val, _is_su_col(col_def))
             else:
-                col_def = cmap.get((tname, col_name))
-                if col_def is not None and col_def.type_contents == 'Real':
-                    normalised[col_name] = _canonical_real(str_val, _is_su_col(col_def))
-                else:
-                    normalised[col_name] = str_val
+                normalised[col_name] = str_val
 
         result.append(frozenset(normalised.items()))
     return result
@@ -471,13 +341,11 @@ def _row_diff_hint(row: frozenset, candidates: list[frozenset]) -> str:
     diffs: list[str] = []
     for k in sorted(set(row_d) | set(best_d)):
         va, vb = row_d.get(k), best_d.get(k)
-        if isinstance(va, frozenset) or isinstance(vb, frozenset):
-            continue
         if va != vb:
             if va is None:
-                diffs.append(f'-{k}={vb}')   # this row is missing it
+                diffs.append(f'-{k}={vb}')
             elif vb is None:
-                diffs.append(f'+{k}={va}')   # this row has it, match doesn't
+                diffs.append(f'+{k}={va}')
             else:
                 diffs.append(f'{k}: {va}!={vb}')
 
@@ -494,10 +362,9 @@ def _compare_structured(
     conn_a: duckdb.DuckDBPyConnection,
     conn_b: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
-    fp_a: dict[str, frozenset],
-    fp_b: dict[str, frozenset],
+    uuid_tbls: frozenset[str],
+    uuid_fk_cols: dict[str, frozenset[str]],
 ) -> list[FidelityMismatch]:
-    fk_cols = _fk_cols_by_table(schema)
     cmap = _col_map(schema)
     syn_a = _load_synthetic_set(conn_a)
     syn_b = _load_synthetic_set(conn_b)
@@ -524,16 +391,22 @@ def _compare_structured(
             ))
             continue
 
-        rows_a = _normalised_rows(conn_a, tname, tdef, fp_a, fk_cols, cmap, syn_a)
-        rows_b = _normalised_rows(conn_b, tname, tdef, fp_b, fk_cols, cmap, syn_b)
+        rows_a = _normalised_rows(
+            conn_a, tname, tdef, uuid_tbls, uuid_fk_cols, cmap, syn_a
+        )
+        rows_b = _normalised_rows(
+            conn_b, tname, tdef, uuid_tbls, uuid_fk_cols, cmap, syn_b
+        )
 
         ctr_a = Counter(rows_a)
         ctr_b = Counter(rows_b)
         surplus_a = ctr_a - ctr_b
         surplus_b = ctr_b - ctr_a
 
+        hint_pool_b = rows_b[:200]
+        hint_pool_a = rows_a[:200]
         for row, count in surplus_a.items():
-            hint = _row_diff_hint(row, rows_b)
+            hint = _row_diff_hint(row, hint_pool_b)
             for _ in range(count):
                 mismatches.append(FidelityMismatch(
                     kind='row_content',
@@ -541,7 +414,7 @@ def _compare_structured(
                     description=f'table {tname!r}: row in A has no equivalent in B{hint}',
                 ))
         for row, count in surplus_b.items():
-            hint = _row_diff_hint(row, rows_a)
+            hint = _row_diff_hint(row, hint_pool_a)
             for _ in range(count):
                 mismatches.append(FidelityMismatch(
                     kind='row_content',
@@ -802,7 +675,6 @@ def check_fidelity(
     """
     mismatches: list[FidelityMismatch] = []
 
-    # Labels used in the report header
     def _label(src: object) -> str:
         if isinstance(src, CifFile):
             return 'CifFile object'
@@ -876,17 +748,18 @@ def check_fidelity(
     if not ingest_ok_a or not ingest_ok_b:
         return _finish(mismatches)
 
-    # --- Step 2: build fingerprint maps ---
+    # --- Step 2: detect UUID-keyed tables ---
     if schema_spec is not None:
-        fp_a = _build_fingerprint_map(conn_a, schema_spec)
-        fp_b = _build_fingerprint_map(conn_b, schema_spec)
+        uuid_tbls = _uuid_pk_tables(conn_a, conn_b, schema_spec)
+        uuid_fk_cols = _fk_to_uuid_cols(schema_spec, uuid_tbls)
     else:
-        fp_a = fp_b = {}
+        uuid_tbls = frozenset()
+        uuid_fk_cols = {}
 
     # --- Step 3: compare structured tables ---
     if schema_spec is not None:
         mismatches.extend(
-            _compare_structured(conn_a, conn_b, schema_spec, fp_a, fp_b)
+            _compare_structured(conn_a, conn_b, schema_spec, uuid_tbls, uuid_fk_cols)
         )
 
     # --- Step 4: compare _cif_fallback ---

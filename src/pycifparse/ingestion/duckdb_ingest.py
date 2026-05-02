@@ -623,32 +623,57 @@ def _run_fk_fill_pass(
                 continue
             if not col.is_primary_key and not propagate_fk:
                 continue
-            target_loc = tag_to_column.get(target_def_id)
-            if target_loc:
-                tgt_tbl2, tgt_col2 = target_loc
-                if tgt_tbl2 in schema.tables:
-                    db.execute(f"""
-                        UPDATE "_raw_{tbl_name}" c
-                        SET "{col_name}" = COALESCE(
-                            (SELECT p."{tgt_col2}" FROM "_raw_{tgt_tbl2}" p
-                             WHERE p._block_id = c._block_id
-                               AND p._loop_id = c._loop_id
-                               AND p._iter_idx = c._iter_idx
-                               AND p."{tgt_col2}" IS NOT NULL
-                             LIMIT 1),
-                            (SELECT p."{tgt_col2}" FROM "_raw_{tgt_tbl2}" p
-                             WHERE p._block_id = c._block_id
-                               AND p._loop_id = '{_SCALARS_LOOP_ID}'
-                               AND p."{tgt_col2}" IS NOT NULL
-                             LIMIT 1),
-                            (SELECT p."{tgt_col2}" FROM "_raw_{tgt_tbl2}" p
-                             WHERE p._block_id = c._block_id
-                               AND p."{tgt_col2}" IS NOT NULL
-                             ORDER BY (p._loop_id = '{_SCALARS_LOOP_ID}') DESC, p._iter_idx
-                             LIMIT 1)
-                        )
-                        WHERE c."{col_name}" IS NULL
-                    """)
+
+            # Follow the propagation chain transitively so that across-block
+            # scenarios (ALL_BLOCKS re-ingest) can fall back to deeper ancestors
+            # that share the current block's _block_id.
+            lookup_chain: list[tuple[str, str]] = []
+            current_def_id = target_def_id
+            visited_defs: set[str] = set()
+            for _ in range(8):
+                if current_def_id in visited_defs:
+                    break
+                visited_defs.add(current_def_id)
+                loc = tag_to_column.get(current_def_id)
+                if not loc:
+                    break
+                tgt_tbl_c, tgt_col_c = loc
+                if tgt_tbl_c not in schema.tables:
+                    break
+                lookup_chain.append((tgt_tbl_c, tgt_col_c))
+                next_link = next(
+                    (lnk for lnk in schema.propagation_links.get(tgt_tbl_c, [])
+                     if lnk[0] == tgt_col_c),
+                    None,
+                )
+                if next_link is None:
+                    break
+                current_def_id = next_link[1]
+
+            if lookup_chain:
+                subs: list[str] = []
+                for tgt_tbl_c, tgt_col_c in lookup_chain:
+                    subs += [
+                        f'(SELECT p."{tgt_col_c}" FROM "_raw_{tgt_tbl_c}" p'
+                        f' WHERE p._block_id = c._block_id'
+                        f'   AND p._loop_id = c._loop_id AND p._iter_idx = c._iter_idx'
+                        f'   AND p."{tgt_col_c}" IS NOT NULL LIMIT 1)',
+                        f'(SELECT p."{tgt_col_c}" FROM "_raw_{tgt_tbl_c}" p'
+                        f' WHERE p._block_id = c._block_id'
+                        f"   AND p._loop_id = '{_SCALARS_LOOP_ID}'"
+                        f'   AND p."{tgt_col_c}" IS NOT NULL LIMIT 1)',
+                        f'(SELECT p."{tgt_col_c}" FROM "_raw_{tgt_tbl_c}" p'
+                        f' WHERE p._block_id = c._block_id'
+                        f'   AND p."{tgt_col_c}" IS NOT NULL'
+                        f"  ORDER BY (p._loop_id = '{_SCALARS_LOOP_ID}') DESC, p._iter_idx"
+                        f' LIMIT 1)',
+                    ]
+                db.execute(f"""
+                    UPDATE "_raw_{tbl_name}" c
+                    SET "{col_name}" = COALESCE({", ".join(subs)})
+                    WHERE c."{col_name}" IS NULL
+                """)
+
             if default_val is not None:
                 db.execute(f"""
                     UPDATE "_raw_{tbl_name}"
@@ -708,7 +733,6 @@ def propagate_fk_sql(
     topo = _topo_order(schema)
 
     _run_fk_fill_pass(db, schema, topo, tag_to_column, propagate_fk, emit, populated)
-
     _insert_key_fk_stubs(db, schema, topo, populated)
     _run_fk_fill_pass(db, schema, topo, tag_to_column, propagate_fk, emit, populated)
 
@@ -928,6 +952,18 @@ def _merge_keyed(
     all_insert_cols = ns_pks + data_cols + ['_block_id', '_row_id']
     insert_col_list = ', '.join(f'"{c}"' for c in all_insert_cols)
     data_part = (', '.join(data_exprs) + ', ') if data_exprs else ''
+
+    # Build the ON CONFLICT update clause: fill NULLs from the incoming row,
+    # keep existing non-NULL values.  Identical values are a no-op.
+    update_parts = [
+        f'"{col}" = COALESCE("{tbl_name}"."{col}", excluded."{col}")'
+        for col in data_cols
+    ]
+    if update_parts:
+        on_conflict = f'ON CONFLICT ({pk_sel}) DO UPDATE SET {", ".join(update_parts)}'
+    else:
+        on_conflict = f'ON CONFLICT ({pk_sel}) DO NOTHING'
+
     db.execute(f"""
         INSERT INTO "{tbl_name}" ({insert_col_list})
         SELECT
@@ -936,7 +972,7 @@ def _merge_keyed(
             MIN(_row_id) + {row_id_offset} AS _row_id
         FROM "_raw_{tbl_name}"
         GROUP BY {pk_sel}
-        ON CONFLICT ({pk_sel}) DO NOTHING
+        {on_conflict}
     """)
 
 

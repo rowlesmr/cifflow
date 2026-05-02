@@ -50,7 +50,7 @@ DIC_FILE  = DIC_DIR / 'cif_pow.dic'
 DIC_CACHE = ROOT / 'cif_pow_cache.json'   # JSON cache; delete to force re-parse
 
 # CIF file to ingest
-CIF_FILE = ROOT / 'tests' / 'cif_files' / "second.cif" #'multi_one.cif'  #
+CIF_FILE = ROOT / 'tests' / 'cif_files' / "second_short.cif" #'multi_one.cif'  #
 
 # Output databases
 DB_FILE       = ROOT / 'output.duckdb'        # VARCHAR-storage (original ingest)
@@ -268,27 +268,16 @@ if DB_FILE.exists():
     DB_FILE.unlink()
 
 try:
-    # conn, ingest_warnings = ingest(
-    #     cif,                   # CifFile from build()
-    #     db=duckdb.connect(     # file-backed database with reduced block size (db=None (the default) gives a fully functional in-memory connection):
-    #         str(DB_FILE),      # 163 schema tables × 256 KB default = ~40 MB of overhead;
-    #         config={'default_block_size': 16384},  # 16 KB → ~2 MB overhead instead
-    #     ),
-    #     schema=schema,         # SchemaSpec; None -> all tags to _cif_fallback
-    #     propagate_fk=False,    # True -> fill missing non-key FK columns from block context
-    #     dataset_id=None,       # str -> one dataset only; None -> all
-    # )
-
-
     conn, ingest_warnings = ingest(
         cif,                   # CifFile from build()
-        db=None,
+        db=duckdb.connect(     # file-backed database with reduced block size (db=None (the default) gives a fully functional in-memory connection):
+            str(DB_FILE),      # 163 schema tables × 256 KB default = ~40 MB of overhead;
+            config={'default_block_size': 16384},  # 16 KB → ~2 MB overhead instead
+        ),
         schema=schema,         # SchemaSpec; None -> all tags to _cif_fallback
         propagate_fk=False,    # True -> fill missing non-key FK columns from block context
         dataset_id=None,       # str -> one dataset only; None -> all
     )
-
-
 except IngestionError as exc:
     print(f'\n  INGESTION FAILED — {len(exc.errors)} error(s):')
     for i, err in enumerate(exc.errors, 1):
@@ -307,61 +296,61 @@ print(f'  Database saved to: {DB_FILE}')
 
 print_time("Finished ingest", start_ingest)
 
-# # ---------------------------------------------------------------------------
-# # Step 6 — Validate
-# # ---------------------------------------------------------------------------
-# # validate_database() runs all schema checks directly against an existing
-# # DuckDB connection — no second ingest needed.
-# # Returns list[DbValidationResult]; never raises.
-#
-# print(f'\n=== Step 6: Validate ===')
-# start_validate = get_now()
-#
-# #see also validate()
-#
-# db_issues: list[DbValidationResult] = validate_database(
-#     conn,    # populated DuckDB connection from Step 5
-#     schema,  # SchemaSpec to validate against
-# )
-#
-# SEV_ORDER = {'Error': 0, 'Warning': 1, 'Info': 2}
-# counts = {'Error': 0, 'Warning': 0, 'Info': 0}
-# for issue in db_issues:
-#     counts[issue.severity] += 1
-#
-# passed = counts['Error'] == 0
-# status = 'PASSED' if passed else 'FAILED'
-# print(f'  Validation {status}: '
-#       f'{counts["Error"]} error(s), '
-#       f'{counts["Warning"]} warning(s), '
-#       f'{counts["Info"]} info(s)')
-#
-# for issue in sorted(db_issues, key=lambda i: SEV_ORDER[i.severity]):
-#     loc = f'  block={issue.block_id!r}' if issue.block_id else ''
-#     tag  = f'  tag={issue.tag!r}' if issue.tag else ''
-#     val  = f'  value={issue.value!r}' if issue.value else ''
-#     print(f'  [{issue.severity:7s}] ({issue.check}){loc}{tag}{val}')
-#     print(f'           {issue.message}')
-#
-# # Quick row-count summary
-# tables_with_rows = []
-# for table_name in schema.tables:
-#     count = conn.execute(
-#         f'SELECT COUNT(*) FROM "{table_name}"'
-#     ).fetchone()[0]
-#     if count:
-#         tables_with_rows.append((table_name, count))
-#
-# fallback_count = conn.execute('SELECT COUNT(*) FROM "_cif_fallback"').fetchone()[0]
-#
-# print(f'\n  Structured table rows:')
-# for name, count in sorted(tables_with_rows, key=lambda x: -x[1])[:15]:
-#     print(f'    {name:30s}  {count:>6} row(s)')
-# if not tables_with_rows:
-#     print('    (none)')
-# print(f'  Fallback tier (_cif_fallback): {fallback_count} row(s)')
-#
-# print_time("Finished validate", start_validate)
+# ---------------------------------------------------------------------------
+# Step 6 — Validate
+# ---------------------------------------------------------------------------
+# validate_database() runs all schema checks directly against an existing
+# DuckDB connection — no second ingest needed.
+# Returns list[DbValidationResult]; never raises.
+
+print(f'\n=== Step 6: Validate ===')
+start_validate = get_now()
+
+#see also validate()
+
+db_issues: list[DbValidationResult] = validate_database(
+    conn,    # populated DuckDB connection from Step 5
+    schema,  # SchemaSpec to validate against
+)
+
+SEV_ORDER = {'Error': 0, 'Warning': 1, 'Info': 2}
+counts = {'Error': 0, 'Warning': 0, 'Info': 0}
+for issue in db_issues:
+    counts[issue.severity] += 1
+
+passed = counts['Error'] == 0
+status = 'PASSED' if passed else 'FAILED'
+print(f'  Validation {status}: '
+      f'{counts["Error"]} error(s), '
+      f'{counts["Warning"]} warning(s), '
+      f'{counts["Info"]} info(s)')
+
+for issue in sorted(db_issues, key=lambda i: SEV_ORDER[i.severity]):
+    loc = f'  block={issue.block_id!r}' if issue.block_id else ''
+    tag  = f'  tag={issue.tag!r}' if issue.tag else ''
+    val  = f'  value={issue.value!r}' if issue.value else ''
+    print(f'  [{issue.severity:7s}] ({issue.check}){loc}{tag}{val}')
+    print(f'           {issue.message}')
+
+# Quick row-count summary
+tables_with_rows = []
+for table_name in schema.tables:
+    count = conn.execute(
+        f'SELECT COUNT(*) FROM "{table_name}"'
+    ).fetchone()[0]
+    if count:
+        tables_with_rows.append((table_name, count))
+
+fallback_count = conn.execute('SELECT COUNT(*) FROM "_cif_fallback"').fetchone()[0]
+
+print(f'\n  Structured table rows:')
+for name, count in sorted(tables_with_rows, key=lambda x: -x[1])[:15]:
+    print(f'    {name:30s}  {count:>6} row(s)')
+if not tables_with_rows:
+    print('    (none)')
+print(f'  Fallback tier (_cif_fallback): {fallback_count} row(s)')
+
+print_time("Finished validate", start_validate)
 
 # ---------------------------------------------------------------------------
 # Step 7 — convert_database: copy VARCHAR-storage DB to typed-column DB
@@ -381,17 +370,9 @@ if TYPED_DB_FILE.exists():
 
 typed_conn = duckdb.connect(str(TYPED_DB_FILE))
 
-# coercion_warnings = convert_database(
-#     src=conn,                        # source VARCHAR-storage DuckDB connection
-#     dst=typed_conn,                  # destination DuckDB connection (must be empty)
-#     schema=schema,                   # SchemaSpec for type information
-#     on_coercion_failure='null',      # 'null'  -> failed cast -> NULL (default)
-#                                      # 'keep'  -> leave VARCHAR value unchanged
-#                                      # 'error' -> raise on first failure
-# )
 coercion_warnings = convert_database(
     src=conn,                        # source VARCHAR-storage DuckDB connection
-    dst= duckdb.connect(),                  # destination DuckDB connection (must be empty)
+    dst=typed_conn,                  # destination DuckDB connection (must be empty)
     schema=schema,                   # SchemaSpec for type information
     on_coercion_failure='null',      # 'null'  -> failed cast -> NULL (default)
                                      # 'keep'  -> leave VARCHAR value unchanged
@@ -583,6 +564,7 @@ fidelity_cases = [
 ]
 
 for mode_name, emitted_cif, report_path in fidelity_cases:
+    print(f"Starting {mode_name}")
     start_individual_fidelity = get_now()
     fid = check_fidelity(
         CIF_FILE,            # source A: original CIF file
