@@ -5,10 +5,9 @@ import pycifparse as pcp
 from pycifparse.ingestion.duckdb_ingest import (
     setup_duckdb, load_block_data, flush_table_batches,
     propagate_fk_sql, _non_synthetic_pks, _non_pk_data_cols,
-    _next_rid, _SCALARS_LOOP_ID,
+    _SCALARS_LOOP_ID,
 )
 from pycifparse.ingestion.ingest import build_tag_to_column, build_su_map, _select_blocks
-from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
 
 ROOT = pathlib.Path(__file__).parent
 CIF_FILE = ROOT / 'tests' / 'cif_files' / 'second.cif'

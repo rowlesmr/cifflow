@@ -202,26 +202,15 @@ def convert_database(
     dst.begin()
     try:
         # Structured tables with typed DDL
+        _INFRA = frozenset({'_block_id', '_row_id', '_pycifparse_id'})
         for tbl_name in ordered_tables:
             table = schema.tables[tbl_name]
-            cols = table.columns
+            cols = [c for c in table.columns if not c.is_synthetic or c.name in _INFRA]
             col_names = [c.name for c in cols]
             sql_types  = {c.name: _sql_type_for(c)  for c in cols}
             leaf_types = {c.name: _leaf_sql_type(c) for c in cols}
 
-            col_defs: list[str] = []
-            for col in cols:
-                sql_type = sql_types[col.name]
-                null_clause = '' if col.nullable else ' NOT NULL'
-                col_defs.append(f'    "{col.name}"  {sql_type}{null_clause}')
-
-            pk_cols = table.primary_keys
-            if pk_cols:
-                col_defs.append(
-                    '    PRIMARY KEY ('
-                    + ', '.join(f'"{c}"' for c in pk_cols)
-                    + ')'
-                )
+            col_defs = [f'    "{col.name}"  {sql_types[col.name]}' for col in cols]
 
             dst.execute(
                 f'CREATE TABLE "{tbl_name}" (\n'
@@ -250,10 +239,15 @@ def convert_database(
                     ))
                 placeholders = ', '.join('?' * len(col_names))
                 col_list_sql = ', '.join(f'"{c}"' for c in col_names)
-                dst.executemany(
-                    f'INSERT INTO "{tbl_name}" ({col_list_sql}) VALUES ({placeholders})',
-                    casted,
-                )
+                try:
+                    dst.executemany(
+                        f'INSERT INTO "{tbl_name}" ({col_list_sql}) VALUES ({placeholders})',
+                        casted,
+                    )
+                except Exception as exc:
+                    raise type(exc)(
+                        f"inserting into '{tbl_name}': {exc}"
+                    ) from exc
 
         # Fallback-tier tables copied verbatim (VARCHAR storage)
         for tbl in _FALLBACK_TABLES:

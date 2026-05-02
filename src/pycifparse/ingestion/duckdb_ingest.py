@@ -970,8 +970,6 @@ def create_final_tables(
     if errors is None:
         errors = []
     for tbl_name, table in schema.tables.items():
-        if populated is not None and tbl_name not in populated:
-            continue
         is_keyless = table.primary_keys == ['_pycifparse_id']
         ns_pks = _non_synthetic_pks(table)
         data_cols = _non_pk_data_cols(table)
@@ -979,6 +977,9 @@ def create_final_tables(
             db.execute(f'DROP TABLE IF EXISTS "_raw_{tbl_name}"')
             continue
         db.execute(_create_final_table_ddl(tbl_name, table))
+        if populated is not None and tbl_name not in populated:
+            db.execute(f'DROP TABLE IF EXISTS "_raw_{tbl_name}"')
+            continue
         active_cols = _active_data_cols(db, tbl_name, data_cols)
         if is_keyless:
             offset = db.execute(

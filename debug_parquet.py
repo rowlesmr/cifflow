@@ -18,6 +18,7 @@ exactly.  No NULL padding, no unified union schema.
 import pathlib
 import sys
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from pycifparse import build_arrow
@@ -40,7 +41,7 @@ def dump_cif_to_parquet(cif_path: pathlib.Path, out_dir: pathlib.Path) -> None:
 
     for i, batch in enumerate(batches):
         path = out_dir / f'batch_{i:03d}.parquet'
-        pq.write_table(batch, path)
+        pq.write_table(pa.Table.from_batches([batch]), path)
         block_name = batch.column('_block_name')[0].as_py()
         loop_id    = batch.column('_loop_id')[0].as_py()
         n_tags     = batch.num_columns - 5

@@ -16,7 +16,7 @@ Output files:
 """
 
 import pathlib
-import sqlite3
+import duckdb
 
 ROOT     = pathlib.Path(__file__).parent
 DIC_DIR  = ROOT / 'data' / 'dictionaries'
@@ -25,7 +25,7 @@ FILE_NAME = "multi_one" # "pathological_key_block""tmp" #
 
 CIF_FILE = ROOT / 'tests' / 'cif_files' / (FILE_NAME +'.cif')
 
-DB_COMPACT_FILE = ROOT / (FILE_NAME +'_compact_db.db')
+DB_CONVERT_FILE = ROOT / (FILE_NAME +'_covert_db.duckdb')
 
 
 
@@ -39,7 +39,7 @@ from pycifparse import (
     load_dictionary,
     save_dictionary,
     generate_schema,
-    compactify_database,
+    convert_database,
     emit,
     EmitMode,
     OutputPlan,
@@ -147,14 +147,14 @@ if report.database is None:
     raise SystemExit(1)
 
 if report.database:
-    if DB_COMPACT_FILE.exists():
-        DB_COMPACT_FILE.unlink()  # start fresh each run
+    if DB_CONVERT_FILE.exists():
+        DB_CONVERT_FILE.unlink()  # start fresh each run
 
-    dest = sqlite3.connect(DB_COMPACT_FILE)
-    compactify_database(
+    dest = duckdb.connect(str(DB_CONVERT_FILE))
+    convert_database(
         src=report.database,  # source connection (already populated by ingest)
-        dst=dest,  # destination connection (must be empty)
-        schema=schema,  # SchemaSpec used when src was populated
+        dst=dest,             # destination connection (must be empty)
+        schema=schema,        # SchemaSpec used when src was populated
     )
     dest.close()
 

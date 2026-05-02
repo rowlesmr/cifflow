@@ -94,10 +94,7 @@ class TestCoreCellOnly:
         assert _scalar(cell_only_conn, 'cell', 'volume', 'test_cell_only') == '187.06'
 
     def test_no_atom_site_rows(self, cell_only_conn):
-        all_tables = {r[0] for r in cell_only_conn.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()}
-        assert 'atom_site' not in all_tables
+        assert cell_only_conn.execute('SELECT COUNT(*) FROM atom_site').fetchone()[0] == 0
 
     def test_stub_diffrn_created(self, cell_only_conn):
         """No _diffrn.id in file: UUID stub must be created in diffrn."""

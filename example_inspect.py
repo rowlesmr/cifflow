@@ -11,7 +11,6 @@ Run from the repository root:
 """
 
 import pathlib
-import sqlite3
 
 ROOT    = pathlib.Path(__file__).parent
 DIC_DIR = ROOT / 'data' / 'dictionaries'
@@ -114,7 +113,7 @@ inspect_model(
 # ---------------------------------------------------------------------------
 # Section 5 — inspect_schema
 # ---------------------------------------------------------------------------
-# Summarises the SQLite schema derived from a DDLm dictionary.
+# Summarises the DuckDB schema derived from a DDLm dictionary.
 # Accepts a SchemaSpec, a DdlmDictionary, a pathlib.Path, or a raw dic string.
 
 print('=' * 60)
@@ -196,21 +195,14 @@ print('Section 6 — inspect_ingest')
 print('=' * 60)
 
 from pycifparse import build
-from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
 
 cif, parse_errors = build(CIF_SOURCE)
 if parse_errors:
     for e in parse_errors:
         print(f'  [parse error] {e.message}')
 
-conn = sqlite3.connect(':memory:')
-conn.isolation_level = None
-apply_schema(conn, schema)
-apply_fallback_schema(conn)
-
 events: list[TraceEvent] = inspect_ingest(
     cif,
-    conn,
     schema=schema,          # pass None to route everything to _cif_fallback
     propagate_fk=False,
 )
@@ -228,6 +220,5 @@ print(f'  Captured: {len(warnings)} warning(s), '
 for ev in events:
     print(f'    {ev.kind:12s}  {ev.detail[:60]}')
 
-conn.close()
 print()
 print('Done.')
