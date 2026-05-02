@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
 mod cif_model;
-mod error;
+pub mod error;
 mod event_sink;
 pub mod lexer;
 pub mod parser;

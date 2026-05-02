@@ -31,10 +31,10 @@ pub enum RawValue {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Default)]
-pub(crate) struct FrameData {
-    pub(crate) tag_order: Vec<String>,
-    pub(crate) tags: HashMap<String, Vec<RawValue>>,
-    pub(crate) loops: Vec<Vec<String>>,
+pub struct FrameData {
+    pub tag_order: Vec<String>,
+    pub tags: HashMap<String, Vec<RawValue>>,
+    pub loops: Vec<Vec<String>>,
 }
 
 impl FrameData {
@@ -62,15 +62,15 @@ impl FrameData {
 // Completed structures
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub(crate) struct ParsedSaveFrame {
-    pub(crate) name: String,
-    pub(crate) data: FrameData,
+pub struct ParsedSaveFrame {
+    pub name: String,
+    pub data: FrameData,
 }
 
-pub(crate) struct ParsedBlock {
-    pub(crate) name: String,
-    pub(crate) data: FrameData,
-    pub(crate) save_frames: Vec<ParsedSaveFrame>,
+pub struct ParsedBlock {
+    pub name: String,
+    pub data: FrameData,
+    pub save_frames: Vec<ParsedSaveFrame>,
 }
 
 pub struct ParsedCif {
@@ -709,4 +709,525 @@ impl ParsedCif {
         }
         Ok(result)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+    use crate::version::{detect_version, CifVersion};
+
+    // ── test infrastructure ───────────────────────────────────────────────────
+
+    fn parse(src: &str) -> ParsedCif {
+        let vr = detect_version(src);
+        let mut b = RawBuilder::new(vr.version, false);
+        for e in &vr.errors { b.push_error(e); }
+        let tokens = Lexer::new(&vr.remaining, vr.version, vr.line_offset).tokenise();
+        Parser::new().parse(tokens, &mut b);
+        b.finish()
+    }
+
+    fn parse_strict(src: &str) -> ParsedCif {
+        let vr = detect_version(src);
+        let mut b = RawBuilder::new(vr.version, true);
+        for e in &vr.errors { b.push_error(e); }
+        let tokens = Lexer::new(&vr.remaining, vr.version, vr.line_offset).tokenise();
+        Parser::new().parse(tokens, &mut b);
+        b.finish()
+    }
+
+    fn str_val(v: &RawValue) -> &str {
+        if let RawValue::Str(s) = v { s } else { panic!("not a Str: {:?}", v) }
+    }
+
+    // ── version detection ─────────────────────────────────────────────────────
+
+    #[test]
+    fn version_cif2_magic() {
+        assert_eq!(parse("#\\#CIF_2.0\ndata_b _t v").version, CifVersion::Cif2_0);
+    }
+
+    #[test]
+    fn version_cif1_no_magic() {
+        assert_eq!(parse("data_b _t v").version, CifVersion::Cif1_1);
+    }
+
+    // ── block structure ───────────────────────────────────────────────────────
+
+    #[test]
+    fn single_block_name() {
+        let p = parse("data_myblock _t v");
+        assert_eq!(p.blocks.len(), 1);
+        assert_eq!(p.blocks[0].name, "myblock");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn two_blocks() {
+        let p = parse("data_a _ta va data_b _tb vb");
+        assert_eq!(p.blocks.len(), 2);
+        assert_eq!(p.blocks[0].name, "a");
+        assert_eq!(p.blocks[1].name, "b");
+    }
+
+    #[test]
+    fn empty_source_no_blocks() {
+        let p = parse("");
+        assert_eq!(p.blocks.len(), 0);
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn duplicate_block_name_is_error() {
+        let p = parse("data_foo _t 1 data_foo _t 2");
+        assert_eq!(p.blocks.len(), 2);
+        assert!(!p.errors.is_empty());
+        assert!(p.errors.iter().any(|e| e.message.contains("duplicate")));
+    }
+
+    // ── scalar values ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn scalar_string_stored() {
+        let p = parse("data_b _tag hello");
+        let vals = &p.blocks[0].data.tags["_tag"];
+        assert_eq!(vals.len(), 1);
+        assert_eq!(str_val(&vals[0]), "hello");
+    }
+
+    #[test]
+    fn placeholder_dot_stored_as_dot() {
+        let p = parse("data_b _tag .");
+        let v = str_val(&p.blocks[0].data.tags["_tag"][0]);
+        assert_eq!(v, ".");
+    }
+
+    #[test]
+    fn placeholder_question_stored_as_question() {
+        let p = parse("data_b _tag ?");
+        let v = str_val(&p.blocks[0].data.tags["_tag"][0]);
+        assert_eq!(v, "?");
+    }
+
+    #[test]
+    fn quoted_dot_stored_as_sentinel() {
+        // Quoted '.' should be stored as '"."' (sentinel encoding)
+        let p = parse("data_b _tag '.'");
+        let v = str_val(&p.blocks[0].data.tags["_tag"][0]);
+        assert_eq!(v, "\".\"");
+    }
+
+    #[test]
+    fn quoted_question_stored_as_sentinel() {
+        let p = parse("data_b _tag \"?\"");
+        let v = str_val(&p.blocks[0].data.tags["_tag"][0]);
+        assert_eq!(v, "\"?\"");
+    }
+
+    #[test]
+    fn tag_order_preserved() {
+        let p = parse("data_b _c 3 _a 1 _b 2");
+        assert_eq!(p.blocks[0].data.tag_order, vec!["_c", "_a", "_b"]);
+    }
+
+    #[test]
+    fn duplicate_tag_values_both_stored() {
+        let p = parse("data_b _tag val1 _tag val2");
+        let vals = &p.blocks[0].data.tags["_tag"];
+        assert_eq!(vals.len(), 2);
+        assert_eq!(str_val(&vals[0]), "val1");
+        assert_eq!(str_val(&vals[1]), "val2");
+    }
+
+    // ── loops ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn loop_values_stored_per_tag() {
+        let p = parse("data_b loop_ _a _b 1 2 3 4");
+        let data = &p.blocks[0].data;
+        assert_eq!(data.loops, vec![vec!["_a".to_string(), "_b".to_string()]]);
+        assert_eq!(data.tags["_a"].iter().map(|v| str_val(v)).collect::<Vec<_>>(), vec!["1", "3"]);
+        assert_eq!(data.tags["_b"].iter().map(|v| str_val(v)).collect::<Vec<_>>(), vec!["2", "4"]);
+    }
+
+    #[test]
+    fn loop_tag_order_in_loops_vec() {
+        let p = parse("data_b loop_ _x _y 1 2");
+        assert_eq!(p.blocks[0].data.loops[0], vec!["_x", "_y"]);
+    }
+
+    #[test]
+    fn loop_imbalanced_pad_mode() {
+        // 3 values for a 2-tag loop → pad mode adds 1 placeholder, emits error
+        let p = parse("data_b loop_ _a _b 1 2 3");
+        assert!(!p.errors.is_empty());
+        assert!(p.errors.iter().any(|e| e.message.contains("not divisible")));
+        let data = &p.blocks[0].data;
+        // padded: _a=[1,3], _b=[2,?]
+        assert_eq!(data.tags["_a"].len(), 2);
+        assert_eq!(data.tags["_b"].len(), 2);
+        assert_eq!(str_val(&data.tags["_b"][1]), "?");
+    }
+
+    #[test]
+    fn loop_imbalanced_strict_mode_stops() {
+        let p = parse_strict("data_b loop_ _a _b 1 2 3");
+        assert!(!p.errors.is_empty());
+        // In strict mode, partial loop data may still be in blocks but stopped flag is set
+    }
+
+    #[test]
+    fn scalar_then_loop_then_scalar() {
+        let p = parse("data_b _x 1 loop_ _y 2 3 _z 4");
+        let data = &p.blocks[0].data;
+        assert_eq!(str_val(&data.tags["_x"][0]), "1");
+        assert_eq!(data.tags["_y"].len(), 2);
+        assert_eq!(str_val(&data.tags["_z"][0]), "4");
+    }
+
+    // ── save frames ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn save_frame_stored() {
+        let p = parse("data_b save_sf _tag val save_");
+        assert_eq!(p.blocks[0].save_frames.len(), 1);
+        assert_eq!(p.blocks[0].save_frames[0].name, "sf");
+        assert_eq!(str_val(&p.blocks[0].save_frames[0].data.tags["_tag"][0]), "val");
+    }
+
+    #[test]
+    fn duplicate_save_frame_is_error() {
+        let p = parse("data_b save_sf _t 1 save_ save_sf _t 2 save_");
+        assert!(!p.errors.is_empty());
+    }
+
+    // ── containers ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn list_value_stored() {
+        let p = parse("#\\#CIF_2.0\ndata_b _tag [1 2 3]");
+        let v = &p.blocks[0].data.tags["_tag"][0];
+        assert!(matches!(v, RawValue::List(_)));
+        if let RawValue::List(items) = v {
+            assert_eq!(items.len(), 3);
+            assert_eq!(str_val(&items[0]), "1");
+        }
+    }
+
+    #[test]
+    fn table_value_stored() {
+        let p = parse("#\\#CIF_2.0\ndata_b _tag {\"key\":val}");
+        let v = &p.blocks[0].data.tags["_tag"][0];
+        assert!(matches!(v, RawValue::Table(_)));
+        if let RawValue::Table(pairs) = v {
+            assert_eq!(pairs.len(), 1);
+            assert_eq!(pairs[0].0, "key");
+            assert_eq!(str_val(&pairs[0].1), "val");
+        }
+    }
+
+    #[test]
+    fn nested_list() {
+        let p = parse("#\\#CIF_2.0\ndata_b _tag [[1 2] 3]");
+        let v = &p.blocks[0].data.tags["_tag"][0];
+        if let RawValue::List(outer) = v {
+            assert_eq!(outer.len(), 2);
+            assert!(matches!(&outer[0], RawValue::List(_)));
+        } else { panic!("expected List"); }
+    }
+
+    // ── multiline text field transform ────────────────────────────────────────
+
+    #[test]
+    fn multiline_content_transformed() {
+        // ;text\n; → raw = "text" → transform_multiline("text") = "text"
+        let p = parse("data_b _tag\n;text\n;");
+        assert_eq!(str_val(&p.blocks[0].data.tags["_tag"][0]), "text");
+    }
+
+    #[test]
+    fn multiline_with_fold_prefix() {
+        // fold: first line is "P>\ ", remaining lines have prefix "P>" stripped + unfolded
+        let cif = "data_b _tag\n;P>\\  \nP>part1\\\nP>part2\n;";
+        let p = parse(cif);
+        assert_eq!(str_val(&p.blocks[0].data.tags["_tag"][0]), "part1part2");
+    }
+
+    // ── error propagation ─────────────────────────────────────────────────────
+
+    #[test]
+    fn no_errors_on_clean_input() {
+        let p = parse("#\\#CIF_2.0\ndata_b _tag val");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn version_error_propagated() {
+        // Unknown CIF version produces an error from detect_version
+        let p = parse("#\\#CIF_9.9\ndata_b _tag val");
+        assert!(!p.errors.is_empty());
+    }
+
+    #[test]
+    fn global_error_propagated() {
+        let p = parse("data_b global_");
+        assert!(p.errors.iter().any(|e| e.message.contains("global_")));
+    }
+
+    // ── fixture files ─────────────────────────────────────────────────────────
+
+    // Helper: parse fixture, assert no panic, return ParsedCif
+    macro_rules! fixture {
+        ($path:literal) => { parse(include_str!($path)) };
+    }
+
+    #[test]
+    fn fixture_empty() {
+        let p = fixture!("../../tests/cif_files/comcifs/empty.cif");
+        assert_eq!(p.blocks.len(), 0);
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_comment_only() {
+        let p = fixture!("../../tests/cif_files/comcifs/comment_only.cif");
+        assert_eq!(p.blocks.len(), 0);
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_simple_data() {
+        let p = fixture!("../../tests/cif_files/comcifs/simple_data.cif");
+        assert_eq!(p.blocks.len(), 1);
+        assert_eq!(p.blocks[0].name, "simple_data");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_simple_loops() {
+        let p = fixture!("../../tests/cif_files/comcifs/simple_loops.cif");
+        assert_eq!(p.errors.len(), 0);
+        assert!(!p.blocks[0].data.loops.is_empty());
+    }
+
+    #[test]
+    fn fixture_simple_containers() {
+        let p = fixture!("../../tests/cif_files/comcifs/simple_containers.cif");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_complex_data() {
+        let p = fixture!("../../tests/cif_files/comcifs/complex_data.cif");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_nested() {
+        // nested.cif contains nested save frames (illegal) → parser + semantic errors
+        let p = fixture!("../../tests/cif_files/comcifs/nested.cif");
+        assert_eq!(p.blocks.len(), 1);
+        assert!(!p.errors.is_empty());
+    }
+
+    #[test]
+    fn fixture_list_data() {
+        let p = fixture!("../../tests/cif_files/comcifs/list_data.cif");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_table_data() {
+        let p = fixture!("../../tests/cif_files/comcifs/table_data.cif");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_strings() {
+        let p = fixture!("../../tests/cif_files/comcifs/strings.cif");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_text_fields() {
+        let p = fixture!("../../tests/cif_files/comcifs/text_fields.cif");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_triple() {
+        let p = fixture!("../../tests/cif_files/comcifs/triple.cif");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_unicode() {
+        let p = fixture!("../../tests/cif_files/comcifs/unicode.cif");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_ver1() {
+        let p = fixture!("../../tests/cif_files/comcifs/ver1.cif");
+        assert_eq!(p.version, CifVersion::Cif1_1);
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_ver2() {
+        let p = fixture!("../../tests/cif_files/comcifs/ver2.cif");
+        assert_eq!(p.version, CifVersion::Cif2_0);
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_cif11_unquoted() {
+        let p = fixture!("../../tests/cif_files/comcifs/cif11_unquoted.cif");
+        assert_eq!(p.version, CifVersion::Cif1_1);
+    }
+
+    #[test]
+    fn fixture_cif1_quoting() {
+        let p = fixture!("../../tests/cif_files/comcifs/cif1_quoting.cif");
+        assert_eq!(p.version, CifVersion::Cif1_1);
+    }
+
+    #[test]
+    fn fixture_bom() {
+        // Single BOM byte — no data blocks, orphan-value error for the BOM char
+        let p = fixture!("../../tests/cif_files/comcifs/bom.cif");
+        assert_eq!(p.blocks.len(), 0);
+    }
+
+    #[test]
+    fn fixture_bom_ver2() {
+        let p = fixture!("../../tests/cif_files/comcifs/bom_ver2.cif");
+        assert_eq!(p.version, CifVersion::Cif2_0);
+    }
+
+    #[test]
+    fn fixture_container_names() {
+        let p = fixture!("../../tests/cif_files/comcifs/container_names.cif");
+        assert_eq!(p.errors.len(), 0);
+    }
+
+    #[test]
+    fn fixture_10() {
+        let _ = fixture!("../../tests/cif_files/comcifs/10.cif");
+    }
+
+    #[test]
+    fn fixture_cif1_invalid() {
+        let p = fixture!("../../tests/cif_files/comcifs/cif1_invalid.cif");
+        // Invalid CIF 1.x constructs produce errors but must not panic
+        assert!(!p.errors.is_empty());
+    }
+
+    #[test]
+    fn fixture_malformed_loops() {
+        let p = fixture!("../../tests/cif_files/malformed/loops.cif");
+        assert!(!p.errors.is_empty());
+    }
+
+    #[test]
+    fn fixture_malformed_strings_cif1() {
+        let p = fixture!("../../tests/cif_files/malformed/strings1-1.cif");
+        assert!(!p.errors.is_empty());
+    }
+
+    #[test]
+    fn fixture_malformed_strings_cif2() {
+        let p = fixture!("../../tests/cif_files/malformed/strings2-0.cif");
+        assert!(!p.errors.is_empty());
+    }
+
+    #[test]
+    fn fixture_malformed_containers() {
+        let p = fixture!("../../tests/cif_files/malformed/containers.cif");
+        assert!(!p.errors.is_empty());
+    }
+
+    #[test]
+    fn fixture_malformed_multiline() {
+        let p = fixture!("../../tests/cif_files/malformed/multiline.cif");
+        assert!(!p.errors.is_empty());
+    }
+
+    #[test]
+    fn fixture_single_one() { let _ = fixture!("../../tests/cif_files/single_one.cif"); }
+    #[test]
+    fn fixture_single_many_1() { let _ = fixture!("../../tests/cif_files/single_many_1.cif"); }
+    #[test]
+    fn fixture_single_many_2() { let _ = fixture!("../../tests/cif_files/single_many_2.cif"); }
+    #[test]
+    fn fixture_single_list() { let _ = fixture!("../../tests/cif_files/single_list.cif"); }
+    #[test]
+    fn fixture_multi_one() { let _ = fixture!("../../tests/cif_files/multi_one.cif"); }
+    #[test]
+    fn fixture_multi_many() { let _ = fixture!("../../tests/cif_files/multi_many.cif"); }
+    #[test]
+    fn fixture_multi_list() { let _ = fixture!("../../tests/cif_files/multi_list.cif"); }
+    #[test]
+    fn fixture_multi_one_as_oneblock() { let _ = fixture!("../../tests/cif_files/multi_one_as_oneblock.cif"); }
+    #[test]
+    fn fixture_second_short() { let _ = fixture!("../../tests/cif_files/second_short.cif"); }
+    #[test]
+    fn fixture_one_structure() { let _ = fixture!("../../tests/cif_files/one_structure.cif"); }
+    #[test]
+    fn fixture_transitive_01() { let _ = fixture!("../../tests/cif_files/transitive_01.cif"); }
+    #[test]
+    fn fixture_transitive_02() { let _ = fixture!("../../tests/cif_files/transitive_02.cif"); }
+    #[test]
+    fn fixture_transitive_03() { let _ = fixture!("../../tests/cif_files/transitive_03.cif"); }
+    #[test]
+    fn fixture_enumeration_range() { let _ = fixture!("../../tests/cif_files/enumeration_range.cif"); }
+    #[test]
+    fn fixture_pathological_key_block() { let _ = fixture!("../../tests/cif_files/pathological_key_block.cif"); }
+
+    #[test]
+    fn fixture_pycifparse_core_cell_only() {
+        let p = fixture!("../../tests/cif_files/pycifparse/core_cell_only.cif");
+        assert_eq!(p.errors.len(), 0);
+        assert_eq!(p.blocks.len(), 1);
+    }
+    #[test]
+    fn fixture_pycifparse_core_cell_su() { let _ = fixture!("../../tests/cif_files/pycifparse/core_cell_su.cif"); }
+    #[test]
+    fn fixture_pycifparse_core_atom_site_no_atom_type() { let _ = fixture!("../../tests/cif_files/pycifparse/core_atom_site_no_atom_type.cif"); }
+    #[test]
+    fn fixture_pycifparse_core_alias_tag() { let _ = fixture!("../../tests/cif_files/pycifparse/core_alias_tag.cif"); }
+    #[test]
+    fn fixture_pycifparse_core_placeholder_in_loop() { let _ = fixture!("../../tests/cif_files/pycifparse/core_placeholder_in_loop.cif"); }
+    #[test]
+    fn fixture_pycifparse_core_quoted_sentinel() { let _ = fixture!("../../tests/cif_files/pycifparse/core_quoted_sentinel.cif"); }
+    #[test]
+    fn fixture_pycifparse_core_unknown_tag() { let _ = fixture!("../../tests/cif_files/pycifparse/core_unknown_tag.cif"); }
+    #[test]
+    fn fixture_pycifparse_core_multiple_blocks() { let _ = fixture!("../../tests/cif_files/pycifparse/core_multiple_blocks.cif"); }
+    #[test]
+    fn fixture_pycifparse_core_multiline_formula() { let _ = fixture!("../../tests/cif_files/pycifparse/core_multiline_formula.cif"); }
+    #[test]
+    fn fixture_pycifparse_core_repeated_loop_key() { let _ = fixture!("../../tests/cif_files/pycifparse/core_repeated_loop_key.cif"); }
+    #[test]
+    fn fixture_pycifparse_core_keyless_sets() { let _ = fixture!("../../tests/cif_files/pycifparse/core_keyless_sets.cif"); }
+    #[test]
+    fn fixture_pycifparse_fallback_scalars() { let _ = fixture!("../../tests/cif_files/pycifparse/fallback_scalars.cif"); }
+    #[test]
+    fn fixture_pycifparse_fallback_loop() { let _ = fixture!("../../tests/cif_files/pycifparse/fallback_loop.cif"); }
+    #[test]
+    fn fixture_pycifparse_fallback_value_types() { let _ = fixture!("../../tests/cif_files/pycifparse/fallback_value_types.cif"); }
+    #[test]
+    fn fixture_pycifparse_fallback_containers() { let _ = fixture!("../../tests/cif_files/pycifparse/fallback_containers.cif"); }
+    #[test]
+    fn fixture_pycifparse_fallback_multiblock() { let _ = fixture!("../../tests/cif_files/pycifparse/fallback_multiblock.cif"); }
+    #[test]
+    fn fixture_pycifparse_pow_wavelength_propagation() { let _ = fixture!("../../tests/cif_files/pycifparse/pow_wavelength_propagation.cif"); }
+    #[test]
+    fn fixture_pycifparse_pow_enumeration_default() { let _ = fixture!("../../tests/cif_files/pycifparse/pow_enumeration_default.cif"); }
+    #[test]
+    fn fixture_pycifparse_pow_small_pd_data_meas() { let _ = fixture!("../../tests/cif_files/pycifparse/pow_small_pd_data_meas.cif"); }
+    #[test]
+    fn fixture_pycifparse_pow_small_pd_meas_proc() { let _ = fixture!("../../tests/cif_files/pycifparse/pow_small_pd_meas_proc.cif"); }
 }

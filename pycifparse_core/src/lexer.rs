@@ -414,7 +414,7 @@ impl Lexer {
         Token { token_type: TokenType::Value, value: buf, value_type: Some(ValueType::String), line, column: col, errors }
     }
 
-    fn read_multiline(&mut self) -> Token {
+    pub fn read_multiline(&mut self) -> Token {
         debug_assert!(self.col == 1 && self.peek(0) == ';');
         let line = self.line;
         let col  = self.col;
@@ -457,5 +457,451 @@ impl Lexer {
             value_type: Some(ValueType::MultilineString),
             line, column: col, errors,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lex2(src: &str) -> Vec<Token> { Lexer::new(src, CifVersion::Cif2_0, 0).tokenise() }
+    fn lex1(src: &str) -> Vec<Token> { Lexer::new(src, CifVersion::Cif1_1, 0).tokenise() }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    fn ttype(t: &Token) -> TokenType { t.token_type }
+    fn vtype(t: &Token) -> Option<ValueType> { t.value_type }
+    fn val(t: &Token) -> &str { &t.value }
+    fn has_errors(t: &Token) -> bool { !t.errors.is_empty() }
+
+    // ── empty / whitespace / comments ─────────────────────────────────────────
+
+    #[test]
+    fn empty_source() {
+        assert!(lex2("").is_empty());
+    }
+
+    #[test]
+    fn whitespace_only() {
+        assert!(lex2("   \t  \n  \n").is_empty());
+    }
+
+    #[test]
+    fn comment_only() {
+        assert!(lex2("# this is a comment").is_empty());
+    }
+
+    #[test]
+    fn comment_stripped_before_token() {
+        let toks = lex2("# comment\n_tag");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(ttype(&toks[0]), TokenType::Tag);
+        assert_eq!(val(&toks[0]), "_tag");
+    }
+
+    #[test]
+    fn inline_comment_after_token() {
+        let toks = lex2("_tag # rest is comment");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(ttype(&toks[0]), TokenType::Tag);
+    }
+
+    // ── tags ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn tag_basic() {
+        let toks = lex2("_atom_site.x");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(ttype(&toks[0]), TokenType::Tag);
+        assert_eq!(vtype(&toks[0]), None);
+        assert_eq!(val(&toks[0]), "_atom_site.x");
+    }
+
+    #[test]
+    fn tag_underscore_prefix_not_keyword() {
+        // _data_block starts with _ so it is a Tag, not a Keyword
+        let toks = lex2("_data_block");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(ttype(&toks[0]), TokenType::Tag);
+    }
+
+    #[test]
+    fn tag_single_underscore() {
+        let toks = lex2("_");
+        assert_eq!(ttype(&toks[0]), TokenType::Tag);
+        assert_eq!(val(&toks[0]), "_");
+    }
+
+    // ── keywords ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn keyword_data() {
+        let toks = lex2("data_myblock");
+        assert_eq!(ttype(&toks[0]), TokenType::Keyword);
+        assert_eq!(val(&toks[0]), "data_myblock");
+    }
+
+    #[test]
+    fn keyword_data_empty_suffix() {
+        let toks = lex2("data_");
+        assert_eq!(ttype(&toks[0]), TokenType::Keyword);
+    }
+
+    #[test]
+    fn keyword_loop_lowercase() {
+        let toks = lex2("loop_");
+        assert_eq!(ttype(&toks[0]), TokenType::Keyword);
+    }
+
+    #[test]
+    fn keyword_loop_uppercase() {
+        let toks = lex2("LOOP_");
+        assert_eq!(ttype(&toks[0]), TokenType::Keyword);
+    }
+
+    #[test]
+    fn keyword_loop_mixed_case() {
+        let toks = lex2("Loop_");
+        assert_eq!(ttype(&toks[0]), TokenType::Keyword);
+    }
+
+    #[test]
+    fn keyword_stop() {
+        let toks = lex2("stop_");
+        assert_eq!(ttype(&toks[0]), TokenType::Keyword);
+    }
+
+    #[test]
+    fn keyword_global() {
+        let toks = lex2("global_");
+        assert_eq!(ttype(&toks[0]), TokenType::Keyword);
+    }
+
+    #[test]
+    fn keyword_save_open() {
+        let toks = lex2("save_myframe");
+        assert_eq!(ttype(&toks[0]), TokenType::Keyword);
+        assert_eq!(val(&toks[0]), "save_myframe");
+    }
+
+    #[test]
+    fn keyword_save_close() {
+        let toks = lex2("save_");
+        assert_eq!(ttype(&toks[0]), TokenType::Keyword);
+    }
+
+    // ── bare-word values ───────────────────────────────────────────────────────
+
+    #[test]
+    fn value_string_bare() {
+        let toks = lex2("hello");
+        assert_eq!(ttype(&toks[0]), TokenType::Value);
+        assert_eq!(vtype(&toks[0]), Some(ValueType::String));
+        assert_eq!(val(&toks[0]), "hello");
+    }
+
+    #[test]
+    fn value_placeholder_dot() {
+        let toks = lex2(".");
+        assert_eq!(ttype(&toks[0]), TokenType::Value);
+        assert_eq!(vtype(&toks[0]), Some(ValueType::Placeholder));
+        assert_eq!(val(&toks[0]), ".");
+    }
+
+    #[test]
+    fn value_placeholder_question() {
+        let toks = lex2("?");
+        assert_eq!(ttype(&toks[0]), TokenType::Value);
+        assert_eq!(vtype(&toks[0]), Some(ValueType::Placeholder));
+    }
+
+    #[test]
+    fn value_numeric() {
+        let toks = lex2("42");
+        assert_eq!(ttype(&toks[0]), TokenType::Value);
+        assert_eq!(vtype(&toks[0]), Some(ValueType::String));
+    }
+
+    #[test]
+    fn value_float_with_su() {
+        let toks = lex2("1.23(5)");
+        assert_eq!(ttype(&toks[0]), TokenType::Value);
+        assert_eq!(vtype(&toks[0]), Some(ValueType::String));
+        assert_eq!(val(&toks[0]), "1.23(5)");
+    }
+
+    #[test]
+    fn value_negative_number() {
+        let toks = lex2("-12.3");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::String));
+        assert_eq!(val(&toks[0]), "-12.3");
+    }
+
+    // ── quoted strings ────────────────────────────────────────────────────────
+
+    #[test]
+    fn single_quoted_basic() {
+        let toks = lex2("'hello world'");
+        assert_eq!(ttype(&toks[0]), TokenType::Value);
+        assert_eq!(vtype(&toks[0]), Some(ValueType::SingleQuoted));
+        assert_eq!(val(&toks[0]), "hello world");
+        assert!(!has_errors(&toks[0]));
+    }
+
+    #[test]
+    fn double_quoted_basic() {
+        let toks = lex2("\"hello world\"");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::DoubleQuoted));
+        assert_eq!(val(&toks[0]), "hello world");
+    }
+
+    #[test]
+    fn single_quoted_empty() {
+        let toks = lex2("''");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::SingleQuoted));
+        assert_eq!(val(&toks[0]), "");
+    }
+
+    #[test]
+    fn quoted_dot_is_not_placeholder() {
+        let toks = lex2("'.'");
+        assert_eq!(ttype(&toks[0]), TokenType::Value);
+        assert_eq!(vtype(&toks[0]), Some(ValueType::SingleQuoted));
+        assert_eq!(val(&toks[0]), ".");
+    }
+
+    #[test]
+    fn quoted_question_is_not_placeholder() {
+        let toks = lex2("\"?\"");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::DoubleQuoted));
+        assert_eq!(val(&toks[0]), "?");
+    }
+
+    #[test]
+    fn quoted_keyword_is_value() {
+        let toks = lex2("'loop_'");
+        assert_eq!(ttype(&toks[0]), TokenType::Value);
+        assert_eq!(vtype(&toks[0]), Some(ValueType::SingleQuoted));
+    }
+
+    #[test]
+    fn single_quoted_unterminated_at_newline() {
+        let toks = lex1("'hello\nnext");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::SingleQuoted));
+        assert_eq!(val(&toks[0]), "hello");
+        assert!(has_errors(&toks[0]));
+    }
+
+    #[test]
+    fn double_quoted_unterminated_at_eof() {
+        let toks = lex2("\"hello");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::DoubleQuoted));
+        assert_eq!(val(&toks[0]), "hello");
+        assert!(has_errors(&toks[0]));
+    }
+
+    // ── triple-quoted strings (CIF 2.0) ───────────────────────────────────────
+
+    #[test]
+    fn triple_single_quoted_cif2() {
+        let toks = lex2("'''hello'''");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::TripleSingleQuoted));
+        assert_eq!(val(&toks[0]), "hello");
+        assert!(!has_errors(&toks[0]));
+    }
+
+    #[test]
+    fn triple_double_quoted_cif2() {
+        let toks = lex2("\"\"\"hello\"\"\"");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::TripleDoubleQuoted));
+        assert_eq!(val(&toks[0]), "hello");
+    }
+
+    #[test]
+    fn triple_quoted_contains_newline() {
+        let toks = lex2("'''line1\nline2'''");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::TripleSingleQuoted));
+        assert_eq!(val(&toks[0]), "line1\nline2");
+    }
+
+    #[test]
+    fn triple_quoted_contains_single_quotes() {
+        let toks = lex2("'''it's fine'''");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::TripleSingleQuoted));
+        assert_eq!(val(&toks[0]), "it's fine");
+    }
+
+    #[test]
+    fn triple_quoted_semicolon_not_multiline() {
+        // semicolon inside triple-quoted string is NOT a multiline delimiter
+        let toks = lex2("'''\n;\ncontent\n;'''");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::TripleSingleQuoted));
+        assert_eq!(val(&toks[0]), "\n;\ncontent\n;");
+    }
+
+    #[test]
+    fn triple_single_quoted_cif1_is_error() {
+        let toks = lex1("'''hello'''");
+        assert_eq!(ttype(&toks[0]), TokenType::Value);
+        assert_eq!(vtype(&toks[0]), Some(ValueType::String));
+        assert!(has_errors(&toks[0]));
+        assert!(toks[0].errors[0].message.contains("not valid in CIF 1.x"));
+    }
+
+    #[test]
+    fn triple_double_quoted_cif1_is_error() {
+        let toks = lex1("\"\"\"hello\"\"\"");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::String));
+        assert!(has_errors(&toks[0]));
+    }
+
+    #[test]
+    fn triple_unterminated_at_eof() {
+        let toks = lex2("'''hello");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::TripleSingleQuoted));
+        assert!(has_errors(&toks[0]));
+    }
+
+    // ── multiline strings ─────────────────────────────────────────────────────
+
+    #[test]
+    fn multiline_basic() {
+        // ;\nhello\n; — content starts after opening ;, ends before closing \n;
+        let toks = lex2(";\nhello\n;");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(vtype(&toks[0]), Some(ValueType::MultilineString));
+        assert_eq!(val(&toks[0]), "\nhello");
+        assert!(!has_errors(&toks[0]));
+    }
+
+    #[test]
+    fn multiline_content_on_same_line_as_opener() {
+        // ;text\n; — content starts immediately after opener
+        let toks = lex2(";text\n;");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::MultilineString));
+        assert_eq!(val(&toks[0]), "text");
+    }
+
+    #[test]
+    fn multiline_multiple_lines() {
+        let toks = lex2(";\nline1\nline2\n;");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::MultilineString));
+        assert_eq!(val(&toks[0]), "\nline1\nline2");
+    }
+
+    #[test]
+    fn multiline_semicolon_not_at_column_1() {
+        // Space before ; means it is NOT a multiline opener
+        let toks = lex2(" ;content\n;");
+        assert!(toks.len() > 1 || ttype(&toks[0]) != TokenType::Value
+            || vtype(&toks[0]) != Some(ValueType::MultilineString));
+    }
+
+    #[test]
+    fn multiline_unterminated_at_eof() {
+        let toks = lex2(";\nhello");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::MultilineString));
+        assert!(has_errors(&toks[0]));
+        assert!(toks[0].errors.iter().any(|e| e.message.contains("unterminated")));
+    }
+
+    // ── CIF 2.0 structural delimiters ────────────────────────────────────────
+
+    #[test]
+    fn cif2_list_open_close() {
+        let toks = lex2("[ ]");
+        assert_eq!(toks.len(), 2);
+        assert_eq!(val(&toks[0]), "[");
+        assert_eq!(val(&toks[1]), "]");
+    }
+
+    #[test]
+    fn cif2_table_open_close() {
+        let toks = lex2("{ }");
+        assert_eq!(toks.len(), 2);
+        assert_eq!(val(&toks[0]), "{");
+        assert_eq!(val(&toks[1]), "}");
+    }
+
+    #[test]
+    fn cif2_table_colon_separator() {
+        // Colon after a non-whitespace character is a table separator in CIF 2
+        let toks = lex2("\"key\":");
+        // "key" token, then : token
+        assert_eq!(toks.len(), 2);
+        assert_eq!(val(&toks[1]), ":");
+    }
+
+    #[test]
+    fn cif1_brackets_are_bare_words() {
+        // In CIF 1.x, [ is not a structural delimiter
+        let toks = lex1("[foo]");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(ttype(&toks[0]), TokenType::Value);
+        assert_eq!(val(&toks[0]), "[foo]");
+    }
+
+    // ── multiple tokens / whitespace separation ───────────────────────────────
+
+    #[test]
+    fn multiple_tokens_space_separated() {
+        let toks = lex2("data_blk _tag val");
+        assert_eq!(toks.len(), 3);
+        assert_eq!(ttype(&toks[0]), TokenType::Keyword);
+        assert_eq!(ttype(&toks[1]), TokenType::Tag);
+        assert_eq!(ttype(&toks[2]), TokenType::Value);
+    }
+
+    #[test]
+    fn tab_is_whitespace() {
+        let toks = lex2("_tag\tval");
+        assert_eq!(toks.len(), 2);
+    }
+
+    #[test]
+    fn newline_is_whitespace() {
+        let toks = lex2("_tag\nval");
+        assert_eq!(toks.len(), 2);
+    }
+
+    // ── position tracking ─────────────────────────────────────────────────────
+
+    #[test]
+    fn line_and_column_first_token() {
+        let toks = lex2("_tag");
+        assert_eq!(toks[0].line, 1);
+        assert_eq!(toks[0].column, 1);
+    }
+
+    #[test]
+    fn line_tracking_across_newlines() {
+        let toks = lex2("_a\n_b\n_c");
+        assert_eq!(toks[0].line, 1);
+        assert_eq!(toks[1].line, 2);
+        assert_eq!(toks[2].line, 3);
+    }
+
+    #[test]
+    fn column_tracking_on_same_line() {
+        let toks = lex2("_a val");
+        assert_eq!(toks[0].column, 1);
+        assert_eq!(toks[1].column, 4); // after "_a "
+    }
+
+    // ── CIF 1.x character restrictions ───────────────────────────────────────
+
+    #[test]
+    fn cif1_multiline_rejects_high_unicode() {
+        // Unicode beyond ASCII triggers a LexerError in CIF 1.x multiline fields
+        let toks = lex1(";\ncaf\u{00E9}\n;");
+        assert_eq!(vtype(&toks[0]), Some(ValueType::MultilineString));
+        assert!(has_errors(&toks[0]));
+        assert!(toks[0].errors[0].message.contains("not permitted in CIF 1.x"));
+    }
+
+    #[test]
+    fn cif2_allows_unicode() {
+        let toks = lex2(";\ncaf\u{00E9}\n;");
+        assert!(!has_errors(&toks[0]));
     }
 }

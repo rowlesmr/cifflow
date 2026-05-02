@@ -97,3 +97,100 @@ pub fn detect_version(source: &str) -> VersionResult {
         errors,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ver(src: &str) -> CifVersion { detect_version(src).version }
+    fn errs(src: &str) -> usize { detect_version(src).errors.len() }
+    fn offset(src: &str) -> u32 { detect_version(src).line_offset }
+    fn remaining(src: &str) -> String { detect_version(src).remaining }
+
+    #[test]
+    fn cif2_magic() {
+        assert_eq!(ver("#\\#CIF_2.0\ndata_foo"), CifVersion::Cif2_0);
+        assert_eq!(errs("#\\#CIF_2.0\ndata_foo"), 0);
+        assert_eq!(offset("#\\#CIF_2.0\ndata_foo"), 1);
+        assert_eq!(remaining("#\\#CIF_2.0\ndata_foo"), "data_foo");
+    }
+
+    #[test]
+    fn cif11_magic() {
+        assert_eq!(ver("#\\#CIF_1.1\ndata_foo"), CifVersion::Cif1_1);
+        assert_eq!(errs("#\\#CIF_1.1\ndata_foo"), 0);
+    }
+
+    #[test]
+    fn cif10_magic_is_error_defaults_to_cif2() {
+        assert_eq!(ver("#\\#CIF_1.0\ndata_foo"), CifVersion::Cif2_0);
+        assert_eq!(errs("#\\#CIF_1.0\ndata_foo"), 1);
+        let e = &detect_version("#\\#CIF_1.0\ndata_foo").errors[0];
+        assert!(e.message.contains("unrecognised CIF version"));
+    }
+
+    #[test]
+    fn unknown_version_defaults_to_cif2() {
+        assert_eq!(ver("#\\#CIF_xyz\ndata_foo"), CifVersion::Cif2_0);
+        assert_eq!(errs("#\\#CIF_xyz\ndata_foo"), 1);
+    }
+
+    #[test]
+    fn bom_before_magic_cif2() {
+        assert_eq!(ver("\u{FEFF}#\\#CIF_2.0\ndata_foo"), CifVersion::Cif2_0);
+        assert_eq!(errs("\u{FEFF}#\\#CIF_2.0\ndata_foo"), 0);
+    }
+
+    #[test]
+    fn bom_before_magic_cif11() {
+        assert_eq!(ver("\u{FEFF}#\\#CIF_1.1\ndata_foo"), CifVersion::Cif1_1);
+    }
+
+    #[test]
+    fn leading_blank_lines_before_magic() {
+        let src = "\n\n#\\#CIF_2.0\ndata_foo";
+        assert_eq!(ver(src), CifVersion::Cif2_0);
+        // 2 blank lines consumed, then magic line; remaining starts at line 4 → offset 3
+        assert_eq!(offset(src), 3);
+    }
+
+    #[test]
+    fn no_magic_line_defaults_to_cif11() {
+        let src = "data_foo\n_tag val";
+        assert_eq!(ver(src), CifVersion::Cif1_1);
+        assert_eq!(errs(src), 0);
+        // remaining is the whole source (nothing consumed)
+        assert_eq!(remaining(src), src);
+    }
+
+    #[test]
+    fn empty_source_is_cif11() {
+        assert_eq!(ver(""), CifVersion::Cif1_1);
+        assert_eq!(remaining(""), "");
+    }
+
+    #[test]
+    fn whitespace_only_is_cif11() {
+        assert_eq!(ver("   \n  \n"), CifVersion::Cif1_1);
+    }
+
+    #[test]
+    fn magic_not_first_non_whitespace_is_comment() {
+        // data_foo is first non-whitespace; the CIF_2.0 magic on the second line
+        // is a regular comment — no version upgrade.
+        let src = "data_foo\n#\\#CIF_2.0\n_tag val";
+        assert_eq!(ver(src), CifVersion::Cif1_1);
+        assert_eq!(remaining(src), src);
+    }
+
+    #[test]
+    fn magic_with_trailing_whitespace() {
+        assert_eq!(ver("#\\#CIF_2.0   \ndata_foo"), CifVersion::Cif2_0);
+    }
+
+    #[test]
+    fn crlf_line_endings_normalised() {
+        assert_eq!(ver("#\\#CIF_2.0\r\ndata_foo"), CifVersion::Cif2_0);
+        assert_eq!(remaining("#\\#CIF_2.0\r\ndata_foo"), "data_foo");
+    }
+}

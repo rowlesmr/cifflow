@@ -94,4 +94,96 @@ mod tests {
         let result = transform_multiline(input);
         assert_eq!(result, "line1\nline2");
     }
+
+    #[test]
+    fn empty_raw_string() {
+        assert_eq!(transform_multiline(""), "");
+    }
+
+    #[test]
+    fn single_line_no_backslash() {
+        assert_eq!(transform_multiline("hello"), "hello");
+    }
+
+    #[test]
+    fn multiple_lines_no_transform() {
+        // No backslash on first line → pass through unchanged
+        assert_eq!(transform_multiline("line1\nline2\nline3"), "line1\nline2\nline3");
+    }
+
+    #[test]
+    fn whitespace_only_lines_preserved() {
+        assert_eq!(transform_multiline("   \n  \nhello"), "   \n  \nhello");
+    }
+
+    #[test]
+    fn fold_only_no_prefix() {
+        // First line is "\  " (just backslash + spaces) with no prefix candidate
+        // → fold mode, first line removed, remaining lines unfolded
+        let input = "\\  \npart1\\\npart2";
+        let result = transform_multiline(input);
+        assert_eq!(result, "part1part2");
+    }
+
+    #[test]
+    fn fold_last_line_dangling_backslash() {
+        // Last line ends with \ → the pending fragment is emitted without a newline
+        let input = "\\  \npart1\\\npart2\\";
+        let result = transform_multiline(input);
+        assert_eq!(result, "part1part2");
+    }
+
+    #[test]
+    fn prefix_double_backslash_no_fold() {
+        // "P>\\\\" on first line = prefix "P>" + "\\\\" (two backslashes + spaces)
+        // Fold mode is NOT triggered; one backslash is stripped from the first line,
+        // leaving "\" (one backslash) plus the trailing spaces from the header.
+        let input = "P>\\\\  \nP>line1\nP>line2";
+        let result = transform_multiline(input);
+        // After prefix "P>" stripped: first line = "\\  " (two backslashes + two spaces)
+        // Remove one backslash: first line becomes "\  " (one backslash + two spaces)
+        assert_eq!(result, "\\  \nline1\nline2");
+    }
+
+    #[test]
+    fn prefix_not_on_all_lines_no_transform() {
+        // Prefix "P>" only on first line; second line doesn't start with it
+        // → no transform
+        let input = "P>\\  \nnotprefixed";
+        let result = transform_multiline(input);
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn fold_joins_continuation_lines() {
+        // Lines ending with \ are joined with the next line
+        let input = "\\  \nfirst \\\nsecond \\\nthird";
+        let result = transform_multiline(input);
+        assert_eq!(result, "first second third");
+    }
+
+    #[test]
+    fn fold_trailing_spaces_not_trimmed_before_backslash() {
+        // Spaces immediately before the continuation \ are part of the content —
+        // only trailing whitespace AFTER the backslash (i.e. on the rstripped line)
+        // would be stripped, but the backslash is the final char so nothing is.
+        let input = "\\  \nword  \\\nnext";
+        let result = transform_multiline(input);
+        assert_eq!(result, "word  next");
+    }
+
+    #[test]
+    fn prefix_with_fold_combined() {
+        // Prefix "P>" + fold: first line is header, remaining lines have prefix stripped
+        // then fold applied
+        let input = "P>\\  \nP>part1\\\nP>part2";
+        let result = transform_multiline(input);
+        assert_eq!(result, "part1part2");
+    }
+
+    #[test]
+    fn no_backslash_on_first_line_pass_through() {
+        let input = "no backslash here\nline2";
+        assert_eq!(transform_multiline(input), input);
+    }
 }

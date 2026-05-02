@@ -632,7 +632,7 @@ impl Parser {
 
     // ── EOF ───────────────────────────────────────────────────────────────────
 
-    fn handle_eof<S: EventSink>(&mut self, sink: &mut S) {
+    pub fn handle_eof<S: EventSink>(&mut self, sink: &mut S) {
         let line = self.last_line;
         let col  = self.last_col;
 
@@ -669,5 +669,377 @@ impl Parser {
             sink.on_save_frame_end();
             self.in_save_frame = false;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::event_sink::EventSink;
+    use crate::lexer::{Lexer, ValueType};
+    use crate::version::detect_version;
+
+    // ── Recording sink ────────────────────────────────────────────────────────
+
+    #[derive(Debug, PartialEq, Clone)]
+    enum Ev {
+        DataBlock(String),
+        SaveFrameStart(String),
+        SaveFrameEnd,
+        Tag(String),
+        Value(String, ValueType),
+        ListStart,
+        ListEnd,
+        TableStart,
+        TableKey(String, ValueType),
+        TableEnd,
+        LoopStart(Vec<String>),
+        LoopEnd,
+        Err(String),
+    }
+
+    struct Rec(Vec<Ev>);
+
+    impl EventSink for Rec {
+        fn on_data_block(&mut self, n: &str) { self.0.push(Ev::DataBlock(n.to_string())); }
+        fn on_save_frame_start(&mut self, n: &str) { self.0.push(Ev::SaveFrameStart(n.to_string())); }
+        fn on_save_frame_end(&mut self) { self.0.push(Ev::SaveFrameEnd); }
+        fn add_tag(&mut self, t: &str) { self.0.push(Ev::Tag(t.to_string())); }
+        fn add_value(&mut self, v: &str, vt: ValueType) { self.0.push(Ev::Value(v.to_string(), vt)); }
+        fn on_list_start(&mut self) { self.0.push(Ev::ListStart); }
+        fn on_list_end(&mut self) { self.0.push(Ev::ListEnd); }
+        fn on_table_start(&mut self) { self.0.push(Ev::TableStart); }
+        fn on_table_key(&mut self, k: &str, vt: ValueType) { self.0.push(Ev::TableKey(k.to_string(), vt)); }
+        fn on_table_end(&mut self) { self.0.push(Ev::TableEnd); }
+        fn on_loop_start(&mut self, tags: &[String]) { self.0.push(Ev::LoopStart(tags.to_vec())); }
+        fn on_loop_end(&mut self) { self.0.push(Ev::LoopEnd); }
+        fn on_parse_error(&mut self, _e: &'static str, msg: &str, _l: u32, _c: u32, _ctx: &str, _r: &str) {
+            self.0.push(Ev::Err(msg.to_string()));
+        }
+    }
+
+    fn events(src: &str) -> Vec<Ev> {
+        let vr = detect_version(src);
+        let tokens = Lexer::new(&vr.remaining, vr.version, vr.line_offset).tokenise();
+        let mut sink = Rec(Vec::new());
+        Parser::new().parse(tokens, &mut sink);
+        sink.0
+    }
+
+    fn ev_tags(evs: &[Ev]) -> Vec<&str> {
+        evs.iter().filter_map(|e| if let Ev::Tag(t) = e { Some(t.as_str()) } else { None }).collect()
+    }
+
+    fn ev_values(evs: &[Ev]) -> Vec<&str> {
+        evs.iter().filter_map(|e| if let Ev::Value(v, _) = e { Some(v.as_str()) } else { None }).collect()
+    }
+
+    fn ev_errors(evs: &[Ev]) -> Vec<&str> {
+        evs.iter().filter_map(|e| if let Ev::Err(m) = e { Some(m.as_str()) } else { None }).collect()
+    }
+
+    fn count(evs: &[Ev], ev: &Ev) -> usize {
+        evs.iter().filter(|e| *e == ev).count()
+    }
+
+    // ── basic structure ───────────────────────────────────────────────────────
+
+    #[test]
+    fn empty_source_no_events() {
+        assert!(events("").is_empty());
+    }
+
+    #[test]
+    fn single_data_block() {
+        let evs = events("data_foo");
+        assert_eq!(evs, vec![Ev::DataBlock("foo".to_string())]);
+    }
+
+    #[test]
+    fn data_block_name_preserved() {
+        let evs = events("data_My_Block_123");
+        assert!(matches!(&evs[0], Ev::DataBlock(n) if n == "My_Block_123"));
+    }
+
+    #[test]
+    fn tag_value_pair() {
+        let evs = events("data_b _tag val");
+        assert_eq!(ev_tags(&evs), vec!["_tag"]);
+        assert_eq!(ev_values(&evs), vec!["val"]);
+        assert!(ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn tag_placeholder_dot() {
+        let evs = events("data_b _tag .");
+        assert!(matches!(&evs[2], Ev::Value(v, vt) if v == "." && *vt == ValueType::Placeholder));
+    }
+
+    #[test]
+    fn tag_placeholder_question() {
+        let evs = events("data_b _tag ?");
+        assert!(matches!(&evs[2], Ev::Value(v, vt) if v == "?" && *vt == ValueType::Placeholder));
+    }
+
+    #[test]
+    fn quoted_value_preserves_type() {
+        let evs = events("data_b _tag 'hello'");
+        assert!(matches!(&evs[2], Ev::Value(v, vt)
+            if v == "hello" && *vt == ValueType::SingleQuoted));
+    }
+
+    #[test]
+    fn multiple_tag_value_pairs() {
+        let evs = events("data_b _a 1 _b 2 _c 3");
+        assert_eq!(ev_tags(&evs), vec!["_a", "_b", "_c"]);
+        assert_eq!(ev_values(&evs), vec!["1", "2", "3"]);
+    }
+
+    // ── loops ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn loop_basic() {
+        let evs = events("data_b loop_ _a _b 1 2 3 4");
+        assert!(matches!(&evs[1], Ev::LoopStart(tags) if tags == &["_a", "_b"]));
+        assert_eq!(ev_values(&evs), vec!["1", "2", "3", "4"]);
+        assert!(evs.contains(&Ev::LoopEnd));
+    }
+
+    #[test]
+    fn loop_terminated_by_eof() {
+        let evs = events("data_b loop_ _a 1 2");
+        assert!(evs.contains(&Ev::LoopEnd));
+        assert!(ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn loop_terminated_by_new_data_block() {
+        let evs = events("data_a loop_ _x 1 2 data_b _y 3");
+        assert!(evs.contains(&Ev::LoopEnd));
+        assert_eq!(count(&evs, &Ev::DataBlock("a".to_string())), 1);
+        assert_eq!(count(&evs, &Ev::DataBlock("b".to_string())), 1);
+    }
+
+    #[test]
+    fn loop_terminated_by_new_tag() {
+        let evs = events("data_b loop_ _a 1 2 _b 3");
+        // Loop over _a is closed by _b; _b then becomes a standalone tag
+        assert!(evs.contains(&Ev::LoopEnd));
+        // _a is in LoopStart, not a Tag event; only _b appears as a Tag event
+        assert_eq!(ev_tags(&evs), vec!["_b"]);
+        assert_eq!(ev_values(&evs), vec!["1", "2", "3"]);
+    }
+
+    #[test]
+    fn loop_terminated_by_stop() {
+        let evs = events("data_b loop_ _a 1 2 stop_");
+        assert!(evs.contains(&Ev::LoopEnd));
+        assert!(ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn loop_no_values_emits_error() {
+        let evs = events("data_b loop_ _a");
+        assert!(evs.contains(&Ev::LoopStart(vec!["_a".to_string()])));
+        assert!(evs.contains(&Ev::LoopEnd));
+        assert!(!ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn loop_no_tags_is_error() {
+        let evs = events("data_b loop_ 1 2 3");
+        assert!(!ev_errors(&evs).is_empty());
+        assert!(!evs.contains(&Ev::LoopEnd));
+    }
+
+    // ── save frames ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn save_frame_basic() {
+        let evs = events("data_b save_myframe _tag val save_");
+        assert!(matches!(&evs[1], Ev::SaveFrameStart(n) if n == "myframe"));
+        assert_eq!(ev_tags(&evs), vec!["_tag"]);
+        assert!(evs.contains(&Ev::SaveFrameEnd));
+        assert!(ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn save_frame_terminated_by_eof() {
+        let evs = events("data_b save_sf _tag val");
+        assert!(evs.contains(&Ev::SaveFrameEnd));
+        assert!(!ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn save_frame_terminated_by_new_data_block() {
+        let evs = events("data_a save_sf _tag val data_b _x 1");
+        assert!(evs.contains(&Ev::SaveFrameEnd));
+        assert_eq!(count(&evs, &Ev::DataBlock("a".to_string())), 1);
+        assert_eq!(count(&evs, &Ev::DataBlock("b".to_string())), 1);
+    }
+
+    #[test]
+    fn nested_save_frame_is_error() {
+        let evs = events("data_b save_a _x 1 save_b _y 2 save_");
+        let errs = ev_errors(&evs);
+        assert!(errs.iter().any(|m| m.contains("nested save frame")));
+    }
+
+    #[test]
+    fn save_close_outside_frame_is_error() {
+        let evs = events("data_b save_");
+        assert!(!ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn save_frame_outside_data_block_is_error() {
+        let evs = events("save_sf _tag val save_");
+        assert!(!ev_errors(&evs).is_empty());
+    }
+
+    // ── orphan values and error recovery ─────────────────────────────────────
+
+    #[test]
+    fn orphan_value_attaches_to_error_tag() {
+        let evs = events("data_b hello");
+        assert!(!ev_errors(&evs).is_empty());
+        assert!(ev_tags(&evs).iter().any(|t| t.contains("error_value")));
+    }
+
+    #[test]
+    fn tag_without_value_at_eof_gets_placeholder() {
+        let evs = events("data_b _tag");
+        assert!(!ev_errors(&evs).is_empty());
+        assert!(matches!(evs.last().unwrap(), Ev::Value(v, vt)
+            if v == "?" && *vt == ValueType::Placeholder));
+    }
+
+    #[test]
+    fn new_tag_while_previous_has_no_value() {
+        let evs = events("data_b _tag1 _tag2 val");
+        let errs = ev_errors(&evs);
+        assert!(errs.iter().any(|m| m.contains("has no value")));
+        assert_eq!(ev_values(&evs).iter().filter(|v| **v == "val").count(), 1);
+    }
+
+    // ── global_ ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn global_emits_error_and_halts() {
+        let evs = events("data_b _tag 1 global_ _tag 2");
+        let errs = ev_errors(&evs);
+        assert!(errs.iter().any(|m| m.contains("global_")));
+        // _tag 2 after global_ must not appear — parser halted
+        let tags = ev_tags(&evs);
+        assert_eq!(tags.iter().filter(|t| **t == "_tag").count(), 1);
+    }
+
+    // ── stop_ ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn stop_outside_loop_is_error() {
+        let evs = events("data_b _tag 1 stop_");
+        assert!(!ev_errors(&evs).is_empty());
+    }
+
+    // ── containers (CIF 2.0) ─────────────────────────────────────────────────
+
+    #[test]
+    fn list_basic() {
+        let evs = events("#\\#CIF_2.0\ndata_b _tag [1 2 3]");
+        assert!(evs.contains(&Ev::ListStart));
+        assert_eq!(ev_values(&evs), vec!["1", "2", "3"]);
+        assert!(evs.contains(&Ev::ListEnd));
+        assert!(ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn list_nested() {
+        let evs = events("#\\#CIF_2.0\ndata_b _tag [[1 2] 3]");
+        assert_eq!(count(&evs, &Ev::ListStart), 2);
+        assert_eq!(count(&evs, &Ev::ListEnd), 2);
+        assert!(ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn table_basic() {
+        let evs = events("#\\#CIF_2.0\ndata_b _tag {\"key\":val}");
+        assert!(evs.contains(&Ev::TableStart));
+        assert!(evs.iter().any(|e| matches!(e, Ev::TableKey(k, _) if k == "key")));
+        assert_eq!(ev_values(&evs), vec!["val"]);
+        assert!(evs.contains(&Ev::TableEnd));
+    }
+
+    #[test]
+    fn table_unquoted_key_is_error() {
+        let evs = events("#\\#CIF_2.0\ndata_b _tag {key:val}");
+        assert!(!ev_errors(&evs).is_empty());
+        // Despite error, key is still emitted
+        assert!(evs.iter().any(|e| matches!(e, Ev::TableKey(_, _))));
+    }
+
+    #[test]
+    fn unclosed_list_at_eof_closes_implicitly() {
+        let evs = events("#\\#CIF_2.0\ndata_b _tag [1 2");
+        assert!(evs.contains(&Ev::ListEnd));
+        assert!(!ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn unclosed_list_closed_by_new_tag() {
+        let evs = events("#\\#CIF_2.0\ndata_b _tag [1 2 _next val");
+        assert!(evs.contains(&Ev::ListEnd));
+    }
+
+    #[test]
+    fn unmatched_close_list_is_error() {
+        let evs = events("#\\#CIF_2.0\ndata_b _tag ]");
+        assert!(!ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn unmatched_close_table_is_error() {
+        let evs = events("#\\#CIF_2.0\ndata_b _tag }");
+        assert!(!ev_errors(&evs).is_empty());
+    }
+
+    // ── multi-block ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn multi_block() {
+        let evs = events("data_a _ta va data_b _tb vb");
+        assert_eq!(count(&evs, &Ev::DataBlock("a".to_string())), 1);
+        assert_eq!(count(&evs, &Ev::DataBlock("b".to_string())), 1);
+        assert_eq!(ev_tags(&evs), vec!["_ta", "_tb"]);
+        assert_eq!(ev_values(&evs), vec!["va", "vb"]);
+    }
+
+    #[test]
+    fn tag_outside_data_block_is_error() {
+        let evs = events("_tag val");
+        assert!(!ev_errors(&evs).is_empty());
+    }
+
+    #[test]
+    fn loop_outside_data_block_is_error() {
+        let evs = events("loop_ _a 1 2");
+        assert!(!ev_errors(&evs).is_empty());
+    }
+
+    // ── loop with containers ──────────────────────────────────────────────────
+
+    #[test]
+    fn loop_with_list_values() {
+        let evs = events("#\\#CIF_2.0\ndata_b loop_ _a [1 2] [3 4]");
+        assert!(evs.contains(&Ev::LoopStart(vec!["_a".to_string()])));
+        assert_eq!(count(&evs, &Ev::ListStart), 2);
+        assert!(evs.contains(&Ev::LoopEnd));
+    }
+
+    #[test]
+    fn container_without_tag_is_error() {
+        let evs = events("#\\#CIF_2.0\ndata_b [1 2]");
+        assert!(!ev_errors(&evs).is_empty());
+        assert!(ev_tags(&evs).iter().any(|t| t.contains("error_value")));
     }
 }
