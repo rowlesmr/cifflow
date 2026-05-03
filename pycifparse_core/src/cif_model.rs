@@ -16,6 +16,10 @@ use pyo3::types::{PyDict, PyList};
 use crate::raw_builder::{raw_value_to_python, FrameData, ParsedCif};
 use crate::version::CifVersion;
 
+fn casefold(s: &str) -> String {
+    s.to_lowercase()
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared helper — convert FrameData to (tags_dict, tag_order_list, loops_list)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,15 +88,16 @@ impl PyCifSaveFrame {
     }
 
     fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+        let norm = casefold(key);
         let tags = self._tags.bind(py).downcast::<PyDict>()?;
-        match tags.get_item(key)? {
+        match tags.get_item(norm.as_str())? {
             Some(v) => Ok(v),
             None    => Err(PyKeyError::new_err(key.to_string())),
         }
     }
 
     fn __contains__(&self, py: Python<'_>, key: &str) -> PyResult<bool> {
-        self._tags.bind(py).downcast::<PyDict>()?.contains(key)
+        self._tags.bind(py).downcast::<PyDict>()?.contains(casefold(key).as_str())
     }
 
     #[getter]
@@ -204,15 +209,16 @@ impl PyCifBlock {
     }
 
     fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-        if key.starts_with('_') {
+        let norm = casefold(key);
+        if norm.starts_with('_') {
             let tags = self._tags.bind(py).downcast::<PyDict>()?;
-            match tags.get_item(key)? {
+            match tags.get_item(norm.as_str())? {
                 Some(v) => Ok(v),
                 None    => Err(PyKeyError::new_err(key.to_string())),
             }
         } else {
             let sfs = self._save_frames.bind(py).downcast::<PyDict>()?;
-            match sfs.get_item(key)? {
+            match sfs.get_item(norm.as_str())? {
                 Some(v) => Ok(v),
                 None    => Err(PyKeyError::new_err(key.to_string())),
             }
@@ -220,10 +226,11 @@ impl PyCifBlock {
     }
 
     fn __contains__(&self, py: Python<'_>, key: &str) -> PyResult<bool> {
-        if key.starts_with('_') {
-            self._tags.bind(py).downcast::<PyDict>()?.contains(key)
+        let norm = casefold(key);
+        if norm.starts_with('_') {
+            self._tags.bind(py).downcast::<PyDict>()?.contains(norm.as_str())
         } else {
-            self._save_frames.bind(py).downcast::<PyDict>()?.contains(key)
+            self._save_frames.bind(py).downcast::<PyDict>()?.contains(norm.as_str())
         }
     }
 
@@ -263,11 +270,12 @@ impl PyCifBlock {
     }
 
     fn get_all<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyList>> {
+        let norm = casefold(name);
         let sf_list = self._save_frame_list.bind(py).downcast::<PyList>()?;
         let result = PyList::empty(py);
         for sf in sf_list.iter() {
             let sf_name: String = sf.getattr("name")?.extract()?;
-            if sf_name == name {
+            if sf_name == norm {
                 result.append(sf)?;
             }
         }
@@ -369,15 +377,16 @@ impl PyCifFile {
     }
 
     fn __getitem__<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+        let norm = casefold(name);
         let blocks = self._blocks.bind(py).downcast::<PyDict>()?;
-        match blocks.get_item(name)? {
+        match blocks.get_item(norm.as_str())? {
             Some(v) => Ok(v),
             None    => Err(PyKeyError::new_err(name.to_string())),
         }
     }
 
     fn __contains__(&self, py: Python<'_>, name: &str) -> PyResult<bool> {
-        self._blocks.bind(py).downcast::<PyDict>()?.contains(name)
+        self._blocks.bind(py).downcast::<PyDict>()?.contains(casefold(name).as_str())
     }
 
     #[getter]
@@ -409,11 +418,12 @@ impl PyCifFile {
     }
 
     fn get_all<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyList>> {
+        let norm = casefold(name);
         let bl = self._block_list.bind(py).downcast::<PyList>()?;
         let result = PyList::empty(py);
         for b in bl.iter() {
             let b_name: String = b.getattr("name")?.extract()?;
-            if b_name == name {
+            if b_name == norm {
                 result.append(b)?;
             }
         }

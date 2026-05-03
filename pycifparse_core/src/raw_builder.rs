@@ -336,6 +336,14 @@ fn block_to_python<'py>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Unicode canonical caseless matching
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn casefold(s: &str) -> String {
+    s.to_lowercase()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EventSink implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -343,7 +351,8 @@ impl EventSink for RawBuilder {
     fn on_data_block(&mut self, name: &str) {
         if self.stopped { return; }
         self.finish_current_block();
-        let is_dup = !self.seen_block_names.insert(name.to_string());
+        let norm = casefold(name);
+        let is_dup = !self.seen_block_names.insert(norm.clone());
         if is_dup {
             self.semantic_error(
                 format!("duplicate data block name: {:?}", name),
@@ -358,19 +367,20 @@ impl EventSink for RawBuilder {
         self.loop_buffers.clear();
         self.container_stack.clear();
         self.seen_save_frame_names.clear();
-        self.current_block = Some((name.to_string(), FrameData::default(), Vec::new()));
+        self.current_block = Some((norm, FrameData::default(), Vec::new()));
     }
 
     fn on_save_frame_start(&mut self, name: &str) {
         if self.stopped || self.current_block.is_none() { return; }
-        let is_dup = !self.seen_save_frame_names.insert(name.to_string());
+        let norm = casefold(name);
+        let is_dup = !self.seen_save_frame_names.insert(norm.clone());
         if is_dup {
             self.semantic_error(
                 format!("duplicate save frame name: {:?}", name),
                 "duplicate save frame stored with distinct internal id".to_string(),
             );
         }
-        self.current_save_frame = Some((name.to_string(), FrameData::default()));
+        self.current_save_frame = Some((norm, FrameData::default()));
     }
 
     fn on_save_frame_end(&mut self) {
@@ -384,7 +394,7 @@ impl EventSink for RawBuilder {
 
     fn add_tag(&mut self, tag: &str) {
         if self.stopped { return; }
-        self.active_tag = Some(tag.to_string());
+        self.active_tag = Some(casefold(tag));
     }
 
     fn add_value(&mut self, value: &str, vtype: ValueType) {
@@ -436,13 +446,14 @@ impl EventSink for RawBuilder {
 
     fn on_loop_start(&mut self, tags: &[String]) {
         if self.stopped { return; }
+        let normed: Vec<String> = tags.iter().map(|t| casefold(t)).collect();
         self.in_loop = true;
-        self.loop_tags = tags.to_vec();
         self.loop_value_index = 0;
         self.loop_buffers.clear();
-        for tag in tags {
+        for tag in &normed {
             self.loop_buffers.entry(tag.clone()).or_default();
         }
+        self.loop_tags = normed;
     }
 
     fn on_loop_end(&mut self) {
@@ -1230,4 +1241,22 @@ mod tests {
     fn fixture_pycifparse_pow_small_pd_data_meas() { let _ = fixture!("../../tests/cif_files/pycifparse/pow_small_pd_data_meas.cif"); }
     #[test]
     fn fixture_pycifparse_pow_small_pd_meas_proc() { let _ = fixture!("../../tests/cif_files/pycifparse/pow_small_pd_meas_proc.cif"); }
+
+    #[test]
+    fn fixture_pycifparse_pow_multiple_blocks_canonical_case() {
+        let p = fixture!("../../tests/cif_files/pycifparse/pow_multiple_blocks_canonical_case.cif");
+        // All 3 blocks casefold to "abc"
+        assert_eq!(p.blocks.len(), 3);
+        assert!(p.blocks.iter().all(|b| b.name == "abc"));
+        // 2 errors: data_abc and data_aBc duplicate data_ABC
+        assert_eq!(
+            p.errors.iter().filter(|e| e.message.contains("duplicate data block")).count(),
+            2
+        );
+        // Block 0 has _cell.length_a with 2 values (_cell.LENGTH_A casefolded to same tag)
+        assert_eq!(
+            p.blocks[0].data.tags.get("_cell.length_a").map(|v| v.len()),
+            Some(2)
+        );
+    }
 }

@@ -9,9 +9,14 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 import uuid as _uuid_module
 from collections import defaultdict, deque
 from typing import Any, Callable
+
+
+def _casefold(s: str) -> str:
+    return unicodedata.normalize('NFC', unicodedata.normalize('NFD', s).casefold())
 
 import pyarrow as pa
 
@@ -303,7 +308,7 @@ def _route_tag(
     deprecated_warned: set[str],
     emit: Callable[..., None],
 ) -> tuple[str, tuple[str, str] | None]:
-    tag_lc = tag.lower()
+    tag_lc = _casefold(tag)
     canonical = schema.alias_to_definition_id.get(tag_lc, tag_lc)
     if canonical in schema.deprecated_ids and tag_lc not in deprecated_warned:
         deprecated_warned.add(tag_lc)

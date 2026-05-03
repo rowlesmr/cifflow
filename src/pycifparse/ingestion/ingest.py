@@ -5,7 +5,12 @@ from __future__ import annotations
 import json
 import pathlib
 import re
+import unicodedata
 from typing import Any
+
+
+def _casefold(s: str) -> str:
+    return unicodedata.normalize('NFC', unicodedata.normalize('NFD', s).casefold())
 
 import duckdb
 import pyarrow as pa
@@ -277,7 +282,7 @@ def _process_block_no_schema(
                     fallback_rows.append({
                         '_block_id': block_id,
                         '_row_id': row_id,
-                        'tag': ltag.lower(),
+                        'tag': _casefold(ltag),
                         'value': stored,
                         'value_type': vtype,
                         'loop_id': loop_id_counter,
@@ -290,7 +295,7 @@ def _process_block_no_schema(
             fallback_rows.append({
                 '_block_id': block_id,
                 '_row_id': 1,
-                'tag': tag.lower(),
+                'tag': _casefold(tag),
                 'value': stored,
                 'value_type': vtype,
                 'loop_id': None,

@@ -229,7 +229,7 @@ def dictionary():
 class TestDictionaryMetadata:
     def test_name(self, dictionary):
         d, _ = dictionary
-        assert d.name == 'TEST_DICT'
+        assert d.name == 'test_dict'
 
     def test_title(self, dictionary):
         d, _ = dictionary
@@ -800,7 +800,7 @@ class TestRealDictionary:
 
     def test_name(self, cif_core):
         d, _ = cif_core
-        assert d.name == 'CIF_CORE'
+        assert d.name == 'cif_core'
 
     def test_items_populated(self, cif_core):
         d, _ = cif_core
@@ -930,7 +930,7 @@ class TestModeFull:
             on_warning=warnings.append,
         ).load(primary)
         assert any('missing.dic' in w for w in warnings)
-        assert d.name == 'PRIMARY'
+        assert d.name == 'primary'
 
     def test_miss_exit_aborts_load(self):
         warnings = []
@@ -1142,7 +1142,7 @@ _dictionary.title SECOND
         warnings = []
         d = DictionaryLoader(on_warning=warnings.append).load(src)
         assert any('data blocks' in w for w in warnings)
-        assert d.name == 'FIRST'
+        assert d.name == 'first'
 
     def test_load_with_base_uri_collects_source_file(self):
         src = """\

@@ -448,6 +448,69 @@ class TestDuplicateSaveFrameNames:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Canonical caseless matching
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCaselessMatching:
+    """Block/save-frame/tag names are stored as NFC(casefold(NFD(x)))."""
+
+    def test_block_name_casefolded(self):
+        b, _ = make_builder()
+        b.on_data_block('ABC')
+        assert b.result.blocks == ['abc']
+
+    def test_block_lookup_caseless(self):
+        b, _ = make_builder()
+        b.on_data_block('ABC')
+        b.add_tag('_t')
+        b.add_value('1', ST)
+        assert b.result['abc']['_t'] == ['1']
+        assert b.result['ABC']['_t'] == ['1']
+
+    def test_tag_name_casefolded(self):
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.add_tag('_CELL.LENGTH_A')
+        b.add_value('3.0', ST)
+        assert '_cell.length_a' in b.result['d']
+        assert '_CELL.LENGTH_A' in b.result['d']
+
+    def test_caseless_duplicate_block_detected(self):
+        b, errs = make_builder()
+        b.on_data_block('ABC')
+        b.on_data_block('abc')
+        b.on_data_block('aBc')
+        assert len(b.result.blocks) == 3
+        assert all(name == 'abc' for name in b.result.blocks)
+        assert len(errs) == 2
+
+    def test_caseless_duplicate_tag_merged(self):
+        b, _ = make_builder()
+        b.on_data_block('d')
+        b.add_tag('_cell.length_a')
+        b.add_value('3.0', ST)
+        b.add_tag('_CELL.LENGTH_A')
+        b.add_value('3.1', ST)
+        vals = b.result['d']['_cell.length_a']
+        assert len(vals) == 2
+        assert vals[0] == '3.0'
+        assert vals[1] == '3.1'
+
+    def test_caseless_fixture(self):
+        """pow_multiple_blocks_canonical_case.cif: 3 blocks all match 'abc'."""
+        from pycifparse.cifmodel.builder import build
+        import pathlib
+        src = pathlib.Path('tests/cif_files/pycifparse/pow_multiple_blocks_canonical_case.cif').read_text()
+        cif, errs = build(src)
+        assert len(cif.blocks) == 3
+        assert all(n == 'abc' for n in cif.blocks)
+        assert sum(1 for e in errs if 'duplicate' in e.message) == 2
+        # _cell.LENGTH_A in block 0 casefolded to same as _cell.length_a → 2 values
+        block0 = cif.get_all('abc')[0]
+        assert len(block0['_cell.length_a']) == 2
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Stopped-state coverage
 # ─────────────────────────────────────────────────────────────────────────────
 

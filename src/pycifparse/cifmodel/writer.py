@@ -15,8 +15,13 @@ Usage::
 
 from __future__ import annotations
 
+import unicodedata
 import warnings
 from typing import Union
+
+
+def _casefold(s: str) -> str:
+    return unicodedata.normalize('NFC', unicodedata.normalize('NFD', s).casefold())
 
 from pycifparse.types import CifVersion
 from pycifparse.cifmodel.model import CifBlock, CifFile, CifSaveFrame, CifValue
@@ -133,6 +138,7 @@ class SaveFrameWriter:
 
     def set_tag(self, tag: str, value: CifInput) -> 'SaveFrameWriter':
         _check_tag(tag, self._version)
+        tag = _casefold(tag)
         if tag in self._ns._tags:
             raise ValueError(
                 f"Tag {tag!r} already exists in namespace {self._ns.name!r}"
@@ -145,9 +151,11 @@ class SaveFrameWriter:
     def add_loop(self, columns: dict[str, list[CifInput]]) -> 'SaveFrameWriter':
         if not columns:
             raise ValueError("columns must not be empty")
+        for tag in columns:
+            _check_tag(tag, self._version)
+        columns = {_casefold(k): v for k, v in columns.items()}
         tags = list(columns.keys())
         for tag in tags:
-            _check_tag(tag, self._version)
             if tag in self._ns._tags:
                 raise ValueError(
                     f"Tag {tag!r} already exists in namespace {self._ns.name!r}"
@@ -169,8 +177,9 @@ class SaveFrameWriter:
         new_tag: str,
         values: list[CifInput],
     ) -> 'SaveFrameWriter':
-        loop_idx = _find_loop_index(self._ns, loop_tag)
+        loop_idx = _find_loop_index(self._ns, _casefold(loop_tag))
         _check_tag(new_tag, self._version)
+        new_tag = _casefold(new_tag)
         if new_tag in self._ns._tags:
             raise ValueError(
                 f"Tag {new_tag!r} already exists in namespace {self._ns.name!r}"
@@ -197,7 +206,8 @@ class SaveFrameWriter:
         loop_tag: str,
         new_order: list[str],
     ) -> 'SaveFrameWriter':
-        loop_idx = _find_loop_index(self._ns, loop_tag)
+        loop_idx = _find_loop_index(self._ns, _casefold(loop_tag))
+        new_order = [_casefold(t) for t in new_order]
         current = self._ns._loops[loop_idx]
         if sorted(new_order) != sorted(current):
             raise ValueError(
@@ -213,7 +223,7 @@ class SaveFrameWriter:
         return self
 
     def get_loop_tags(self, loop_tag: str) -> list[str]:
-        loop_idx = _find_loop_index(self._ns, loop_tag)
+        loop_idx = _find_loop_index(self._ns, _casefold(loop_tag))
         return list(self._ns._loops[loop_idx])
 
     def add_loop_row(
@@ -221,7 +231,7 @@ class SaveFrameWriter:
         loop_tag: str,
         row: list[CifInput],
     ) -> 'SaveFrameWriter':
-        loop_idx = _find_loop_index(self._ns, loop_tag)
+        loop_idx = _find_loop_index(self._ns, _casefold(loop_tag))
         loop_tags = self._ns._loops[loop_idx]
         if len(row) != len(loop_tags):
             raise ValueError(
@@ -238,6 +248,7 @@ class SaveFrameWriter:
         tag: str,
         value: 'CifInput | list[CifInput]',
     ) -> 'SaveFrameWriter':
+        tag = _casefold(tag)
         if tag not in self._ns._tags:
             raise KeyError(tag)
         if self._tag_in_any_loop(tag):
@@ -251,6 +262,7 @@ class SaveFrameWriter:
         return self
 
     def delete_tag(self, tag: str) -> 'SaveFrameWriter':
+        tag = _casefold(tag)
         if tag not in self._ns._tags:
             raise KeyError(tag)
         if self._tag_in_any_loop(tag):
@@ -268,7 +280,8 @@ class SaveFrameWriter:
         loop_tag: str,
         tag_to_remove: str,
     ) -> 'SaveFrameWriter':
-        loop_idx = _find_loop_index(self._ns, loop_tag)
+        loop_idx = _find_loop_index(self._ns, _casefold(loop_tag))
+        tag_to_remove = _casefold(tag_to_remove)
         if tag_to_remove not in self._ns._loops[loop_idx]:
             raise KeyError(tag_to_remove)
         self._remove_loop_tag_impl(loop_idx, tag_to_remove)
@@ -334,6 +347,7 @@ class BlockWriter(SaveFrameWriter):
 
     def add_save_frame(self, name: str) -> SaveFrameWriter:
         _check_name(name, self._version, "save-frame")
+        name = _casefold(name)
         if name in self._block._save_frames:
             raise ValueError(
                 f"Save frame {name!r} already exists in block {self._block.name!r}"
@@ -343,12 +357,14 @@ class BlockWriter(SaveFrameWriter):
         return SaveFrameWriter(frame, self._version)
 
     def get_save_frame(self, name: str, index: int = 0) -> SaveFrameWriter:
+        name = _casefold(name)
         matches = [sf for sf in self._block._save_frame_list if sf.name == name]
         if not matches:
             raise KeyError(name)
         return SaveFrameWriter(matches[index], self._version)
 
     def remove_save_frame(self, name: str, *, from_end: bool = False) -> 'BlockWriter':
+        name = _casefold(name)
         if name not in self._block._save_frames:
             raise KeyError(name)
         lst = self._block._save_frame_list
@@ -365,9 +381,11 @@ class BlockWriter(SaveFrameWriter):
         return self
 
     def rename_save_frame(self, old_name: str, new_name: str) -> 'BlockWriter':
+        old_name = _casefold(old_name)
         if old_name not in self._block._save_frames:
             raise KeyError(old_name)
         _check_name(new_name, self._version, "save-frame")
+        new_name = _casefold(new_name)
         if new_name in self._block._save_frames:
             raise ValueError(
                 f"Save frame {new_name!r} already exists in block {self._block.name!r}"
@@ -424,6 +442,7 @@ class CifWriter:
 
     def add_block(self, name: str) -> BlockWriter:
         _check_name(name, self._version, "block")
+        name = _casefold(name)
         if name in self._file:
             raise ValueError(f"Block {name!r} already exists in this CifWriter")
         block = CifBlock(name)
@@ -431,12 +450,14 @@ class CifWriter:
         return BlockWriter(block, self._version)
 
     def get_block(self, name: str, index: int = 0) -> BlockWriter:
+        name = _casefold(name)
         matches = [b for b in self._file._block_list if b.name == name]
         if not matches:
             raise KeyError(name)
         return BlockWriter(matches[index], self._version)
 
     def remove_block(self, name: str, *, from_end: bool = False) -> 'CifWriter':
+        name = _casefold(name)
         if name not in self._file:
             raise KeyError(name)
         lst = self._file._block_list
@@ -453,9 +474,11 @@ class CifWriter:
         return self
 
     def rename_block(self, old_name: str, new_name: str) -> 'CifWriter':
+        old_name = _casefold(old_name)
         if old_name not in self._file:
             raise KeyError(old_name)
         _check_name(new_name, self._version, "block")
+        new_name = _casefold(new_name)
         if new_name in self._file:
             raise ValueError(f"Block {new_name!r} already exists in this CifWriter")
         block = self._file._blocks.pop(old_name)

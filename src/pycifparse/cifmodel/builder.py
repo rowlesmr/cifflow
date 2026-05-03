@@ -19,8 +19,13 @@ All other value types are stored as raw strings.
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Callable, Literal, Union
+
+
+def _casefold(s: str) -> str:
+    return unicodedata.normalize('NFC', unicodedata.normalize('NFD', s).casefold())
 
 from pycifparse.types import ParseError, ValueType
 from pycifparse.cifmodel.model import CifBlock, CifFile, CifSaveFrame, CifValue
@@ -139,6 +144,7 @@ class CifBuilder:
     def on_data_block(self, name: str) -> None:
         if self._stopped:
             return
+        name = _casefold(name)
         if name in self._file:
             self._semantic_error(
                 message=f'duplicate data block name: {name!r}',
@@ -157,6 +163,7 @@ class CifBuilder:
     def on_save_frame_start(self, name: str) -> None:
         if self._stopped or self._block is None:
             return
+        name = _casefold(name)
         if name in self._block:
             self._semantic_error(
                 message=f'duplicate save frame name: {name!r}',
@@ -174,7 +181,7 @@ class CifBuilder:
     def add_tag(self, tag_name: str) -> None:
         if self._stopped:
             return
-        self._active_tag = tag_name
+        self._active_tag = _casefold(tag_name)
 
     def add_value(self, value: str, value_type: ValueType) -> None:
         if self._stopped:
@@ -219,9 +226,9 @@ class CifBuilder:
         if self._stopped:
             return
         self._in_loop = True
-        self._loop_tags = list(tags)
+        self._loop_tags = [_casefold(t) for t in tags]
         self._loop_value_index = 0
-        self._loop_buffers = {tag: [] for tag in tags}
+        self._loop_buffers = {_casefold(t): [] for t in tags}
 
     def on_loop_end(self) -> None:
         if self._stopped:

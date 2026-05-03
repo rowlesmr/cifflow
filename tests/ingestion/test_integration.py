@@ -83,9 +83,9 @@ class TestIngestWithSchema:
     def test_cell_length_a_in_structured_table(self, one_structure_conn):
         """_cell.length_a = 3.992 should be in the cell structured table."""
         row = one_structure_conn.execute(
-            "SELECT length_a FROM cell WHERE _block_id = 'Selenium_0'"
+            "SELECT length_a FROM cell WHERE _block_id = 'selenium_0'"
         ).fetchone()
-        assert row is not None, "No cell row for Selenium_0"
+        assert row is not None, "No cell row for selenium_0"
         assert row[0] == '3.992'
 
     def test_atom_site_label_in_structured_table(self, one_structure_conn):
@@ -93,7 +93,7 @@ class TestIngestWithSchema:
         labels = [
             r[0]
             for r in one_structure_conn.execute(
-                "SELECT label FROM atom_site WHERE _block_id = 'Selenium_0'"
+                "SELECT label FROM atom_site WHERE _block_id = 'selenium_0'"
             ).fetchall()
         ]
         assert 'Se1' in labels
@@ -108,17 +108,17 @@ class TestIngestWithSchema:
     def test_block_id_preserved(self, one_structure_conn):
         """_block_id in structured tables must match the CIF data_ block name."""
         row = one_structure_conn.execute(
-            "SELECT _block_id FROM cell WHERE _block_id = 'Selenium_0' LIMIT 1"
+            "SELECT _block_id FROM cell WHERE _block_id = 'selenium_0' LIMIT 1"
         ).fetchone()
         assert row is not None
-        assert row[0] == 'Selenium_0'
+        assert row[0] == 'selenium_0'
 
     def test_missing_key_fk_creates_stub_parent(self, one_structure_conn):
         """When key-FK source is absent, a stub parent row is created to satisfy the FK."""
         # cell.diffrn_id is a key-FK -> diffrn.id.
         # one_structure.cif has no _diffrn.id, so a UUID stub must exist in diffrn.
         cell_row = one_structure_conn.execute(
-            "SELECT diffrn_id FROM cell WHERE _block_id = 'Selenium_0'"
+            "SELECT diffrn_id FROM cell WHERE _block_id = 'selenium_0'"
         ).fetchone()
         assert cell_row is not None
         diffrn_id = cell_row[0]
@@ -168,7 +168,7 @@ class TestIngestNoSchema:
     def test_cell_length_a_in_fallback(self, one_structure_conn_no_schema):
         rows = one_structure_conn_no_schema.execute(
             "SELECT value FROM _cif_fallback "
-            "WHERE tag = '_cell.length_a' AND _block_id = 'Selenium_0'"
+            "WHERE tag = '_cell.length_a' AND _block_id = 'selenium_0'"
         ).fetchall()
         assert len(rows) == 1
         assert rows[0][0] == '3.992'
