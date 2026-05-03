@@ -1,3 +1,3 @@
 [workspace]
-members = ["pycifparse_core"]
+members = ["cifflow_core"]
 resolver = "2"

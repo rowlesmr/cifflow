@@ -1,7 +1,7 @@
 """
-pycifparse — inspect workflow
+cifflow — inspect workflow
 ==============================
-Demonstrates every function in the pycifparse.inspect family.
+Demonstrates every function in the cifflow.inspect family.
 
 Each inspector pretty-prints the internal state of one pipeline layer.
 They are zero-overhead when not called; import them only when debugging.
@@ -15,7 +15,7 @@ import pathlib
 ROOT    = pathlib.Path(__file__).parent
 DIC_DIR = ROOT / 'data' / 'dictionaries'
 
-from pycifparse.inspect import (
+from cifflow.inspect import (
     inspect_lexer,
     inspect_parse,
     ParseHandler,
@@ -83,8 +83,8 @@ print('=' * 60)
 print('Section 3 — ParseHandler with forwarding')
 print('=' * 60)
 
-from pycifparse.cifmodel.builder import CifBuilder
-from pycifparse.parser.parser import CifParser
+from cifflow.cifmodel.builder import CifBuilder
+from cifflow.parser.parser import CifParser
 
 builder = CifBuilder(on_error=lambda e: None)
 CifParser(ParseHandler(builder, show_values=False)).parse(CIF_SOURCE)
@@ -175,8 +175,8 @@ inspect_schema(MINI_DIC)
 #   inspect_schema(pathlib.Path('data/dictionaries/cif_core.dic'))
 
 # From a pre-loaded DdlmDictionary:
-from pycifparse.dictionary.loader import DictionaryLoader
-from pycifparse.dictionary.schema import generate_schema
+from cifflow.dictionary.loader import DictionaryLoader
+from cifflow.dictionary.schema import generate_schema
 
 dic    = DictionaryLoader().load(MINI_DIC)
 schema = generate_schema(dic)
@@ -194,7 +194,7 @@ print('=' * 60)
 print('Section 6 — inspect_ingest')
 print('=' * 60)
 
-from pycifparse import build
+from cifflow import build
 
 cif, parse_errors = build(CIF_SOURCE)
 if parse_errors:

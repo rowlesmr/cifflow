@@ -9,7 +9,7 @@ import tempfile
 import duckdb
 import pytest
 
-from pycifparse.dictionary import (
+from cifflow.dictionary import (
     DictionaryLoader,
     directory_resolver,
     emit_create_statements,
@@ -76,19 +76,19 @@ class TestDdlDic:
         for name in schema.tables:
             assert name in db_tables
 
-    def test_synthetic_block_id_present(self, schema):
+    def test_synthetic_cifflow_block_id_present(self, schema):
         for table in schema.tables.values():
             col_names = [c.name for c in table.columns]
-            assert '_block_id' in col_names, (
-                f"table {table.name!r} missing _block_id"
+            assert '_cifflow_block_id' in col_names, (
+                f"table {table.name!r} missing _cifflow_block_id"
             )
 
-    def test_loop_tables_have_row_id(self, schema):
+    def test_loop_tables_have_cifflow_row_id(self, schema):
         for table in schema.tables.values():
             if table.category_class == 'Loop':
                 col_names = [c.name for c in table.columns]
-                assert '_row_id' in col_names, (
-                    f"Loop table {table.name!r} missing _row_id"
+                assert '_cifflow_row_id' in col_names, (
+                    f"Loop table {table.name!r} missing _cifflow_row_id"
                 )
 
     def test_fk_deferrable_in_ddl_if_present(self, schema):
@@ -170,8 +170,8 @@ class TestCifCoreDic:
         assert loop_tables, "expected at least one Loop table"
         for table in loop_tables[:3]:
             col_names = _db_columns(conn, table.name)
-            assert '_row_id' in col_names, (
-                f"Loop table {table.name!r} missing _row_id column"
+            assert '_cifflow_row_id' in col_names, (
+                f"Loop table {table.name!r} missing _cifflow_row_id column"
             )
 
 

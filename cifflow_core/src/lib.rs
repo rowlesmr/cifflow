@@ -1,0 +1,308 @@
+use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyList};
+
+mod cif_model;
+pub mod error;
+mod event_sink;
+pub mod lexer;
+pub mod parser;
+pub mod raw_builder;
+mod textfield;
+pub mod version;
+
+use cif_model::{build_py_cif, PyCifBlock, PyCifFile, PyCifSaveFrame};
+use event_sink::EventSink;
+use lexer::{Lexer, ValueType};
+use parser::Parser;
+use raw_builder::RawBuilder;
+use version::{detect_version, CifVersion};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PyEventSink — EventSink that calls a Python CifParserEvents handler
+// ─────────────────────────────────────────────────────────────────────────────
+
+struct PyEventSink<'py> {
+    handler:         &'py Bound<'py, PyAny>,
+    parse_error_cls: Bound<'py, PyAny>,
+    vt_objs:         [Bound<'py, PyAny>; 7],
+    // First Python exception raised by a callback; subsequent calls are no-ops.
+    pending_error:   Option<PyErr>,
+}
+
+impl<'py> PyEventSink<'py> {
+    fn new(py: Python<'py>, handler: &'py Bound<'py, PyAny>) -> PyResult<Self> {
+        let types_mod = py.import("cifflow.types")?;
+        let parse_error_cls = types_mod.getattr("ParseError")?;
+        let vt_cls          = types_mod.getattr("ValueType")?;
+        Ok(PyEventSink {
+            handler,
+            parse_error_cls,
+            vt_objs: [
+                vt_cls.getattr("MULTILINE_STRING")?,     // 0
+                vt_cls.getattr("TRIPLE_DOUBLE_QUOTED")?, // 1
+                vt_cls.getattr("TRIPLE_SINGLE_QUOTED")?, // 2
+                vt_cls.getattr("DOUBLE_QUOTED")?,        // 3
+                vt_cls.getattr("SINGLE_QUOTED")?,        // 4
+                vt_cls.getattr("STRING")?,               // 5
+                vt_cls.getattr("PLACEHOLDER")?,          // 6
+            ],
+            pending_error: None,
+        })
+    }
+
+    fn py_vt(&self, vt: ValueType) -> &Bound<'py, PyAny> {
+        &self.vt_objs[vt as usize]
+    }
+
+    /// Call a Python method, storing the first error and short-circuiting thereafter.
+    fn call(&mut self, f: impl FnOnce(&Bound<'py, PyAny>) -> PyResult<()>) {
+        if self.pending_error.is_none() {
+            if let Err(e) = f(self.handler) {
+                self.pending_error = Some(e);
+            }
+        }
+    }
+
+    /// Re-raise any stored Python exception.
+    fn take_error(&mut self) -> PyResult<()> {
+        if let Some(e) = self.pending_error.take() { Err(e) } else { Ok(()) }
+    }
+}
+
+impl<'py> EventSink for PyEventSink<'py> {
+    fn on_data_block(&mut self, name: &str) {
+        self.call(|h| { h.call_method1("on_data_block", (name,))?; Ok(()) });
+    }
+    fn on_save_frame_start(&mut self, name: &str) {
+        self.call(|h| { h.call_method1("on_save_frame_start", (name,))?; Ok(()) });
+    }
+    fn on_save_frame_end(&mut self) {
+        self.call(|h| { h.call_method1("on_save_frame_end", ())?; Ok(()) });
+    }
+    fn add_tag(&mut self, tag: &str) {
+        self.call(|h| { h.call_method1("add_tag", (tag,))?; Ok(()) });
+    }
+    fn add_value(&mut self, value: &str, vt: ValueType) {
+        let py_vt = self.py_vt(vt).clone();
+        self.call(|h| { h.call_method1("add_value", (value, &py_vt))?; Ok(()) });
+    }
+    fn on_list_start(&mut self) {
+        self.call(|h| { h.call_method1("on_list_start", ())?; Ok(()) });
+    }
+    fn on_list_end(&mut self) {
+        self.call(|h| { h.call_method1("on_list_end", ())?; Ok(()) });
+    }
+    fn on_table_start(&mut self) {
+        self.call(|h| { h.call_method1("on_table_start", ())?; Ok(()) });
+    }
+    fn on_table_key(&mut self, key: &str, vt: ValueType) {
+        let py_vt = self.py_vt(vt).clone();
+        self.call(|h| { h.call_method1("on_table_key", (key, &py_vt))?; Ok(()) });
+    }
+    fn on_table_end(&mut self) {
+        self.call(|h| { h.call_method1("on_table_end", ())?; Ok(()) });
+    }
+    fn on_loop_start(&mut self, tags: &[String]) {
+        let py_tags: Vec<&str> = tags.iter().map(String::as_str).collect();
+        self.call(|h| { h.call_method1("on_loop_start", (py_tags,))?; Ok(()) });
+    }
+    fn on_loop_end(&mut self) {
+        self.call(|h| { h.call_method1("on_loop_end", ())?; Ok(()) });
+    }
+    fn on_parse_error(
+        &mut self, etype: &'static str, msg: &str,
+        line: u32, col: u32, context: &str, recovery: &str,
+    ) {
+        if self.pending_error.is_some() { return; }
+        let pe = match self.parse_error_cls.call1((
+            etype, msg, line as usize, col as usize, context, recovery,
+        )) {
+            Ok(v) => v,
+            Err(e) => { self.pending_error = Some(e); return; }
+        };
+        if let Err(e) = self.handler.call_method1("on_error", (pe,)) {
+            self.pending_error = Some(e);
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// parse — Python-callback path (kept for CifBuilder programmatic API)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[pyfunction]
+fn parse<'py>(
+    py: Python<'py>,
+    source: &str,
+    handler: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let mut sink = PyEventSink::new(py, handler)?;
+
+    let vr = detect_version(source);
+    for e in &vr.errors {
+        sink.on_parse_error(e.error_type, &e.message, e.line, e.column, &e.context, &e.recovery_action);
+    }
+
+    let lexer  = Lexer::new(&vr.remaining, vr.version, vr.line_offset);
+    let tokens = lexer.tokenise();
+    let mut parser = Parser::new();
+    parser.parse(tokens, &mut sink);
+    sink.take_error()?;
+
+    let types_mod       = py.import("cifflow.types")?;
+    let cif_version_cls = types_mod.getattr("CifVersion")?;
+    let attr = match vr.version {
+        CifVersion::Cif2_0 => "CIF_2_0",
+        CifVersion::Cif1_1 => "CIF_1_1",
+    };
+    cif_version_cls.getattr(attr)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// parse_raw — zero-Python-callback path
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Parse *source* CIF text entirely in Rust.  Returns a Python dict:
+///
+///   { "version": str, "errors": [...], "blocks": [...] }
+///
+/// No Python calls are made during parsing.  CifScalar objects are created
+/// lazily in Python when block data is first accessed via __getitem__.
+#[pyfunction]
+#[pyo3(signature = (source, mode=None))]
+fn parse_raw<'py>(py: Python<'py>, source: &str, mode: Option<&str>) -> PyResult<Bound<'py, PyDict>> {
+    let mode_strict = mode == Some("strict");
+    let vr = detect_version(source);
+    let mut builder = RawBuilder::new(vr.version, mode_strict);
+
+    for e in &vr.errors {
+        builder.push_error(e);
+    }
+
+    let lexer  = Lexer::new(&vr.remaining, vr.version, vr.line_offset);
+    let tokens = lexer.tokenise();
+    let mut parser = Parser::new();
+    parser.parse(tokens, &mut builder);
+
+    builder.to_python(py)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// parse_cif — returns PyCifFile directly (no dict intermediary)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[pyfunction]
+#[pyo3(signature = (source, mode=None))]
+fn parse_cif<'py>(
+    py: Python<'py>,
+    source: &str,
+    mode: Option<&str>,
+) -> PyResult<(Py<PyCifFile>, Bound<'py, PyList>)> {
+    let mode_strict = mode == Some("strict");
+    let vr = detect_version(source);
+    let mut builder = RawBuilder::new(vr.version, mode_strict);
+    for e in &vr.errors {
+        builder.push_error(e);
+    }
+    let lexer = Lexer::new(&vr.remaining, vr.version, vr.line_offset);
+    let tokens = lexer.tokenise();
+    let mut parser = Parser::new();
+    parser.parse(tokens, &mut builder);
+
+    let parsed = builder.finish();
+
+    let errors = PyList::empty(py);
+    for e in &parsed.errors {
+        let d = PyDict::new(py);
+        d.set_item("error_type", e.error_type)?;
+        d.set_item("message", e.message.as_str())?;
+        d.set_item("line", e.line)?;
+        d.set_item("column", e.column)?;
+        d.set_item("context", e.context.as_str())?;
+        d.set_item("recovery_action", e.recovery_action.as_str())?;
+        errors.append(&d)?;
+    }
+
+    let cif = build_py_cif(py, &parsed)?;
+    Ok((cif, errors))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// parse_arrow — returns (list[pa.RecordBatch], list[error_dicts])
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn parse_to_arrow<'py>(
+    py: Python<'py>,
+    source: &str,
+    mode_strict: bool,
+) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
+    let vr = detect_version(source);
+    let mut builder = RawBuilder::new(vr.version, mode_strict);
+    for e in &vr.errors {
+        builder.push_error(e);
+    }
+    let lexer = Lexer::new(&vr.remaining, vr.version, vr.line_offset);
+    let tokens = lexer.tokenise();
+    let mut parser = Parser::new();
+    parser.parse(tokens, &mut builder);
+
+    let parsed = builder.finish();
+
+    let errors = PyList::empty(py);
+    for e in &parsed.errors {
+        let d = PyDict::new(py);
+        d.set_item("error_type", e.error_type)?;
+        d.set_item("message", e.message.as_str())?;
+        d.set_item("line", e.line)?;
+        d.set_item("column", e.column)?;
+        d.set_item("context", e.context.as_str())?;
+        d.set_item("recovery_action", e.recovery_action.as_str())?;
+        errors.append(&d)?;
+    }
+
+    let batches = PyList::empty(py);
+    for batch in parsed.to_py_batches(py)? {
+        batches.append(batch)?;
+    }
+
+    Ok((batches, errors))
+}
+
+#[pyfunction]
+#[pyo3(signature = (source, mode=None))]
+fn parse_arrow<'py>(
+    py: Python<'py>,
+    source: &str,
+    mode: Option<&str>,
+) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
+    parse_to_arrow(py, source, mode == Some("strict"))
+}
+
+#[pyfunction]
+#[pyo3(signature = (path, mode=None))]
+fn parse_arrow_file<'py>(
+    py: Python<'py>,
+    path: &str,
+    mode: Option<&str>,
+) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+    parse_to_arrow(py, &source, mode == Some("strict"))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Module
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[pymodule]
+fn cifflow_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PyCifSaveFrame>()?;
+    m.add_class::<PyCifBlock>()?;
+    m.add_class::<PyCifFile>()?;
+    m.add_function(wrap_pyfunction!(parse, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_raw, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_cif, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_arrow_file, m)?)?;
+    Ok(())
+}

@@ -1,6 +1,6 @@
-# pycifparse — API Reference
+# cifflow — API Reference
 
-All public symbols are importable from the top-level `pycifparse` package unless
+All public symbols are importable from the top-level `cifflow` package unless
 otherwise noted.
 
 ---
@@ -8,10 +8,10 @@ otherwise noted.
 ## Module layout
 
 ```
-pycifparse/
+cifflow/
 ├── __init__.py           # Top-level re-exports (all public symbols)
 ├── types.py              # CifVersion, ValueType, ParseError, CifParserEvents
-├── pycifparse_core/      # PyO3 Rust extension (CifFile, CifBlock, CifSaveFrame,
+├── cifflow_core/      # PyO3 Rust extension (CifFile, CifBlock, CifSaveFrame,
 │                         #   parse_cif, parse_arrow, parse_arrow_file)
 ├── lexer/
 │   ├── lexer.py          # Lexer (internal)
@@ -101,7 +101,7 @@ Output file written: `fidelity_report.txt`.
 
 ---
 
-## Shared types (`pycifparse.types`)
+## Shared types (`cifflow.types`)
 
 ### `CifVersion`
 
@@ -178,7 +178,7 @@ directly with `CifBuilder`.
 
 ---
 
-## Parser (`pycifparse.parser.parser`)
+## Parser (`cifflow.parser.parser`)
 
 ### `CifParser`
 
@@ -196,7 +196,7 @@ exception on malformed input.
 
 ---
 
-## CIF model (`pycifparse.cifmodel`)
+## CIF model (`cifflow.cifmodel`)
 
 ### `CifValue`
 
@@ -371,7 +371,7 @@ This is the primary entry point for most callers.
 **Example:**
 
 ```python
-from pycifparse import build
+from cifflow import build
 
 cif, errors = build(source)
 
@@ -415,7 +415,7 @@ Every batch carries five metadata columns:
 
 | Column | Type | Notes |
 |---|---|---|
-| `_block_idx` | `Int32` | Block index in file order |
+| `_cifflow_block_idx` | `Int32` | Block index in file order |
 | `_block_name` | `Utf8` | Block name |
 | `_frame_idx` | `Int32` (nullable) | Save frame index; `NULL` for block-level |
 | `_frame_name` | `Utf8` (nullable) | Save frame name; `NULL` for block-level |
@@ -438,9 +438,9 @@ returned — the `CifFile` is already validated.
 
 ---
 
-## CIF model — construction and editing (`pycifparse.cifmodel.writer`)
+## CIF model — construction and editing (`cifflow.cifmodel.writer`)
 
-All symbols are importable from `pycifparse.cifmodel.writer` or the top-level `pycifparse` package.
+All symbols are importable from `cifflow.cifmodel.writer` or the top-level `cifflow` package.
 
 ### `CifInput`
 
@@ -548,7 +548,7 @@ When `cif` is supplied, `CifWriter` wraps the existing object in place; `build()
 **Example:**
 
 ```python
-from pycifparse import CifWriter, CifVersion
+from cifflow import CifWriter, CifVersion
 
 w = CifWriter(version=CifVersion.CIF_2_0)
 bw = w.add_block('my_data')
@@ -563,7 +563,7 @@ cif = w.build()
 
 ---
 
-## CIF model — cleaning (`pycifparse.cifmodel.clean`)
+## CIF model — cleaning (`cifflow.cifmodel.clean`)
 
 `clean()` targets artefacts that the parser introduces automatically.  For structural edits to CIF content — reassigning values, reordering, renaming, adding or removing tags and loops — use `CifWriter`.
 
@@ -582,7 +582,7 @@ One warning per removal action.  `category` values:
 
 | Category | Step |
 |---|---|
-| `'remove_error_values'` | Orphan `_pycifparse_error_value` tags removed |
+| `'remove_error_values'` | Orphan `_cifflow_error_value` tags removed |
 | `'deduplicate_blocks'` | Duplicate data block removed |
 | `'deduplicate_save_frames'` | Duplicate save frame removed |
 | `'deduplicate_tags'` | Duplicate scalar tag deduplicated |
@@ -612,7 +612,7 @@ Removes well-known parse-time artefacts from a `CifFile`.  Returns `(cleaned_cif
 
 **Steps (in order):**
 
-1. **`remove_error_values`** — removes the synthetic `_pycifparse_error_value` tag that the parser inserts for orphan values with no preceding tag.
+1. **`remove_error_values`** — removes the synthetic `_cifflow_error_value` tag that the parser inserts for orphan values with no preceding tag.
 2. **`deduplicate_blocks`** — when multiple blocks share the same name, keeps `'first'` or `'last'`; `False` disables.
 3. **`deduplicate_save_frames`** — same as above, applied per block.
 4. **`deduplicate_tags`** — when a scalar tag has multiple values (non-loop duplicates), keeps `'first'` or `'last'`; loop columns are never touched.
@@ -623,7 +623,7 @@ Every removal produces a `CleanWarning`; nothing is silently discarded.
 **Example:**
 
 ```python
-from pycifparse import build, clean
+from cifflow import build, clean
 
 cif, parse_errors = build(source)
 cif, warnings = clean(cif)
@@ -633,9 +633,9 @@ for w in warnings:
 
 ---
 
-## Output layer (`pycifparse.output`)
+## Output layer (`cifflow.output`)
 
-All symbols are importable from `pycifparse.output` or the top-level `pycifparse` package.
+All symbols are importable from `cifflow.output` or the top-level `cifflow` package.
 
 ---
 
@@ -645,15 +645,15 @@ All symbols are importable from `pycifparse.output` or the top-level `pycifparse
 class EmitMode(Enum):
     ONE_BLOCK  = "one_block"   # all data in one block named 'output'
     ALL_BLOCKS = "all_blocks"  # one block per non-empty table, plus fallback blocks
-    ORIGINAL   = "original"    # one block per original _block_id (default)
+    ORIGINAL   = "original"    # one block per original _cifflow_block_id (default)
     GROUPED    = "grouped"     # one block per Set-anchor key combination
 ```
 
 **`ORIGINAL`** reconstructs the CIF blocks as they were before ingestion — the simple inverse of `ingest()`.
 
-**`GROUPED`** traverses the FK graph (BFS) from each table to find the nearest Set-class ancestor.  Tables whose FK chains share the same Set anchor and the same anchor key values are emitted together.  This merges rows from multiple original blocks that carry the same Set-level identity.  Tables with no Set ancestor fall back to `_block_id` grouping and are absorbed into co-located Set-anchored blocks; truly orphaned block IDs produce standalone blocks.
+**`GROUPED`** traverses the FK graph (BFS) from each table to find the nearest Set-class ancestor.  Tables whose FK chains share the same Set anchor and the same anchor key values are emitted together.  This merges rows from multiple original blocks that carry the same Set-level identity.  Tables with no Set ancestor fall back to `_cifflow_block_id` grouping and are absorbed into co-located Set-anchored blocks; truly orphaned block IDs produce standalone blocks.
 
-**`ALL_BLOCKS`** emits one block per table, split by Set-key combination.  Raises `ValueError` if any `_cif_fallback` rows are present (unknown tags cannot be assigned to a dictionary-split block) or if any keyless Set table (one whose only PK column is `_pycifparse_id`) contains data.
+**`ALL_BLOCKS`** emits one block per table, split by Set-key combination.  Raises `ValueError` if any `_cif_fallback` rows are present (unknown tags cannot be assigned to a dictionary-split block) or if any keyless Set table (one whose only PK column is `_cifflow_id`) contains data.
 
 Block partitioning rules:
 
@@ -661,7 +661,7 @@ Block partitioning rules:
 - **Loop category, no Set-key columns** — one block for all rows.  Block name: `{table}`.
 - **Loop category, one or more Set-key columns** — one block per unique combination of Set-key values.  Block name: `{table}_{set_val...}`.  Set-key values are emitted as scalar tag–value pairs above the loop (using the parent category's tag name); the corresponding FK columns are suppressed from the loop header.
 
-`_audit_dataset.id` injection: the dataset ID is resolved per block by looking up the originating `_block_id` values in `_block_dataset_membership`.  If exactly one distinct ID is found it is injected as a scalar.  If multiple IDs are found they are injected as a `loop_`.  If none is found a fresh UUID is generated (CIF 2.0 only).  Injection is skipped for any block that already carries `_audit_dataset.id` via its structured table (`audit_dataset`) or `_cif_fallback` rows.
+`_audit_dataset.id` injection: the dataset ID is resolved per block by looking up the originating `_cifflow_block_id` values in `_block_dataset_membership`.  If exactly one distinct ID is found it is injected as a scalar.  If multiple IDs are found they are injected as a `loop_`.  If none is found a fresh UUID is generated (CIF 2.0 only).  Injection is skipped for any block that already carries `_audit_dataset.id` via its structured table (`audit_dataset`) or `_cif_fallback` rows.
 
 **`OutputPlan` in ALL_BLOCKS mode:** spec-matching (`matches`, `single_block`, `block_namer`) is not applied.  `category_order` from the first `BlockSpec` that declares one controls the order in which tables are processed (and thus the order of their blocks in the output file).  The wildcard `'*'` notation is supported.  Unlisted tables follow alphabetically (Set-class first).
 
@@ -762,7 +762,7 @@ CIF string.
 - Blocks separated by two blank lines.
 - Set categories emitted as scalar tag–value pairs; Loop categories as `loop_` constructs.
 - `_cif_fallback` rows grouped by tag; single-value tags as scalars, multi-value as single-column loops.
-- Synthetic columns (`_block_id`, `_row_id`, `_pycifparse_id`) are never emitted.
+- Synthetic columns (`_cifflow_block_id`, `_cifflow_row_id`, `_cifflow_id`) are never emitted.
 - `NULL` columns (all values NULL in all rows) are omitted.
 - `NULL` values within a loop row are emitted as `.` (inapplicable placeholder).
 - Default ordering: Set categories first (alphabetical), then Loop categories (alphabetical), then fallback.
@@ -803,8 +803,8 @@ CIF string.
 **Example:**
 
 ```python
-from pycifparse import emit, EmitMode
-from pycifparse.types import CifVersion
+from cifflow import emit, EmitMode
+from cifflow.types import CifVersion
 
 cif_text = emit(conn, schema)                              # ORIGINAL mode, CIF 2.0
 cif_text = emit(conn, schema, mode=EmitMode.GROUPED)       # grouped by Set anchor
@@ -865,7 +865,7 @@ The returned string always begins with `'\n'`.
 
 ---
 
-## Inspect utilities (`pycifparse.inspect`)
+## Inspect utilities (`cifflow.inspect`)
 
 All six entry points accept `str | pathlib.Path | IO[str]` as `source`.
 Output is ANSI-coloured when writing to a tty; plain otherwise.
@@ -937,10 +937,10 @@ class TraceEvent:
 
 ---
 
-## Dictionary layer (`pycifparse.dictionary`)
+## Dictionary layer (`cifflow.dictionary`)
 
-All symbols below are importable directly from `pycifparse.dictionary` or from
-the top-level `pycifparse` package.
+All symbols below are importable directly from `cifflow.dictionary` or from
+the top-level `cifflow` package.
 
 ---
 
@@ -965,7 +965,7 @@ Returns a `SourceResolver` that reads files by filename (last URI path
 component) from a local directory.  Returns `None` if the file is not found.
 
 ```python
-from pycifparse import DictionaryLoader, directory_resolver
+from cifflow import DictionaryLoader, directory_resolver
 
 resolver = directory_resolver('data/dictionaries')
 loader = DictionaryLoader(resolver=resolver)
@@ -986,7 +986,7 @@ found.  Pass to `DictionaryLoader(path_resolver=...)` so that
 full paths rather than bare URIs.
 
 ```python
-from pycifparse import DictionaryLoader, directory_resolver, directory_path_resolver
+from cifflow import DictionaryLoader, directory_resolver, directory_path_resolver
 
 DIC_DIR = 'data/dictionaries'
 loader = DictionaryLoader(
@@ -1111,7 +1111,7 @@ lifetime of the loader instance.
 **Example:**
 
 ```python
-from pycifparse import DictionaryLoader, directory_resolver
+from cifflow import DictionaryLoader, directory_resolver
 
 resolver = directory_resolver('data/dictionaries')
 source = open('data/dictionaries/cif_core.dic').read()
@@ -1152,7 +1152,7 @@ class ColumnDef:
                                  #   Informational only — DDL always emits TEXT.
     nullable:        bool        # False for synthetic and PK columns; True otherwise
     is_primary_key:  bool
-    is_synthetic:    bool        # True for _block_id, _row_id, _pycifparse_id
+    is_synthetic:    bool        # True for _cifflow_block_id, _cifflow_row_id, _cifflow_id
     linked_item_id:      str | None  # SU items only; no FK constraint produced
     type_container:      str | None  # DDLm _type.container value: "Single", "Matrix",
                                      #   "List", "Array", etc.; None if unknown or synthetic.
@@ -1180,7 +1180,7 @@ CIF presence states are encoded directly in the value column:
 | `'"?"'` | literal quoted question mark |
 | anything else | real value, stored as raw string |
 
-Synthetic columns (`_block_id`, `_row_id`, `_pycifparse_id`) have `definition_id=""`
+Synthetic columns (`_cifflow_block_id`, `_cifflow_row_id`, `_cifflow_id`) have `definition_id=""`
 and are excluded from `column_to_tag`.
 
 ---
@@ -1199,9 +1199,9 @@ class TableDef:
 ```
 
 **Column ordering:**
-1. `_block_id` — always first; informational only for keyed tables
-2. `_pycifparse_id` — keyless Set tables only; synthetic UUID primary key
-3. `_row_id` — all tables (Set and Loop)
+1. `_cifflow_block_id` — always first; informational only for keyed tables
+2. `_cifflow_id` — keyless Set tables only; synthetic UUID primary key
+3. `_cifflow_row_id` — all tables (Set and Loop)
 4. Non-synthetic PK columns in `_category_key.name` order
 5. Remaining domain columns alphabetically
 
@@ -1243,9 +1243,9 @@ Derives a `SchemaSpec` from a loaded `DdlmDictionary`.
 
 - `"Set"` and `"Loop"` categories → one table each.
 - `"Head"` → silently skipped.  Other classes → warn and skip.
-- PK from `_category_key.name`; fallback `_pycifparse_id` (keyless Set, with warning)
-  or `_block_id` + `_row_id` (keyless Loop, with warning).
-- `_row_id` is present on all tables (Set and Loop); `_block_id` is always present
+- PK from `_category_key.name`; fallback `_cifflow_id` (keyless Set, with warning)
+  or `_cifflow_block_id` + `_cifflow_row_id` (keyless Loop, with warning).
+- `_cifflow_row_id` is present on all tables (Set and Loop); `_cifflow_block_id` is always present
   but is only part of the PK for keyless Loop tables.
 - `"Link"` items → `ForeignKeyDef` on the source table.
 - `"SU"` items → `ColumnDef.linked_item_id` only; no FK constraint.
@@ -1267,8 +1267,8 @@ def emit_create_statements(schema: SchemaSpec) -> list[str]:
 
 Returns one `CREATE TABLE IF NOT EXISTS` string per table.  All value columns
 are declared `TEXT` regardless of `ColumnDef.type_contents`.  All FK constraints
-carry `DEFERRABLE INITIALLY DEFERRED`.  On tables where `_row_id` is not already
-part of the `PRIMARY KEY`, a table-level `UNIQUE ("_block_id", "_row_id")`
+carry `DEFERRABLE INITIALLY DEFERRED`.  On tables where `_cifflow_row_id` is not already
+part of the `PRIMARY KEY`, a table-level `UNIQUE ("_cifflow_block_id", "_cifflow_row_id")`
 constraint is emitted.
 
 This function generates SQLite-compatible DDL for inspection and documentation
@@ -1291,12 +1291,12 @@ This function is for inspection and documentation purposes.  The DuckDB ingest
 path creates these tables internally; callers do not need to call this function.
 
 **`_cif_fallback`** — stores all tag/value pairs not routed to a structured table.
-PK: `(_block_id, _row_id, tag)`.
+PK: `(_cifflow_block_id, _cifflow_row_id, tag)`.
 
 | Column | Type | Nullable |
 |---|---|---|
-| `_block_id` | TEXT | NOT NULL |
-| `_row_id` | INTEGER | NOT NULL |
+| `_cifflow_block_id` | TEXT | NOT NULL |
+| `_cifflow_row_id` | INTEGER | NOT NULL |
 | `tag` | TEXT | NOT NULL |
 | `value` | TEXT | nullable |
 | `value_type` | TEXT | NOT NULL |
@@ -1305,11 +1305,11 @@ PK: `(_block_id, _row_id, tag)`.
 
 **`_block_dataset_membership`** — records which dataset(s) each block belongs to,
 and the `id_regime` determined at ingestion time.
-PK: `(_block_id, _audit_dataset_id)`.
+PK: `(_cifflow_block_id, _audit_dataset_id)`.
 
 | Column | Type | Notes |
 |---|---|---|
-| `_block_id` | TEXT NOT NULL | Block name |
+| `_cifflow_block_id` | TEXT NOT NULL | Block name |
 | `_audit_dataset_id` | TEXT NOT NULL | Dataset ID; `''` for general blocks |
 | `id_regime` | TEXT NOT NULL | `'dataset'`, `'uuid'`, or `'assumed'` |
 
@@ -1351,7 +1351,7 @@ tier, not an error.  Does not emit warnings; the caller acts on
 `was_alias` and `is_deprecated`.
 
 ```python
-from pycifparse import resolve_tag
+from cifflow import resolve_tag
 
 r = resolve_tag('_atom_site.fract_x', d)
 if r is None:
@@ -1384,7 +1384,7 @@ references an unknown `definition_id`.  The caller should fall back to
 **Example:**
 
 ```python
-from pycifparse import (
+from cifflow import (
     DictionaryLoader, directory_resolver,
     save_dictionary, load_dictionary,
 )
@@ -1403,7 +1403,7 @@ else:
 
 ---
 
-## Ingestion layer (`pycifparse.ingestion`)
+## Ingestion layer (`cifflow.ingestion`)
 
 ### `ingest(cif, db, schema, ...)`
 
@@ -1470,7 +1470,7 @@ For every resolved FK value, `ingest` ensures the referenced parent row exists;
 if absent, a stub row is inserted with only the PK populated.
 
 **Cross-block merging:** Rows with the same PK across blocks are merged (first
-value wins; conflict → warning).  `_block_id` records the first contributing
+value wins; conflict → warning).  `_cifflow_block_id` records the first contributing
 block.
 
 **Dataset namespace:**
@@ -1500,7 +1500,7 @@ connection and semantic error/warning strings in emission order.
 
 ---
 
-## Database utilities (`pycifparse.database`)
+## Database utilities (`cifflow.database`)
 
 ### `convert_database(src, dst, schema, on_coercion_failure='null') -> list[str]`
 
@@ -1510,7 +1510,7 @@ All tables and columns are preserved.  The source database must have been
 populated by `ingest()`; all its columns are `VARCHAR`.
 
 ```python
-from pycifparse import convert_database
+from cifflow import convert_database
 import duckdb
 
 src_conn, _ = ingest(cif, schema=schema)
@@ -1566,7 +1566,7 @@ warnings = convert_database(
 
 ---
 
-## Fidelity layer (`pycifparse.fidelity`)
+## Fidelity layer (`cifflow.fidelity`)
 
 ### `FidelityMismatch`
 
@@ -1646,7 +1646,7 @@ this path (UTF-8) before returning.
   differs from `'.'` as `STRING`.
 
 ```python
-from pycifparse import check_fidelity
+from cifflow import check_fidelity
 
 report = check_fidelity(
     'tests/cif_files/multi_one.cif',
@@ -1667,7 +1667,7 @@ else:
 
 ```python
 from typing import Literal
-from pycifparse import visualise_schema, visualise_schema_html
+from cifflow import visualise_schema, visualise_schema_html
 
 def visualise_schema(
     schema: SchemaSpec,
@@ -1772,10 +1772,10 @@ with open('schema.html', 'w', encoding='utf-8') as f:
 
 ---
 
-## Validation layer (`pycifparse.validation`)
+## Validation layer (`cifflow.validation`)
 
 ```python
-from pycifparse import validate, ValidationReport, ValidationIssue
+from cifflow import validate, ValidationReport, ValidationIssue
 ```
 
 ### `ValidationIssue`
@@ -1794,7 +1794,7 @@ class ValidationIssue:
     col:        int | None    # source column (parse stage only)
     table:      str | None    # DuckDB table name (database stage only)
     column:     str | None    # DuckDB column name (database stage only)
-    row_id:     int | None    # _row_id of the failing row (database stage only)
+    row_id:     int | None    # _cifflow_row_id of the failing row (database stage only)
     key_values: dict[str, str | None] | None  # PK tag → value for the row
 ```
 

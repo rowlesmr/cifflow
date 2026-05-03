@@ -1,5 +1,5 @@
 """
-pycifparse — example workflow
+cifflow — example workflow
 ==============================
 Demonstrates the full pipeline: dictionary loading → DuckDB ingestion → CIF emission.
 
@@ -65,7 +65,7 @@ USE_CACHE = True
 # Imports
 # ---------------------------------------------------------------------------
 time_before_imports = get_now()
-from pycifparse import (
+from cifflow import (
     DictionaryLoader,
     directory_resolver,
     load_dictionary,
@@ -87,8 +87,8 @@ from pycifparse import (
     ValidationReport,
     DbValidationResult,
 )
-from pycifparse.fidelity import check_fidelity
-from pycifparse.types import CifVersion
+from cifflow.fidelity import check_fidelity
+from cifflow.types import CifVersion
 print_time("Done imports", time_before_imports, time.time())
 
 # ---------------------------------------------------------------------------
@@ -402,7 +402,7 @@ print_time("Finished convert", start_convert)
 # ---------------------------------------------------------------------------
 # emit() reads the populated database and produces a valid CIF string.
 # ORIGINAL is the simple inverse of ingestion: each source data_ block
-# becomes one output block, in _block_id order.
+# becomes one output block, in _cifflow_block_id order.
 
 print('\n=== Step 8: Emit CIF (ORIGINAL mode) ===')
 start_emit_original = get_now()
@@ -412,7 +412,7 @@ ORIGINAL_CIF_FILE = ROOT / 'output_original.cif'
 cif_original = emit(
     conn,                          # open DuckDB connection (read-only)
     schema,                        # SchemaSpec used during ingestion
-    mode=EmitMode.ORIGINAL,        # one block per original _block_id (default)
+    mode=EmitMode.ORIGINAL,        # one block per original _cifflow_block_id (default)
     version=CifVersion.CIF_2_0,    # magic line and quoting strategy
     plan=None,                     # OutputPlan | None; None -> default ordering
     reconstruct_su=False,          # True -> merge (measurand, su) back into value(su)
@@ -513,7 +513,7 @@ print_time("Finished one-block emit", start_emit_oneblock)
 # ALL_BLOCKS mirrors GROUPED block partitioning: one output block per
 # distinct Set-anchor key combination.  Set categories produce one block per
 # row; Loop categories are grouped by the domain PK of the nearest Set
-# ancestor.  Tables with no Set ancestor are grouped by _block_id.
+# ancestor.  Tables with no Set ancestor are grouped by _cifflow_block_id.
 
 print('\n=== Step 11: Emit CIF (ALL_BLOCKS mode) ===')
 start_emit_allblocks = get_now()

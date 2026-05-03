@@ -3,7 +3,7 @@ requires = ["maturin>=1.5,<2"]
 build-backend = "maturin"
 
 [project]
-name = "pycifparse"
+name = "cifflow"
 version = "0.1.0"
 description = "A streaming, event-driven parser for Crystallographic Information Files (CIF)"
 requires-python = ">=3.10"
@@ -20,22 +20,22 @@ dev = [
 
 [tool.maturin]
 python-source = "src"
-module-name = "pycifparse.pycifparse_core"
-manifest-path = "pycifparse_core/Cargo.toml"
+module-name = "cifflow.cifflow_core"
+manifest-path = "cifflow_core/Cargo.toml"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
     "slow: large real-world CIF files (deselect with -m 'not slow')",
 ]
-addopts = "--cov=pycifparse --cov-branch --cov-report=term-missing --cov-report=html:tests/test_coverage"
+addopts = "--cov=cifflow --cov-branch --cov-report=term-missing --cov-report=html:tests/test_coverage"
 filterwarnings = [
     "ignore::ResourceWarning",
 ]
 
 [tool.coverage.run]
 branch = true
-source = ["pycifparse"]
+source = ["cifflow"]
 
 [tool.coverage.report]
 show_missing = true

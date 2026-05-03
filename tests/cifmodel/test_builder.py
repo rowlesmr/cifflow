@@ -3,9 +3,9 @@ Tests for CifBuilder — event-driven construction of CifFile.
 """
 
 import pytest
-from pycifparse.cifmodel.builder import CifBuilder
-from pycifparse.cifmodel.model import CifBlock, CifSaveFrame
-from pycifparse.types import ParseError, ValueType
+from cifflow.cifmodel.builder import CifBuilder
+from cifflow.cifmodel.model import CifBlock, CifSaveFrame
+from cifflow.types import ParseError, ValueType
 
 
 def make_builder(mode='pad'):
@@ -498,9 +498,9 @@ class TestCaselessMatching:
 
     def test_caseless_fixture(self):
         """pow_multiple_blocks_canonical_case.cif: 3 blocks all match 'abc'."""
-        from pycifparse.cifmodel.builder import build
+        from cifflow.cifmodel.builder import build
         import pathlib
-        src = pathlib.Path('tests/cif_files/pycifparse/pow_multiple_blocks_canonical_case.cif').read_text()
+        src = pathlib.Path('tests/cif_files/cifflow/pow_multiple_blocks_canonical_case.cif').read_text()
         cif, errs = build(src)
         assert len(cif.blocks) == 3
         assert all(n == 'abc' for n in cif.blocks)

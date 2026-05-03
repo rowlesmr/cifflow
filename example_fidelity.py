@@ -1,5 +1,5 @@
 """
-pycifparse — fidelity check example
+cifflow — fidelity check example
 =====================================
 Demonstrates check_fidelity() by comparing two semantically equivalent CIF
 files: ``multi_one.cif`` (24 data blocks spread across instrument, wavelength,
@@ -15,7 +15,7 @@ Run from the repository root:
 
 import pathlib
 
-from pycifparse import (
+from cifflow import (
     check_fidelity,
     FidelityReport,
     FidelityMismatch,
