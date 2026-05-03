@@ -1,0 +1,60 @@
+#\#CIF_2.0
+# Tests: multiple data_ blocks with the same tag structure.
+# 
+# There is no common dataset_id, so ingestion should be rejected
+#
+# Dictionary: cif_pow
+
+data_block_A
+_audit_dataset.id b0524302-b4b8-451f-9c71-a6193d950c66
+
+_cell.length_a    3.000
+_cell.length_b    4.000
+_cell.length_c    5.000
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+loop_
+  _atom_site.label
+  _atom_site.type_symbol
+  _atom_site.fract_x
+  _atom_site.fract_y
+  _atom_site.fract_z
+  Na1 Na 0.0 0.0 0.0
+  Cl1 Cl 0.5 0.5 0.5
+
+data_block_B
+_audit_dataset.id 934f8141-7f9b-4950-909a-723a92f48f8f
+
+_cell.length_a    5.640
+_cell.length_b    5.640
+_cell.length_c    5.640
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+loop_
+  _atom_site.label
+  _atom_site.type_symbol
+  _atom_site.fract_x
+  _atom_site.fract_y
+  _atom_site.fract_z
+  K1  K  0.0 0.0 0.0
+  F1  F  0.5 0.5 0.5
+
+data_block_C
+_audit_dataset.id 491fa770-6dee-435b-8418-1fba3e3ab6a6
+
+_cell.length_a    4.740
+_cell.length_b    5.840
+_cell.length_c    6.940
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+loop_
+  _atom_site.label
+  _atom_site.type_symbol
+  _atom_site.fract_x
+  _atom_site.fract_y
+  _atom_site.fract_z
+  F1   F   0.0 0.0 0.0
+  Na1  Na  0.5 0.5 0.5

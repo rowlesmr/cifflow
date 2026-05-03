@@ -1,0 +1,33 @@
+#\#CIF_2.0
+# Tests: multiple data_ blocks with the same name, given cannonical caseless matching
+# should result in 3 duplicate blocks
+# There are also duplicate tags, too
+# Dictionary: cif_pow
+
+data_ABC
+_cell.length_a    3.000
+_cell.length_b    4.000
+_cell.length_c    5.000
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+
+_cell.LENGTH_A    3.1 #this is an issue - different value to above
+
+data_abc #this should duplicate the first block
+_cell.length_a    5.640
+_cell.length_b    5.640
+_cell.length_c    5.640
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
+
+_cell.LENGTH_A    5.640 #this is not an issue - same value as above
+
+data_aBc #this should duplicate the first block
+_cell.length_a    4.740
+_cell.length_b    5.840
+_cell.length_c    6.940
+_cell.angle_alpha 90
+_cell.angle_beta  90
+_cell.angle_gamma 90
