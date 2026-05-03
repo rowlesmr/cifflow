@@ -10,9 +10,9 @@ Conventions:
 import pathlib
 import pytest
 
-from pycifparse.lexer.lexer import Lexer
-from pycifparse.lexer.tokens import Token
-from pycifparse.types import CifVersion, TokenType, ValueType
+from cifflow.lexer.lexer import Lexer
+from cifflow.lexer.tokens import Token
+from cifflow.types import CifVersion, TokenType, ValueType
 
 CIF2 = CifVersion.CIF_2_0
 CIF1 = CifVersion.CIF_1_1

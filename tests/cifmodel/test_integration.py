@@ -7,7 +7,7 @@ Uses the build() convenience function and the existing test CIF files.
 import pathlib
 import pytest
 
-from pycifparse.cifmodel.builder import build
+from cifflow.cifmodel.builder import build
 
 CIF_DIR = pathlib.Path(__file__).parent.parent / 'cif_files'
 COMCIFS = CIF_DIR / 'comcifs'

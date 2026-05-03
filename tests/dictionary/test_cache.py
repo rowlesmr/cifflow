@@ -8,9 +8,9 @@ import tempfile
 
 import pytest
 
-from pycifparse.dictionary.cache import load_dictionary, save_dictionary
-from pycifparse.dictionary.ddlm_item import DdlmItem
-from pycifparse.dictionary.ddlm_parser import DdlmDictionary
+from cifflow.dictionary.cache import load_dictionary, save_dictionary
+from cifflow.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.ddlm_parser import DdlmDictionary
 
 
 # ---------------------------------------------------------------------------

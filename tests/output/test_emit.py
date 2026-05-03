@@ -1,5 +1,5 @@
 """
-Tests for pycifparse.output.emit.
+Tests for cifflow.output.emit.
 
 Tests are organised by mode:
 - ONE_BLOCK
@@ -17,7 +17,7 @@ import sqlite3
 
 import pytest
 
-from pycifparse import (
+from cifflow import (
     build,
     ingest,
     emit,
@@ -27,10 +27,10 @@ from pycifparse import (
     generate_schema,
     directory_resolver,
 )
-from pycifparse.dictionary import DictionaryLoader
-from pycifparse.dictionary.schema import SchemaSpec
-from pycifparse.output import BlockSpec, OutputPlan
-from pycifparse.types import CifVersion
+from cifflow.dictionary import DictionaryLoader
+from cifflow.dictionary.schema import SchemaSpec
+from cifflow.output import BlockSpec, OutputPlan
+from cifflow.types import CifVersion
 
 _DATA_DIR = pathlib.Path(__file__).parents[2] / 'data' / 'dictionaries'
 _CIF_DIR  = pathlib.Path(__file__).parents[2] / 'tests' / 'cif_files'
@@ -287,9 +287,9 @@ class TestSetCategory:
 
     def test_synthetic_cols_not_emitted(self, conn, schema):
         result = emit(conn, schema)
-        assert '_block_id' not in result
-        assert '_row_id' not in result
-        assert '_pycifparse_id' not in result
+        assert '_cifflow_block_id' not in result
+        assert '_cifflow_row_id' not in result
+        assert '_cifflow_id' not in result
 
 
 # ---------------------------------------------------------------------------
@@ -661,7 +661,7 @@ class TestPretty:
 class TestAllBlocks:
     """ALL_BLOCKS: one block per Set-anchor key combination (mirrors GROUPED)."""
 
-    # Keyless Set (no _category_key.name) — groups by _block_id like GROUPED.
+    # Keyless Set (no _category_key.name) — groups by _cifflow_block_id like GROUPED.
     @pytest.fixture
     def mini_schema(self):
         return _make_schema(_MINI_DIC)
@@ -913,7 +913,7 @@ class TestAllBlocksSetKeyInPK:
 
 
 # ---------------------------------------------------------------------------
-# ORIGINAL mode — multiple source blocks grouped by _block_id
+# ORIGINAL mode — multiple source blocks grouped by _cifflow_block_id
 # ---------------------------------------------------------------------------
 
 class TestOriginal:
@@ -1407,13 +1407,13 @@ class TestNullHandling:
 # Database round-trip comparison helpers
 # ---------------------------------------------------------------------------
 
-_ADMIN_COLS = {'_block_id', '_row_id', '_pycifparse_id'}
+_ADMIN_COLS = {'_cifflow_block_id', '_cifflow_row_id', '_cifflow_id'}
 
 
 def _data_cols(conn: sqlite3.Connection, table_name: str, schema: SchemaSpec) -> list[str]:
     """Return column names in *table_name* that carry real CIF data.
 
-    Excludes administrative columns (_block_id, _row_id, _pycifparse_id) and
+    Excludes administrative columns (_cifflow_block_id, _cifflow_row_id, _cifflow_id) and
     columns marked synthetic in the schema (transitive bridge helpers, etc.).
     """
     synthetic: set[str] = set()
@@ -1454,7 +1454,7 @@ def _assert_same_data(
     schema: SchemaSpec,
     exclude_tables: set[str] | None = None,
 ) -> None:
-    """Assert that two databases hold the same CIF data modulo _block_id / _row_id.
+    """Assert that two databases hold the same CIF data modulo _cifflow_block_id / _cifflow_row_id.
 
     For every structured table: the set of data rows (all non-admin, non-synthetic
     columns) must be identical.  For the fallback tier: the (tag, value) multiset
@@ -2467,13 +2467,13 @@ class TestLineLimit:
 
     def test_make_text_field_plain(self):
         """Plain value → plain semicolon field."""
-        from pycifparse.output.quote import make_text_field
+        from cifflow.output.quote import make_text_field
         result = make_text_field('hello world')
         assert result == '\n;hello world\n;'
 
     def test_make_text_field_needs_prefix(self):
         """Value containing '\\n;' → prefix protocol."""
-        from pycifparse.output.quote import make_text_field
+        from cifflow.output.quote import make_text_field
         s = 'line1\n;bad\nline3'
         result = make_text_field(s)
         # Opening: newline + ';>' + backslash (prefix-only sentinel).
@@ -2489,7 +2489,7 @@ class TestLineLimit:
 
     def test_make_text_field_fold(self):
         """Long content lines → fold protocol."""
-        from pycifparse.output.quote import make_text_field
+        from cifflow.output.quote import make_text_field
         long_line = 'W' * 80
         result = make_text_field(long_line, line_limit=40)
         lines = result.split('\n')
@@ -2501,7 +2501,7 @@ class TestLineLimit:
 
     def test_make_text_field_prefix_and_fold(self):
         """Value containing '\\n;' AND long lines → prefix+fold."""
-        from pycifparse.output.quote import make_text_field
+        from cifflow.output.quote import make_text_field
         s = 'W' * 80 + '\n;bad'
         result = make_text_field(s, line_limit=40)
         lines = result.split('\n')
@@ -2744,7 +2744,7 @@ class TestDecimalAlign:
     # --- _parse_numeric unit tests ---
 
     def test_parse_numeric_decimal(self):
-        from pycifparse.output.emit import _parse_numeric
+        from cifflow.output.emit import _parse_numeric
         assert _parse_numeric('1.23') == ('1', '23')
         assert _parse_numeric('-1.23') == ('-1', '23')
         assert _parse_numeric('.5') == ('', '5')
@@ -2753,14 +2753,14 @@ class TestDecimalAlign:
         assert _parse_numeric('1.23(4)e-5') == ('1', '23(4)e-5')
 
     def test_parse_numeric_no_dot(self):
-        from pycifparse.output.emit import _parse_numeric
+        from cifflow.output.emit import _parse_numeric
         assert _parse_numeric('123') == ('123', '')
         assert _parse_numeric('123(4)') == ('123(4)', '')
         assert _parse_numeric('12e-2') == ('12', 'e-2')
         assert _parse_numeric('1234e2') == ('1234', 'e2')
 
     def test_parse_numeric_non_numeric(self):
-        from pycifparse.output.emit import _parse_numeric
+        from cifflow.output.emit import _parse_numeric
         assert _parse_numeric('.') is None      # placeholder
         assert _parse_numeric('?') is None      # placeholder
         assert _parse_numeric("'hello'") is None  # quoted

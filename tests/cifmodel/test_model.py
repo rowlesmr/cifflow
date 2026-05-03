@@ -3,7 +3,7 @@ Tests for CifFile, CifBlock, CifSaveFrame data structures.
 """
 
 import pytest
-from pycifparse.cifmodel.model import CifBlock, CifFile, CifSaveFrame
+from cifflow.cifmodel.model import CifBlock, CifFile, CifSaveFrame
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ class TestDuplicateBlocks:
         assert all_a[0]['_x'] == ['first']
         assert all_a[1]['_x'] == ['second']
 
-    def test_duplicate_block_ids_distinct(self):
+    def test_duplicate_cifflow_block_ids_distinct(self):
         f = CifFile()
         b1 = CifBlock('a')
         b2 = CifBlock('a')

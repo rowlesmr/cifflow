@@ -2,11 +2,11 @@
 
 import pytest
 
-from pycifparse.types import CifVersion, ValueType
-from pycifparse.cifmodel.builder import build as parse_build
-from pycifparse.cifmodel.model import CifFile
-from pycifparse.cifmodel.scalar import CifScalar
-from pycifparse.cifmodel.clean import clean, CleanWarning
+from cifflow.types import CifVersion, ValueType
+from cifflow.cifmodel.builder import build as parse_build
+from cifflow.cifmodel.model import CifFile
+from cifflow.cifmodel.scalar import CifScalar
+from cifflow.cifmodel.clean import clean, CleanWarning
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -34,11 +34,11 @@ def _make_cif_with_duplicate_save_frames() -> CifFile:
 
 def _make_cif_with_duplicate_tags() -> CifFile:
     # Two assignments to _tag (parser appends both)
-    from pycifparse.cifmodel.writer import CifWriter
-    from pycifparse.cifmodel.model import CifFile
+    from cifflow.cifmodel.writer import CifWriter
+    from cifflow.cifmodel.model import CifFile
     cif = CifFile(version=CifVersion.CIF_1_1)
-    from pycifparse.cifmodel.model import CifBlock
-    from pycifparse.cifmodel.scalar import CifScalar
+    from cifflow.cifmodel.model import CifBlock
+    from cifflow.cifmodel.scalar import CifScalar
     block = CifBlock("b")
     cif._add_block(block)
     block._append_value("_x", CifScalar("first", ValueType.STRING))
@@ -50,7 +50,7 @@ def _make_cif_with_padded_loop() -> CifFile:
     # Directly build a 2-column loop where the last row is all PLACEHOLDERs,
     # simulating what CifBuilder pad mode produces when the incomplete final row
     # happens to have all missing values filled with '?'.
-    from pycifparse.cifmodel.model import CifBlock
+    from cifflow.cifmodel.model import CifBlock
     cif = CifFile(version=CifVersion.CIF_1_1)
     block = CifBlock("b")
     cif._add_block(block)
@@ -76,7 +76,7 @@ class TestRemoveErrorValues:
                                   deduplicate_save_frames=False,
                                   deduplicate_tags=False,
                                   strip_loop_padding=False)
-        assert "_pycifparse_error_value" not in result["b"]._tags
+        assert "_cifflow_error_value" not in result["b"]._tags
 
     def test_warning_emitted(self):
         cif = _make_cif_with_error_value()
@@ -94,7 +94,7 @@ class TestRemoveErrorValues:
                                   deduplicate_save_frames=False,
                                   deduplicate_tags=False,
                                   strip_loop_padding=False)
-        assert "_pycifparse_error_value" in result["b"]._tags
+        assert "_cifflow_error_value" in result["b"]._tags
         assert not warnings
 
 
@@ -267,7 +267,7 @@ class TestStripLoopPadding:
     def test_legitimate_middle_placeholder_preserved(self):
         # Loop where ? appears in the middle row — must not be stripped.
         # k = min(trailing PLACEHOLDERs per column): _a has 0 trailing, _b has 0 trailing → k=0.
-        from pycifparse.cifmodel.model import CifBlock
+        from cifflow.cifmodel.model import CifBlock
         cif = CifFile(version=CifVersion.CIF_1_1)
         block = CifBlock("b")
         cif._add_block(block)
@@ -294,9 +294,9 @@ class TestStripLoopPadding:
 class TestCopySemantics:
     def test_copy_true_original_unmodified(self):
         cif = _make_cif_with_error_value()
-        assert "_pycifparse_error_value" in cif["b"]._tags
+        assert "_cifflow_error_value" in cif["b"]._tags
         clean(cif)
-        assert "_pycifparse_error_value" in cif["b"]._tags  # original untouched
+        assert "_cifflow_error_value" in cif["b"]._tags  # original untouched
 
     def test_copy_false_returns_same_object(self):
         cif = _make_cif_with_error_value()

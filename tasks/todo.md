@@ -1,4 +1,4 @@
-# pycifparse — Task Log
+# cifflow — Task Log
 
 ---
 
@@ -41,7 +41,7 @@ Also replaced `_PeekableTokens` in `parser.py` with direct list indexing.
 
 #### Phase 1.2 — `_id_regime` O(1) index ✓ (feature branch)
 
-`_id_regime` previously scanned all rows in `merged_rows` filtering by `_block_id` — O(blocks × total_rows) quadratic.
+`_id_regime` previously scanned all rows in `merged_rows` filtering by `_cifflow_block_id` — O(blocks × total_rows) quadratic.
 
 **Fix:** Added `_block_pk_values: dict[str, list[str]]` to `_Ingester`. Populated during `_merge_into` (new `block_pk_values` parameter, also threaded through `_apply_fk`). Also updated the inline set-buffer merge path. `_id_regime` now does a single dict lookup.
 
@@ -103,8 +103,8 @@ Spec: `prompts/unified_validate.md`
 - `ColumnDef`: added `type_container`, `enumeration_states`, `enumeration_range`, `type_dimension`
 - `generate_schema()`: propagates all four new fields; `type_contents` defaults to `'Text'` when absent
 - `quote.py`: added `is_table_key_quotable()` helper
-- `src/pycifparse/validation/`: new package with `_db_checks.py`, `_db_validate.py`, `_validate.py`, `__init__.py`
-- `pycifparse/__init__.py`: exports `validate`, `ValidationReport`, `ValidationIssue`
+- `src/cifflow/validation/`: new package with `_db_checks.py`, `_db_validate.py`, `_validate.py`, `__init__.py`
+- `cifflow/__init__.py`: exports `validate`, `ValidationReport`, `ValidationIssue`
 - `tests/validation/`: `test_validate.py` (42 tests) + `test_db_validate.py` (121 tests) = 163 tests
 
 #### Lessons: 91–94
@@ -185,7 +185,7 @@ Questions to resolve before writing the validator spec:
 
 DDLm attribute defaults (e.g. `_type.container` defaults to `Single`,
 `_type.contents` may have a default, etc.) are defined in `ddl.dic` itself,
-not hardcoded in pycifparse. Currently defaults are either `None` or
+not hardcoded in cifflow. Currently defaults are either `None` or
 approximated by ad-hoc `or 'Single'` guards in `generate_schema()`.
 
 Scope what it would mean to load `ddl.dic` at schema-generation time and use
@@ -219,7 +219,7 @@ in the same namespace. Two failure modes:
   list, leaving that column one value longer than all other columns in the loop. No error
   is emitted. The loop is structurally inconsistent.
 
-Fix required in `CifBuilder` (`src/pycifparse/cifmodel/builder.py`):
+Fix required in `CifBuilder` (`src/cifflow/cifmodel/builder.py`):
 - In `on_loop_start`: check if any incoming loop tag already exists as a scalar in the current
   namespace (`tag in ns._tags and tag not in any existing loop`). If so, emit a semantic error.
 - In `add_tag`: check if the tag already exists as a loop column in the current namespace
@@ -252,12 +252,12 @@ Required changes (do in one pass):
 
 ---
 
-#### Rename `_block_id` → `_pycifparse_block_id`, `_row_id` → `_pycifparse_row_id`
+#### Rename `_cifflow_block_id` → `_cifflow_cifflow_block_id`, `_cifflow_row_id` → `_cifflow_cifflow_row_id`
 
 Pervasive rename across schema generation, ingestion, output, compactification, fidelity,
 inspect layers, all tests, all prompts, and `docs/api.md`. Do in one pass with global
-search-and-replace; grep for both before closing. `_pycifparse_id` and
-`_pycifparse_error_value` are already correctly named.
+search-and-replace; grep for both before closing. `_cifflow_id` and
+`_cifflow_error_value` are already correctly named.
 
 ---
 
@@ -317,14 +317,14 @@ is resolved or a workaround is introduced.
 ## Stage 4: SQLite Ingestion — Implementation Plan
 
 ### Step 1 — Module scaffolding ✓
-- [x] Create `src/pycifparse/ingestion/__init__.py` (exports `ingest`)
-- [x] Create `src/pycifparse/ingestion/ingest.py` (stub raising `NotImplementedError`)
-- [x] Export `ingest` from `pycifparse/__init__.py`
+- [x] Create `src/cifflow/ingestion/__init__.py` (exports `ingest`)
+- [x] Create `src/cifflow/ingestion/ingest.py` (stub raising `NotImplementedError`)
+- [x] Export `ingest` from `cifflow/__init__.py`
 - [x] Create `tests/ingestion/__init__.py`, `test_ingest.py`, `test_integration.py`
-- [x] Confirm import works: `from pycifparse import ingest`
+- [x] Confirm import works: `from cifflow import ingest`
 
 ### Steps 2–10 ✓ COMPLETE
-All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `tests/ingestion/test_ingest.py` (92 tests).
+All implemented in `src/cifflow/ingestion/ingest.py` and unit-tested in `tests/ingestion/test_ingest.py` (92 tests).
 
 ### Step 11 — Integration tests (`@pytest.mark.slow`) ✓
 - [x] Ingest a real CIF file against `cif_core.dic` schema; spot-check known tag values in structured tables
@@ -342,13 +342,13 @@ All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `test
 ### Step 1 — Project scaffolding ✓
 - [x] Directory structure, `pyproject.toml`, stub `__init__.py` files, `tasks/lessons.md`
 
-### Step 2 — Shared types (`src/pycifparse/types.py`) ✓
+### Step 2 — Shared types (`src/cifflow/types.py`) ✓
 - [x] `ValueType`, `TokenType`, `ParseError`, `CifVersion`, `CifParserEvents`
 
 ### Step 3 — Version detection ✓
 - [x] `detect_version`; 15 tests
 
-### Step 4 — Lexer (`src/pycifparse/lexer/`) ✓
+### Step 4 — Lexer (`src/cifflow/lexer/`) ✓
 - [x] Hand-written state machine; 76 tests
 - [x] All string types: bare word, single/double quoted, triple quoted (CIF 2.0),
       multiline text field, CIF 1.1 embedded-quote rule
@@ -356,7 +356,7 @@ All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `test
 - [x] CIF 1.1 character set validation (non-ASCII and VT/FF → LexerError)
 - Key lessons: Lesson 1 (multiline closing delimiter), Lesson 3 (`:` not a bare-word terminator)
 
-### Step 5 — Parser (`src/pycifparse/parser/`) ✓
+### Step 5 — Parser (`src/cifflow/parser/`) ✓
 - [x] `CifParser`; 88 tests
 - [x] Data blocks, save frames, loops (sequential and `stop_`-terminated),
       lists, tables, orphan values, `global_` (fatal), all error-recovery paths
@@ -387,7 +387,7 @@ All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `test
 - [x] CIF 1.1 quoting rules tested against `cif1_quoting.cif`, `cif11_unquoted.cif`,
       `cif1_invalid.cif`
 
-### Debug tooling (`src/pycifparse/debug.py`) ✓
+### Debug tooling (`src/cifflow/debug.py`) ✓
 - [x] `debug_lex(source)` — prints full token stream with positions and lexer errors
 - [x] `DebugHandler(inner)` — wraps any handler; prints all events indented by nesting depth
 - [x] `debug_parse(source)` — convenience wrapper: tokens then events in one call
@@ -399,7 +399,7 @@ All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `test
 
 ## Stage 2: CIF Model (IR) ✓ COMPLETE
 
-### Step 8 — CIF model implementation (`src/pycifparse/cifmodel/`) ✓
+### Step 8 — CIF model implementation (`src/cifflow/cifmodel/`) ✓
 - [x] `CifFile`, `CifBlock`, `CifSaveFrame` data structures
 - [x] `CifBuilder` class implementing `CifParserEvents`
 - [x] Per-block storage: `tag → list[str]` for scalars; loop table structure
@@ -421,7 +421,7 @@ All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `test
 Prompt: `prompts/Stage3_Dictionary_Schema_Prompt.md`
 Data files: `data/dictionaries/`
 Tests: `tests/dictionary/`
-Module: `src/pycifparse/dictionary/`
+Module: `src/cifflow/dictionary/`
 API Reference: `prompts/API Reference.md`
 
 ### Step 10 — `DdlmItem` (`dictionary/ddlm_item.py`) ✓
@@ -444,7 +444,7 @@ API Reference: `prompts/API Reference.md`
       synthetic columns; PK from category_keys (5 fallback cases); FK detection;
       `column_to_tag` reverse mapping; all SQL identifiers double-quoted
 - [x] `emit_create_statements`: valid SQLite DDL; `DEFERRABLE INITIALLY DEFERRED`;
-      `_row_id UNIQUE`
+      `_cifflow_row_id UNIQUE`
 - [x] 58 unit tests including PRAGMA verification
 
 ### Step 13 — Schema application (`dictionary/schema_apply.py`) ✓
@@ -459,10 +459,10 @@ API Reference: `prompts/API Reference.md`
 
 ### Step 15 — Module wiring and integration ✓
 - [x] `dictionary/__init__.py` with all specified exports
-- [x] Updated `pycifparse/__init__.py` to re-export dictionary API
+- [x] Updated `cifflow/__init__.py` to re-export dictionary API
 - [x] Integration tests: `ddl.dic` + `cif_core.dic` → load → schema → apply;
       table count; synthetic columns; FK via PRAGMA; `column_to_tag` round-trip;
-      `_row_id UNIQUE` via `PRAGMA index_list`
+      `_cifflow_row_id UNIQUE` via `PRAGMA index_list`
 - [x] `prompts/API Reference.md` updated with full dictionary public API
 
 ### Review notes
@@ -497,7 +497,7 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 - **Investigate multi-dataset blocks (GROUPED)**: ALL_BLOCKS now correctly emits multiple `_audit_dataset.id` values as a `loop_` when a row group spans more than one original dataset. The equivalent question for GROUPED mode remains open: should GROUPED output preserve all dataset IDs per block, or should re-ingestion be more tolerant (union rather than intersection)?
 
 
-- ~~**Validation layer**~~ — **DONE** (2026-04-19). `src/pycifparse/validation/`. Spec: `prompts/unified_validate.md`. 163 tests. Lessons 91–94.
+- ~~**Validation layer**~~ — **DONE** (2026-04-19). `src/cifflow/validation/`. Spec: `prompts/unified_validate.md`. 163 tests. Lessons 91–94.
 
 - ~~**`check_fidelity`**~~ — **DONE** (2026-04-13). See Lessons 62–64.
 
@@ -531,8 +531,8 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 ### Planned features (inspect layer)
 
 - ~~**`visualise_schema(schema) -> str`**~~ — **DONE** (2026-04-15).
-  `src/pycifparse/dictionary/visualise.py`, exported from `pycifparse.dictionary` and
-  `pycifparse`.  Spec: `prompts/stage 6 visualise schema.md`.  25 tests.
+  `src/cifflow/dictionary/visualise.py`, exported from `cifflow.dictionary` and
+  `cifflow`.  Spec: `prompts/stage 6 visualise schema.md`.  25 tests.
 
 ### Refactors
 
@@ -546,12 +546,12 @@ Tests: `tests/dictionary/test_fallback_schema.py`
   deferred until a `filter=` parameter is added.
 - **`inspect_ingest` filter parameter**: unfiltered trace first; leave open for later.
 - **SQLite trace output for `inspect_ingest`**: out of scope; leave open.
-- **`_pycifparse_id` scoping**: block-category-scoped (current). Revisit with real-world evidence.
+- **`_cifflow_id` scoping**: block-category-scoped (current). Revisit with real-world evidence.
 - `uuid_reference_check` is a stub — no rows written in Stage 4. Implement in a later stage.
 - Looped keyless Set: error is supposed to be emitted and UUID assigned per row, but this path is
-  not explicitly tested. Covered implicitly by the `_pycifparse_id` test but no error-emission test.
-- `_process_scalar` for the no-schema path uses `_row_id=1` for all scalars. In a block with
-  duplicate scalar tags, the fallback PK (`_block_id, _row_id, tag`) will cause a DB-level error
+  not explicitly tested. Covered implicitly by the `_cifflow_id` test but no error-emission test.
+- `_process_scalar` for the no-schema path uses `_cifflow_row_id=1` for all scalars. In a block with
+  duplicate scalar tags, the fallback PK (`_cifflow_block_id, _cifflow_row_id, tag`) will cause a DB-level error
   on the second occurrence. The spec says duplicate tags are undefined behaviour — caller must
   consolidate before `ingest()`. Documented in the Assumptions section of Stage4 prompt.
 - **`emit_defaults` flag**: accepted but has no effect. Suppressing default-fill values requires

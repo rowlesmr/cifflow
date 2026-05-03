@@ -8,11 +8,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pycifparse import check_fidelity, FidelityReport, FidelityMismatch
-from pycifparse.cifmodel.builder import build as _build
-from pycifparse.dictionary.ddlm_item import DdlmItem
-from pycifparse.dictionary.ddlm_parser import DdlmDictionary
-from pycifparse.dictionary.schema import generate_schema
+from cifflow import check_fidelity, FidelityReport, FidelityMismatch
+from cifflow.cifmodel.builder import build as _build
+from cifflow.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.ddlm_parser import DdlmDictionary
+from cifflow.dictionary.schema import generate_schema
 
 
 _CIF_DIR = pathlib.Path(__file__).parents[1] / 'cif_files'
@@ -199,8 +199,8 @@ loop_
   alpha
 """
     # Build manually with errors
-    from pycifparse.cifmodel.model import CifFile, CifBlock
-    from pycifparse.types import ParseError
+    from cifflow.cifmodel.model import CifFile, CifBlock
+    from cifflow.types import ParseError
     # Inject a CifFile-like object can't carry errors; use a string with parse errors
     # instead — test that check_fidelity captures build() errors
     # A truly parse-erroring CIF: unterminated string
@@ -388,7 +388,7 @@ loop_
     assert not any(m.kind == 'schema_mismatch' for m in r.mismatches)
 
 
-def test_different_block_ids_same_data_passed():
+def test_different_cifflow_block_ids_same_data_passed():
     """Different block names but same data → passed."""
     cif_a = """\
 data_structure_1
@@ -423,11 +423,11 @@ def test_second_short_vs_itself():
 @pytest.mark.slow
 def test_round_trip_one_structure():
     """Parse → ingest → emit → parse → ingest; original and round-trip pass."""
-    from pycifparse import emit, ingest as _ingest
-    from pycifparse.dictionary import (
+    from cifflow import emit, ingest as _ingest
+    from cifflow.dictionary import (
         DictionaryLoader, directory_resolver, generate_schema, apply_schema,
     )
-    from pycifparse.dictionary.schema_apply import apply_fallback_schema
+    from cifflow.dictionary.schema_apply import apply_fallback_schema
 
     path = _CIF_DIR / 'one_structure.cif'
     dic_path = _DATA_DIR / 'cif_core.dic'
@@ -514,13 +514,13 @@ save_
 # ---------------------------------------------------------------------------
 
 def test_load_schema_dict_raises_type_error():
-    from pycifparse.fidelity.check import _load_schema
+    from cifflow.fidelity.check import _load_schema
     with pytest.raises(TypeError):
         _load_schema({})
 
 
 def test_load_schema_unrecognised_extension(tmp_path):
-    from pycifparse.fidelity.check import _load_schema
+    from cifflow.fidelity.check import _load_schema
     f = tmp_path / 'data.xyz'
     f.write_text('', encoding='utf-8')
     with pytest.raises(ValueError, match='unrecognised schema file extension'):
@@ -528,8 +528,8 @@ def test_load_schema_unrecognised_extension(tmp_path):
 
 
 def test_load_schema_dic_file(tmp_path):
-    from pycifparse.fidelity.check import _load_schema
-    from pycifparse.dictionary.schema import SchemaSpec
+    from cifflow.fidelity.check import _load_schema
+    from cifflow.dictionary.schema import SchemaSpec
     dic_file = tmp_path / 'mini.dic'
     dic_file.write_text(_MINI_DDL, encoding='utf-8')
     result = _load_schema(dic_file)
@@ -537,10 +537,10 @@ def test_load_schema_dic_file(tmp_path):
 
 
 def test_load_schema_json_file(tmp_path):
-    from pycifparse.fidelity.check import _load_schema
-    from pycifparse.dictionary.loader import DictionaryLoader
-    from pycifparse.dictionary.cache import save_dictionary
-    from pycifparse.dictionary.schema import SchemaSpec
+    from cifflow.fidelity.check import _load_schema
+    from cifflow.dictionary.loader import DictionaryLoader
+    from cifflow.dictionary.cache import save_dictionary
+    from cifflow.dictionary.schema import SchemaSpec
     d = DictionaryLoader().load(_MINI_DDL)
     json_file = tmp_path / 'mini.json'
     save_dictionary(d, json_file)
@@ -549,9 +549,9 @@ def test_load_schema_json_file(tmp_path):
 
 
 def test_load_source_file_path(tmp_path):
-    from pycifparse.fidelity.check import _load_source
-    from pycifparse.cifmodel.model import CifFile
-    from pycifparse.types import CifVersion
+    from cifflow.fidelity.check import _load_source
+    from cifflow.cifmodel.model import CifFile
+    from cifflow.types import CifVersion
     cif_file = tmp_path / 'x.cif'
     cif_file.write_text('data_block1\n_a.b 1\n', encoding='utf-8')
     cif, errors = _load_source(cif_file, CifVersion.CIF_2_0)
@@ -560,8 +560,8 @@ def test_load_source_file_path(tmp_path):
 
 
 def test_load_source_ciffile_passthrough():
-    from pycifparse.fidelity.check import _load_source
-    from pycifparse.types import CifVersion
+    from cifflow.fidelity.check import _load_source
+    from cifflow.types import CifVersion
     cif_obj, _ = _build('data_block1\n_a.b 1\n')
     result, errors = _load_source(cif_obj, CifVersion.CIF_2_0)
     assert result is cif_obj
@@ -577,8 +577,8 @@ def test_format_report_failed_branch():
 
 
 def test_format_report_schema_name_no_source_files():
-    from pycifparse.fidelity.check import _format_report
-    from pycifparse.dictionary.schema import SchemaSpec
+    from cifflow.fidelity.check import _format_report
+    from cifflow.dictionary.schema import SchemaSpec
     spec = SchemaSpec(tables={}, column_to_tag={}, dictionary_name='TEST', source_files=[])
     report = FidelityReport(passed=True, mismatches=[])
     text = _format_report(report, 'A', 'B', schema_spec=spec)
@@ -587,8 +587,8 @@ def test_format_report_schema_name_no_source_files():
 
 
 def test_format_report_schema_name_with_source_files():
-    from pycifparse.fidelity.check import _format_report
-    from pycifparse.dictionary.schema import SchemaSpec
+    from cifflow.fidelity.check import _format_report
+    from cifflow.dictionary.schema import SchemaSpec
     spec = SchemaSpec(tables={}, column_to_tag={}, dictionary_name='TEST',
                       source_files=['a.dic', 'b.dic'])
     report = FidelityReport(passed=True, mismatches=[])
@@ -597,8 +597,8 @@ def test_format_report_schema_name_with_source_files():
 
 
 def test_format_report_schema_name_unknown():
-    from pycifparse.fidelity.check import _format_report
-    from pycifparse.dictionary.schema import SchemaSpec
+    from cifflow.fidelity.check import _format_report
+    from cifflow.dictionary.schema import SchemaSpec
     spec = SchemaSpec(tables={}, column_to_tag={}, dictionary_name=None, source_files=[])
     report = FidelityReport(passed=True, mismatches=[])
     text = _format_report(report, 'A', 'B', schema_spec=spec)
@@ -606,7 +606,7 @@ def test_format_report_schema_name_unknown():
 
 
 def test_format_report_failed_branch_direct():
-    from pycifparse.fidelity.check import _format_report
+    from cifflow.fidelity.check import _format_report
     report = FidelityReport(
         passed=False,
         mismatches=[FidelityMismatch(kind='fallback_mismatch', source='both',
@@ -647,7 +647,7 @@ def test_check_fidelity_accepts_ciffile_source():
 
 
 def test_canonical_real_su_normalizes_trailing_zeros():
-    from pycifparse.fidelity.check import _canonical_real
+    from cifflow.fidelity.check import _canonical_real
     # SU=True → Decimal.normalize() strips trailing zeros
     assert _canonical_real('1.2300', True) == '1.23'
     # SU=False → format(d, 'f') preserves trailing zeros
@@ -655,13 +655,13 @@ def test_canonical_real_su_normalizes_trailing_zeros():
 
 
 def test_canonical_real_non_numeric_passthrough():
-    from pycifparse.fidelity.check import _canonical_real
+    from cifflow.fidelity.check import _canonical_real
     # Non-numeric value passes through unchanged
     assert _canonical_real('abc', False) == 'abc'
 
 
 def test_strip_su_suffix():
-    from pycifparse.fidelity.check import _strip_su_suffix
+    from cifflow.fidelity.check import _strip_su_suffix
     assert _strip_su_suffix('3.14(5)') == '3.14'
     assert _strip_su_suffix('3.14') == '3.14'
     assert _strip_su_suffix('1.2(10)') == '1.2'
@@ -672,8 +672,8 @@ def test_strip_su_suffix():
 # ---------------------------------------------------------------------------
 
 def test_table_present_operational_error():
-    from pycifparse.fidelity.check import _table_present
-    from pycifparse.dictionary.schema import TableDef, ColumnDef
+    from cifflow.fidelity.check import _table_present
+    from cifflow.dictionary.schema import TableDef, ColumnDef
     tdef = TableDef(
         name='test', definition_id='_test', category_class='Loop',
         columns=[ColumnDef(name='id', definition_id='_test.id', type_contents='Text',
@@ -688,8 +688,8 @@ def test_table_present_operational_error():
 
 
 def test_normalised_rows_operational_error():
-    from pycifparse.fidelity.check import _normalised_rows
-    from pycifparse.dictionary.schema import TableDef, ColumnDef
+    from cifflow.fidelity.check import _normalised_rows
+    from cifflow.dictionary.schema import TableDef, ColumnDef
     tdef = TableDef(
         name='test', definition_id='_test', category_class='Loop',
         columns=[ColumnDef(name='id', definition_id='_test.id', type_contents='Text',
@@ -704,14 +704,14 @@ def test_normalised_rows_operational_error():
 
 
 def test_row_diff_hint_no_candidates():
-    from pycifparse.fidelity.check import _row_diff_hint
+    from cifflow.fidelity.check import _row_diff_hint
     row = frozenset({('a', '1'), ('b', '2')})
     hint = _row_diff_hint(row, [])
     assert hint.startswith(' [')
 
 
 def test_row_diff_hint_no_candidates_empty_row():
-    from pycifparse.fidelity.check import _row_diff_hint
+    from cifflow.fidelity.check import _row_diff_hint
     # Row has only frozenset values → pairs is empty → returns ''
     row = frozenset({('fp', frozenset())})
     hint = _row_diff_hint(row, [])
@@ -720,7 +720,7 @@ def test_row_diff_hint_no_candidates_empty_row():
 
 def test_row_diff_hint_va_none_branch():
     """va is None (row missing key that best has) — line 474."""
-    from pycifparse.fidelity.check import _row_diff_hint
+    from cifflow.fidelity.check import _row_diff_hint
     row = frozenset({('x', '1')})
     best = frozenset({('x', '1'), ('z', '3')})  # z only in best
     hint = _row_diff_hint(row, [best])
@@ -729,7 +729,7 @@ def test_row_diff_hint_va_none_branch():
 
 def test_row_diff_hint_vb_none_branch():
     """vb is None (row has key that best lacks) — line 476."""
-    from pycifparse.fidelity.check import _row_diff_hint
+    from cifflow.fidelity.check import _row_diff_hint
     row = frozenset({('x', '1'), ('extra', '5')})
     best = frozenset({('x', '1')})  # extra not in best
     hint = _row_diff_hint(row, [best])
@@ -738,7 +738,7 @@ def test_row_diff_hint_vb_none_branch():
 
 def test_row_diff_hint_frozenset_skip():
     """frozenset value columns are skipped — line 471."""
-    from pycifparse.fidelity.check import _row_diff_hint
+    from cifflow.fidelity.check import _row_diff_hint
     row = frozenset({('fp', frozenset({('a', '1')})), ('x', '1')})
     best = frozenset({('fp', frozenset({('b', '2')})), ('x', '2')})
     hint = _row_diff_hint(row, [best])
@@ -748,7 +748,7 @@ def test_row_diff_hint_frozenset_skip():
 
 def test_row_diff_hint_no_diffs_returns_empty():
     """All fields match → return '' — line 481."""
-    from pycifparse.fidelity.check import _row_diff_hint
+    from cifflow.fidelity.check import _row_diff_hint
     row = frozenset({('x', '1'), ('y', '2')})
     best = frozenset({('x', '1'), ('y', '2')})
     hint = _row_diff_hint(row, [best])
@@ -756,7 +756,7 @@ def test_row_diff_hint_no_diffs_returns_empty():
 
 
 def test_row_diff_hint_many_diffs():
-    from pycifparse.fidelity.check import _row_diff_hint
+    from cifflow.fidelity.check import _row_diff_hint
     row = frozenset({('a', '1'), ('b', '2'), ('c', '3'), ('d', '4')})
     best = frozenset({('a', 'X'), ('b', 'X'), ('c', 'X'), ('d', 'X')})
     hint = _row_diff_hint(row, [best])
@@ -764,9 +764,9 @@ def test_row_diff_hint_many_diffs():
 
 
 def test_compare_schema_mismatch_tag_in_fallback_a_structured_b():
-    from pycifparse.fidelity.check import _compare_schema_mismatch
-    from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
-    from pycifparse.ingestion.ingest import ingest
+    from cifflow.fidelity.check import _compare_schema_mismatch
+    from cifflow.dictionary.schema_apply import apply_schema, apply_fallback_schema
+    from cifflow.ingestion.ingest import ingest
 
     schema = _simple_set_schema()
     cif = "data_b\n_cell.id 1\n_cell.a 5.0\n"
@@ -793,9 +793,9 @@ def test_compare_schema_mismatch_tag_in_fallback_a_structured_b():
 
 def test_compare_schema_mismatch_reverse_direction():
     """Tag in fallback in B but structured in A — exercises the second loop (line 688)."""
-    from pycifparse.fidelity.check import _compare_schema_mismatch
-    from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
-    from pycifparse.ingestion.ingest import ingest
+    from cifflow.fidelity.check import _compare_schema_mismatch
+    from cifflow.dictionary.schema_apply import apply_schema, apply_fallback_schema
+    from cifflow.ingestion.ingest import ingest
 
     schema = _simple_set_schema()
     cif = "data_b\n_cell.id 1\n_cell.a 5.0\n"
@@ -822,7 +822,7 @@ def test_compare_schema_mismatch_reverse_direction():
 
 def test_compare_fallback_no_table():
     """_compare_fallback returns [] when _cif_fallback table does not exist."""
-    from pycifparse.fidelity.check import _compare_fallback
+    from cifflow.fidelity.check import _compare_fallback
     conn_a = sqlite3.connect(':memory:')
     conn_b = sqlite3.connect(':memory:')
     result = _compare_fallback(conn_a, conn_b)
@@ -836,9 +836,9 @@ def test_compare_fallback_no_table():
 # ---------------------------------------------------------------------------
 
 def test_ingest_error_in_check_fidelity():
-    from pycifparse.ingestion.ingest import IngestionError
+    from cifflow.ingestion.ingest import IngestionError
     cif = "data_b\n_a.b 1\n"
-    with patch('pycifparse.fidelity.check.ingest') as mock_ingest:
+    with patch('cifflow.fidelity.check.ingest') as mock_ingest:
         mock_ingest.side_effect = IngestionError(['broken ingest'])
         r = check_fidelity(cif, cif, schema=None)
     assert not r.passed
@@ -849,7 +849,7 @@ def test_ingest_error_in_check_fidelity():
 def test_generic_exception_in_check_fidelity():
     """ValueError in ingest for source_a exercises the except (ValueError, Exception) path."""
     cif = "data_b\n_a.b 1\n"
-    with patch('pycifparse.fidelity.check.ingest') as mock_ingest:
+    with patch('cifflow.fidelity.check.ingest') as mock_ingest:
         mock_ingest.side_effect = ValueError('unexpected failure')
         r = check_fidelity(cif, cif, schema=None)
     assert not r.passed
@@ -875,8 +875,8 @@ def test_placeholder_value_in_structured_table_is_skipped():
 
 def test_normalised_rows_synthetic_set_skipped():
     """Rows in synthetic_set are excluded from normalised output (line 442)."""
-    from pycifparse.fidelity.check import _normalised_rows
-    from pycifparse.dictionary.schema import TableDef, ColumnDef
+    from cifflow.fidelity.check import _normalised_rows
+    from cifflow.dictionary.schema import TableDef, ColumnDef
 
     tdef = TableDef(
         name='atom', definition_id='_atom', category_class='Loop',
@@ -887,7 +887,7 @@ def test_normalised_rows_synthetic_set_skipped():
             ColumnDef(name='x', definition_id='_atom.x', type_contents='Real',
                       nullable=True, is_primary_key=False, is_synthetic=False,
                       linked_item_id=None),
-            ColumnDef(name='_row_id', definition_id='_row_id', type_contents='Text',
+            ColumnDef(name='_cifflow_row_id', definition_id='_cifflow_row_id', type_contents='Text',
                       nullable=True, is_primary_key=False, is_synthetic=True,
                       linked_item_id=None),
         ],
@@ -896,7 +896,7 @@ def test_normalised_rows_synthetic_set_skipped():
 
     conn = sqlite3.connect(':memory:')
     conn.row_factory = sqlite3.Row
-    conn.execute('CREATE TABLE "atom" (id TEXT, x REAL, _row_id TEXT)')
+    conn.execute('CREATE TABLE "atom" (id TEXT, x REAL, _cifflow_row_id TEXT)')
     conn.execute("INSERT INTO atom VALUES ('A1', 1.5, 'ROW1')")
     conn.commit()
 
@@ -917,7 +917,7 @@ def test_normalised_rows_synthetic_set_skipped():
 
 def test_load_synthetic_set_with_data():
     """_load_synthetic_set returns set of tuples when _cif_synthetic exists and has rows."""
-    from pycifparse.fidelity.check import _load_synthetic_set
+    from cifflow.fidelity.check import _load_synthetic_set
     conn = sqlite3.connect(':memory:')
     conn.execute(
         'CREATE TABLE _cif_synthetic (table_name TEXT, row_id TEXT, column_name TEXT)'
@@ -935,7 +935,7 @@ def test_load_synthetic_set_with_data():
 
 def test_compare_schema_mismatch_no_fallback_table():
     """_fallback_tags returns [] when _cif_fallback does not exist (lines 672-673)."""
-    from pycifparse.fidelity.check import _compare_schema_mismatch
+    from cifflow.fidelity.check import _compare_schema_mismatch
     schema = _simple_set_schema()
     conn_a = sqlite3.connect(':memory:')
     conn_b = sqlite3.connect(':memory:')
@@ -948,8 +948,8 @@ def test_compare_schema_mismatch_no_fallback_table():
 
 def test_compare_schema_mismatch_structured_table_missing_in_b():
     """_in_structured swallows OperationalError when table missing in conn_b (lines 661-662)."""
-    from pycifparse.fidelity.check import _compare_schema_mismatch
-    from pycifparse.dictionary.schema_apply import apply_fallback_schema
+    from cifflow.fidelity.check import _compare_schema_mismatch
+    from cifflow.dictionary.schema_apply import apply_fallback_schema
 
     schema = _simple_set_schema()
 
@@ -958,7 +958,7 @@ def test_compare_schema_mismatch_structured_table_missing_in_b():
     conn_a.row_factory = sqlite3.Row
     apply_fallback_schema(conn_a)
     conn_a.execute(
-        "INSERT INTO _cif_fallback (_block_id, _row_id, tag, value, value_type) "
+        "INSERT INTO _cif_fallback (_cifflow_block_id, _cifflow_row_id, tag, value, value_type) "
         "VALUES ('B', 1, '_cell.a', '5.0', 'string')"
     )
     conn_a.commit()
@@ -977,9 +977,9 @@ def test_compare_schema_mismatch_structured_table_missing_in_b():
 
 def test_compare_schema_mismatch_in_structured_multi_table_mapping():
     """_in_structured loops over multiple (table, col) pairs for same defid (line 659->654)."""
-    from pycifparse.fidelity.check import _compare_schema_mismatch
-    from pycifparse.dictionary.schema import SchemaSpec, TableDef, ColumnDef
-    from pycifparse.dictionary.schema_apply import apply_fallback_schema
+    from cifflow.fidelity.check import _compare_schema_mismatch
+    from cifflow.dictionary.schema import SchemaSpec, TableDef, ColumnDef
+    from cifflow.dictionary.schema_apply import apply_fallback_schema
 
     # Build an artificial schema where _item.val maps to two tables
     col_id = ColumnDef(name='id', definition_id='_item.id', type_contents='Text',
@@ -1008,7 +1008,7 @@ def test_compare_schema_mismatch_in_structured_multi_table_mapping():
     conn_a.row_factory = sqlite3.Row
     apply_fallback_schema(conn_a)
     conn_a.execute(
-        "INSERT INTO _cif_fallback (_block_id, _row_id, tag, value, value_type) "
+        "INSERT INTO _cif_fallback (_cifflow_block_id, _cifflow_row_id, tag, value, value_type) "
         "VALUES ('B', 1, '_item.val', 'foo', 'string')"
     )
     conn_a.commit()

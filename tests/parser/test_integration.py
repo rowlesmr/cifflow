@@ -12,7 +12,7 @@ import pathlib
 
 import pytest
 
-from pycifparse.types import ValueType
+from cifflow.types import ValueType
 from tests.parser.test_parser import Event, RecordingHandler, parse
 
 CIF_DIR   = pathlib.Path(__file__).parent.parent / 'cif_files'

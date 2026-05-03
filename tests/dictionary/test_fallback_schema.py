@@ -6,8 +6,8 @@ import sqlite3
 
 import pytest
 
-from pycifparse.dictionary.schema import emit_fallback_create_statements
-from pycifparse.dictionary.schema_apply import apply_fallback_schema
+from cifflow.dictionary.schema import emit_fallback_create_statements
+from cifflow.dictionary.schema_apply import apply_fallback_schema
 
 
 # ---------------------------------------------------------------------------
@@ -29,10 +29,10 @@ class TestEmitFallbackCreateStatements:
         assert stmts[1].startswith('CREATE INDEX IF NOT EXISTS')
         assert 'idx_cif_fallback_tag_block' in stmts[1]
 
-    def test_index_covers_tag_and_block_id(self):
+    def test_index_covers_tag_and_cifflow_block_id(self):
         stmts = emit_fallback_create_statements()
         assert '"tag"' in stmts[1]
-        assert '"_block_id"' in stmts[1]
+        assert '"_cifflow_block_id"' in stmts[1]
 
     def test_third_is_membership_table(self):
         stmts = emit_fallback_create_statements()
@@ -84,16 +84,16 @@ class TestFallbackTableStructure:
 
     def test_expected_columns_present(self, conn):
         pragma = {row[1]: row for row in conn.execute('PRAGMA table_info("_cif_fallback")')}
-        for col in ('_block_id', '_row_id', 'tag', 'value', 'value_type', 'loop_id', 'col_index', 'ref_table'):
+        for col in ('_cifflow_block_id', '_cifflow_row_id', 'tag', 'value', 'value_type', 'loop_id', 'col_index', 'ref_table'):
             assert col in pragma, f"column {col!r} missing from _cif_fallback"
 
-    def test_block_id_not_null(self, conn):
+    def test_cifflow_block_id_not_null(self, conn):
         pragma = {row[1]: row for row in conn.execute('PRAGMA table_info("_cif_fallback")')}
-        assert pragma['_block_id'][3] == 1  # notnull
+        assert pragma['_cifflow_block_id'][3] == 1  # notnull
 
-    def test_row_id_not_null(self, conn):
+    def test_cifflow_row_id_not_null(self, conn):
         pragma = {row[1]: row for row in conn.execute('PRAGMA table_info("_cif_fallback")')}
-        assert pragma['_row_id'][3] == 1  # notnull
+        assert pragma['_cifflow_row_id'][3] == 1  # notnull
 
     def test_tag_not_null(self, conn):
         pragma = {row[1]: row for row in conn.execute('PRAGMA table_info("_cif_fallback")')}
@@ -119,13 +119,13 @@ class TestFallbackTableStructure:
         pragma = {row[1]: row for row in conn.execute('PRAGMA table_info("_cif_fallback")')}
         assert pragma['ref_table'][3] == 0  # nullable
 
-    def test_primary_key_is_block_id_row_id_tag(self, conn):
+    def test_primary_key_is_cifflow_block_id_cifflow_row_id_tag(self, conn):
         pk_cols = {
             row[1]
             for row in conn.execute('PRAGMA table_info("_cif_fallback")')
             if row[5] > 0  # pk flag
         }
-        assert pk_cols == {'_block_id', '_row_id', 'tag'}
+        assert pk_cols == {'_cifflow_block_id', '_cifflow_row_id', 'tag'}
 
 
 class TestBlockDatasetMembershipTableStructure:
@@ -147,7 +147,7 @@ class TestBlockDatasetMembershipTableStructure:
             row[1]: row
             for row in conn.execute('PRAGMA table_info("_block_dataset_membership")')
         }
-        for col in ('_block_id', '_audit_dataset_id', 'id_regime'):
+        for col in ('_cifflow_block_id', '_audit_dataset_id', 'id_regime'):
             assert col in pragma, f"column {col!r} missing from _block_dataset_membership"
 
     def test_all_columns_not_null(self, conn):
@@ -155,16 +155,16 @@ class TestBlockDatasetMembershipTableStructure:
             row[1]: row
             for row in conn.execute('PRAGMA table_info("_block_dataset_membership")')
         }
-        for col in ('_block_id', '_audit_dataset_id', 'id_regime'):
+        for col in ('_cifflow_block_id', '_audit_dataset_id', 'id_regime'):
             assert pragma[col][3] == 1, f"column {col!r} should be NOT NULL"
 
-    def test_primary_key_is_block_id_and_dataset_id(self, conn):
+    def test_primary_key_is_cifflow_block_id_and_dataset_id(self, conn):
         pk_cols = {
             row[1]
             for row in conn.execute('PRAGMA table_info("_block_dataset_membership")')
             if row[5] > 0
         }
-        assert pk_cols == {'_block_id', '_audit_dataset_id'}
+        assert pk_cols == {'_cifflow_block_id', '_audit_dataset_id'}
 
 
 class TestValidationResultTableStructure:
@@ -203,7 +203,7 @@ class TestValidationResultTableStructure:
         }
         assert pragma['severity'][3] == 1
 
-    def test_block_id_nullable(self, conn):
+    def test_cifflow_block_id_nullable(self, conn):
         pragma = {
             row[1]: row
             for row in conn.execute('PRAGMA table_info("_validation_result")')
@@ -248,7 +248,7 @@ class TestApplyFallbackSchemaBehaviour:
         conn = sqlite3.connect(':memory:')
         apply_fallback_schema(conn)
         conn.execute(
-            'INSERT INTO "_cif_fallback" (_block_id, _row_id, tag, value, value_type) '
+            'INSERT INTO "_cif_fallback" (_cifflow_block_id, _cifflow_row_id, tag, value, value_type) '
             "VALUES ('blk1', 1, '_some.tag', 'hello', 'string')"
         )
         conn.commit()
@@ -260,7 +260,7 @@ class TestApplyFallbackSchemaBehaviour:
         apply_fallback_schema(conn)
         conn.execute(
             'INSERT INTO "_cif_fallback" '
-            '(_block_id, _row_id, tag, value, value_type, loop_id, col_index) '
+            '(_cifflow_block_id, _cifflow_row_id, tag, value, value_type, loop_id, col_index) '
             "VALUES ('blk1', 1, '_some.tag', 'hello', 'string', NULL, NULL)"
         )
         conn.commit()
@@ -272,7 +272,7 @@ class TestApplyFallbackSchemaBehaviour:
         apply_fallback_schema(conn)
         conn.execute(
             'INSERT INTO "_cif_fallback" '
-            '(_block_id, _row_id, tag, value, value_type, loop_id, col_index, ref_table) '
+            '(_cifflow_block_id, _cifflow_row_id, tag, value, value_type, loop_id, col_index, ref_table) '
             "VALUES ('blk1', 1, '_some.tag', 'hello', 'string', NULL, NULL, NULL)"
         )
         conn.commit()
@@ -284,7 +284,7 @@ class TestApplyFallbackSchemaBehaviour:
         apply_fallback_schema(conn)
         conn.execute(
             'INSERT INTO "_cif_fallback" '
-            '(_block_id, _row_id, tag, value, value_type, loop_id, col_index, ref_table) '
+            '(_cifflow_block_id, _cifflow_row_id, tag, value, value_type, loop_id, col_index, ref_table) '
             "VALUES ('blk1', 1, '_some.tag', 'hello', 'string', 0, 0, 'pd_data')"
         )
         conn.commit()
@@ -295,11 +295,11 @@ class TestApplyFallbackSchemaBehaviour:
         conn = sqlite3.connect(':memory:')
         apply_fallback_schema(conn)
         conn.execute(
-            'INSERT INTO "_cif_fallback" (_block_id, _row_id, tag, value, value_type) '
+            'INSERT INTO "_cif_fallback" (_cifflow_block_id, _cifflow_row_id, tag, value, value_type) '
             "VALUES ('blk1', 1, '_some.tag', 'a', 'string')"
         )
         conn.execute(
-            'INSERT INTO "_cif_fallback" (_block_id, _row_id, tag, value, value_type) '
+            'INSERT INTO "_cif_fallback" (_cifflow_block_id, _cifflow_row_id, tag, value, value_type) '
             "VALUES ('blk2', 1, '_some.tag', 'b', 'string')"
         )
         conn.commit()
@@ -310,11 +310,11 @@ class TestApplyFallbackSchemaBehaviour:
         conn = sqlite3.connect(':memory:')
         apply_fallback_schema(conn)
         conn.execute(
-            'INSERT INTO "_cif_fallback" (_block_id, _row_id, tag, value, value_type) '
+            'INSERT INTO "_cif_fallback" (_cifflow_block_id, _cifflow_row_id, tag, value, value_type) '
             "VALUES ('blk1', 1, '_some.tag', 'hello', 'string')"
         )
         conn.execute(
-            'INSERT INTO "_block_dataset_membership" (_block_id, _audit_dataset_id, id_regime) '
+            'INSERT INTO "_block_dataset_membership" (_cifflow_block_id, _audit_dataset_id, id_regime) '
             "VALUES ('blk1', 'ds1', 'dataset')"
         )
         conn.commit()
@@ -326,7 +326,7 @@ class TestApplyFallbackSchemaBehaviour:
         conn = sqlite3.connect(':memory:')
         apply_fallback_schema(conn)
         conn.execute(
-            'INSERT INTO "_cif_fallback" (_block_id, _row_id, tag, value, value_type) '
+            'INSERT INTO "_cif_fallback" (_cifflow_block_id, _cifflow_row_id, tag, value, value_type) '
             "VALUES ('blk1', 1, '_some.tag', 'hello', 'string')"
         )
         conn.commit()
@@ -351,10 +351,10 @@ class TestApplyFallbackSchemaBehaviour:
         conn.close()
 
     def test_coexists_with_structured_schema(self):
-        from pycifparse.dictionary.ddlm_item import DdlmItem
-        from pycifparse.dictionary.ddlm_parser import DdlmDictionary
-        from pycifparse.dictionary.schema import generate_schema
-        from pycifparse.dictionary.schema_apply import apply_schema
+        from cifflow.dictionary.ddlm_item import DdlmItem
+        from cifflow.dictionary.ddlm_parser import DdlmDictionary
+        from cifflow.dictionary.schema import generate_schema
+        from cifflow.dictionary.schema_apply import apply_schema
 
         cat = DdlmItem(
             definition_id='atom_site', scope='Category', definition_class='Loop',
