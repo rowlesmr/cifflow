@@ -229,7 +229,7 @@ Represents one `save_name … save_` frame.
 
 ```python
 class CifSaveFrame:
-    name: str          # frame name as it appeared in the file
+    name: str          # frame name, stored in Unicode canonical caseless form
     _id:  int          # internal unique identifier (assigned by parent CifBlock)
 ```
 
@@ -261,7 +261,7 @@ access.
 
 ```python
 class CifBlock(CifSaveFrame):
-    name: str          # block name as it appeared in the file
+    name: str          # block name, stored in Unicode canonical caseless form
     _id:  int          # internal unique identifier (assigned by parent CifFile)
 ```
 
@@ -933,6 +933,7 @@ class TraceEvent:
 | Duplicate names preserved | Duplicate block/frame names stored with distinct `_id`; first returned by `[]`, all by `get_all()` |
 | No crash on malformed input | Parser recovers and continues; errors reported via callback |
 | ValueType provenance | `PLACEHOLDER` is never rewritten as a quoted type |
+| Canonical caseless names | Block names, save frame names, and tag names are stored and queried using Unicode canonical caseless form: `NFC(casefold(NFD(x)))`.  `cif["ABC"]` finds a block stored as `"abc"`. |
 
 ---
 
@@ -1032,7 +1033,7 @@ One save frame from a DDLm dictionary.  Produced by `DictionaryLoader.load()`.
 ```python
 @dataclass
 class DdlmDictionary:
-    name:                    str                   # data_ block name
+    name:                    str                   # data_ block name, stored in Unicode canonical caseless form
     title:                   str | None            # _dictionary.title
     version:                 str | None            # _dictionary.version
     categories:              dict[str, DdlmItem]   # definition_id → item
@@ -1116,7 +1117,7 @@ resolver = directory_resolver('data/dictionaries')
 source = open('data/dictionaries/cif_core.dic').read()
 d = DictionaryLoader(resolver=resolver).load(source)
 
-print(d.name)          # 'CIF_CORE'
+print(d.name)          # 'cif_core'
 print(len(d.items))    # number of defined items
 ```
 
