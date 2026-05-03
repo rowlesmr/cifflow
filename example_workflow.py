@@ -83,6 +83,8 @@ from pycifparse import (
     OutputPlan,
     BlockSpec,
     validate_database,
+    validate,
+    ValidationReport,
     DbValidationResult,
 )
 from pycifparse.fidelity import check_fidelity
@@ -252,6 +254,7 @@ for block_name in cif.blocks:
 
 print_time("Finished cif parse", start_cif_parse)
 
+
 # ---------------------------------------------------------------------------
 # Step 5 — Ingest into output.duckdb
 # ---------------------------------------------------------------------------
@@ -295,6 +298,7 @@ else:
 print(f'  Database saved to: {DB_FILE}')
 
 print_time("Finished ingest", start_ingest)
+
 
 # ---------------------------------------------------------------------------
 # Step 6 — Validate
@@ -351,6 +355,7 @@ if not tables_with_rows:
 print(f'  Fallback tier (_cif_fallback): {fallback_count} row(s)')
 
 print_time("Finished validate", start_validate)
+
 
 # ---------------------------------------------------------------------------
 # Step 7 — convert_database: copy VARCHAR-storage DB to typed-column DB
