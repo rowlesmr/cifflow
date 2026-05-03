@@ -40,6 +40,10 @@ jobs:
           command: develop
           args: --extras dev
 
-      - run: cargo test --manifest-path cifflow_core/Cargo.toml
+      - name: Run Rust tests
+        shell: bash
+        env:
+          RUSTFLAGS: ${{ runner.os == 'macOS' && '-C link-arg=-undefined -C link-arg=dynamic_lookup' || '' }}
+        run: cargo test --manifest-path cifflow_core/Cargo.toml
 
       - run: python -m pytest
