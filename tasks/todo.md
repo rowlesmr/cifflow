@@ -111,6 +111,55 @@ Spec: `prompts/unified_validate.md`
 
 ---
 
+### Performance optimisation — Phase 1.3 parse (suggestions, not yet implemented)
+
+Profiling after Phase 1.1 (regex tokenizer) + Phase 1.2 (`_id_regime` index) + Phase 1.3 parse
+(cursor line/col, TAG fast path, BW inline) shows parse at ~19.2s. Tokenizer is now near its
+Python ceiling. Remaining parse time is split:
+
+| Hotspot | Cumtime | Notes |
+|---------|---------|-------|
+| `tokenize` | 11.0s | regex engine + cursor + `_match_to_token` |
+| `_match_to_token` | 3.8s | 1.4M calls; `m.group(0)`, `m.lastgroup`, token construction |
+| `_find_multiline_spans` | 0.6s | one-time; hard to improve |
+| `add_value` (builder) | 4.9s | 1.4M calls |
+| `_dispatch_value` (builder) | 2.6s | 1.4M calls |
+| `CifScalar.__new__` | 1.2s | 1.4M str-subclass constructions |
+
+#### Cursor approach result (implemented, modest gain)
+
+Replacing `_line_col` + bisect with a running `(csr_line, csr_nl)` cursor saves bisect (0.4s)
+but adds `str.count('\n')` calls for every token gap and every token body (~0.44s) plus Python
+bytecode overhead. Net improvement in tokenize: ~0.5s. The C-level `str.count` on short ranges
+is fast but not free; the function-call overhead per token dominates.
+
+**Possible refinement**: pass `kind = m.lastgroup` from the outer loop into `_match_to_token`
+(avoiding the duplicate attribute access inside the function), and skip the within-token
+`count('\n', start, end)` for the ~97% of tokens that cannot contain newlines (TAG, BW, DQ, SQ,
+CMT, DEL, COL). Only TDQ/TSQ/TDQ_UNT/TSQ_UNT can span lines. Estimated saving: ~0.2s.
+
+#### Builder chain (higher risk, higher reward)
+
+The 4.9s `add_value` → 2.6s `_dispatch_value` → 1.2s `CifScalar.__new__` chain is the next
+largest parse bottleneck. Options, in ascending risk order:
+
+1. **Avoid `CifScalar` at build time** — store `(raw_str, ValueType)` tuples in the model
+   internally; wrap to `CifScalar` lazily in `__getitem__`. Saves 1.4M str-subclass
+   constructions (~1.2s). Requires changing the model's internal storage but not its public
+   API if `__getitem__` still returns `CifScalar`. Medium risk.
+
+2. **Reduce `_dispatch_value` branching** — profile which ValueType branches are taken most
+   often (likely `STRING` and `PLACEHOLDER`) and reorder the `if/elif` chain to put the
+   common cases first. Low risk, small gain (~0.2s).
+
+3. **Batch `add_value` calls** — instead of calling the builder event handler per-token,
+   accumulate values in the parser and flush in batches. Significant refactor of the
+   parser/builder interface. High risk.
+
+Recommendation: implement option 1 after ingest optimisations, re-profile before committing.
+
+---
+
 ### Remaining items
 
 #### Expand tests to cover file-based loading

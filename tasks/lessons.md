@@ -1,29 +1,5 @@
 # cifflow — Lessons Learned
 
-## Lesson 102 — `_id_regime` quadratic scan: maintain a per-block index during merge (2026-04-23)
-
-**Context:** `_id_regime` iterated over all rows in `merged_rows` for every block, filtering by `_cifflow_block_id`. With 156 blocks and ~1.98 M total rows, this is O(blocks × rows) — 12.9 s cumulative in profiling.
-
-**Fix:** Added `_block_pk_values: dict[str, list[str]]` to `_Ingester`, populated inside `_merge_into` on new-row insertion (non-synthetic PK columns only). Threaded through `_apply_fk` so stub rows are also indexed. The set-buffer inline merge path required a separate update since it bypasses `_merge_into`. `_id_regime` now does a single `dict.get` lookup.
-
-**Rule:** Any O(total_rows) scan inside a per-block loop is quadratic. Use a per-block accumulator built incrementally during the merge pass instead.
-
----
-
-## Lesson 101 — Regex tokenizer: three correctness pitfalls (2026-04-22)
-
-**Context:** Replacing the generator-based lexer with a `re.finditer` tokenizer introduced three non-obvious bugs.
-
-1. **Unterminated triple-quoted strings.** Lazy `[\s\S]*?` fails silently if no closing `'''`/`"""` exists — the regex engine then tries shorter patterns and misidentifies the content (e.g. `''` matches as an empty single-quoted string). Fix: add greedy `TDQ_UNT`/`TSQ_UNT` fallback patterns (`"{3}[\s\S]*`) immediately after the terminated counterparts so they swallow to EOF.
-
-2. **`\n;` inside triple-quoted strings.** A plain multiline pre-scan regex fires on `\n;` even when it's inside `'''...'''`, which is legal in CIF 2.0. Fix: the pre-scan must also find triple-quote openers and track a `skip_until` offset; any multiline match before `skip_until` is ignored.
-
-3. **`:` inside bare words.** Making `:` a standalone delimiter token splits values like `16:00` into three tokens. In the original lexer, `:` is checked at the top of the main loop but `_read_bare_word` does not stop at it, so bare words consume `:` greedily. Fix: use a lookbehind `(?<=[\"'\]\}]):` — `:` is only structural when the immediately preceding matched character is a structural close (quote or bracket).
-
-**Rule:** Before writing a regex tokenizer, audit the reference implementation for every character that has context-dependent meaning. Unterminated-string fallbacks and multiline-in-triple-quoted interactions are the two most common pitfalls.
-
----
-
 ## Lesson 100 — ALL_BLOCKS `dataset_id` must come from `_block_dataset_membership`, not a single upfront UUID (2026-04-21)
 
 **Context:** ALL_BLOCKS mode injected one `uuid.uuid4()` for all emitted blocks. The fidelity checker then found `_audit_dataset.id` values differing between the original file and re-emitted file.

@@ -10,12 +10,12 @@ result and a correct line offset so that reported positions are absolute.
 """
 
 from dataclasses import dataclass
-from typing import Iterator, List, Optional
+from typing import List, Optional
 
 from cifflow.types import (
     CifVersion, ValueType, TokenType, ParseError, CifParserEvents,
 )
-from cifflow.lexer.lexer import Lexer
+from cifflow.lexer._tokenize_re import tokenize as _tokenize
 from cifflow.lexer.tokens import Token
 from cifflow.parser.version import detect_version
 
@@ -45,35 +45,6 @@ class _FakeToken:
     line: int
     column: int
     value: str = 'EOF'
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Peekable token stream wrapper
-# ─────────────────────────────────────────────────────────────────────────────
-
-class _PeekableTokens:
-    def __init__(self, gen: Iterator[Token]) -> None:
-        self._gen = gen
-        self._buf: List[Token] = []
-
-    def peek(self) -> Optional[Token]:
-        if not self._buf:
-            try:
-                self._buf.append(next(self._gen))
-            except StopIteration:
-                return None
-        return self._buf[0]
-
-    def next(self) -> Optional[Token]:
-        if self._buf:
-            return self._buf.pop(0)
-        try:
-            return next(self._gen)
-        except StopIteration:
-            return None
-
-    def at_end(self) -> bool:
-        return self.peek() is None
 
 
 # ValueType values that are valid for table keys (quoted strings only).
@@ -117,8 +88,8 @@ class CifParser:
                 recovery_action=ve.recovery_action,
             ))
 
-        lexer = Lexer(remaining, version, line_offset)
-        self._stream = _PeekableTokens(lexer.tokens())
+        self._tokens: List[Token] = _tokenize(remaining, version, line_offset)
+        self._pos: int = 0
         self._version = version
 
         self._in_data_block: bool = False
@@ -133,10 +104,9 @@ class CifParser:
         self._last_line: int = 1
         self._last_col: int = 1
 
-        while not self._stream.at_end() and not self._halted:
-            tok = self._stream.next()
-            if tok is None:
-                break
+        while self._pos < len(self._tokens) and not self._halted:
+            tok = self._tokens[self._pos]
+            self._pos += 1
             self._flush_errors(tok)
             self._last_line, self._last_col = tok.line, tok.column
             self._dispatch(tok)
@@ -367,11 +337,11 @@ class CifParser:
     def _start_loop(self, tok: Token) -> None:
         """Collect loop tag names, then emit on_loop_start."""
         tags: List[str] = []
-        while not self._stream.at_end():
-            nxt = self._stream.peek()
-            if nxt is None or nxt.token_type != TokenType.TAG:
+        while self._pos < len(self._tokens):
+            nxt = self._tokens[self._pos]
+            if nxt.token_type != TokenType.TAG:
                 break
-            nxt = self._stream.next()
+            self._pos += 1
             self._flush_errors(nxt)
             tags.append(nxt.value)
 
