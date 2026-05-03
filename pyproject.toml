@@ -4,8 +4,9 @@ build-backend = "maturin"
 
 [project]
 name = "cifflow"
-version = "0.1.1"
-description = "A streaming, event-driven parser for Crystallographic Information Files (CIF)"
+version = "0.1.2"
+description = "Parse, store, validate, and emit Crystallographic Information Files (CIF)"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "duckdb",
@@ -46,7 +47,7 @@ skip_covered = false
 directory = "tests/test_coverage"
 
 [tool.bumpversion]
-current_version = "0.1.1"
+current_version = "0.1.2"
 commit = true
 tag = true
 tag_name = "v{new_version}"
@@ -62,3 +63,8 @@ replace = 'version = "{new_version}"'
 filename = "cifflow_core/Cargo.toml"
 search = 'version = "{current_version}"'
 replace = 'version = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "v{current_version}"
+replace = "v{new_version}"

@@ -1,8 +1,8 @@
 # cifflow
 
-A Python library for parsing, storing, and outputting Crystallographic Information Framework (CIF) files.
+Parse, store, validate, and emit Crystallographic Information Files (CIF).
 
-**Python ≥ 3.10 · Apache 2.0 · v0.1.0 · pre-release (not yet on PyPI)**
+**Python ≥ 3.10 · Apache 2.0 · v0.1.2 · pre-release (not yet on PyPI)**
 
 ---
 

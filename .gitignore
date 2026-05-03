@@ -154,6 +154,7 @@ cython_debug/
 prompts
 
 *.zip
+*.bat
 .claude/
 scripts/
 tests/test_coverage/
