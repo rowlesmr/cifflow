@@ -68,7 +68,10 @@
       "Bash(python3 -c \"import duckdb; db = duckdb.connect\\(':memory:'\\); print\\(db.execute\\('SELECT gen_random_uuid\\(\\)'\\).fetchone\\(\\)\\)\")",
       "Bash(python3 -c \"import duckdb; db = duckdb.connect\\(':memory:'\\); print\\(db.execute\\('SELECT uuid\\(\\)'\\).fetchone\\(\\)\\)\")",
       "Bash(python -c \"import duckdb; print\\(duckdb.__version__\\)\")",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(cargo test *)",
+      "Bash(.venv\\\\Scripts\\\\python -m pytest tests/ -q --tb=no)",
+      "Bash(python -m maturin develop)"
     ]
   }
 }
