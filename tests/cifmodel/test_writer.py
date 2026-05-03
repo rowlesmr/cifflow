@@ -3,10 +3,10 @@
 import pytest
 import warnings
 
-from pycifparse.types import CifVersion, ValueType
-from pycifparse.cifmodel.model import CifFile, CifBlock, CifSaveFrame
-from pycifparse.cifmodel.scalar import CifScalar
-from pycifparse.cifmodel.writer import CifWriter, BlockWriter, SaveFrameWriter
+from cifflow.types import CifVersion, ValueType
+from cifflow.cifmodel.model import CifFile, CifBlock, CifSaveFrame
+from cifflow.cifmodel.scalar import CifScalar
+from cifflow.cifmodel.writer import CifWriter, BlockWriter, SaveFrameWriter
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -110,13 +110,13 @@ class TestCifWriterBasic:
 
 class TestCifWriterWrap:
     def test_wrap_returns_same_object_on_build(self):
-        from pycifparse.cifmodel.builder import build as parse_build
+        from cifflow.cifmodel.builder import build as parse_build
         cif, _ = parse_build("data_test\n_tag value\n")
         w = CifWriter(CifVersion.CIF_1_1, cif=cif)
         assert w.build() is cif
 
     def test_wrap_mutations_visible_on_original(self):
-        from pycifparse.cifmodel.builder import build as parse_build
+        from cifflow.cifmodel.builder import build as parse_build
         cif, _ = parse_build("data_test\n_tag value\n")
         w = CifWriter(CifVersion.CIF_1_1, cif=cif)
         bw = w.get_block("test")
@@ -153,14 +153,14 @@ class TestGetBlockIndex:
             w.get_block("missing")
 
     def test_get_block_index_out_of_range_raises(self):
-        from pycifparse.cifmodel.builder import build as parse_build
+        from cifflow.cifmodel.builder import build as parse_build
         cif, _ = parse_build("data_b\n_t1 v1\ndata_b\n_t2 v2\n")
         w = CifWriter(CifVersion.CIF_1_1, cif=cif)
         with pytest.raises(IndexError):
             w.get_block("b", index=5)
 
     def test_get_block_index_1_accesses_duplicate(self):
-        from pycifparse.cifmodel.builder import build as parse_build
+        from cifflow.cifmodel.builder import build as parse_build
         cif, _ = parse_build("data_b\n_t1 v1\ndata_b\n_t2 v2\n")
         w = CifWriter(CifVersion.CIF_1_1, cif=cif)
         bw1 = w.get_block("b", index=0)
@@ -214,7 +214,7 @@ class TestBlockManagement:
             w.remove_block("missing")
 
     def test_remove_block_from_end(self):
-        from pycifparse.cifmodel.builder import build as parse_build
+        from cifflow.cifmodel.builder import build as parse_build
         cif, _ = parse_build("data_b\n_t1 v1\ndata_b\n_t2 v2\n")
         w = CifWriter(CifVersion.CIF_1_1, cif=cif)
         w.remove_block("b", from_end=True)
@@ -522,7 +522,7 @@ class TestSaveFrameManagement:
             bw.get_save_frame("missing")
 
     def test_get_save_frame_index_1_accesses_duplicate(self):
-        from pycifparse.cifmodel.builder import build as parse_build
+        from cifflow.cifmodel.builder import build as parse_build
         cif, _ = parse_build("data_b\nsave_sf\n_t1 v1\nsave_\nsave_sf\n_t2 v2\nsave_\n")
         w = CifWriter(CifVersion.CIF_1_1, cif=cif)
         bw = w.get_block("b")

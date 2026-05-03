@@ -4,9 +4,9 @@ import sqlite3
 
 import pytest
 
-from pycifparse.dictionary.ddlm_item import DdlmItem
-from pycifparse.dictionary.ddlm_parser import DdlmDictionary
-from pycifparse.dictionary.schema import (
+from cifflow.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.ddlm_parser import DdlmDictionary
+from cifflow.dictionary.schema import (
     ColumnDef,
     ForeignKeyDef,
     SchemaSpec,
@@ -150,46 +150,46 @@ class TestTableNaming:
 # ---------------------------------------------------------------------------
 
 class TestSyntheticColumns:
-    def test_block_id_present_on_set_table(self):
+    def test_cifflow_block_id_present_on_set_table(self):
         cats = [_cat('cfg', 'cfg', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         col_names = [c.name for c in schema.tables['cfg'].columns]
-        assert '_block_id' in col_names
+        assert '_cifflow_block_id' in col_names
 
-    def test_block_id_present_on_loop_table(self):
+    def test_cifflow_block_id_present_on_loop_table(self):
         cats = [_cat('meas', 'meas', 'Loop')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         col_names = [c.name for c in schema.tables['meas'].columns]
-        assert '_block_id' in col_names
+        assert '_cifflow_block_id' in col_names
 
-    def test_row_id_present_on_set_table(self):
+    def test_cifflow_row_id_present_on_set_table(self):
         cats = [_cat('cfg', 'cfg', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         col_names = [c.name for c in schema.tables['cfg'].columns]
-        assert '_row_id' in col_names
+        assert '_cifflow_row_id' in col_names
 
-    def test_row_id_present_on_loop_table(self):
+    def test_cifflow_row_id_present_on_loop_table(self):
         cats = [_cat('meas', 'meas', 'Loop')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         col_names = [c.name for c in schema.tables['meas'].columns]
-        assert '_row_id' in col_names
+        assert '_cifflow_row_id' in col_names
 
-    def test_block_id_not_null(self):
+    def test_cifflow_block_id_not_null(self):
         cats = [_cat('cfg', 'cfg', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
-        block_id = next(c for c in schema.tables['cfg'].columns if c.name == '_block_id')
+        block_id = next(c for c in schema.tables['cfg'].columns if c.name == '_cifflow_block_id')
         assert block_id.nullable is False
 
-    def test_row_id_not_null(self):
+    def test_cifflow_row_id_not_null(self):
         cats = [_cat('meas', 'meas', 'Loop')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
-        row_id = next(c for c in schema.tables['meas'].columns if c.name == '_row_id')
+        row_id = next(c for c in schema.tables['meas'].columns if c.name == '_cifflow_row_id')
         assert row_id.nullable is False
 
     def test_synthetics_absent_from_column_to_tag(self):
@@ -197,21 +197,21 @@ class TestSyntheticColumns:
         items = [_item('_meas.id', 'meas', 'id', type_contents='Text')]
         d = _make_dict(cats, items)
         schema = generate_schema(d)
-        assert ('meas', '_block_id') not in schema.column_to_tag
-        assert ('meas', '_row_id') not in schema.column_to_tag
+        assert ('meas', '_cifflow_block_id') not in schema.column_to_tag
+        assert ('meas', '_cifflow_row_id') not in schema.column_to_tag
 
-    def test_block_id_is_synthetic(self):
+    def test_cifflow_block_id_is_synthetic(self):
         cats = [_cat('cfg', 'cfg', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
-        col = next(c for c in schema.tables['cfg'].columns if c.name == '_block_id')
+        col = next(c for c in schema.tables['cfg'].columns if c.name == '_cifflow_block_id')
         assert col.is_synthetic is True
 
-    def test_row_id_is_synthetic(self):
+    def test_cifflow_row_id_is_synthetic(self):
         cats = [_cat('meas', 'meas', 'Loop')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
-        col = next(c for c in schema.tables['meas'].columns if c.name == '_row_id')
+        col = next(c for c in schema.tables['meas'].columns if c.name == '_cifflow_row_id')
         assert col.is_synthetic is True
 
 
@@ -230,8 +230,8 @@ class TestPrimaryKeys:
         pk_col = next(c for c in table.columns if c.name == 'id')
         assert pk_col.is_primary_key is True
         assert pk_col.nullable is False
-        # _block_id not PK when key is present
-        block_col = next(c for c in table.columns if c.name == '_block_id')
+        # _cifflow_block_id not PK when key is present
+        block_col = next(c for c in table.columns if c.name == '_cifflow_block_id')
         assert block_col.is_primary_key is False
 
     def test_set_without_category_key_fallback(self):
@@ -239,19 +239,19 @@ class TestPrimaryKeys:
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         table = schema.tables['series']
-        assert table.primary_keys == ['_pycifparse_id']
-        pycifparse_id_col = next(c for c in table.columns if c.name == '_pycifparse_id')
-        assert pycifparse_id_col.is_primary_key is True
-        assert pycifparse_id_col.is_synthetic is True
-        # _block_id is present but informational only
-        block_col = next(c for c in table.columns if c.name == '_block_id')
+        assert table.primary_keys == ['_cifflow_id']
+        cifflow_id_col = next(c for c in table.columns if c.name == '_cifflow_id')
+        assert cifflow_id_col.is_primary_key is True
+        assert cifflow_id_col.is_synthetic is True
+        # _cifflow_block_id is present but informational only
+        block_col = next(c for c in table.columns if c.name == '_cifflow_block_id')
         assert block_col.is_primary_key is False
 
     def test_set_without_category_key_emits_warning(self):
         cats = [_cat('series', 'series', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
-        assert any('series' in w and 'Set' in w and '_pycifparse_id' in w for w in schema.warnings)
+        assert any('series' in w and 'Set' in w and '_cifflow_id' in w for w in schema.warnings)
 
     def test_loop_with_single_key(self):
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
@@ -282,8 +282,8 @@ class TestPrimaryKeys:
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         table = schema.tables['orphan']
-        assert table.primary_keys == ['_block_id', '_row_id']
-        for name in ('_block_id', '_row_id'):
+        assert table.primary_keys == ['_cifflow_block_id', '_cifflow_row_id']
+        for name in ('_cifflow_block_id', '_cifflow_row_id'):
             col = next(c for c in table.columns if c.name == name)
             assert col.is_primary_key is True
 
@@ -371,7 +371,7 @@ class TestTypeMapping:
 
 class TestColumnOrdering:
     def test_set_column_order(self):
-        # Set table: _block_id, _row_id, PK cols, then alpha non-PK cols
+        # Set table: _cifflow_block_id, _cifflow_row_id, PK cols, then alpha non-PK cols
         cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
         items = [
             _item('_cfg.id', 'cfg', 'id', type_contents='Text'),
@@ -381,14 +381,14 @@ class TestColumnOrdering:
         d = _make_dict(cats, items)
         schema = generate_schema(d)
         names = [c.name for c in schema.tables['cfg'].columns]
-        assert names[0] == '_block_id'
-        assert names[1] == '_row_id'
+        assert names[0] == '_cifflow_block_id'
+        assert names[1] == '_cifflow_row_id'
         assert names[2] == 'id'       # PK
         assert names[3] == 'a_first'  # alpha first non-PK
         assert names[4] == 'z_last'
 
     def test_loop_column_order(self):
-        # Loop table: _block_id, _row_id, PK cols, then alpha non-PK cols
+        # Loop table: _cifflow_block_id, _cifflow_row_id, PK cols, then alpha non-PK cols
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
         items = [
             _item('_meas.id', 'meas', 'id', type_contents='Text'),
@@ -398,8 +398,8 @@ class TestColumnOrdering:
         d = _make_dict(cats, items)
         schema = generate_schema(d)
         names = [c.name for c in schema.tables['meas'].columns]
-        assert names[0] == '_block_id'
-        assert names[1] == '_row_id'
+        assert names[0] == '_cifflow_block_id'
+        assert names[1] == '_cifflow_row_id'
         assert names[2] == 'id'       # PK
         assert names[3] == 'a_name'   # alpha non-PK
         assert names[4] == 'z_val'
@@ -439,8 +439,8 @@ class TestColumnToTag:
         items = [_item('_meas.id', 'meas', 'id', type_contents='Text')]
         d = _make_dict(cats, items)
         schema = generate_schema(d)
-        assert ('meas', '_block_id') not in schema.column_to_tag
-        assert ('meas', '_row_id') not in schema.column_to_tag
+        assert ('meas', '_cifflow_block_id') not in schema.column_to_tag
+        assert ('meas', '_cifflow_row_id') not in schema.column_to_tag
 
     def test_column_to_tag_round_trip(self):
         cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
@@ -630,38 +630,38 @@ class TestEmitCreateStatements:
         stmt = emit_create_statements(schema)[0]
         assert stmt.startswith('CREATE TABLE IF NOT EXISTS "cfg" (')
 
-    def test_not_null_on_block_id(self):
+    def test_not_null_on_cifflow_block_id(self):
         cats = [_cat('cfg', 'cfg', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         stmt = emit_create_statements(schema)[0]
-        assert '"_block_id"  TEXT  NOT NULL' in stmt
+        assert '"_cifflow_block_id"  TEXT  NOT NULL' in stmt
 
-    def test_row_id_composite_unique_in_keyed_loop_stmt(self):
-        # Keyed Loop: _row_id is not PK, so composite UNIQUE (_block_id, _row_id) added
+    def test_cifflow_row_id_composite_unique_in_keyed_loop_stmt(self):
+        # Keyed Loop: _cifflow_row_id is not PK, so composite UNIQUE (_cifflow_block_id, _cifflow_row_id) added
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
         items = [_item('_meas.id', 'meas', 'id', type_contents='Text')]
         d = _make_dict(cats, items)
         schema = generate_schema(d)
         stmt = emit_create_statements(schema)[0]
-        assert 'UNIQUE ("_block_id", "_row_id")' in stmt
+        assert 'UNIQUE ("_cifflow_block_id", "_cifflow_row_id")' in stmt
 
-    def test_row_id_no_extra_unique_in_keyless_loop_stmt(self):
-        # Keyless Loop: PK is (_block_id, _row_id) — no extra UNIQUE constraint
+    def test_cifflow_row_id_no_extra_unique_in_keyless_loop_stmt(self):
+        # Keyless Loop: PK is (_cifflow_block_id, _cifflow_row_id) — no extra UNIQUE constraint
         cats = [_cat('meas', 'meas', 'Loop')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         stmt = emit_create_statements(schema)[0]
-        assert 'PRIMARY KEY ("_block_id", "_row_id")' in stmt
+        assert 'PRIMARY KEY ("_cifflow_block_id", "_cifflow_row_id")' in stmt
         assert 'UNIQUE' not in stmt
 
-    def test_row_id_present_in_set_stmt(self):
+    def test_cifflow_row_id_present_in_set_stmt(self):
         cats = [_cat('cfg', 'cfg', 'Set')]
         d = _make_dict(cats, [])
         schema = generate_schema(d)
         stmt = emit_create_statements(schema)[0]
-        assert '"_row_id"  INTEGER  NOT NULL' in stmt
-        assert 'UNIQUE ("_block_id", "_row_id")' in stmt
+        assert '"_cifflow_row_id"  INTEGER  NOT NULL' in stmt
+        assert 'UNIQUE ("_cifflow_block_id", "_cifflow_row_id")' in stmt
 
     def test_fk_clause_with_deferrable(self):
         cats = [
@@ -717,8 +717,8 @@ class TestEmitCreateStatements:
         assert 'config' in tables
         assert 'meas' in tables
 
-    def test_block_id_row_id_composite_unique_via_pragma(self):
-        # Keyed Loop: composite UNIQUE (_block_id, _row_id) should exist
+    def test_cifflow_block_id_cifflow_row_id_composite_unique_via_pragma(self):
+        # Keyed Loop: composite UNIQUE (_cifflow_block_id, _cifflow_row_id) should exist
         cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
         items = [_item('_meas.id', 'meas', 'id', type_contents='Text')]
         d = _make_dict(cats, items)
@@ -729,10 +729,10 @@ class TestEmitCreateStatements:
         found = False
         for row in unique_indexes:
             cols = [r[2] for r in conn.execute(f"PRAGMA index_info('{row[1]}')")]
-            if '_block_id' in cols and '_row_id' in cols:
+            if '_cifflow_block_id' in cols and '_cifflow_row_id' in cols:
                 found = True
                 break
-        assert found, "composite UNIQUE (_block_id, _row_id) should exist on keyed Loop table"
+        assert found, "composite UNIQUE (_cifflow_block_id, _cifflow_row_id) should exist on keyed Loop table"
 
     def test_fk_via_pragma(self):
         cats = [

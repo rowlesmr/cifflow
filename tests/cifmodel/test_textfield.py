@@ -3,7 +3,7 @@ Tests for the multiline text field transformation pipeline.
 """
 
 import pytest
-from pycifparse.cifmodel.textfield import transform_multiline
+from cifflow.cifmodel.textfield import transform_multiline
 
 
 # ─────────────────────────────────────────────────────────────────────────────

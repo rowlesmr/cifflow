@@ -1,4 +1,4 @@
-# pycifparse — Output Specification Reference
+# cifflow — Output Specification Reference
 
 This document describes how CIF emission is controlled: the `EmitMode` enum, `OutputPlan`,
 `BlockSpec`, the `emit()` function, and the formatting options that govern the final text.
@@ -16,7 +16,7 @@ It does not write to the database.
 The central entry point is `emit()`:
 
 ```python
-from pycifparse import emit, EmitMode, OutputPlan, BlockSpec, CifVersion
+from cifflow import emit, EmitMode, OutputPlan, BlockSpec, CifVersion
 
 cif_text = emit(conn, schema, mode=EmitMode.ORIGINAL, version=CifVersion.CIF_2_0)
 ```
@@ -34,7 +34,7 @@ Three interacting decisions control what comes out:
 ## EmitMode
 
 ```python
-from pycifparse import EmitMode
+from cifflow import EmitMode
 ```
 
 `EmitMode` is an enum with four values.  Exactly one is chosen per `emit()` call.
@@ -43,7 +43,7 @@ from pycifparse import EmitMode
 
 ### `EmitMode.ORIGINAL` (default)
 
-One output block per distinct `_block_id` value.  Reconstructs the original CIF blocks
+One output block per distinct `_cifflow_block_id` value.  Reconstructs the original CIF blocks
 exactly as they were before ingestion — the inverse of `ingest()`.
 
 - FK-PK columns are suppressed: if a FK column is redundant because the referenced Set
@@ -66,10 +66,10 @@ to find the nearest reachable Set-class ancestor.  Three outcomes are possible:
 1. A Set-class table is directly reachable → that Set is the anchor.
 2. A Loop-class intermediate is reachable and has an onward FK to a Set → one-hop chain;
    that Set is the anchor.
-3. No Set is reachable → the table falls back to `_block_id` grouping.
+3. No Set is reachable → the table falls back to `_cifflow_block_id` grouping.
 
-Keyless Set tables (whose only domain PK is `_pycifparse_id`) have no cross-block
-identity and also fall back to `_block_id` grouping.
+Keyless Set tables (whose only domain PK is `_cifflow_id`) have no cross-block
+identity and also fall back to `_cifflow_block_id` grouping.
 
 - FK-PK suppression is enabled (`suppress_fk_pk=True`).
 - `_audit_dataset.id` is **not** injected.
@@ -114,9 +114,9 @@ the loop header.
 **Guards — `ValueError` is raised if:**
 - Any `_cif_fallback` rows are present.  Unknown tags cannot be unambiguously assigned
   to a dictionary-split block.
-- Any keyless Set table (one whose only domain PK is `_pycifparse_id`) contains rows.
+- Any keyless Set table (one whose only domain PK is `_cifflow_id`) contains rows.
 
-**Dataset ID injection:**  Per block, the emitter resolves the originating `_block_id`
+**Dataset ID injection:**  Per block, the emitter resolves the originating `_cifflow_block_id`
 values from `_block_dataset_membership` and injects `_audit_dataset.id`:
 
 - Exactly one distinct ID found → inject as a scalar value.
@@ -133,7 +133,7 @@ Spec matching (`BlockSpec.matches`) is **not** applied in ALL_BLOCKS mode.
 ## OutputPlan
 
 ```python
-from pycifparse import OutputPlan
+from cifflow import OutputPlan
 ```
 
 `OutputPlan` is an optional dataclass passed to `emit()` via the `plan` parameter.
@@ -182,7 +182,7 @@ Fallback chain (first non-None result wins):
 ## BlockSpec
 
 ```python
-from pycifparse import BlockSpec
+from cifflow import BlockSpec
 ```
 
 `BlockSpec` is a dataclass that pairs a predicate (which blocks match) with emission
@@ -272,7 +272,7 @@ Emission order of columns within specific categories.  Maps category (table) nam
 ordered list of column names.
 
 Listed columns appear in declared order.  Remaining columns follow alphabetically.
-Synthetic columns (`_block_id`, `_row_id`, `_pycifparse_id`) and null-only columns are
+Synthetic columns (`_cifflow_block_id`, `_cifflow_row_id`, `_cifflow_id`) and null-only columns are
 never emitted regardless of this setting.
 
 ```python
@@ -314,7 +314,7 @@ constructed from anchor key values:
 ## `emit()` function
 
 ```python
-from pycifparse import emit
+from cifflow import emit
 
 cif_text: str = emit(
     conn,
@@ -454,7 +454,7 @@ Within a single category, column order is:
 2. Remaining non-synthetic, non-null columns, alphabetically (PK columns first among
    the remainder).
 
-Synthetic columns (`_block_id`, `_row_id`, `_pycifparse_id`) and null-only columns are
+Synthetic columns (`_cifflow_block_id`, `_cifflow_row_id`, `_cifflow_id`) and null-only columns are
 never emitted.
 
 ---
@@ -502,7 +502,7 @@ The `quote()` function selects the shortest valid CIF token for a stored value.
 It is also exported for use outside `emit()`:
 
 ```python
-from pycifparse import quote
+from cifflow import quote
 token = quote('hello world', CifVersion.CIF_2_0)  # → "'hello world'"
 ```
 
@@ -549,7 +549,7 @@ Prefix and fold may be combined when both conditions apply simultaneously.
 
 ```python
 import sqlite3
-import pycifparse as cif
+import cifflow as cif
 
 # Load dictionary and generate schema
 loader = cif.DictionaryLoader()

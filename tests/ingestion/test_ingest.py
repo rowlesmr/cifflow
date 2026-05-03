@@ -8,14 +8,14 @@ import uuid
 
 import pytest
 
-from pycifparse import ingest, IngestionError
-from pycifparse.cifmodel.model import CifBlock, CifFile
-from pycifparse.cifmodel.scalar import CifScalar
-from pycifparse.dictionary.ddlm_item import DdlmItem
-from pycifparse.dictionary.ddlm_parser import DdlmDictionary
-from pycifparse.dictionary.schema import generate_schema
-from pycifparse.dictionary.schema_apply import apply_fallback_schema, apply_schema
-from pycifparse.ingestion.ingest import (
+from cifflow import ingest, IngestionError
+from cifflow.cifmodel.model import CifBlock, CifFile
+from cifflow.cifmodel.scalar import CifScalar
+from cifflow.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.ddlm_parser import DdlmDictionary
+from cifflow.dictionary.schema import generate_schema
+from cifflow.dictionary.schema_apply import apply_fallback_schema, apply_schema
+from cifflow.ingestion.ingest import (
     _apply_fk,
     _fk_specs_for,
     _merge_into,
@@ -26,7 +26,7 @@ from pycifparse.ingestion.ingest import (
     encode_value,
     split_su,
 )
-from pycifparse.types import ValueType
+from cifflow.types import ValueType
 
 
 # ---------------------------------------------------------------------------
@@ -238,25 +238,25 @@ def _rows(conn, table, cols=None):
 def _fallback(conn, block_id=None):
     if block_id:
         return conn.execute(
-            'SELECT "_block_id","_row_id","tag","value","value_type","loop_id","col_index"'
-            ' FROM "_cif_fallback" WHERE "_block_id"=? ORDER BY "_row_id","col_index","tag"',
+            'SELECT "_cifflow_block_id","_cifflow_row_id","tag","value","value_type","loop_id","col_index"'
+            ' FROM "_cif_fallback" WHERE "_cifflow_block_id"=? ORDER BY "_cifflow_row_id","col_index","tag"',
             (block_id,)
         ).fetchall()
     return conn.execute(
-        'SELECT "_block_id","_row_id","tag","value","value_type","loop_id","col_index"'
-        ' FROM "_cif_fallback" ORDER BY "_block_id","_row_id","col_index","tag"'
+        'SELECT "_cifflow_block_id","_cifflow_row_id","tag","value","value_type","loop_id","col_index"'
+        ' FROM "_cif_fallback" ORDER BY "_cifflow_block_id","_cifflow_row_id","col_index","tag"'
     ).fetchall()
 
 
 def _membership(conn, block_id=None):
     if block_id:
         return conn.execute(
-            'SELECT "_block_id","_audit_dataset_id","id_regime"'
-            ' FROM "_block_dataset_membership" WHERE "_block_id"=?',
+            'SELECT "_cifflow_block_id","_audit_dataset_id","id_regime"'
+            ' FROM "_block_dataset_membership" WHERE "_cifflow_block_id"=?',
             (block_id,)
         ).fetchall()
     return conn.execute(
-        'SELECT "_block_id","_audit_dataset_id","id_regime"'
+        'SELECT "_cifflow_block_id","_audit_dataset_id","id_regime"'
         ' FROM "_block_dataset_membership"'
     ).fetchall()
 
@@ -274,11 +274,11 @@ def _validation(conn):
 
 class TestImport:
     def test_ingest_importable_from_top_level(self):
-        from pycifparse import ingest as _ingest
+        from cifflow import ingest as _ingest
         assert callable(_ingest)
 
     def test_ingest_importable_from_ingestion(self):
-        from pycifparse.ingestion import ingest as _ingest
+        from cifflow.ingestion import ingest as _ingest
         assert callable(_ingest)
 
 
@@ -427,9 +427,9 @@ class TestBuildTagToColumn:
     def test_synthetic_columns_excluded(self):
         schema = _schema_a()
         mapping = build_tag_to_column(schema)
-        # Synthetic columns (_block_id, _row_id) are not in column_to_tag
+        # Synthetic columns (_cifflow_block_id, _cifflow_row_id) are not in column_to_tag
         for key in mapping:
-            assert not key.startswith('_block') and '_row_id' not in key
+            assert not key.startswith('_block') and '_cifflow_row_id' not in key
 
 
 # ===========================================================================
@@ -449,12 +449,12 @@ class TestNoSchema:
         assert '_cell.length_a' in tags
         assert '_cell.length_b' in tags
 
-    def test_scalar_row_id_is_1(self):
+    def test_scalar_cifflow_row_id_is_1(self):
         f = _file(_block('B', scalars={'_cell.length_a': _s('5.4')}))
         conn = _conn()
         ingest(f, conn)
         row = _fallback(conn, 'B')[0]
-        assert row[1] == 1  # _row_id
+        assert row[1] == 1  # _cifflow_row_id
 
     def test_loop_rows_to_fallback(self):
         f = _file(_block('B', loops=[
@@ -466,7 +466,7 @@ class TestNoSchema:
         rows = _fallback(conn, 'B')
         assert len(rows) == 4  # 2 iterations × 2 tags
 
-    def test_loop_row_id_increments_per_iteration(self):
+    def test_loop_cifflow_row_id_increments_per_iteration(self):
         f = _file(_block('B', loops=[
             (['_atom_site.label'], [[_s('C1')], [_s('C2')]]),
         ]))
@@ -571,7 +571,7 @@ class TestLoopRouting:
         rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         assert set(rows) == {('C1', '0.1'), ('C2', '0.2')}
 
-    def test_loop_row_id_increments(self):
+    def test_loop_cifflow_row_id_increments(self):
         schema = _schema_a()
         f = _file(_block('B', loops=[
             (['_atom_site.label'],
@@ -579,7 +579,7 @@ class TestLoopRouting:
         ]))
         conn = _conn(schema)
         ingest(f, conn, schema)
-        rows = _rows(conn, 'atom_site', ['_row_id', 'label'])
+        rows = _rows(conn, 'atom_site', ['_cifflow_row_id', 'label'])
         row_ids = sorted(r[0] for r in rows)
         assert row_ids == [1, 2]
 
@@ -798,7 +798,7 @@ class TestMerge:
         rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         assert rows == [('C1', '0.1')]
 
-    def test_merged_block_id_from_first_block(self):
+    def test_merged_cifflow_block_id_from_first_block(self):
         schema = _schema_a()
         b1 = _block('B1', loops=[
             (['_atom_site.label'], [[_s('C1')]]),
@@ -809,7 +809,7 @@ class TestMerge:
         ])
         conn = _conn(schema)
         ingest(_file(b1, b2), conn, schema)
-        rows = _rows(conn, 'atom_site', ['_block_id', 'label', 'x_fract'])
+        rows = _rows(conn, 'atom_site', ['_cifflow_block_id', 'label', 'x_fract'])
         assert rows == [('B1', 'C1', '0.5')]
 
     def test_cross_block_merge_conflict_raises(self):
@@ -830,7 +830,7 @@ class TestMerge:
         rows = _rows(conn, 'atom_site', ['x_fract'])
         assert rows == []
 
-    def test_row_id_does_not_reset_between_blocks(self):
+    def test_cifflow_row_id_does_not_reset_between_blocks(self):
         schema = _schema_a()
         b1 = _block('B1', loops=[
             (['_atom_site.label'], [[_s('C1')]]),
@@ -840,7 +840,7 @@ class TestMerge:
         ])
         conn = _conn(schema)
         ingest(_file(b1, b2), conn, schema)
-        rows = _rows(conn, 'atom_site', ['_row_id', 'label'])
+        rows = _rows(conn, 'atom_site', ['_cifflow_row_id', 'label'])
         row_id_by_label = {label: rid for rid, label in rows}
         assert row_id_by_label['C1'] == 1
         assert row_id_by_label['C2'] == 2  # not 1 again
@@ -917,7 +917,7 @@ class TestFKPropagation:
         schema = _schema_a()
         # Build cell table row with no structure_id value
         table = schema.tables['cell']
-        row = {'_block_id': 'B', 'length_a': '5.4'}
+        row = {'_cifflow_block_id': 'B', 'length_a': '5.4'}
         errors = []
         fk_acc = {}
         sfk, cfk, prop = _fk_specs_for(table, schema)
@@ -938,7 +938,7 @@ class TestFKPropagation:
         schema = _schema_a()
         table = schema.tables['cell']
         # row already has structure_id='EXPLICIT'; fk_acc has 'S1'
-        row = {'_block_id': 'B', 'structure_id': 'EXPLICIT', 'length_a': '5.4'}
+        row = {'_cifflow_block_id': 'B', 'structure_id': 'EXPLICIT', 'length_a': '5.4'}
         fk_acc = {'_structure.id': 'S1'}
         errors = []
         sfk, cfk, prop = _fk_specs_for(table, schema)
@@ -950,7 +950,7 @@ class TestFKPropagation:
         """UUID generated for key-FK also creates a stub row in the parent table."""
         schema = _schema_a()
         table = schema.tables['cell']
-        row = {'_block_id': 'B', 'length_a': '5.4'}
+        row = {'_cifflow_block_id': 'B', 'length_a': '5.4'}
         errors = []
         fk_acc = {}
         merged_rows: dict = {}
@@ -967,7 +967,7 @@ class TestFKPropagation:
         stub_rows = list(merged_rows['structure'].values())
         assert len(stub_rows) == 1
         assert stub_rows[0]['id'] == sid
-        assert stub_rows[0]['_block_id'] == 'B'
+        assert stub_rows[0]['_cifflow_block_id'] == 'B'
 
     def test_key_fk_absent_stub_does_not_overwrite_real_parent(self):
         """If the parent table already has a real row, the stub is merged in without
@@ -977,11 +977,11 @@ class TestFKPropagation:
         errors = []
         fk_acc = {}
         # Pre-populate a real structure row with id='S1'
-        real_structure_row = {'_block_id': 'B', 'id': 'S1', '_row_id': 1}
+        real_structure_row = {'_cifflow_block_id': 'B', 'id': 'S1', '_cifflow_row_id': 1}
         merged_rows: dict = {'structure': {('S1',): real_structure_row}}
         row_id_counters: dict = {'structure': 2}
         # Now ingest a cell row that already knows structure_id='S1'
-        row = {'_block_id': 'B', 'structure_id': 'S1', 'length_a': '5.4'}
+        row = {'_cifflow_block_id': 'B', 'structure_id': 'S1', 'length_a': '5.4'}
         sfk, cfk, prop = _fk_specs_for(table, schema)
         _apply_fk(row, sfk, cfk, prop, None, fk_acc,
                   propagate_fk=False, emit=errors.append,
@@ -1006,37 +1006,37 @@ class TestSetTable:
         rows = _rows(conn, 'structure', ['id'])
         assert set(rows) == {('S1',), ('S2',)}
 
-    def test_set_table_block_id_populated(self):
+    def test_set_table_cifflow_block_id_populated(self):
         schema = _schema_a()
         f = _file(_block('MY_BLOCK', scalars={'_structure.id': _s('S1')}))
         conn = _conn(schema)
         ingest(f, conn, schema)
-        rows = _rows(conn, 'structure', ['_block_id', 'id'])
+        rows = _rows(conn, 'structure', ['_cifflow_block_id', 'id'])
         assert rows[0] == ('MY_BLOCK', 'S1')
 
-    def test_keyless_set_table_pycifparse_id_is_uuid(self):
+    def test_keyless_set_table_cifflow_id_is_uuid(self):
         schema = _schema_keyless_set()
         f = _file(_block('B', scalars={'_props.name': _s('val')}))
         conn = _conn(schema)
         ingest(f, conn, schema)
-        rows = _rows(conn, 'props', ['_pycifparse_id', 'name'])
+        rows = _rows(conn, 'props', ['_cifflow_id', 'name'])
         assert len(rows) == 1
         pid = rows[0][0]
         assert pid is not None
         try:
             uuid.UUID(pid)
         except ValueError:
-            pytest.fail(f'_pycifparse_id is not a UUID: {pid!r}')
+            pytest.fail(f'_cifflow_id is not a UUID: {pid!r}')
 
-    def test_set_table_row_id_reserved_at_first_tag(self):
-        """_row_id for Set table should reflect encounter order, not be arbitrary."""
+    def test_set_table_cifflow_row_id_reserved_at_first_tag(self):
+        """_cifflow_row_id for Set table should reflect encounter order, not be arbitrary."""
         schema = _schema_a()
         f = _file(_block('B', scalars={
             '_structure.id': _s('S1'),
         }))
         conn = _conn(schema)
         ingest(f, conn, schema)
-        rows = _rows(conn, 'structure', ['_row_id'])
+        rows = _rows(conn, 'structure', ['_cifflow_row_id'])
         assert rows[0][0] == 1
 
 
@@ -1058,8 +1058,8 @@ class TestMixedLoop:
         fb = _fallback(conn, 'B')
         assert any(r[2] == '_atom_site.custom_tag' for r in fb)
 
-    def test_mixed_loop_fallback_row_id_matches_structured(self):
-        """Fallback cells in mixed loop share _row_id with structured row."""
+    def test_mixed_loop_fallback_cifflow_row_id_matches_structured(self):
+        """Fallback cells in mixed loop share _cifflow_row_id with structured row."""
         schema = _schema_a()
         f = _file(_block('B', loops=[
             (['_atom_site.label', '_atom_site.custom_tag'],
@@ -1067,10 +1067,10 @@ class TestMixedLoop:
         ]))
         conn = _conn(schema)
         ingest(f, conn, schema)
-        struct_row_id = _rows(conn, 'atom_site', ['_row_id'])[0][0]
+        struct_cifflow_row_id = _rows(conn, 'atom_site', ['_cifflow_row_id'])[0][0]
         fb = _fallback(conn, 'B')
-        fb_row_id = fb[0][1]  # _row_id
-        assert fb_row_id == struct_row_id
+        fb_cifflow_row_id = fb[0][1]  # _cifflow_row_id
+        assert fb_cifflow_row_id == struct_cifflow_row_id
 
     def test_mixed_loop_col_index_correct(self):
         schema = _schema_a()
@@ -1406,16 +1406,16 @@ class TestMergeIntoCoverage:
         counters: dict = {}
         msgs = []
         # First insert a real row
-        row1 = {'_block_id': 'B', 'id': 'S1'}
+        row1 = {'_cifflow_block_id': 'B', 'id': 'S1'}
         _merge_into(merged, 'structure', row1, table, counters, msgs.append)
         # Second insert: same PK, None value for 'id' (PK skipped), plus a hypothetical col
         # Since structure only has 'id' (which is PK), use cell table for a non-PK col
         cell_table = schema.tables['cell']
         cell_merged: dict = {}
         cell_counters: dict = {}
-        row2 = {'_block_id': 'B', 'structure_id': 'S1', 'length_a': '5.0'}
+        row2 = {'_cifflow_block_id': 'B', 'structure_id': 'S1', 'length_a': '5.0'}
         _merge_into(cell_merged, 'cell', row2, cell_table, cell_counters, msgs.append)
-        row3 = {'_block_id': 'B', 'structure_id': 'S1', 'length_a': None}
+        row3 = {'_cifflow_block_id': 'B', 'structure_id': 'S1', 'length_a': None}
         _merge_into(cell_merged, 'cell', row3, cell_table, cell_counters, msgs.append)
         # length_a should still be '5.0' (None incoming was skipped)
         existing = list(cell_merged['cell'].values())[0]
@@ -1430,9 +1430,9 @@ class TestMergeIntoCoverage:
         counters: dict = {}
         msgs = []
         emit = lambda msg, **kw: msgs.append(msg)
-        row1 = {'_block_id': 'B1', 'structure_id': 'S1', 'length_a': '5.0'}
+        row1 = {'_cifflow_block_id': 'B1', 'structure_id': 'S1', 'length_a': '5.0'}
         _merge_into(merged, 'cell', row1, cell_table, counters, emit)
-        row2 = {'_block_id': 'B2', 'structure_id': 'S1', 'length_a': '6.0'}
+        row2 = {'_cifflow_block_id': 'B2', 'structure_id': 'S1', 'length_a': '6.0'}
         # emit_error=None (default) → emit is used for conflict
         _merge_into(merged, 'cell', row2, cell_table, counters, emit)
         assert any('merge conflict' in m for m in msgs)
@@ -1468,7 +1468,7 @@ class TestSetMergeConflict:
 
 class TestPreCommitHook:
     def test_pre_commit_hook_called_before_commit(self):
-        from pycifparse.ingestion.ingest import _Ingester
+        from cifflow.ingestion.ingest import _Ingester
         schema = _schema_a()
         f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
         conn = _conn(schema)
@@ -1482,7 +1482,7 @@ class TestPreCommitHook:
         conn.close()
 
     def test_pre_commit_hook_exception_rolls_back(self):
-        from pycifparse.ingestion.ingest import _Ingester
+        from cifflow.ingestion.ingest import _Ingester
         schema = _schema_a()
         f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
         conn = _conn(schema)
@@ -1505,7 +1505,7 @@ class TestPreCommitHook:
 class TestSqliteInsertError:
     def test_sqlite_error_on_insert_emits_warning(self):
         """Drop the table after schema creation so that INSERT fails."""
-        from pycifparse.ingestion.ingest import _Ingester
+        from cifflow.ingestion.ingest import _Ingester
         schema = _schema_a()
         f = _file(_block('B', scalars={'_structure.id': _s('S1')}))
         conn = _conn(schema)
@@ -1526,7 +1526,7 @@ class TestFKKeyAbsentTargetNotInSchema:
         """When the FK target column is not mapped in schema.column_to_tag,
         a UUID is still generated for a key-FK column (lines 344-349 branch)."""
         # Build a minimal SchemaSpec where column_to_tag doesn't map the FK target
-        from pycifparse.dictionary.schema import SchemaSpec, TableDef, ColumnDef, ForeignKeyDef
+        from cifflow.dictionary.schema import SchemaSpec, TableDef, ColumnDef, ForeignKeyDef
         col_pk = ColumnDef(name='structure_id', definition_id='_cell.structure_id',
                            type_contents='Text', nullable=False,
                            is_primary_key=True, is_synthetic=False,
@@ -1557,7 +1557,7 @@ class TestFKKeyAbsentTargetNotInSchema:
                 # ('structure', 'id') intentionally absent
             },
         )
-        row = {'_block_id': 'B', 'length_a': '5.0'}
+        row = {'_cifflow_block_id': 'B', 'length_a': '5.0'}
         msgs = []
         sfk, cfk, prop = _fk_specs_for(cell_table, schema)
         _apply_fk(row, sfk, cfk, prop, None, {}, propagate_fk=False, emit=msgs.append)
@@ -1575,16 +1575,16 @@ class TestFillBridgeColumns:
     """Unit tests for _fill_bridge_columns with multiple resolution chains."""
 
     def test_primary_chain_used_when_populated(self):
-        from pycifparse.dictionary.schema import BridgeColumnDef
-        from pycifparse.ingestion.ingest import _fill_bridge_columns
+        from cifflow.dictionary.schema import BridgeColumnDef
+        from cifflow.ingestion.ingest import _fill_bridge_columns
 
         # Two chains: primary goes A→B (via col1→pk→val_primary),
         # fallback goes A→C (via col2→pk→val_fallback).
         # Primary chain is populated — it should be used.
         merged_rows = {
-            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
-            'b': {(None, 1): {'_block_id': 'blk', 'pk': 'k1', 'val_primary': 'PRIMARY'}},
-            'c': {(None, 1): {'_block_id': 'blk', 'pk': 'k2', 'val_fallback': 'FALLBACK'}},
+            'a': {(None, 1): {'_cifflow_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
+            'b': {(None, 1): {'_cifflow_block_id': 'blk', 'pk': 'k1', 'val_primary': 'PRIMARY'}},
+            'c': {(None, 1): {'_cifflow_block_id': 'blk', 'pk': 'k2', 'val_fallback': 'FALLBACK'}},
         }
         bd = BridgeColumnDef(
             table_name='a',
@@ -1597,15 +1597,15 @@ class TestFillBridgeColumns:
         assert merged_rows['a'][(None, 1)]['derived'] == 'PRIMARY'
 
     def test_fallback_chain_used_when_primary_misses(self):
-        from pycifparse.dictionary.schema import BridgeColumnDef
-        from pycifparse.ingestion.ingest import _fill_bridge_columns
+        from cifflow.dictionary.schema import BridgeColumnDef
+        from cifflow.ingestion.ingest import _fill_bridge_columns
 
         # Primary chain lookup returns nothing (b has no matching row).
         # Fallback chain should be used instead.
         merged_rows = {
-            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
+            'a': {(None, 1): {'_cifflow_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
             'b': {},   # primary bridge table empty
-            'c': {(None, 1): {'_block_id': 'blk', 'pk': 'k2', 'val_fallback': 'FALLBACK'}},
+            'c': {(None, 1): {'_cifflow_block_id': 'blk', 'pk': 'k2', 'val_fallback': 'FALLBACK'}},
         }
         bd = BridgeColumnDef(
             table_name='a',
@@ -1618,11 +1618,11 @@ class TestFillBridgeColumns:
         assert merged_rows['a'][(None, 1)]['derived'] == 'FALLBACK'
 
     def test_null_when_all_chains_miss(self):
-        from pycifparse.dictionary.schema import BridgeColumnDef
-        from pycifparse.ingestion.ingest import _fill_bridge_columns
+        from cifflow.dictionary.schema import BridgeColumnDef
+        from cifflow.ingestion.ingest import _fill_bridge_columns
 
         merged_rows = {
-            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
+            'a': {(None, 1): {'_cifflow_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
             'b': {},
             'c': {},
         }
@@ -1637,12 +1637,12 @@ class TestFillBridgeColumns:
         assert merged_rows['a'][(None, 1)].get('derived') is None
 
     def test_chains_agree_no_warning_emitted(self):
-        from pycifparse.dictionary.schema import BridgeColumnDef
-        from pycifparse.ingestion.ingest import _fill_bridge_columns
+        from cifflow.dictionary.schema import BridgeColumnDef
+        from cifflow.ingestion.ingest import _fill_bridge_columns
 
         # Both chains resolve to the same value — no warning should be emitted.
         merged_rows = {
-            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
+            'a': {(None, 1): {'_cifflow_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
             'b': {(None, 1): {'pk': 'k1', 'val': 'SAME'}},
             'c': {(None, 1): {'pk': 'k2', 'val': 'SAME'}},
         }
@@ -1659,12 +1659,12 @@ class TestFillBridgeColumns:
         assert warnings == []
 
     def test_chains_disagree_warning_emitted_first_value_used(self):
-        from pycifparse.dictionary.schema import BridgeColumnDef
-        from pycifparse.ingestion.ingest import _fill_bridge_columns
+        from cifflow.dictionary.schema import BridgeColumnDef
+        from cifflow.ingestion.ingest import _fill_bridge_columns
 
         # Chains resolve to different values — warning emitted, first value used.
         merged_rows = {
-            'a': {(None, 1): {'_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
+            'a': {(None, 1): {'_cifflow_block_id': 'blk', 'col1': 'k1', 'col2': 'k2'}},
             'b': {(None, 1): {'pk': 'k1', 'val': 'FIRST'}},
             'c': {(None, 1): {'pk': 'k2', 'val': 'SECOND'}},
         }
@@ -1687,8 +1687,8 @@ class TestFillBridgeColumns:
 def _cif_pow_schema():
     """Load cif_pow.dic and return a generated SchemaSpec (cached per process)."""
     from pathlib import Path
-    from pycifparse.dictionary.loader import DictionaryLoader, directory_resolver
-    from pycifparse.dictionary.schema import generate_schema
+    from cifflow.dictionary.loader import DictionaryLoader, directory_resolver
+    from cifflow.dictionary.schema import generate_schema
     dic_path = Path('data/dictionaries/cif_pow.dic')
     loader = DictionaryLoader(resolver=directory_resolver(dic_path.parent))
     return generate_schema(loader.load(dic_path.read_text(encoding='utf-8')))
@@ -1697,8 +1697,8 @@ def _cif_pow_schema():
 def _ingest_cif_file(cif_path_str, schema):
     """Parse *cif_path_str*, ingest into an in-memory DB, return (conn, errors)."""
     from pathlib import Path
-    from pycifparse import build, ingest
-    from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
+    from cifflow import build, ingest
+    from cifflow.dictionary.schema_apply import apply_schema, apply_fallback_schema
     cif, _ = build(Path(cif_path_str).read_text(encoding='utf-8'))
     conn = sqlite3.connect(':memory:')
     conn.execute('PRAGMA foreign_keys = OFF')

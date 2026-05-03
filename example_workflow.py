@@ -1,5 +1,5 @@
 """
-pycifparse — example workflow
+cifflow — example workflow
 ==============================
 Demonstrates the full pipeline: dictionary loading → SQLite ingestion → CIF emission.
 
@@ -64,7 +64,7 @@ USE_CACHE = True
 # DictionaryLoader resolves _import.get directives inside the dictionary file.
 # directory_resolver maps URI filenames to files in a local directory.
 
-from pycifparse import (
+from cifflow import (
     DictionaryLoader,
     directory_resolver,
     load_dictionary,
@@ -88,8 +88,8 @@ from pycifparse import (
     ValidationReport,
     ValidationIssue,
 )
-from pycifparse.fidelity import check_fidelity
-from pycifparse.types import CifVersion
+from cifflow.fidelity import check_fidelity
+from cifflow.types import CifVersion
 
 print('=== Step 1: Load dictionary ===')
 
@@ -409,7 +409,7 @@ print(f'  Compact database saved to: {COMPACT_DB_FILE}')
 # ---------------------------------------------------------------------------
 # emit() reads the populated database and produces a valid CIF string.
 # ORIGINAL is the simple inverse of ingestion: each source data_ block
-# becomes one output block, in _block_id order.
+# becomes one output block, in _cifflow_block_id order.
 
 print('\n=== Step 8: Emit CIF (ORIGINAL mode) ===')
 
@@ -418,7 +418,7 @@ ORIGINAL_CIF_FILE = ROOT / 'output_original.cif'
 cif_original = emit(
     conn,                          # open sqlite3.Connection (read-only)
     schema,                        # SchemaSpec used during ingestion
-    mode=EmitMode.ORIGINAL,        # one block per original _block_id (default)
+    mode=EmitMode.ORIGINAL,        # one block per original _cifflow_block_id (default)
     version=CifVersion.CIF_2_0,    # magic line and quoting strategy
     plan=None,                     # OutputPlan | None; None -> default ordering
     reconstruct_su=False,          # True -> merge (measurand, su) back into value(su)
@@ -529,7 +529,7 @@ else:
 # ALL_BLOCKS mirrors GROUPED block partitioning: one output block per
 # distinct Set-anchor key combination.  Set categories produce one block per
 # row; Loop categories are grouped by the domain PK of the nearest Set
-# ancestor.  Tables with no Set ancestor are grouped by _block_id.
+# ancestor.  Tables with no Set ancestor are grouped by _cifflow_block_id.
 # In CIF 2.0, _audit_dataset.id is injected into every block using a shared
 # UUID so that a reader can identify all blocks as belonging to the same
 # dataset.

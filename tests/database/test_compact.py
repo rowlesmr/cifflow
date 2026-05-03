@@ -6,11 +6,11 @@ import sqlite3
 
 import pytest
 
-from pycifparse import compactify_database
-from pycifparse.dictionary.ddlm_item import DdlmItem
-from pycifparse.dictionary.ddlm_parser import DdlmDictionary
-from pycifparse.dictionary.schema import generate_schema
-from pycifparse.dictionary.schema_apply import apply_fallback_schema, apply_schema
+from cifflow import compactify_database
+from cifflow.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.ddlm_parser import DdlmDictionary
+from cifflow.dictionary.schema import generate_schema
+from cifflow.dictionary.schema_apply import apply_fallback_schema, apply_schema
 
 
 # ---------------------------------------------------------------------------
@@ -107,10 +107,10 @@ def _populated_src(schema, *, with_b=True):
     # Disable FK for easy direct insertion
     c.execute('PRAGMA foreign_keys = OFF')
     c.execute('BEGIN')
-    c.execute('INSERT INTO "a" ("_block_id", "_row_id", "id") VALUES (?, ?, ?)',
+    c.execute('INSERT INTO "a" ("_cifflow_block_id", "_cifflow_row_id", "id") VALUES (?, ?, ?)',
               ('BLK', 1, 'A1'))
     if with_b:
-        c.execute('INSERT INTO "b" ("_block_id", "_row_id", "label", "a_id", "x") '
+        c.execute('INSERT INTO "b" ("_cifflow_block_id", "_cifflow_row_id", "label", "a_id", "x") '
                   'VALUES (?, ?, ?, ?, ?)', ('BLK', 1, 'L1', 'A1', '1.0'))
     c.execute('COMMIT')
     return c
@@ -185,7 +185,7 @@ class TestDropEmptyColumn:
         # Add a b row with x=NULL
         src.execute('PRAGMA foreign_keys = OFF')
         src.execute('BEGIN')
-        src.execute('INSERT INTO "b" ("_block_id", "_row_id", "label", "a_id") '
+        src.execute('INSERT INTO "b" ("_cifflow_block_id", "_cifflow_row_id", "label", "a_id") '
                     'VALUES (?, ?, ?, ?)', ('BLK', 1, 'L1', 'A1'))
         src.execute('COMMIT')
         dst = _dst()
@@ -197,7 +197,7 @@ class TestDropEmptyColumn:
         src = _populated_src(schema, with_b=False)
         src.execute('PRAGMA foreign_keys = OFF')
         src.execute('BEGIN')
-        src.execute('INSERT INTO "b" ("_block_id", "_row_id", "label") '
+        src.execute('INSERT INTO "b" ("_cifflow_block_id", "_cifflow_row_id", "label") '
                     'VALUES (?, ?, ?)', ('BLK', 1, 'L1'))
         src.execute('COMMIT')
         dst = _dst()
@@ -225,8 +225,8 @@ class TestDropEmptyColumn:
         src = _populated_src(schema, with_b=True)
         dst = _dst()
         compactify_database(src, dst, schema)
-        assert '_block_id' in _cols(dst, 'b')
-        assert '_row_id' in _cols(dst, 'b')
+        assert '_cifflow_block_id' in _cols(dst, 'b')
+        assert '_cifflow_row_id' in _cols(dst, 'b')
 
 
 # ===========================================================================
@@ -254,7 +254,7 @@ class TestFKConstraints:
         src.execute('PRAGMA foreign_keys = OFF')
         src.execute('BEGIN')
         # Only insert into b, leave a empty
-        src.execute('INSERT INTO "b" ("_block_id", "_row_id", "label") '
+        src.execute('INSERT INTO "b" ("_cifflow_block_id", "_cifflow_row_id", "label") '
                     'VALUES (?, ?, ?)', ('BLK', 1, 'L1'))
         src.execute('COMMIT')
 
@@ -279,7 +279,7 @@ class TestFKConstraints:
         # Attempt to insert a b row with non-existent a_id — must fail
         with pytest.raises(sqlite3.IntegrityError):
             dst.execute(
-                'INSERT INTO "b" ("_block_id", "_row_id", "label", "a_id") '
+                'INSERT INTO "b" ("_cifflow_block_id", "_cifflow_row_id", "label", "a_id") '
                 'VALUES (?, ?, ?, ?)', ('X', 99, 'BAD', 'NONEXISTENT')
             )
 
@@ -312,7 +312,7 @@ class TestFallbackTables:
         apply_fallback_schema(src)
         src.execute(
             'INSERT INTO "_cif_fallback" '
-            '("_block_id","_row_id","tag","value","value_type","loop_id","col_index") '
+            '("_cifflow_block_id","_cifflow_row_id","tag","value","value_type","loop_id","col_index") '
             'VALUES (?,?,?,?,?,?,?)',
             ('BLK', 1, '_unknown.x', '42', 'string', None, None)
         )

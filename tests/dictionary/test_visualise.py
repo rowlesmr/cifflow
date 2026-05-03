@@ -2,14 +2,14 @@
 
 import pytest
 
-from pycifparse.dictionary.schema import (
+from cifflow.dictionary.schema import (
     BridgeColumnDef,
     ColumnDef,
     ForeignKeyDef,
     SchemaSpec,
     TableDef,
 )
-from pycifparse.dictionary.visualise import visualise_schema, visualise_schema_html
+from cifflow.dictionary.visualise import visualise_schema, visualise_schema_html
 
 
 # ---------------------------------------------------------------------------
@@ -218,13 +218,13 @@ class TestHideDeprecated:
     def test_table_with_only_synthetic_cols_not_hidden(self):
         # A table with no non-synthetic columns cannot have all non-synthetic cols deprecated
         synth_col = ColumnDef(
-            name='_block_id', definition_id='', type_contents=None,
+            name='_cifflow_block_id', definition_id='', type_contents=None,
             type_container=None, is_primary_key=True, is_synthetic=True,
             linked_item_id=None, nullable=False,
         )
         tbl = TableDef(
             name='infra', definition_id='_infra', category_class='Set',
-            columns=[synth_col], primary_keys=['_block_id'], foreign_keys=[],
+            columns=[synth_col], primary_keys=['_cifflow_block_id'], foreign_keys=[],
         )
         s = _schema([tbl])
         s = SchemaSpec(

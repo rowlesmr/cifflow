@@ -2,8 +2,8 @@
 
 import pytest
 
-from pycifparse.cifmodel.scalar import CifScalar
-from pycifparse.types import ValueType
+from cifflow.cifmodel.scalar import CifScalar
+from cifflow.types import ValueType
 
 
 class TestCifScalarConstruction:
@@ -63,7 +63,7 @@ class TestCifScalarStrBehaviour:
 
 class TestCifScalarBuilderIntegration:
     def test_scalar_tag_value_is_cifscalar(self):
-        from pycifparse.cifmodel.builder import build
+        from cifflow.cifmodel.builder import build
         cif, _ = build("#\\#CIF_2.0\ndata_test\n_tag value\n")
         v = cif['test']['_tag'][0]
         assert isinstance(v, CifScalar)
@@ -71,20 +71,20 @@ class TestCifScalarBuilderIntegration:
         assert v.value_type == ValueType.STRING
 
     def test_placeholder_dot_has_placeholder_type(self):
-        from pycifparse.cifmodel.builder import build
+        from cifflow.cifmodel.builder import build
         cif, _ = build("#\\#CIF_2.0\ndata_test\n_tag .\n")
         v = cif['test']['_tag'][0]
         assert isinstance(v, CifScalar)
         assert v.value_type == ValueType.PLACEHOLDER
 
     def test_placeholder_question_has_placeholder_type(self):
-        from pycifparse.cifmodel.builder import build
+        from cifflow.cifmodel.builder import build
         cif, _ = build("#\\#CIF_2.0\ndata_test\n_tag ?\n")
         v = cif['test']['_tag'][0]
         assert v.value_type == ValueType.PLACEHOLDER
 
     def test_quoted_dot_has_double_quoted_type(self):
-        from pycifparse.cifmodel.builder import build
+        from cifflow.cifmodel.builder import build
         cif, _ = build('#\\#CIF_2.0\ndata_test\n_tag "."\n')
         v = cif['test']['_tag'][0]
         assert isinstance(v, CifScalar)
@@ -92,20 +92,20 @@ class TestCifScalarBuilderIntegration:
         assert v.value_type == ValueType.DOUBLE_QUOTED
 
     def test_quoted_question_has_double_quoted_type(self):
-        from pycifparse.cifmodel.builder import build
+        from cifflow.cifmodel.builder import build
         cif, _ = build('#\\#CIF_2.0\ndata_test\n_tag "?"\n')
         v = cif['test']['_tag'][0]
         assert v.value_type == ValueType.DOUBLE_QUOTED
 
     def test_multiline_value_type_preserved(self):
-        from pycifparse.cifmodel.builder import build
+        from cifflow.cifmodel.builder import build
         cif, _ = build("#\\#CIF_2.0\ndata_test\n_tag\n;\nhello\n;\n")
         v = cif['test']['_tag'][0]
         assert isinstance(v, CifScalar)
         assert v.value_type == ValueType.MULTILINE_STRING
 
     def test_loop_values_are_cifscalar(self):
-        from pycifparse.cifmodel.builder import build
+        from cifflow.cifmodel.builder import build
         cif, _ = build(
             "#\\#CIF_2.0\ndata_test\nloop_\n_a _b\n1 2\n3 4\n"
         )
@@ -114,7 +114,7 @@ class TestCifScalarBuilderIntegration:
         assert v.value_type == ValueType.STRING
 
     def test_pad_placeholder_is_cifscalar_with_placeholder_type(self):
-        from pycifparse.cifmodel.builder import build
+        from cifflow.cifmodel.builder import build
         # Loop with 2 tags but 3 values — last row padded with ?
         cif, _ = build(
             "#\\#CIF_2.0\ndata_test\nloop_\n_a _b\n1 2\n3\n",
