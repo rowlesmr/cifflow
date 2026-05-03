@@ -5,11 +5,28 @@ on:
     branches: [compiled]   # switch to tags: ["v*"] for production releases
 
 jobs:
-  build-wheels:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist --find-interpreter
+          manylinux: auto
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux
+          path: dist/
+
+  build-non-linux:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
         include:
           - os: macos-latest
@@ -27,7 +44,6 @@ jobs:
           command: build
           args: --release --out dist
           target: ${{ matrix.target }}
-          manylinux: auto
 
       - uses: actions/upload-artifact@v4
         with:
@@ -35,7 +51,7 @@ jobs:
           path: dist/
 
   publish:
-    needs: build-wheels
+    needs: [build-linux, build-non-linux]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
