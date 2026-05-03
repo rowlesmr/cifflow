@@ -1,8 +1,8 @@
 """Tests for resolver.py — resolve_tag."""
 
-from pycifparse.dictionary.ddlm_item import DdlmItem
-from pycifparse.dictionary.ddlm_parser import DdlmDictionary
-from pycifparse.dictionary.resolver import ResolvedTag, resolve_tag
+from cifflow.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.ddlm_parser import DdlmDictionary
+from cifflow.dictionary.resolver import ResolvedTag, resolve_tag
 
 
 # ---------------------------------------------------------------------------

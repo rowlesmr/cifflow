@@ -33,7 +33,7 @@ DB_CONVERT_FILE = ROOT / (FILE_NAME +'_covert_db.duckdb')
 # Imports
 # ---------------------------------------------------------------------------
 
-from pycifparse import (
+from cifflow import (
     DictionaryLoader,
     directory_resolver,
     load_dictionary,
@@ -46,8 +46,8 @@ from pycifparse import (
     BlockSpec,
     validate,
 )
-from pycifparse.fidelity import check_fidelity
-from pycifparse.types import CifVersion
+from cifflow.fidelity import check_fidelity
+from cifflow.types import CifVersion
 
 # ---------------------------------------------------------------------------
 # Step 1 — Dictionary

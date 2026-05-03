@@ -1,4 +1,4 @@
-# pycifparse
+# cifflow
 
 A Python library for parsing, storing, and outputting Crystallographic Information Framework (CIF) files.
 
@@ -37,17 +37,17 @@ A Python library for parsing, storing, and outputting Crystallographic Informati
 
 ## Installation
 
-pycifparse is not yet on PyPI. Install directly from source:
+cifflow is not yet on PyPI. Install directly from source:
 
 ```
-git clone https://github.com/rowlesmr/pycifparse.git
-cd pycifparse
+git clone https://github.com/rowlesmr/cifflow.git
+cd cifflow
 pip install -e ".[dev]"
 .venv/Scripts/maturin develop   # or: maturin develop, if maturin is on PATH
 ```
 
 `duckdb` and `pyarrow` are declared dependencies and are installed automatically.
-The Rust extension (`pycifparse_core`) is compiled by `maturin` during the second step.
+The Rust extension (`cifflow_core`) is compiled by `maturin` during the second step.
 
 ---
 
@@ -56,7 +56,7 @@ The Rust extension (`pycifparse_core`) is compiled by `maturin` during the secon
 ### Parse a CIF file
 
 ```python
-from pycifparse import build
+from cifflow import build
 
 text = open('structure.cif', encoding='utf-8').read()
 cif, errors = build(text)   # never raises; errors is a list[ParseError]
@@ -75,13 +75,13 @@ errors automatically.
 
 ```python
 import pathlib
-from pycifparse import (
+from cifflow import (
     DictionaryLoader, directory_resolver,
     save_dictionary, load_dictionary,
     generate_schema,
     build, ingest, emit, EmitMode,
 )
-from pycifparse.types import CifVersion
+from cifflow.types import CifVersion
 
 # 1. Load dictionary (with JSON cache to avoid re-parsing on every run)
 cache = pathlib.Path('cif_pow_cache.json')
@@ -175,4 +175,4 @@ Apache 2.0. See `LICENSE`.
 
 The bundled JavaScript files (`viz.js` 2.1.2 and `svg-pan-zoom` 3.6.1) used by
 `visualise_schema_html` are MIT-licensed. Licence notices are in
-`src/pycifparse/dictionary/js/LICENSES.txt`.
+`src/cifflow/dictionary/js/LICENSES.txt`.

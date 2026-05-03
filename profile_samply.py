@@ -51,7 +51,7 @@ def main():
     args = _parse_args()
     path = str(args.cif_file)
 
-    import pycifparse as pcp
+    import cifflow as pcp
 
     size_kb = pathlib.Path(path).stat().st_size / 1024
     print(f"File: {path}  ({size_kb:.0f} KB)")

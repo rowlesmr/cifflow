@@ -8,12 +8,12 @@ import uuid
 import duckdb
 import pytest
 
-from pycifparse import ingest, IngestionError
-from pycifparse.cifmodel.model import CifBlock, CifFile
-from pycifparse.dictionary.ddlm_item import DdlmItem
-from pycifparse.dictionary.ddlm_parser import DdlmDictionary
-from pycifparse.dictionary.schema import generate_schema
-from pycifparse.ingestion.ingest import (
+from cifflow import ingest, IngestionError
+from cifflow.cifmodel.model import CifBlock, CifFile
+from cifflow.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.ddlm_parser import DdlmDictionary
+from cifflow.dictionary.schema import generate_schema
+from cifflow.ingestion.ingest import (
     build_su_map,
     build_tag_to_column,
     decode_container,
@@ -21,7 +21,7 @@ from pycifparse.ingestion.ingest import (
     encode_value,
     split_su,
 )
-from pycifparse.types import ValueType
+from cifflow.types import ValueType
 
 
 # ---------------------------------------------------------------------------
@@ -234,25 +234,25 @@ def _rows(conn, table, cols=None):
 def _fallback(conn, block_id=None):
     if block_id:
         return conn.execute(
-            'SELECT "_block_id","_row_id","tag","value","value_type","loop_id","col_index"'
-            ' FROM "_cif_fallback" WHERE "_block_id"=? ORDER BY "_row_id","col_index","tag"',
+            'SELECT "_cifflow_block_id","_cifflow_row_id","tag","value","value_type","loop_id","col_index"'
+            ' FROM "_cif_fallback" WHERE "_cifflow_block_id"=? ORDER BY "_cifflow_row_id","col_index","tag"',
             [block_id]
         ).fetchall()
     return conn.execute(
-        'SELECT "_block_id","_row_id","tag","value","value_type","loop_id","col_index"'
-        ' FROM "_cif_fallback" ORDER BY "_block_id","_row_id","col_index","tag"'
+        'SELECT "_cifflow_block_id","_cifflow_row_id","tag","value","value_type","loop_id","col_index"'
+        ' FROM "_cif_fallback" ORDER BY "_cifflow_block_id","_cifflow_row_id","col_index","tag"'
     ).fetchall()
 
 
 def _membership(conn, block_id=None):
     if block_id:
         return conn.execute(
-            'SELECT "_block_id","_audit_dataset_id","id_regime"'
-            ' FROM "_block_dataset_membership" WHERE "_block_id"=?',
+            'SELECT "_cifflow_block_id","_audit_dataset_id","id_regime"'
+            ' FROM "_block_dataset_membership" WHERE "_cifflow_block_id"=?',
             [block_id]
         ).fetchall()
     return conn.execute(
-        'SELECT "_block_id","_audit_dataset_id","id_regime"'
+        'SELECT "_cifflow_block_id","_audit_dataset_id","id_regime"'
         ' FROM "_block_dataset_membership"'
     ).fetchall()
 
@@ -270,11 +270,11 @@ def _validation(conn):
 
 class TestImport:
     def test_ingest_importable_from_top_level(self):
-        from pycifparse import ingest as _ingest
+        from cifflow import ingest as _ingest
         assert callable(_ingest)
 
     def test_ingest_importable_from_ingestion(self):
-        from pycifparse.ingestion import ingest as _ingest
+        from cifflow.ingestion import ingest as _ingest
         assert callable(_ingest)
 
 
@@ -423,9 +423,9 @@ class TestBuildTagToColumn:
     def test_synthetic_columns_excluded(self):
         schema = _schema_a()
         mapping = build_tag_to_column(schema)
-        # Synthetic columns (_block_id, _row_id) are not in column_to_tag
+        # Synthetic columns (_cifflow_block_id, _cifflow_row_id) are not in column_to_tag
         for key in mapping:
-            assert not key.startswith('_block') and '_row_id' not in key
+            assert not key.startswith('_block') and '_cifflow_row_id' not in key
 
 
 # ===========================================================================
@@ -444,11 +444,11 @@ class TestNoSchema:
         assert '_cell.length_a' in tags
         assert '_cell.length_b' in tags
 
-    def test_scalar_row_id_is_1(self):
+    def test_scalar_cifflow_row_id_is_1(self):
         f = _file(_block('B', scalars={'_cell.length_a': _s('5.4')}))
         conn, _ = _do_ingest(f)
         row = _fallback(conn, 'B')[0]
-        assert row[1] == 1  # _row_id
+        assert row[1] == 1  # _cifflow_row_id
 
     def test_loop_rows_to_fallback(self):
         f = _file(_block('B', loops=[
@@ -459,7 +459,7 @@ class TestNoSchema:
         rows = _fallback(conn, 'B')
         assert len(rows) == 4  # 2 iterations × 2 tags
 
-    def test_loop_row_id_increments_per_iteration(self):
+    def test_loop_cifflow_row_id_increments_per_iteration(self):
         f = _file(_block('B', loops=[
             (['_atom_site.label'], [[_s('C1')], [_s('C2')]]),
         ]))
@@ -554,14 +554,14 @@ class TestLoopRouting:
         rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         assert set(rows) == {('C1', '0.1'), ('C2', '0.2')}
 
-    def test_loop_row_id_increments(self):
+    def test_loop_cifflow_row_id_increments(self):
         schema = _schema_a()
         f = _file(_block('B', loops=[
             (['_atom_site.label'],
              [[_s('C1')], [_s('C2')]]),
         ]))
         conn, _ = _do_ingest(f, schema)
-        rows = _rows(conn, 'atom_site', ['_row_id', 'label'])
+        rows = _rows(conn, 'atom_site', ['_cifflow_row_id', 'label'])
         row_ids = sorted(r[0] for r in rows)
         assert row_ids == [1, 2]
 
@@ -770,7 +770,7 @@ class TestMerge:
         rows = _rows(conn, 'atom_site', ['label', 'x_fract'])
         assert rows == [('C1', '0.1')]
 
-    def test_merged_block_id_from_first_block(self):
+    def test_merged_cifflow_block_id_from_first_block(self):
         schema = _schema_a()
         b1 = _block('B1', loops=[
             (['_atom_site.label'], [[_s('C1')]]),
@@ -780,10 +780,10 @@ class TestMerge:
              [[_s('C1'), _s('0.5')]]),
         ])
         conn, _ = _do_ingest(_file(b1, b2), schema)
-        rows = _rows(conn, 'atom_site', ['_block_id', 'label', 'x_fract'])
+        rows = _rows(conn, 'atom_site', ['_cifflow_block_id', 'label', 'x_fract'])
         assert rows == [('B1', 'C1', '0.5')]
 
-    def test_row_id_does_not_reset_between_blocks(self):
+    def test_cifflow_row_id_does_not_reset_between_blocks(self):
         schema = _schema_a()
         b1 = _block('B1', loops=[
             (['_atom_site.label'], [[_s('C1')]]),
@@ -792,7 +792,7 @@ class TestMerge:
             (['_atom_site.label'], [[_s('C2')]]),
         ])
         conn, _ = _do_ingest(_file(b1, b2), schema)
-        rows = _rows(conn, 'atom_site', ['_row_id', 'label'])
+        rows = _rows(conn, 'atom_site', ['_cifflow_row_id', 'label'])
         row_id_by_label = {label: rid for rid, label in rows}
         assert row_id_by_label['C1'] == 1
         assert row_id_by_label['C2'] == 2  # not 1 again
@@ -873,34 +873,34 @@ class TestSetTable:
         rows = _rows(conn, 'structure', ['id'])
         assert set(rows) == {('S1',), ('S2',)}
 
-    def test_set_table_block_id_populated(self):
+    def test_set_table_cifflow_block_id_populated(self):
         schema = _schema_a()
         f = _file(_block('MY_BLOCK', scalars={'_structure.id': _s('S1')}))
         conn, _ = _do_ingest(f, schema)
-        rows = _rows(conn, 'structure', ['_block_id', 'id'])
+        rows = _rows(conn, 'structure', ['_cifflow_block_id', 'id'])
         assert rows[0] == ('MY_BLOCK', 'S1')
 
-    def test_keyless_set_table_pycifparse_id_is_uuid(self):
+    def test_keyless_set_table_cifflow_id_is_uuid(self):
         schema = _schema_keyless_set()
         f = _file(_block('B', scalars={'_props.name': _s('val')}))
         conn, _ = _do_ingest(f, schema)
-        rows = _rows(conn, 'props', ['_pycifparse_id', 'name'])
+        rows = _rows(conn, 'props', ['_cifflow_id', 'name'])
         assert len(rows) == 1
         pid = rows[0][0]
         assert pid is not None
         try:
             uuid.UUID(pid)
         except ValueError:
-            pytest.fail(f'_pycifparse_id is not a UUID: {pid!r}')
+            pytest.fail(f'_cifflow_id is not a UUID: {pid!r}')
 
-    def test_set_table_row_id_reserved_at_first_tag(self):
-        """_row_id for Set table should reflect encounter order, not be arbitrary."""
+    def test_set_table_cifflow_row_id_reserved_at_first_tag(self):
+        """_cifflow_row_id for Set table should reflect encounter order, not be arbitrary."""
         schema = _schema_a()
         f = _file(_block('B', scalars={
             '_structure.id': _s('S1'),
         }))
         conn, _ = _do_ingest(f, schema)
-        rows = _rows(conn, 'structure', ['_row_id'])
+        rows = _rows(conn, 'structure', ['_cifflow_row_id'])
         assert rows[0][0] == 1
 
 
@@ -921,18 +921,18 @@ class TestMixedLoop:
         fb = _fallback(conn, 'B')
         assert any(r[2] == '_atom_site.custom_tag' for r in fb)
 
-    def test_mixed_loop_fallback_row_id_matches_structured(self):
-        """Fallback cells in mixed loop share _row_id with structured row."""
+    def test_mixed_loop_fallback_cifflow_row_id_matches_structured(self):
+        """Fallback cells in mixed loop share _cifflow_row_id with structured row."""
         schema = _schema_a()
         f = _file(_block('B', loops=[
             (['_atom_site.label', '_atom_site.custom_tag'],
              [[_s('C1'), _s('extra')]]),
         ]))
         conn, _ = _do_ingest(f, schema)
-        struct_row_id = _rows(conn, 'atom_site', ['_row_id'])[0][0]
+        struct_cifflow_row_id = _rows(conn, 'atom_site', ['_cifflow_row_id'])[0][0]
         fb = _fallback(conn, 'B')
-        fb_row_id = fb[0][1]  # _row_id
-        assert fb_row_id == struct_row_id
+        fb_cifflow_row_id = fb[0][1]  # _cifflow_row_id
+        assert fb_cifflow_row_id == struct_cifflow_row_id
 
     def test_mixed_loop_col_index_correct(self):
         schema = _schema_a()

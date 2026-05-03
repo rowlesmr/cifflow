@@ -8,8 +8,8 @@ Phase B: _import.get resolution.
 import pathlib
 import pytest
 
-from pycifparse.dictionary.loader import DictionaryLoader, directory_resolver
-from pycifparse.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.loader import DictionaryLoader, directory_resolver
+from cifflow.dictionary.ddlm_item import DdlmItem
 
 DATA_DIR = pathlib.Path(__file__).parent.parent.parent / 'data' / 'dictionaries'
 
@@ -1085,7 +1085,7 @@ class TestIgnoreHeadImports:
 
 class TestDirectoryPathResolver:
     def test_finds_file_returns_absolute_path(self, tmp_path):
-        from pycifparse.dictionary.loader import directory_path_resolver
+        from cifflow.dictionary.loader import directory_path_resolver
         f = tmp_path / 'foo.dic'
         f.write_text('#\\#CIF_2.0\n', encoding='utf-8')
         resolver = directory_path_resolver(tmp_path)
@@ -1095,7 +1095,7 @@ class TestDirectoryPathResolver:
         assert pathlib.Path(result).is_absolute()
 
     def test_returns_none_for_missing(self, tmp_path):
-        from pycifparse.dictionary.loader import directory_path_resolver
+        from cifflow.dictionary.loader import directory_path_resolver
         resolver = directory_path_resolver(tmp_path)
         assert resolver('file:///nonexistent.dic') is None
 
@@ -1160,7 +1160,7 @@ save_
         assert 'mydict.dic' in d.source_files
 
     def test_load_with_base_uri_and_path_resolver(self, tmp_path):
-        from pycifparse.dictionary.loader import directory_path_resolver
+        from cifflow.dictionary.loader import directory_path_resolver
         f = tmp_path / 'mydict.dic'
         f.write_text("""\
 #\\#CIF_2.0

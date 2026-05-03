@@ -1,4 +1,4 @@
-# pycifparse — Task Log
+# cifflow — Task Log
 
 ---
 
@@ -12,17 +12,17 @@
 
 #### Bug fix: ALL_BLOCKS re-ingest duplication (pd_data 25252 → 6313 rows)
 
-**Root cause:** `_run_fk_fill_pass` resolved propagation links only one level deep. In ALL_BLOCKS output, each category is a separate CIF block with a different `_block_id`. When re-ingested:
-- `_raw_pd_meas` rows have `_block_id = 'pd_meas_...'`
+**Root cause:** `_run_fk_fill_pass` resolved propagation links only one level deep. In ALL_BLOCKS output, each category is a separate CIF block with a different `_cifflow_block_id`. When re-ingested:
+- `_raw_pd_meas` rows have `_cifflow_block_id = 'pd_meas_...'`
 - Propagation link: `pd_meas.diffractogram_id ← _pd_data.diffractogram_id ← _pd_diffractogram.id`
-- The code looked in `_raw_pd_data` filtered by `_block_id = 'pd_meas_...'` — but `_raw_pd_data` only has rows with `_block_id = 'pd_data_...'` → fill fails
+- The code looked in `_raw_pd_data` filtered by `_cifflow_block_id = 'pd_meas_...'` — but `_raw_pd_data` only has rows with `_cifflow_block_id = 'pd_data_...'` → fill fails
 - `has_single_fk=False` for `diffractogram_id` → UUID generation fires → 6313 unique UUIDs per sibling table
 - Composite FK stub creation: each UUID not found in `_raw_pd_data` → 3 × 6313 = 18939 stub rows inserted
 - `_raw_pd_data` total: 6313 + 18939 = 25252 → all inserted as distinct PKs
 
-**Fix (`duckdb_ingest.py` — `_run_fk_fill_pass`):** Propagation link resolution now follows the full transitive chain (up to 8 levels). For each level, three block-scoped subqueries (same-loop/iter, scalars-loop, any-row-in-block) are added to the COALESCE. Each ALL_BLOCKS block emits the Set-key scalar (`_pd_diffractogram.id`) so `_raw_pd_diffractogram` has a row with the correct `_block_id`, and the level-2 lookup finds it.
+**Fix (`duckdb_ingest.py` — `_run_fk_fill_pass`):** Propagation link resolution now follows the full transitive chain (up to 8 levels). For each level, three block-scoped subqueries (same-loop/iter, scalars-loop, any-row-in-block) are added to the COALESCE. Each ALL_BLOCKS block emits the Set-key scalar (`_pd_diffractogram.id`) so `_raw_pd_diffractogram` has a row with the correct `_cifflow_block_id`, and the level-2 lookup finds it.
 
-**File changed:** `src/pycifparse/ingestion/duckdb_ingest.py` — propagation links section of `_run_fk_fill_pass`.
+**File changed:** `src/cifflow/ingestion/duckdb_ingest.py` — propagation links section of `_run_fk_fill_pass`.
 
 #### Test failures fixed (8 failures → 0)
 
@@ -64,7 +64,7 @@ Fix:
 
 2. **`emit_create_statements` DDL target** — generates SQLite DDL and is still exported as public API. The ingest path no longer uses it (DuckDB has its own DDL). Decision: update to DuckDB DDL, or keep as SQLite DDL for backward compat? Currently tested with SQLite in `test_schema.py`.
 
-3. **`_block_id`/`_row_id` rename** — a pervasive rename to `_pycifparse_block_id`/`_pycifparse_row_id` is documented. Large mechanical change touching schema generation, ingest, output, compactification, fidelity, inspect, all tests, and prompts. Decide timing: before or after rust branch merge to main.
+3. **`_cifflow_block_id`/`_cifflow_row_id` rename** — a pervasive rename to `_cifflow_cifflow_block_id`/`_cifflow_cifflow_row_id` is documented. Large mechanical change touching schema generation, ingest, output, compactification, fidelity, inspect, all tests, and prompts. Decide timing: before or after rust branch merge to main.
 
 4. **rust branch merge to main** — rust branch contains: PyO3-backed `CifFile` (Phase B), Arrow IR pipeline, DuckDB ingest (Phase C), and all associated performance work. Main branch is still on old Python CifFile + SQLite path. Decide merge timing relative to remaining functional work.
 
@@ -118,7 +118,7 @@ Fix:
 | **Total** | **~25s** |
 
 **Ingest bottlenecks (hard to optimize further without architectural change):**
-- `create_final_tables` ~5.6s — `ROW_NUMBER() OVER (ORDER BY ...)` sort in `_merge_keyed` for large tables (pd_meas, pd_calc_component: 100K–240K rows). Sort is inherent to assigning sequential `_row_id` values.
+- `create_final_tables` ~5.6s — `ROW_NUMBER() OVER (ORDER BY ...)` sort in `_merge_keyed` for large tables (pd_meas, pd_calc_component: 100K–240K rows). Sort is inherent to assigning sequential `_cifflow_row_id` values.
 - `propagate_fk_sql` ~2.4s — FK fill passes.
 - `flush_table_batches` ~0.9s, `load_block_data` ~1.2s.
 
@@ -151,7 +151,7 @@ Emit layer re-quotes by content analysis. Ingest checks string value directly.
 
 Scalar tags → one RecordBatch per block, one row, one column per tag:
 ```
-_block_idx:  Int32
+_cifflow_block_idx:  Int32
 _block_name: Utf8
 _frame_idx:  Int32  (NULL for block-level)
 _frame_name: Utf8   (NULL for block-level)
@@ -163,7 +163,7 @@ _loop_id:    Utf8   "__scalars__"
 
 Loop → one RecordBatch per loop, N rows, one column per tag:
 ```
-_block_idx:  Int32
+_cifflow_block_idx:  Int32
 _block_name: Utf8
 _loop_id:    Utf8   "__loop_0__", "__loop_1__", ...
 <tag_1>:     Utf8
@@ -200,7 +200,7 @@ cif.deepcopy()            # → CifFile
 
 #### Phase B.2 — Arrow IR pipeline ✓ COMPLETE (2026-04-26)
 
-- [x] `arrow = { version = "53", features = ["ipc"] }` added to `pycifparse_core/Cargo.toml`
+- [x] `arrow = { version = "53", features = ["ipc"] }` added to `cifflow_core/Cargo.toml`
 - [x] `raw_builder.rs`: `ParsedCif::to_ipc_batches()` — scalar batch + one batch per loop per block/save-frame; each batch carries only its own tag columns; serialised via `arrow::ipc::writer::FileWriter` → `Vec<u8>`
 - [x] `lib.rs`: `parse_arrow(source, mode)` added; returns `(list[bytes], list[error_dicts])`; registered in module
 - [x] `builder.py`: `build_arrow(source, *, mode)` added; deserializes IPC bytes via `pyarrow.ipc.open_file`
@@ -215,7 +215,7 @@ cif.deepcopy()            # → CifFile
 - [x] `lib.rs`: `parse_arrow` uses `to_py_batches()` — returns `list[pa.RecordBatch]` directly; `parse_arrow_file(path, mode)` added (Rust `std::fs::read_to_string`); both registered in module
 - [x] `builder.py`: `build_arrow()` drops IPC deserialization; `build_arrow_file(path, *, mode)` added
 - [x] `__init__.py`: `build_arrow_file` exported
-- [x] `pycifparse_core.pyi`: `parse_arrow` return type updated; `parse_arrow_file` stub added
+- [x] `cifflow_core.pyi`: `parse_arrow` return type updated; `parse_arrow_file` stub added
 - [x] 1836 tests pass; Lesson 107
 
 #### Phase B.3 — PyO3-exposed CifFile ✓ COMPLETE (2026-04-26)
@@ -228,7 +228,7 @@ cif.deepcopy()            # → CifFile
 - [x] `lib.rs`: `parse_cif(source, mode)` added; returns `(PyCifFile, list[error_dicts])` directly
 - [x] `builder.py`: `build()` calls `parse_cif` — dict-unpacking code removed
 - [x] `model.py`: replaced Python class definitions with PyO3 re-exports (`CifFile = _core.CifFile` etc.)
-- [x] `pycifparse_core.pyi`: full stubs for all three types + `parse_cif`
+- [x] `cifflow_core.pyi`: full stubs for all three types + `parse_cif`
 - [x] 1836 tests pass; Lessons 105–106
 
 #### Risk areas
@@ -286,7 +286,7 @@ metadata and conflict flag columns, never row data. `ValidationReport` is unchan
 
 #### Phase C.1 — DuckDB setup + raw table loading from Arrow IR
 
-**New file: `src/pycifparse/ingestion/duckdb_ingest.py`**
+**New file: `src/cifflow/ingestion/duckdb_ingest.py`**
 
 - `pip install duckdb` (add to project deps)
 - `build_duckdb(batches, schema) -> duckdb.DuckDBPyConnection`:
@@ -312,10 +312,10 @@ Python iterates the FK graph from `SchemaSpec` and generates SQL; DuckDB execute
 UPDATE child_table c
 SET fk_col = (
     SELECT p.pk_col FROM parent_table p
-    WHERE p._block_id = c._block_id LIMIT 1
+    WHERE p._cifflow_block_id = c._cifflow_block_id LIMIT 1
 )
 WHERE c.fk_col IS NULL
-  AND c._block_id IN (SELECT DISTINCT _block_id FROM parent_table);
+  AND c._cifflow_block_id IN (SELECT DISTINCT _cifflow_block_id FROM parent_table);
 ```
 This is executed once per FK edge in the graph, in topological order.
 
@@ -361,7 +361,7 @@ HAVING COUNT(DISTINCT value) > 1 AND COUNT(value) > 1
 **Merge result:**
 ```sql
 -- Merged table: FIRST non-NULL wins per (pk, col)
-SELECT pk_cols, FIRST(col IGNORE NULLS ORDER BY _block_idx) AS col, ...
+SELECT pk_cols, FIRST(col IGNORE NULLS ORDER BY _cifflow_block_idx) AS col, ...
 FROM all_block_rows
 GROUP BY pk_cols
 ```
@@ -369,8 +369,8 @@ GROUP BY pk_cols
 Conflicts are collected into the audit log / `ValidationIssue` list. Blocking conflicts
 raise `IngestionError` and abort the SQLite push (audit rows still committed).
 
-**Risk:** `_merge_into` tracks `_row_id` counters to give every row a stable integer ID.
-DuckDB uses `ROW_NUMBER() OVER (ORDER BY ...)` to assign `_row_id` equivalents.
+**Risk:** `_merge_into` tracks `_cifflow_row_id` counters to give every row a stable integer ID.
+DuckDB uses `ROW_NUMBER() OVER (ORDER BY ...)` to assign `_cifflow_row_id` equivalents.
 
 #### Phase C.4 — Validation in DuckDB
 
@@ -407,7 +407,7 @@ Metadata tables (`_block_order`, `_block_dataset_membership`, `_tag_presence`,
 `_validation_result`, `_cif_fallback`) are still written from Python as today — these
 are not hot-path tables and their current implementation is correct.
 
-`_pycifparse_audit` table (from spec): deferred — write from Python for now,
+`_cifflow_audit` table (from spec): deferred — write from Python for now,
 using the same `on_error` callback mechanism.
 
 #### Phase C.6 — Hot path deletion + verification
@@ -479,7 +479,7 @@ Also replaced `_PeekableTokens` in `parser.py` with direct list indexing.
 
 #### Phase 1.2 — `_id_regime` O(1) index ✓ (feature branch)
 
-`_id_regime` previously scanned all rows in `merged_rows` filtering by `_block_id` — O(blocks × total_rows) quadratic.
+`_id_regime` previously scanned all rows in `merged_rows` filtering by `_cifflow_block_id` — O(blocks × total_rows) quadratic.
 
 **Fix:** Added `_block_pk_values: dict[str, list[str]]` to `_Ingester`. Populated during `_merge_into` (new `block_pk_values` parameter, also threaded through `_apply_fk`). Also updated the inline set-buffer merge path. `_id_regime` now does a single dict lookup.
 
@@ -560,7 +560,7 @@ Target: 27.5s → ~2.7s. Remaining bottlenecks and candidate approaches:
 | Arrow inserts (Load phase) | ~10s — 156 register/execute/unregister per table | Batch all blocks per table into one Arrow insert (O(tables) not O(blocks × tables)) |
 | `fetchall()` in merge (Merge phase) | ~5s — 500K+ Python tuples created | `fetch_arrow_table()` → columnar access; avoids Python tuple construction |
 | SQLite `executemany` flush | ~8.5s — 126K+ rows per large table, row-by-row | Arrow → SQLite via ADBC or column-oriented `executemany(zip(*cols))` |
-| FK propagation UPDATEs | ~3s — one UPDATE per FK edge per block | Batch all blocks into a single UPDATE (remove `AND _block_id = ?` filter) |
+| FK propagation UPDATEs | ~3s — one UPDATE per FK edge per block | Batch all blocks into a single UPDATE (remove `AND _cifflow_block_id = ?` filter) |
 | SQLite pragmas during flush | free | `PRAGMA synchronous=OFF; PRAGMA journal_mode=MEMORY` inside ingest transaction |
 
 **Highest leverage:** batching Arrow inserts (single `pa.concat_tables` across all blocks per table, then one register/INSERT/unregister) and replacing `fetchall` with `fetch_arrow_table()`.
@@ -568,7 +568,7 @@ Target: 27.5s → ~2.7s. Remaining bottlenecks and candidate approaches:
 #### Open decisions
 
 1. **SQLite ADBC:** `adbc_driver_sqlite` allows Arrow → SQLite without Python intermediary. Worth the new dependency if executemany flush becomes the bottleneck after other fixes.
-2. **FK propagation scope:** Current `propagate_fk_sql` emits one UPDATE per `(fk_edge, block)`. Removing the `_block_id` filter makes it one UPDATE per FK edge total — valid only if the JOIN is block-scoped anyway (it is, via parent/child sharing `_block_id`). Verify before changing.
+2. **FK propagation scope:** Current `propagate_fk_sql` emits one UPDATE per `(fk_edge, block)`. Removing the `_cifflow_block_id` filter makes it one UPDATE per FK edge total — valid only if the JOIN is block-scoped anyway (it is, via parent/child sharing `_cifflow_block_id`). Verify before changing.
 
 ---
 
@@ -597,8 +597,8 @@ Spec: `prompts/unified_validate.md`
 - `ColumnDef`: added `type_container`, `enumeration_states`, `enumeration_range`, `type_dimension`
 - `generate_schema()`: propagates all four new fields; `type_contents` defaults to `'Text'` when absent
 - `quote.py`: added `is_table_key_quotable()` helper
-- `src/pycifparse/validation/`: new package with `_db_checks.py`, `_db_validate.py`, `_validate.py`, `__init__.py`
-- `pycifparse/__init__.py`: exports `validate`, `ValidationReport`, `ValidationIssue`
+- `src/cifflow/validation/`: new package with `_db_checks.py`, `_db_validate.py`, `_validate.py`, `__init__.py`
+- `cifflow/__init__.py`: exports `validate`, `ValidationReport`, `ValidationIssue`
 - `tests/validation/`: `test_validate.py` (42 tests) + `test_db_validate.py` (121 tests) = 163 tests
 
 #### Lessons: 91–94
@@ -679,7 +679,7 @@ Questions to resolve before writing the validator spec:
 
 DDLm attribute defaults (e.g. `_type.container` defaults to `Single`,
 `_type.contents` may have a default, etc.) are defined in `ddl.dic` itself,
-not hardcoded in pycifparse. Currently defaults are either `None` or
+not hardcoded in cifflow. Currently defaults are either `None` or
 approximated by ad-hoc `or 'Single'` guards in `generate_schema()`.
 
 Scope what it would mean to load `ddl.dic` at schema-generation time and use
@@ -713,7 +713,7 @@ in the same namespace. Two failure modes:
   list, leaving that column one value longer than all other columns in the loop. No error
   is emitted. The loop is structurally inconsistent.
 
-Fix required in `CifBuilder` (`src/pycifparse/cifmodel/builder.py`):
+Fix required in `CifBuilder` (`src/cifflow/cifmodel/builder.py`):
 - In `on_loop_start`: check if any incoming loop tag already exists as a scalar in the current
   namespace (`tag in ns._tags and tag not in any existing loop`). If so, emit a semantic error.
 - In `add_tag`: check if the tag already exists as a loop column in the current namespace
@@ -746,12 +746,12 @@ Required changes (do in one pass):
 
 ---
 
-#### Rename `_block_id` → `_pycifparse_block_id`, `_row_id` → `_pycifparse_row_id`
+#### Rename `_cifflow_block_id` → `_cifflow_cifflow_block_id`, `_cifflow_row_id` → `_cifflow_cifflow_row_id`
 
 Pervasive rename across schema generation, ingestion, output, compactification, fidelity,
 inspect layers, all tests, all prompts, and `docs/api.md`. Do in one pass with global
-search-and-replace; grep for both before closing. `_pycifparse_id` and
-`_pycifparse_error_value` are already correctly named.
+search-and-replace; grep for both before closing. `_cifflow_id` and
+`_cifflow_error_value` are already correctly named.
 
 ---
 
@@ -811,14 +811,14 @@ is resolved or a workaround is introduced.
 ## Stage 4: SQLite Ingestion — Implementation Plan
 
 ### Step 1 — Module scaffolding ✓
-- [x] Create `src/pycifparse/ingestion/__init__.py` (exports `ingest`)
-- [x] Create `src/pycifparse/ingestion/ingest.py` (stub raising `NotImplementedError`)
-- [x] Export `ingest` from `pycifparse/__init__.py`
+- [x] Create `src/cifflow/ingestion/__init__.py` (exports `ingest`)
+- [x] Create `src/cifflow/ingestion/ingest.py` (stub raising `NotImplementedError`)
+- [x] Export `ingest` from `cifflow/__init__.py`
 - [x] Create `tests/ingestion/__init__.py`, `test_ingest.py`, `test_integration.py`
-- [x] Confirm import works: `from pycifparse import ingest`
+- [x] Confirm import works: `from cifflow import ingest`
 
 ### Steps 2–10 ✓ COMPLETE
-All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `tests/ingestion/test_ingest.py` (92 tests).
+All implemented in `src/cifflow/ingestion/ingest.py` and unit-tested in `tests/ingestion/test_ingest.py` (92 tests).
 
 ### Step 11 — Integration tests (`@pytest.mark.slow`) ✓
 - [x] Ingest a real CIF file against `cif_core.dic` schema; spot-check known tag values in structured tables
@@ -836,13 +836,13 @@ All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `test
 ### Step 1 — Project scaffolding ✓
 - [x] Directory structure, `pyproject.toml`, stub `__init__.py` files, `tasks/lessons.md`
 
-### Step 2 — Shared types (`src/pycifparse/types.py`) ✓
+### Step 2 — Shared types (`src/cifflow/types.py`) ✓
 - [x] `ValueType`, `TokenType`, `ParseError`, `CifVersion`, `CifParserEvents`
 
 ### Step 3 — Version detection ✓
 - [x] `detect_version`; 15 tests
 
-### Step 4 — Lexer (`src/pycifparse/lexer/`) ✓
+### Step 4 — Lexer (`src/cifflow/lexer/`) ✓
 - [x] Hand-written state machine; 76 tests
 - [x] All string types: bare word, single/double quoted, triple quoted (CIF 2.0),
       multiline text field, CIF 1.1 embedded-quote rule
@@ -850,7 +850,7 @@ All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `test
 - [x] CIF 1.1 character set validation (non-ASCII and VT/FF → LexerError)
 - Key lessons: Lesson 1 (multiline closing delimiter), Lesson 3 (`:` not a bare-word terminator)
 
-### Step 5 — Parser (`src/pycifparse/parser/`) ✓
+### Step 5 — Parser (`src/cifflow/parser/`) ✓
 - [x] `CifParser`; 88 tests
 - [x] Data blocks, save frames, loops (sequential and `stop_`-terminated),
       lists, tables, orphan values, `global_` (fatal), all error-recovery paths
@@ -881,7 +881,7 @@ All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `test
 - [x] CIF 1.1 quoting rules tested against `cif1_quoting.cif`, `cif11_unquoted.cif`,
       `cif1_invalid.cif`
 
-### Debug tooling (`src/pycifparse/debug.py`) ✓
+### Debug tooling (`src/cifflow/debug.py`) ✓
 - [x] `debug_lex(source)` — prints full token stream with positions and lexer errors
 - [x] `DebugHandler(inner)` — wraps any handler; prints all events indented by nesting depth
 - [x] `debug_parse(source)` — convenience wrapper: tokens then events in one call
@@ -893,7 +893,7 @@ All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `test
 
 ## Stage 2: CIF Model (IR) ✓ COMPLETE
 
-### Step 8 — CIF model implementation (`src/pycifparse/cifmodel/`) ✓
+### Step 8 — CIF model implementation (`src/cifflow/cifmodel/`) ✓
 - [x] `CifFile`, `CifBlock`, `CifSaveFrame` data structures
 - [x] `CifBuilder` class implementing `CifParserEvents`
 - [x] Per-block storage: `tag → list[str]` for scalars; loop table structure
@@ -915,7 +915,7 @@ All implemented in `src/pycifparse/ingestion/ingest.py` and unit-tested in `test
 Prompt: `prompts/Stage3_Dictionary_Schema_Prompt.md`
 Data files: `data/dictionaries/`
 Tests: `tests/dictionary/`
-Module: `src/pycifparse/dictionary/`
+Module: `src/cifflow/dictionary/`
 API Reference: `prompts/API Reference.md`
 
 ### Step 10 — `DdlmItem` (`dictionary/ddlm_item.py`) ✓
@@ -938,7 +938,7 @@ API Reference: `prompts/API Reference.md`
       synthetic columns; PK from category_keys (5 fallback cases); FK detection;
       `column_to_tag` reverse mapping; all SQL identifiers double-quoted
 - [x] `emit_create_statements`: valid SQLite DDL; `DEFERRABLE INITIALLY DEFERRED`;
-      `_row_id UNIQUE`
+      `_cifflow_row_id UNIQUE`
 - [x] 58 unit tests including PRAGMA verification
 
 ### Step 13 — Schema application (`dictionary/schema_apply.py`) ✓
@@ -953,10 +953,10 @@ API Reference: `prompts/API Reference.md`
 
 ### Step 15 — Module wiring and integration ✓
 - [x] `dictionary/__init__.py` with all specified exports
-- [x] Updated `pycifparse/__init__.py` to re-export dictionary API
+- [x] Updated `cifflow/__init__.py` to re-export dictionary API
 - [x] Integration tests: `ddl.dic` + `cif_core.dic` → load → schema → apply;
       table count; synthetic columns; FK via PRAGMA; `column_to_tag` round-trip;
-      `_row_id UNIQUE` via `PRAGMA index_list`
+      `_cifflow_row_id UNIQUE` via `PRAGMA index_list`
 - [x] `prompts/API Reference.md` updated with full dictionary public API
 
 ### Review notes
@@ -991,7 +991,7 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 - **Investigate multi-dataset blocks (GROUPED)**: ALL_BLOCKS now correctly emits multiple `_audit_dataset.id` values as a `loop_` when a row group spans more than one original dataset. The equivalent question for GROUPED mode remains open: should GROUPED output preserve all dataset IDs per block, or should re-ingestion be more tolerant (union rather than intersection)?
 
 
-- ~~**Validation layer**~~ — **DONE** (2026-04-19). `src/pycifparse/validation/`. Spec: `prompts/unified_validate.md`. 163 tests. Lessons 91–94.
+- ~~**Validation layer**~~ — **DONE** (2026-04-19). `src/cifflow/validation/`. Spec: `prompts/unified_validate.md`. 163 tests. Lessons 91–94.
 
 - ~~**`check_fidelity`**~~ — **DONE** (2026-04-13). See Lessons 62–64.
 
@@ -1025,8 +1025,8 @@ Tests: `tests/dictionary/test_fallback_schema.py`
 ### Planned features (inspect layer)
 
 - ~~**`visualise_schema(schema) -> str`**~~ — **DONE** (2026-04-15).
-  `src/pycifparse/dictionary/visualise.py`, exported from `pycifparse.dictionary` and
-  `pycifparse`.  Spec: `prompts/stage 6 visualise schema.md`.  25 tests.
+  `src/cifflow/dictionary/visualise.py`, exported from `cifflow.dictionary` and
+  `cifflow`.  Spec: `prompts/stage 6 visualise schema.md`.  25 tests.
 
 ### Refactors
 
@@ -1040,12 +1040,12 @@ Tests: `tests/dictionary/test_fallback_schema.py`
   deferred until a `filter=` parameter is added.
 - **`inspect_ingest` filter parameter**: unfiltered trace first; leave open for later.
 - **SQLite trace output for `inspect_ingest`**: out of scope; leave open.
-- **`_pycifparse_id` scoping**: block-category-scoped (current). Revisit with real-world evidence.
+- **`_cifflow_id` scoping**: block-category-scoped (current). Revisit with real-world evidence.
 - `uuid_reference_check` is a stub — no rows written in Stage 4. Implement in a later stage.
 - Looped keyless Set: error is supposed to be emitted and UUID assigned per row, but this path is
-  not explicitly tested. Covered implicitly by the `_pycifparse_id` test but no error-emission test.
-- `_process_scalar` for the no-schema path uses `_row_id=1` for all scalars. In a block with
-  duplicate scalar tags, the fallback PK (`_block_id, _row_id, tag`) will cause a DB-level error
+  not explicitly tested. Covered implicitly by the `_cifflow_id` test but no error-emission test.
+- `_process_scalar` for the no-schema path uses `_cifflow_row_id=1` for all scalars. In a block with
+  duplicate scalar tags, the fallback PK (`_cifflow_block_id, _cifflow_row_id, tag`) will cause a DB-level error
   on the second occurrence. The spec says duplicate tags are undefined behaviour — caller must
   consolidate before `ingest()`. Documented in the Assumptions section of Stage4 prompt.
 - **`emit_defaults` flag**: accepted but has no effect. Suppressing default-fill values requires

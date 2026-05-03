@@ -1,5 +1,5 @@
 """
-pycifparse — pipeline performance profiler
+cifflow — pipeline performance profiler
 ==========================================
 Measures wall-clock time per pipeline phase, then runs cProfile over each
 phase independently so hot functions can be identified without noise from
@@ -30,7 +30,7 @@ import pstats
 import time
 
 import duckdb
-import pycifparse as pcp
+import cifflow as pcp
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -164,7 +164,7 @@ def phase_emit(conn: duckdb.DuckDBPyConnection, schema: pcp.SchemaSpec) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description='pycifparse pipeline profiler')
+    parser = argparse.ArgumentParser(description='cifflow pipeline profiler')
     parser.add_argument('--input', choices=list(INPUTS), default='second',
                         help='Input file set to use (default: second)')
     parser.add_argument('--profile', action='store_true',
@@ -183,7 +183,7 @@ def main() -> None:
     if args.no_cache and cache_file.exists():
         cache_file.unlink()
 
-    print(f"\npycifparse pipeline profiler")
+    print(f"\ncifflow pipeline profiler")
     print(f"  Input:      {cif_file.name}  ({cif_file.stat().st_size / 1024:.0f} KB)")
     print(f"  Dictionary: {dic_file.name}")
     print(f"  Cache:      {'yes' if cache_file.exists() else 'no (will build)'}")

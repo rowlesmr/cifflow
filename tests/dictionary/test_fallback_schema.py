@@ -5,7 +5,7 @@ Tests for emit_fallback_create_statements and fallback schema structure.
 import duckdb
 import pytest
 
-from pycifparse.dictionary.schema import emit_fallback_create_statements
+from cifflow.dictionary.schema import emit_fallback_create_statements
 
 
 def _fallback_conn():
@@ -35,10 +35,10 @@ class TestEmitFallbackCreateStatements:
         assert stmts[1].startswith('CREATE INDEX IF NOT EXISTS')
         assert 'idx_cif_fallback_tag_block' in stmts[1]
 
-    def test_index_covers_tag_and_block_id(self):
+    def test_index_covers_tag_and_cifflow_block_id(self):
         stmts = emit_fallback_create_statements()
         assert '"tag"' in stmts[1]
-        assert '"_block_id"' in stmts[1]
+        assert '"_cifflow_block_id"' in stmts[1]
 
     def test_third_is_membership_table(self):
         stmts = emit_fallback_create_statements()
@@ -97,12 +97,12 @@ class TestFallbackTableStructure:
 
     def test_expected_columns_present(self, conn):
         cols = self._columns(conn, '_cif_fallback')
-        for col in ('_block_id', '_row_id', 'tag', 'value', 'value_type', 'loop_id', 'col_index', 'ref_table'):
+        for col in ('_cifflow_block_id', '_cifflow_row_id', 'tag', 'value', 'value_type', 'loop_id', 'col_index', 'ref_table'):
             assert col in cols, f"column {col!r} missing from _cif_fallback"
 
     def test_membership_columns_present(self, conn):
         cols = self._columns(conn, '_block_dataset_membership')
-        for col in ('_block_id', '_audit_dataset_id', 'id_regime'):
+        for col in ('_cifflow_block_id', '_audit_dataset_id', 'id_regime'):
             assert col in cols, f"column {col!r} missing from _block_dataset_membership"
 
     def test_validation_columns_present(self, conn):
@@ -116,7 +116,7 @@ class TestFallbackTableStructure:
 
     def test_accepts_scalar_row(self, conn):
         conn.execute(
-            'INSERT INTO "_cif_fallback" (_block_id, _row_id, tag, value, value_type) '
+            'INSERT INTO "_cif_fallback" (_cifflow_block_id, _cifflow_row_id, tag, value, value_type) '
             "VALUES ('blk1', 1, '_some.tag', 'hello', 'string')"
         )
         rows = conn.execute('SELECT * FROM "_cif_fallback"').fetchall()
@@ -125,7 +125,7 @@ class TestFallbackTableStructure:
     def test_accepts_null_loop_id_and_col_index(self, conn):
         conn.execute(
             'INSERT INTO "_cif_fallback" '
-            '(_block_id, _row_id, tag, value, value_type, loop_id, col_index) '
+            '(_cifflow_block_id, _cifflow_row_id, tag, value, value_type, loop_id, col_index) '
             "VALUES ('blk1', 1, '_some.tag', 'hello', 'string', NULL, NULL)"
         )
         row = conn.execute('SELECT loop_id, col_index FROM "_cif_fallback"').fetchone()
@@ -134,7 +134,7 @@ class TestFallbackTableStructure:
     def test_accepts_null_ref_table(self, conn):
         conn.execute(
             'INSERT INTO "_cif_fallback" '
-            '(_block_id, _row_id, tag, value, value_type, loop_id, col_index, ref_table) '
+            '(_cifflow_block_id, _cifflow_row_id, tag, value, value_type, loop_id, col_index, ref_table) '
             "VALUES ('blk1', 1, '_some.tag', 'hello', 'string', NULL, NULL, NULL)"
         )
         row = conn.execute('SELECT ref_table FROM "_cif_fallback"').fetchone()
@@ -142,18 +142,18 @@ class TestFallbackTableStructure:
 
     def test_same_tag_different_blocks_allowed(self, conn):
         conn.execute(
-            'INSERT INTO "_cif_fallback" (_block_id, _row_id, tag, value, value_type) '
+            'INSERT INTO "_cif_fallback" (_cifflow_block_id, _cifflow_row_id, tag, value, value_type) '
             "VALUES ('blk1', 1, '_some.tag', 'a', 'string')"
         )
         conn.execute(
-            'INSERT INTO "_cif_fallback" (_block_id, _row_id, tag, value, value_type) '
+            'INSERT INTO "_cif_fallback" (_cifflow_block_id, _cifflow_row_id, tag, value, value_type) '
             "VALUES ('blk2', 1, '_some.tag', 'b', 'string')"
         )
         rows = conn.execute('SELECT * FROM "_cif_fallback"').fetchall()
         assert len(rows) == 2
 
     def test_coexists_with_structured_table(self, conn):
-        conn.execute('CREATE TABLE "atom_site" ("id" VARCHAR PRIMARY KEY, "_block_id" VARCHAR)')
+        conn.execute('CREATE TABLE "atom_site" ("id" VARCHAR PRIMARY KEY, "_cifflow_block_id" VARCHAR)')
         tables = self._tables(conn)
         assert 'atom_site' in tables
         assert '_cif_fallback' in tables

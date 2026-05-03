@@ -9,8 +9,8 @@ import pathlib
 import duckdb
 import pytest
 
-from pycifparse import build, ingest, IngestionError
-from pycifparse.dictionary import (
+from cifflow import build, ingest, IngestionError
+from cifflow.dictionary import (
     DictionaryLoader,
     directory_resolver,
     generate_schema,
@@ -83,7 +83,7 @@ class TestIngestWithSchema:
     def test_cell_length_a_in_structured_table(self, one_structure_conn):
         """_cell.length_a = 3.992 should be in the cell structured table."""
         row = one_structure_conn.execute(
-            "SELECT length_a FROM cell WHERE _block_id = 'selenium_0'"
+            "SELECT length_a FROM cell WHERE _cifflow_block_id = 'selenium_0'"
         ).fetchone()
         assert row is not None, "No cell row for selenium_0"
         assert row[0] == '3.992'
@@ -93,7 +93,7 @@ class TestIngestWithSchema:
         labels = [
             r[0]
             for r in one_structure_conn.execute(
-                "SELECT label FROM atom_site WHERE _block_id = 'selenium_0'"
+                "SELECT label FROM atom_site WHERE _cifflow_block_id = 'selenium_0'"
             ).fetchall()
         ]
         assert 'Se1' in labels
@@ -105,10 +105,10 @@ class TestIngestWithSchema:
         ).fetchone()
         assert row is None, "_cell.length_a should not appear in _cif_fallback"
 
-    def test_block_id_preserved(self, one_structure_conn):
-        """_block_id in structured tables must match the CIF data_ block name."""
+    def test_cifflow_block_id_preserved(self, one_structure_conn):
+        """_cifflow_block_id in structured tables must match the CIF data_ block name."""
         row = one_structure_conn.execute(
-            "SELECT _block_id FROM cell WHERE _block_id = 'selenium_0' LIMIT 1"
+            "SELECT _cifflow_block_id FROM cell WHERE _cifflow_block_id = 'selenium_0' LIMIT 1"
         ).fetchone()
         assert row is not None
         assert row[0] == 'selenium_0'
@@ -118,7 +118,7 @@ class TestIngestWithSchema:
         # cell.diffrn_id is a key-FK -> diffrn.id.
         # one_structure.cif has no _diffrn.id, so a UUID stub must exist in diffrn.
         cell_row = one_structure_conn.execute(
-            "SELECT diffrn_id FROM cell WHERE _block_id = 'selenium_0'"
+            "SELECT diffrn_id FROM cell WHERE _cifflow_block_id = 'selenium_0'"
         ).fetchone()
         assert cell_row is not None
         diffrn_id = cell_row[0]
@@ -168,7 +168,7 @@ class TestIngestNoSchema:
     def test_cell_length_a_in_fallback(self, one_structure_conn_no_schema):
         rows = one_structure_conn_no_schema.execute(
             "SELECT value FROM _cif_fallback "
-            "WHERE tag = '_cell.length_a' AND _block_id = 'selenium_0'"
+            "WHERE tag = '_cell.length_a' AND _cifflow_block_id = 'selenium_0'"
         ).fetchall()
         assert len(rows) == 1
         assert rows[0][0] == '3.992'
@@ -234,7 +234,7 @@ class TestIngestSecondShort:
         """_diffrn_radiation_wavelength rows must have radiation_id filled from accumulator."""
         rows = second_short_conn.execute(
             "SELECT id, radiation_id FROM diffrn_radiation_wavelength "
-            "WHERE _block_id = 'degaussa_raw_01_wavelength'"
+            "WHERE _cifflow_block_id = 'degaussa_raw_01_wavelength'"
         ).fetchall()
         assert len(rows) == 5
         assert all(r[1] == 'big_tube' for r in rows), \
@@ -244,7 +244,7 @@ class TestIngestSecondShort:
         """_diffrn_radiation.variant must be '.' (enumeration_default) when absent from CIF."""
         row = second_short_conn.execute(
             "SELECT variant, probe FROM diffrn_radiation "
-            "WHERE _block_id = 'degaussa_raw_01_wavelength'"
+            "WHERE _cifflow_block_id = 'degaussa_raw_01_wavelength'"
         ).fetchone()
         assert row is not None
         assert row[0] == '.', f"Expected variant='.', got {row[0]!r}"

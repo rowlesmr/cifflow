@@ -1,13 +1,13 @@
 """Break down DuckDB time per table in extract_merged_rows."""
 import json, pathlib, sqlite3, time, uuid as _uuid_module
 import duckdb
-import pycifparse as pcp
-from pycifparse.ingestion.duckdb_ingest import (
+import cifflow as pcp
+from cifflow.ingestion.duckdb_ingest import (
     setup_duckdb, load_block_data, flush_table_batches,
     propagate_fk_sql, _non_synthetic_pks, _non_pk_data_cols,
     _SCALARS_LOOP_ID,
 )
-from pycifparse.ingestion.ingest import build_tag_to_column, build_su_map, _select_blocks
+from cifflow.ingestion.ingest import build_tag_to_column, build_su_map, _select_blocks
 
 ROOT = pathlib.Path(__file__).parent
 CIF_FILE = ROOT / 'tests' / 'cif_files' / 'second.cif'
@@ -56,21 +56,21 @@ for tbl_name, table in schema.tables.items():
     data_cols = _non_pk_data_cols(table)
     n_pks = len(ns_pks)
     n_data = len(data_cols)
-    is_keyless = table.primary_keys == ['_pycifparse_id']
+    is_keyless = table.primary_keys == ['_cifflow_id']
 
     t_start = time.perf_counter()
     if is_keyless:
         data_sel = ', '.join(f'"{c}"' for c in data_cols) if data_cols else 'NULL AS _dummy'
         arrow_tbl = db.execute(
-            f'SELECT _block_id, {data_sel}'
-            f' FROM "_raw_{tbl_name}" ORDER BY _block_idx, _iter_idx'
+            f'SELECT _cifflow_block_id, {data_sel}'
+            f' FROM "_raw_{tbl_name}" ORDER BY _cifflow_block_idx, _iter_idx'
         ).fetch_arrow_table()
     else:
         pk_sel = ', '.join(f'"{pk}"' for pk in ns_pks)
         data_sel_part = (', ' + ', '.join(f'"{c}"' for c in data_cols)) if data_cols else ''
         arrow_tbl = db.execute(
-            f'SELECT _block_id, _block_idx, _loop_id, _iter_idx, {pk_sel}{data_sel_part}'
-            f' FROM "_raw_{tbl_name}" ORDER BY _block_idx, _loop_id, _iter_idx'
+            f'SELECT _cifflow_block_id, _cifflow_block_idx, _loop_id, _iter_idx, {pk_sel}{data_sel_part}'
+            f' FROM "_raw_{tbl_name}" ORDER BY _cifflow_block_idx, _loop_id, _iter_idx'
         ).fetch_arrow_table()
     t_end = time.perf_counter()
     n_rows = len(arrow_tbl)

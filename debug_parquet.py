@@ -21,7 +21,7 @@ import sys
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from pycifparse import build_arrow
+from cifflow import build_arrow
 
 
 def dump_cif_to_parquet(cif_path: pathlib.Path, out_dir: pathlib.Path) -> None:

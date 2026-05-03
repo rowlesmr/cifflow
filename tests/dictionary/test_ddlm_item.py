@@ -1,7 +1,7 @@
 """Tests for DdlmItem dataclass."""
 
 import pytest
-from pycifparse.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.ddlm_item import DdlmItem
 
 
 def _minimal(**kwargs) -> DdlmItem:
