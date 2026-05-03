@@ -21,6 +21,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - run: python -m venv .venv
+
       - uses: PyO3/maturin-action@v1
         with:
           command: develop
