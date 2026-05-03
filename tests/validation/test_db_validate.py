@@ -8,9 +8,9 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from pycifparse.dictionary.schema import ColumnDef, SchemaSpec, TableDef
-from pycifparse.dictionary.schema_apply import apply_fallback_schema
-from pycifparse.validation._db_checks import (
+from cifflow.dictionary.schema import ColumnDef, SchemaSpec, TableDef
+from cifflow.dictionary.schema_apply import apply_fallback_schema
+from cifflow.validation._db_checks import (
     _NULL_LEAF,
     check_enumeration_range_leaf,
     check_enumeration_states_leaf,
@@ -20,7 +20,7 @@ from pycifparse.validation._db_checks import (
     extract_leaves,
     parse_type_dimension,
 )
-from pycifparse.validation._db_validate import DbValidationResult, validate_database
+from cifflow.validation._db_validate import DbValidationResult, validate_database
 
 
 # ---------------------------------------------------------------------------
@@ -76,16 +76,16 @@ def _make_table(
     keyless_set: bool = False,
 ) -> TableDef:
     """Create a TableDef with standard synthetic prefix columns."""
-    block_id_col = _synthetic('_block_id', is_primary_key='_block_id' in (pks or []))
-    row_id_col = _synthetic('_row_id', is_primary_key='_row_id' in (pks or []))
+    block_id_col = _synthetic('_cifflow_block_id', is_primary_key='_cifflow_block_id' in (pks or []))
+    row_id_col = _synthetic('_cifflow_row_id', is_primary_key='_cifflow_row_id' in (pks or []))
 
     if keyless_set:
-        pycifparse_id = _synthetic('_pycifparse_id', is_primary_key=True)
-        all_cols = [block_id_col, pycifparse_id, row_id_col] + domain_cols
-        primary_keys = ['_pycifparse_id']
+        cifflow_id = _synthetic('_cifflow_id', is_primary_key=True)
+        all_cols = [block_id_col, cifflow_id, row_id_col] + domain_cols
+        primary_keys = ['_cifflow_id']
     else:
         all_cols = [block_id_col, row_id_col] + domain_cols
-        primary_keys = pks if pks is not None else ['_block_id', '_row_id']
+        primary_keys = pks if pks is not None else ['_cifflow_block_id', '_cifflow_row_id']
 
     return TableDef(
         name=table_name,
@@ -133,7 +133,7 @@ def _setup_db(
     for tbl_name, tbl_def in all_tables.items():
         col_parts = []
         for c in tbl_def.columns:
-            typ = 'INTEGER' if c.name == '_row_id' else 'TEXT'
+            typ = 'INTEGER' if c.name == '_cifflow_row_id' else 'TEXT'
             null_clause = '' if c.nullable else ' NOT NULL'
             col_parts.append(f'"{c.name}" {typ}{null_clause}')
         pk_clause = ', '.join(f'"{pk}"' for pk in tbl_def.primary_keys)
@@ -155,9 +155,9 @@ def _setup_db(
     if fallback_rows:
         for fr in fallback_rows:
             conn.execute(
-                'INSERT INTO "_cif_fallback" ("_block_id", "_row_id", "tag", "value", "value_type") '
+                'INSERT INTO "_cif_fallback" ("_cifflow_block_id", "_cifflow_row_id", "tag", "value", "value_type") '
                 'VALUES (?, ?, ?, ?, ?)',
-                (fr['_block_id'], fr['_row_id'], fr['tag'], fr.get('value'), fr.get('value_type', 'string')),
+                (fr['_cifflow_block_id'], fr['_cifflow_row_id'], fr['tag'], fr.get('value'), fr.get('value_type', 'string')),
             )
 
     conn.commit()
@@ -183,7 +183,7 @@ class TestTypeContainer:
 
     def _run(self, col, value, strict=True):
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': value}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': value}])
         results = validate_database(conn, schema, strict_container_nulls=strict)
         conn.close()
         return results
@@ -263,7 +263,7 @@ class TestTypeContainer:
         bad_key = "''' and \"\"\""
         col = _col('val', type_contents='Integer', type_container='Table')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': json.dumps({bad_key: 'not_int'})}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': json.dumps({bad_key: 'not_int'})}])
         results = validate_database(conn, schema)
         conn.close()
         checks = {r.check for r in results}
@@ -281,7 +281,7 @@ class TestTypeContainer:
         col = _col('val', type_contents='Integer', type_container='List',
                    enumeration_states=['1', '2'])
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': 'hello'}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': 'hello'}])
         results = validate_database(conn, schema)
         conn.close()
         assert all(r.check == 'type_container' for r in results)
@@ -304,7 +304,7 @@ class TestTypeDimension:
     def _run(self, dim: str, value, tc='List', strict=True):
         col = _col('val', type_contents='Text', type_container=tc, type_dimension=dim)
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': json.dumps(value)}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': json.dumps(value)}])
         results = validate_database(conn, schema, strict_container_nulls=strict)
         conn.close()
         return [r for r in results if r.check == 'type_dimension']
@@ -376,7 +376,7 @@ class TestTypeDimension:
         col = _col('val', type_contents='Text', type_container='Matrix', type_dimension='[2,3]')
         tbl = _make_table('t', [col])
         v = json.dumps([[1, 2, 3], None])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': v}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': v}])
         results = validate_database(conn, schema, strict_container_nulls=True)
         conn.close()
         dim_results = [r for r in results if r.check == 'type_dimension']
@@ -387,7 +387,7 @@ class TestTypeDimension:
         col = _col('val', type_contents='Text', type_container='Matrix', type_dimension='[2,3]')
         tbl = _make_table('t', [col])
         v = json.dumps([[1, 2, 3], None])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': v}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': v}])
         results = validate_database(conn, schema, strict_container_nulls=False)
         conn.close()
         dim_results = [r for r in results if r.check == 'type_dimension']
@@ -399,7 +399,7 @@ class TestTypeDimension:
     def test_table_with_type_dimension_no_result(self):
         col = _col('val', type_contents='Text', type_container='Table', type_dimension='[3]')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': '{"a":1}'}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': '{"a":1}'}])
         results = validate_database(conn, schema)
         conn.close()
         assert all(r.check != 'type_dimension' for r in results)
@@ -413,7 +413,7 @@ class TestTypeContents:
     def _run(self, type_contents: str, value: str) -> list[DbValidationResult]:
         col = _col('val', type_contents=type_contents, type_container='Single')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': value}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': value}])
         results = validate_database(conn, schema)
         conn.close()
         return [r for r in results if r.check == 'type_contents']
@@ -563,7 +563,7 @@ class TestTypeContentsLeafValues:
     def _run(self, value_json: str, tc: str = 'Integer', strict: bool = True):
         col = _col('val', type_contents=tc, type_container='List')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': value_json}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': value_json}])
         results = validate_database(conn, schema, strict_container_nulls=strict)
         conn.close()
         return [r for r in results if r.check == 'type_contents']
@@ -605,7 +605,7 @@ class TestTypeContentsLeafValues:
     def test_table_column_valid_value_no_result(self):
         col = _col('val', type_contents='Integer', type_container='Table')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': json.dumps({'k': '42'})}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': json.dumps({'k': '42'})}])
         results = validate_database(conn, schema)
         conn.close()
         assert [r for r in results if r.check == 'type_contents'] == []
@@ -613,7 +613,7 @@ class TestTypeContentsLeafValues:
     def test_table_column_invalid_value_gives_error(self):
         col = _col('val', type_contents='Integer', type_container='Table')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': json.dumps({'k': 'abc'})}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': json.dumps({'k': 'abc'})}])
         results = validate_database(conn, schema)
         conn.close()
         tc_results = [r for r in results if r.check == 'type_contents']
@@ -634,7 +634,7 @@ class TestEnumerationRange:
         col = _col('val', type_contents=tc, type_container='Single',
                    enumeration_range=range_str)
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': value}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': value}])
         results = validate_database(conn, schema, strict_container_nulls=strict)
         conn.close()
         return [r for r in results if r.check == 'enumeration_range']
@@ -671,7 +671,7 @@ class TestEnumerationRange:
         col = _col('val', type_contents='Real', type_container='List',
                    enumeration_range='0:10')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': '[1.0, 5.0, 9.9]'}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': '[1.0, 5.0, 9.9]'}])
         results = validate_database(conn, schema)
         conn.close()
         assert [r for r in results if r.check == 'enumeration_range'] == []
@@ -680,7 +680,7 @@ class TestEnumerationRange:
         col = _col('val', type_contents='Real', type_container='List',
                    enumeration_range='0:10')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': '[5.0, 15.0]'}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': '[5.0, 15.0]'}])
         results = validate_database(conn, schema)
         conn.close()
         range_results = [r for r in results if r.check == 'enumeration_range']
@@ -691,7 +691,7 @@ class TestEnumerationRange:
         col = _col('val', type_contents='Real', type_container='List',
                    enumeration_range='0:10')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': '[1.0, null]'}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': '[1.0, null]'}])
         results = validate_database(conn, schema, strict_container_nulls=False)
         conn.close()
         assert [r for r in results if r.check == 'enumeration_range'] == []
@@ -706,7 +706,7 @@ class TestEnumerationStates:
         col = _col('val', type_contents=tc, type_container='Single',
                    enumeration_states=states)
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': value}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': value}])
         results = validate_database(conn, schema)
         conn.close()
         return [r for r in results if r.check == 'enumeration_states']
@@ -739,7 +739,7 @@ class TestEnumerationStates:
         col = _col('val', type_contents='Text', type_container='List',
                    enumeration_states=['a', 'b', 'c'])
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': json.dumps(['a', 'b'])}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': json.dumps(['a', 'b'])}])
         results = validate_database(conn, schema)
         conn.close()
         assert [r for r in results if r.check == 'enumeration_states'] == []
@@ -748,7 +748,7 @@ class TestEnumerationStates:
         col = _col('val', type_contents='Text', type_container='List',
                    enumeration_states=['a', 'b'])
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': json.dumps(['a', 'x'])}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': json.dumps(['a', 'x'])}])
         results = validate_database(conn, schema)
         conn.close()
         es_results = [r for r in results if r.check == 'enumeration_states']
@@ -759,7 +759,7 @@ class TestEnumerationStates:
         col = _col('val', type_contents='Text', type_container='List',
                    enumeration_states=['a', 'b'])
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': json.dumps(['a', None])}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': json.dumps(['a', None])}])
         results = validate_database(conn, schema, strict_container_nulls=False)
         conn.close()
         assert [r for r in results if r.check == 'enumeration_states'] == []
@@ -780,7 +780,7 @@ class TestSentinels:
     def test_null_skips_all_checks(self):
         col = self._col_with_all_constraints()
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': None}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': None}])
         results = validate_database(conn, schema)
         conn.close()
         assert results == []
@@ -788,7 +788,7 @@ class TestSentinels:
     def test_dot_skips_all_checks(self):
         col = self._col_with_all_constraints()
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': '.'}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': '.'}])
         results = validate_database(conn, schema)
         conn.close()
         assert results == []
@@ -796,7 +796,7 @@ class TestSentinels:
     def test_question_skips_all_checks(self):
         col = self._col_with_all_constraints()
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': '?'}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': '?'}])
         results = validate_database(conn, schema)
         conn.close()
         assert results == []
@@ -805,7 +805,7 @@ class TestSentinels:
         col = _col('val', type_contents='Integer', type_container='List',
                    enumeration_states=['1'], enumeration_range='0:1')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': json.dumps(['.', '?', '1'])}])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': json.dumps(['.', '?', '1'])}])
         results = validate_database(conn, schema)
         conn.close()
         assert results == []
@@ -814,7 +814,7 @@ class TestSentinels:
         # "'.'" as a stored string is NOT the placeholder '.'.
         col = _col('val', type_contents='Integer', type_container='List')
         tbl = _make_table('t', [col])
-        conn, schema = _setup_db(tbl, [{'_block_id': 'b', '_row_id': 1, 'val': json.dumps(["'.'"]) }])
+        conn, schema = _setup_db(tbl, [{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'val': json.dumps(["'.'"]) }])
         results = validate_database(conn, schema)
         conn.close()
         tc = [r for r in results if r.check == 'type_contents']
@@ -835,8 +835,8 @@ class TestKeyValues:
             definition_id='_t',
             category_class='Loop',
             columns=[
-                _synthetic('_block_id'),
-                _synthetic('_row_id'),
+                _synthetic('_cifflow_block_id'),
+                _synthetic('_cifflow_row_id'),
                 pk_col, val_col,
             ],
             primary_keys=['id'],
@@ -844,7 +844,7 @@ class TestKeyValues:
         schema = _make_schema(tbl)
         conn = sqlite3.connect(':memory:')
         apply_fallback_schema(conn)
-        conn.execute('CREATE TABLE "t" ("_block_id" TEXT NOT NULL, "_row_id" INTEGER NOT NULL, "id" TEXT, "num" TEXT)')
+        conn.execute('CREATE TABLE "t" ("_cifflow_block_id" TEXT NOT NULL, "_cifflow_row_id" INTEGER NOT NULL, "id" TEXT, "num" TEXT)')
         conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ('b', 1, 'row1', 'bad'))
         conn.commit()
 
@@ -862,8 +862,8 @@ class TestKeyValues:
         conn = sqlite3.connect(':memory:')
         apply_fallback_schema(conn)
         conn.execute(
-            'CREATE TABLE "t" ("_block_id" TEXT NOT NULL, "_pycifparse_id" TEXT NOT NULL, '
-            '"_row_id" INTEGER NOT NULL, "val" TEXT, PRIMARY KEY ("_pycifparse_id"))'
+            'CREATE TABLE "t" ("_cifflow_block_id" TEXT NOT NULL, "_cifflow_id" TEXT NOT NULL, '
+            '"_cifflow_row_id" INTEGER NOT NULL, "val" TEXT, PRIMARY KEY ("_cifflow_id"))'
         )
         conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ('b', 'id1', 1, 'bad'))
         conn.commit()
@@ -886,8 +886,8 @@ class TestBlockIdFilter:
         col = _col('val', type_contents='Integer')
         tbl = _make_table('t', [col])
         conn, schema = _setup_db(tbl, [
-            {'_block_id': 'b1', '_row_id': 1, 'val': 'bad1'},
-            {'_block_id': 'b2', '_row_id': 2, 'val': 'bad2'},
+            {'_cifflow_block_id': 'b1', '_cifflow_row_id': 1, 'val': 'bad1'},
+            {'_cifflow_block_id': 'b2', '_cifflow_row_id': 2, 'val': 'bad2'},
         ])
         results = validate_database(conn, schema)
         conn.close()
@@ -898,8 +898,8 @@ class TestBlockIdFilter:
         col = _col('val', type_contents='Integer')
         tbl = _make_table('t', [col])
         conn, schema = _setup_db(tbl, [
-            {'_block_id': 'b1', '_row_id': 1, 'val': 'bad1'},
-            {'_block_id': 'b2', '_row_id': 2, 'val': 'bad2'},
+            {'_cifflow_block_id': 'b1', '_cifflow_row_id': 1, 'val': 'bad1'},
+            {'_cifflow_block_id': 'b2', '_cifflow_row_id': 2, 'val': 'bad2'},
         ])
         results = validate_database(conn, schema, block_id='b1')
         conn.close()
@@ -923,7 +923,7 @@ class TestUnknownTag:
         tbl = _make_table('t', [_col('val')])
         conn, schema = _setup_db(
             tbl, [],
-            fallback_rows=[{'_block_id': 'b', '_row_id': 1, 'tag': '_cell.unknown', 'value': 'x'}],
+            fallback_rows=[{'_cifflow_block_id': 'b', '_cifflow_row_id': 1, 'tag': '_cell.unknown', 'value': 'x'}],
         )
         results = validate_database(conn, schema)
         conn.close()
@@ -940,8 +940,8 @@ class TestUnknownTag:
         conn, schema = _setup_db(
             tbl, [],
             fallback_rows=[
-                {'_block_id': 'b1', '_row_id': 1, 'tag': '_x.y'},
-                {'_block_id': 'b2', '_row_id': 2, 'tag': '_x.y'},
+                {'_cifflow_block_id': 'b1', '_cifflow_row_id': 1, 'tag': '_x.y'},
+                {'_cifflow_block_id': 'b2', '_cifflow_row_id': 2, 'tag': '_x.y'},
             ],
         )
         results = validate_database(conn, schema)
@@ -949,13 +949,13 @@ class TestUnknownTag:
         ut = [r for r in results if r.check == 'unknown_tag']
         assert len(ut) == 2
 
-    def test_block_id_filter_limits_fallback(self):
+    def test_cifflow_block_id_filter_limits_fallback(self):
         tbl = _make_table('t', [_col('val')])
         conn, schema = _setup_db(
             tbl, [],
             fallback_rows=[
-                {'_block_id': 'b1', '_row_id': 1, 'tag': '_x.y'},
-                {'_block_id': 'b2', '_row_id': 2, 'tag': '_x.y'},
+                {'_cifflow_block_id': 'b1', '_cifflow_row_id': 1, 'tag': '_x.y'},
+                {'_cifflow_block_id': 'b2', '_cifflow_row_id': 2, 'tag': '_x.y'},
             ],
         )
         results = validate_database(conn, schema, block_id='b1')
@@ -978,12 +978,12 @@ class TestKeylessSetCardinality:
         conn = sqlite3.connect(':memory:')
         apply_fallback_schema(conn)
         conn.execute(
-            'CREATE TABLE "t" ("_block_id" TEXT NOT NULL, "_pycifparse_id" TEXT NOT NULL, '
-            '"_row_id" INTEGER NOT NULL, "val" TEXT, PRIMARY KEY ("_pycifparse_id"))'
+            'CREATE TABLE "t" ("_cifflow_block_id" TEXT NOT NULL, "_cifflow_id" TEXT NOT NULL, '
+            '"_cifflow_row_id" INTEGER NOT NULL, "val" TEXT, PRIMARY KEY ("_cifflow_id"))'
         )
         for row in rows:
             conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)',
-                         (row['_block_id'], row['id'], row['_row_id'], row.get('val')))
+                         (row['_cifflow_block_id'], row['id'], row['_cifflow_row_id'], row.get('val')))
         conn.commit()
         schema = _make_schema(tbl_def)
         return conn, schema
@@ -991,7 +991,7 @@ class TestKeylessSetCardinality:
     def test_one_row_per_block_no_result(self):
         tbl = self._make_keyless_table()
         conn, schema = self._create_keyless_db(tbl, [
-            {'_block_id': 'b', 'id': '1', '_row_id': 1},
+            {'_cifflow_block_id': 'b', 'id': '1', '_cifflow_row_id': 1},
         ])
         results = validate_database(conn, schema)
         conn.close()
@@ -1000,8 +1000,8 @@ class TestKeylessSetCardinality:
     def test_two_rows_same_block_gives_error(self):
         tbl = self._make_keyless_table()
         conn, schema = self._create_keyless_db(tbl, [
-            {'_block_id': 'b', 'id': '1', '_row_id': 1},
-            {'_block_id': 'b', 'id': '2', '_row_id': 2},
+            {'_cifflow_block_id': 'b', 'id': '1', '_cifflow_row_id': 1},
+            {'_cifflow_block_id': 'b', 'id': '2', '_cifflow_row_id': 2},
         ])
         results = validate_database(conn, schema)
         conn.close()
@@ -1013,10 +1013,10 @@ class TestKeylessSetCardinality:
     def test_violation_in_one_block_only(self):
         tbl = self._make_keyless_table()
         conn, schema = self._create_keyless_db(tbl, [
-            {'_block_id': 'b1', 'id': '1', '_row_id': 1},
-            {'_block_id': 'b1', 'id': '2', '_row_id': 2},
-            {'_block_id': 'b1', 'id': '3', '_row_id': 3},
-            {'_block_id': 'b2', 'id': '4', '_row_id': 4},
+            {'_cifflow_block_id': 'b1', 'id': '1', '_cifflow_row_id': 1},
+            {'_cifflow_block_id': 'b1', 'id': '2', '_cifflow_row_id': 2},
+            {'_cifflow_block_id': 'b1', 'id': '3', '_cifflow_row_id': 3},
+            {'_cifflow_block_id': 'b2', 'id': '4', '_cifflow_row_id': 4},
         ])
         results = validate_database(conn, schema)
         conn.close()
@@ -1025,23 +1025,23 @@ class TestKeylessSetCardinality:
         assert ksc[0].block_id == 'b1'
         assert ksc[0].value == '3'
 
-    def test_block_id_filter_to_clean_block_no_result(self):
+    def test_cifflow_block_id_filter_to_clean_block_no_result(self):
         tbl = self._make_keyless_table()
         conn, schema = self._create_keyless_db(tbl, [
-            {'_block_id': 'b1', 'id': '1', '_row_id': 1},
-            {'_block_id': 'b1', 'id': '2', '_row_id': 2},
-            {'_block_id': 'b2', 'id': '3', '_row_id': 3},
+            {'_cifflow_block_id': 'b1', 'id': '1', '_cifflow_row_id': 1},
+            {'_cifflow_block_id': 'b1', 'id': '2', '_cifflow_row_id': 2},
+            {'_cifflow_block_id': 'b2', 'id': '3', '_cifflow_row_id': 3},
         ])
         results = validate_database(conn, schema, block_id='b2')
         conn.close()
         assert [r for r in results if r.check == 'keyless_set_cardinality'] == []
 
-    def test_block_id_filter_to_violating_block_gives_error(self):
+    def test_cifflow_block_id_filter_to_violating_block_gives_error(self):
         tbl = self._make_keyless_table()
         conn, schema = self._create_keyless_db(tbl, [
-            {'_block_id': 'b1', 'id': '1', '_row_id': 1},
-            {'_block_id': 'b1', 'id': '2', '_row_id': 2},
-            {'_block_id': 'b2', 'id': '3', '_row_id': 3},
+            {'_cifflow_block_id': 'b1', 'id': '1', '_cifflow_row_id': 1},
+            {'_cifflow_block_id': 'b1', 'id': '2', '_cifflow_row_id': 2},
+            {'_cifflow_block_id': 'b2', 'id': '3', '_cifflow_row_id': 3},
         ])
         results = validate_database(conn, schema, block_id='b1')
         conn.close()
@@ -1056,13 +1056,13 @@ class TestKeylessSetCardinality:
             name='t',
             definition_id='_t',
             category_class='Set',
-            columns=[_synthetic('_block_id'), _synthetic('_row_id'), pk_col, val_col],
+            columns=[_synthetic('_cifflow_block_id'), _synthetic('_cifflow_row_id'), pk_col, val_col],
             primary_keys=['id'],
         )
         schema = _make_schema(tbl)
         conn = sqlite3.connect(':memory:')
         apply_fallback_schema(conn)
-        conn.execute('CREATE TABLE "t" ("_block_id" TEXT NOT NULL, "_row_id" INTEGER NOT NULL, "id" TEXT, "val" TEXT, PRIMARY KEY ("id"))')
+        conn.execute('CREATE TABLE "t" ("_cifflow_block_id" TEXT NOT NULL, "_cifflow_row_id" INTEGER NOT NULL, "id" TEXT, "val" TEXT, PRIMARY KEY ("id"))')
         conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ('b', 1, 'id1', 'v1'))
         conn.execute('INSERT INTO "t" VALUES (?, ?, ?, ?)', ('b', 2, 'id2', 'v2'))
         conn.commit()
@@ -1078,7 +1078,7 @@ class TestKeylessSetCardinality:
 class TestInternalError:
     def test_exception_inside_run_gives_internal_error(self):
         from unittest.mock import patch
-        from pycifparse.validation import _db_validate
+        from cifflow.validation import _db_validate
 
         tbl = _make_table('t', [_col('val')])
         conn, schema = _setup_db(tbl, [])

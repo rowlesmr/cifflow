@@ -1,5 +1,5 @@
 """
-Smoke tests for src/pycifparse/inspect/.
+Smoke tests for src/cifflow/inspect/.
 
 These tests verify that the public entry points run without raising and produce
 sensible output.  They do not assert exact formatting — that would be brittle —
@@ -11,7 +11,7 @@ import io
 
 import pytest
 
-from pycifparse.inspect import (
+from cifflow.inspect import (
     ParseHandler,
     inspect_lexer,
     inspect_model,
@@ -19,8 +19,8 @@ from pycifparse.inspect import (
     inspect_schema,
     TraceEvent,
 )
-from pycifparse.parser.parser import CifParser
-from pycifparse.types import ValueType
+from cifflow.parser.parser import CifParser
+from cifflow.types import ValueType
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -82,7 +82,7 @@ class TestInspectLexer:
         assert 'LEX ERROR' in out
 
     def test_explicit_version_kwarg(self):
-        from pycifparse.types import CifVersion
+        from cifflow.types import CifVersion
         _capture(inspect_lexer, 'data_d\n_t v\n', version=CifVersion.CIF_1_1)
 
     def test_path_input(self, tmp_path):
@@ -273,8 +273,8 @@ save_
 
 class TestInspectSchema:
     def test_runs_without_raising_from_spec(self):
-        from pycifparse.dictionary.loader import DictionaryLoader
-        from pycifparse.dictionary.schema import generate_schema
+        from cifflow.dictionary.loader import DictionaryLoader
+        from cifflow.dictionary.schema import generate_schema
         loader = DictionaryLoader()
         d = loader.load(_SCHEMA_DIC)
         schema = generate_schema(d)
@@ -292,7 +292,7 @@ class TestInspectSchema:
         assert 'widget' in out
 
     def test_runs_from_dictionary_object(self):
-        from pycifparse.dictionary.loader import DictionaryLoader
+        from cifflow.dictionary.loader import DictionaryLoader
         loader = DictionaryLoader()
         d = loader.load(_SCHEMA_DIC)
         out = _capture(inspect_schema, d)
@@ -316,8 +316,8 @@ class TestInspectSchema:
 
     def test_synthetic_columns_shown(self):
         out = _capture(inspect_schema, _SCHEMA_DIC)
-        assert '_block_id' in out
-        assert '_row_id' in out
+        assert '_cifflow_block_id' in out
+        assert '_cifflow_row_id' in out
 
     def test_definition_id_shown(self):
         out = _capture(inspect_schema, _SCHEMA_DIC)
@@ -433,7 +433,7 @@ save_
 
     def test_multi_column_foreign_key_shown(self):
         """Multi-column FK uses composite display (lines 143-147 in _schema.py)."""
-        from pycifparse.dictionary.schema import (
+        from cifflow.dictionary.schema import (
             SchemaSpec, TableDef, ColumnDef, ForeignKeyDef,
         )
         col_a = ColumnDef(name='a', definition_id='_t.a', type_contents='Text',
@@ -460,8 +460,8 @@ save_
 
     def test_schema_warnings_shown(self):
         # Lines 161-164: schema.warnings → warnings section printed
-        from pycifparse.dictionary.loader import DictionaryLoader
-        from pycifparse.dictionary.schema import generate_schema
+        from cifflow.dictionary.loader import DictionaryLoader
+        from cifflow.dictionary.schema import generate_schema
         # Build a schema that produces a warning: missing category keys
         dic_no_keys = """\
 #\\#CIF_2.0
@@ -498,9 +498,9 @@ save_
 class TestInspectIngest:
     def test_returns_list(self):
         import sqlite3
-        from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
+        from cifflow import build
+        from cifflow.dictionary.schema_apply import apply_fallback_schema
+        from cifflow.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
         conn = sqlite3.connect(':memory:')
@@ -514,9 +514,9 @@ class TestInspectIngest:
 
     def test_trace_events_are_trace_event_instances(self):
         import sqlite3
-        from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
+        from cifflow import build
+        from cifflow.dictionary.schema_apply import apply_fallback_schema
+        from cifflow.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
         conn = sqlite3.connect(':memory:')
@@ -531,9 +531,9 @@ class TestInspectIngest:
 
     def test_output_written_to_file(self):
         import sqlite3
-        from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
+        from cifflow import build
+        from cifflow.dictionary.schema_apply import apply_fallback_schema
+        from cifflow.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
         conn = sqlite3.connect(':memory:')
@@ -547,9 +547,9 @@ class TestInspectIngest:
 
     def test_header_present_in_output(self):
         import sqlite3
-        from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
+        from cifflow import build
+        from cifflow.dictionary.schema_apply import apply_fallback_schema
+        from cifflow.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
         conn = sqlite3.connect(':memory:')
@@ -573,9 +573,9 @@ class TestInspectIngest:
         """When file= is omitted, output goes to sys.stdout."""
         import sqlite3
         from unittest.mock import patch
-        from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
+        from cifflow import build
+        from cifflow.dictionary.schema_apply import apply_fallback_schema
+        from cifflow.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
         conn = sqlite3.connect(':memory:')
@@ -591,11 +591,11 @@ class TestInspectIngest:
     def test_ingestion_warning_on_incompatible_loop(self):
         """Incompatible multi-category loop produces an on_error warning."""
         import sqlite3
-        from pycifparse import build
-        from pycifparse.dictionary.loader import DictionaryLoader
-        from pycifparse.dictionary.schema import generate_schema
-        from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
+        from cifflow import build
+        from cifflow.dictionary.loader import DictionaryLoader
+        from cifflow.dictionary.schema import generate_schema
+        from cifflow.dictionary.schema_apply import apply_schema, apply_fallback_schema
+        from cifflow.inspect import inspect_ingest
 
         # Two unrelated Loop categories — a loop spanning both is incompatible.
         two_table_dic = """\
@@ -659,9 +659,9 @@ save_
     def test_clean_ingest_no_warnings(self):
         """Clean ingest prints the 'no warnings' message."""
         import sqlite3
-        from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
+        from cifflow import build
+        from cifflow.dictionary.schema_apply import apply_fallback_schema
+        from cifflow.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
         conn = sqlite3.connect(':memory:')
@@ -689,11 +689,11 @@ save_
         _Ingester.run to raise/return independently.
         """
         import sqlite3
-        from pycifparse import build
-        from pycifparse.dictionary.loader import DictionaryLoader
-        from pycifparse.dictionary.schema import generate_schema
-        from pycifparse.dictionary.schema_apply import apply_schema, apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
+        from cifflow import build
+        from cifflow.dictionary.loader import DictionaryLoader
+        from cifflow.dictionary.schema import generate_schema
+        from cifflow.dictionary.schema_apply import apply_schema, apply_fallback_schema
+        from cifflow.inspect import inspect_ingest
 
         _FK_DIC = """\
 #\\#CIF_2.0
@@ -756,7 +756,7 @@ save_
         # foreign_key_check during _pre_commit).
         conn.execute('PRAGMA foreign_keys = OFF')
         conn.execute(
-            'INSERT INTO "child" ("_block_id", "_row_id", "id", "parent_id") '
+            'INSERT INTO "child" ("_cifflow_block_id", "_cifflow_row_id", "id", "parent_id") '
             'VALUES (?, ?, ?, ?)',
             ('pre', 1, 'C1', 'MISSING_PARENT'),
         )
@@ -777,10 +777,10 @@ save_
         """IngestionError from ingestor.run is caught, printed, and re-raised."""
         import sqlite3
         from unittest.mock import patch
-        from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
-        from pycifparse.ingestion.ingest import IngestionError
-        from pycifparse.inspect import inspect_ingest
+        from cifflow import build
+        from cifflow.dictionary.schema_apply import apply_fallback_schema
+        from cifflow.ingestion.ingest import IngestionError
+        from cifflow.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
         conn = sqlite3.connect(':memory:')
@@ -789,7 +789,7 @@ save_
 
         buf = io.StringIO()
         with patch(
-            'pycifparse.ingestion.ingest._Ingester.run',
+            'cifflow.ingestion.ingest._Ingester.run',
             side_effect=IngestionError(['fatal error msg']),
         ):
             with pytest.raises(IngestionError):
@@ -804,9 +804,9 @@ save_
         """Errors returned (not raised) by ingestor.run become TraceEvent('error')."""
         import sqlite3
         from unittest.mock import patch
-        from pycifparse import build
-        from pycifparse.dictionary.schema_apply import apply_fallback_schema
-        from pycifparse.inspect import inspect_ingest
+        from cifflow import build
+        from cifflow.dictionary.schema_apply import apply_fallback_schema
+        from cifflow.inspect import inspect_ingest
 
         cif, _ = build(_SIMPLE)
         conn = sqlite3.connect(':memory:')
@@ -815,7 +815,7 @@ save_
 
         buf = io.StringIO()
         with patch(
-            'pycifparse.ingestion.ingest._Ingester.run',
+            'cifflow.ingestion.ingest._Ingester.run',
             return_value=['something went wrong'],
         ):
             result = inspect_ingest(cif, conn, schema=None, file=buf)
@@ -909,32 +909,32 @@ class TestInspectModel:
 
 class TestInspectCommon:
     def test_fmt_value_list(self):
-        from pycifparse.inspect._common import fmt_value
+        from cifflow.inspect._common import fmt_value
         result = fmt_value(['a', 'b'])
         assert result.startswith('[')
         assert 'a' in result
         assert 'b' in result
 
     def test_fmt_value_dict(self):
-        from pycifparse.inspect._common import fmt_value
+        from cifflow.inspect._common import fmt_value
         result = fmt_value({'key': 'val'})
         assert result.startswith('{')
         assert 'key' in result
 
     def test_fmt_value_long_string_truncated(self):
-        from pycifparse.inspect._common import fmt_value
+        from cifflow.inspect._common import fmt_value
         long_str = 'x' * 40
         result = fmt_value(long_str)
         assert '...' in result
         assert len(result) < len(long_str)
 
     def test_fmt_value_short_string_unchanged(self):
-        from pycifparse.inspect._common import fmt_value
+        from cifflow.inspect._common import fmt_value
         assert fmt_value('hello') == 'hello'
 
     def test_c_with_colour_enabled(self):
         from unittest.mock import MagicMock
-        from pycifparse.inspect._common import c, BOLD
+        from cifflow.inspect._common import c, BOLD
         mock_file = MagicMock()
         mock_file.isatty.return_value = True
         result = c('text', BOLD, file=mock_file)
@@ -942,7 +942,7 @@ class TestInspectCommon:
         assert 'text' in result
 
     def test_c_without_colour_returns_plain_text(self):
-        from pycifparse.inspect._common import c, BOLD
+        from cifflow.inspect._common import c, BOLD
         result = c('text', BOLD, file=io.StringIO())
         assert result == 'text'
 
@@ -954,7 +954,7 @@ class TestInspectCommon:
 class TestInspectParserCoverageGaps:
     def test_on_error_empty_context_no_context_appended(self):
         """on_error with empty context skips context append (branch 133->135)."""
-        from pycifparse.types import ParseError
+        from cifflow.types import ParseError
         buf = io.StringIO()
         handler = ParseHandler(file=buf)
         err = ParseError(
@@ -971,7 +971,7 @@ class TestInspectParserCoverageGaps:
 
     def test_on_error_with_context_but_no_recovery(self):
         """on_error with context set but recovery_action empty (branch 135->137)."""
-        from pycifparse.types import ParseError
+        from cifflow.types import ParseError
         buf = io.StringIO()
         handler = ParseHandler(file=buf)
         err = ParseError(

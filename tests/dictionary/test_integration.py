@@ -10,7 +10,7 @@ import pytest
 
 import tempfile
 
-from pycifparse.dictionary import (
+from cifflow.dictionary import (
     DictionaryLoader,
     apply_schema,
     directory_resolver,
@@ -55,25 +55,25 @@ class TestDdlDic:
         for name in schema.tables:
             assert name in db_tables
 
-    def test_synthetic_block_id_present(self, schema):
+    def test_synthetic_cifflow_block_id_present(self, schema):
         for table in schema.tables.values():
             col_names = [c.name for c in table.columns]
-            assert '_block_id' in col_names, (
-                f"table {table.name!r} missing _block_id"
+            assert '_cifflow_block_id' in col_names, (
+                f"table {table.name!r} missing _cifflow_block_id"
             )
 
-    def test_loop_tables_have_row_id(self, schema):
+    def test_loop_tables_have_cifflow_row_id(self, schema):
         for table in schema.tables.values():
             if table.category_class == 'Loop':
                 col_names = [c.name for c in table.columns]
-                assert '_row_id' in col_names, (
-                    f"Loop table {table.name!r} missing _row_id"
+                assert '_cifflow_row_id' in col_names, (
+                    f"Loop table {table.name!r} missing _cifflow_row_id"
                 )
 
     def test_fk_deferrable_in_ddl_if_present(self, schema):
         # ddl.dic may have zero FKs (Link items whose targets are non-schema
         # categories).  If any FK exists, it must carry DEFERRABLE.
-        from pycifparse.dictionary.schema import emit_create_statements
+        from cifflow.dictionary.schema import emit_create_statements
         fk_stmts = [s for s in emit_create_statements(schema)
                     if 'FOREIGN KEY' in s]
         for stmt in fk_stmts:
@@ -170,7 +170,7 @@ class TestCifCoreDic:
         for name in schema.tables:
             assert name in db_tables
 
-    def test_row_id_unique_on_loop_tables(self, conn, schema):
+    def test_cifflow_row_id_unique_on_loop_tables(self, conn, schema):
         loop_tables = [t for t in schema.tables.values()
                        if t.category_class == 'Loop']
         assert loop_tables, "expected at least one Loop table"
@@ -183,8 +183,8 @@ class TestCifCoreDic:
                         f'PRAGMA index_info("{idx[1]}")'
                     ):
                         unique_cols.add(info[2])
-            assert '_row_id' in unique_cols, (
-                f"Loop table {table.name!r} missing UNIQUE on _row_id"
+            assert '_cifflow_row_id' in unique_cols, (
+                f"Loop table {table.name!r} missing UNIQUE on _cifflow_row_id"
             )
 
 

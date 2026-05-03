@@ -1,8 +1,8 @@
-# pycifparse — Lessons Learned
+# cifflow — Lessons Learned
 
 ## Lesson 102 — `_id_regime` quadratic scan: maintain a per-block index during merge (2026-04-23)
 
-**Context:** `_id_regime` iterated over all rows in `merged_rows` for every block, filtering by `_block_id`. With 156 blocks and ~1.98 M total rows, this is O(blocks × rows) — 12.9 s cumulative in profiling.
+**Context:** `_id_regime` iterated over all rows in `merged_rows` for every block, filtering by `_cifflow_block_id`. With 156 blocks and ~1.98 M total rows, this is O(blocks × rows) — 12.9 s cumulative in profiling.
 
 **Fix:** Added `_block_pk_values: dict[str, list[str]]` to `_Ingester`, populated inside `_merge_into` on new-row insertion (non-synthetic PK columns only). Threaded through `_apply_fk` so stub rows are also indexed. The set-buffer inline merge path required a separate update since it bypasses `_merge_into`. `_id_regime` now does a single `dict.get` lookup.
 
@@ -28,7 +28,7 @@
 
 **Context:** ALL_BLOCKS mode injected one `uuid.uuid4()` for all emitted blocks. The fidelity checker then found `_audit_dataset.id` values differing between the original file and re-emitted file.
 
-**Fix:** `_resolve_dataset_id()` queries `_block_dataset_membership` for the originating `_block_id` values of each row group. Returns the existing ID (str), a sorted list when multiple IDs (emitted as a `loop_`), or a fresh UUID only when no membership data exists.
+**Fix:** `_resolve_dataset_id()` queries `_block_dataset_membership` for the originating `_cifflow_block_id` values of each row group. Returns the existing ID (str), a sorted list when multiple IDs (emitted as a `loop_`), or a fresh UUID only when no membership data exists.
 
 **Rule:** In ALL_BLOCKS mode, `dataset_id` must be resolved per block from the database, not generated once globally. `_BlockData.dataset_id` may be `str | list[str] | None`.
 
@@ -102,7 +102,7 @@
 
 **Context:** `TestInternalError` in `tests/validation/test_db_validate.py`.
 
-**Mistake:** Patched `_check_keyless_cardinality` to raise, but the test table had PKs (`_block_id`, `_row_id`), so the code path that calls `_check_keyless_cardinality` (keyless Set tables only) was never reached. The patch was never triggered; the test passed vacuously.
+**Mistake:** Patched `_check_keyless_cardinality` to raise, but the test table had PKs (`_cifflow_block_id`, `_cifflow_row_id`), so the code path that calls `_check_keyless_cardinality` (keyless Set tables only) was never reached. The patch was never triggered; the test passed vacuously.
 
 **Fix:** Patch `_run_validation` directly to raise, which is always called regardless of table shape.
 
@@ -216,15 +216,15 @@
 
 ---
 
-## Lesson 85 — Bridge column lookups must not be keyed by `_block_id` (2026-04-16)
+## Lesson 85 — Bridge column lookups must not be keyed by `_cifflow_block_id` (2026-04-16)
 
 **Context:** `_build_chain_lookups` and `_resolve_chain` in `ingestion/ingest.py`.
 
-**Mistake:** Bridge lookups were keyed by `(block_id, pk_val)` where `block_id` was the `_block_id` of the *source* row.  In a multi-block dataset (e.g. `data_peak`, `data_powder_1`, `data_wavelength_1` all sharing one `_audit_dataset.id`), the source table (`pd_peak`) and the bridge table (`pd_diffractogram`) come from different CIF data blocks and therefore have different `_block_id` values.  The lookup always missed, leaving the derived column NULL.
+**Mistake:** Bridge lookups were keyed by `(block_id, pk_val)` where `block_id` was the `_cifflow_block_id` of the *source* row.  In a multi-block dataset (e.g. `data_peak`, `data_powder_1`, `data_wavelength_1` all sharing one `_audit_dataset.id`), the source table (`pd_peak`) and the bridge table (`pd_diffractogram`) come from different CIF data blocks and therefore have different `_cifflow_block_id` values.  The lookup always missed, leaving the derived column NULL.
 
-**Fix:** Changed lookup key to just `pk_val`.  `merged_rows` is already scoped to a single dataset ingest call, so cross-dataset contamination cannot occur — the `_block_id` discrimination was unnecessary and actively harmful.
+**Fix:** Changed lookup key to just `pk_val`.  `merged_rows` is already scoped to a single dataset ingest call, so cross-dataset contamination cannot occur — the `_cifflow_block_id` discrimination was unnecessary and actively harmful.
 
-**Rule:** Bridge lookups operate within `merged_rows` which is already dataset-scoped.  Do not add `_block_id` as a discriminator inside that lookup — it will break any multi-block dataset where source and target rows originate from different CIF data blocks.
+**Rule:** Bridge lookups operate within `merged_rows` which is already dataset-scoped.  Do not add `_cifflow_block_id` as a discriminator inside that lookup — it will break any multi-block dataset where source and target rows originate from different CIF data blocks.
 
 ---
 
@@ -274,7 +274,7 @@ Always check `type_container` before deciding the column's storage affinity or c
 
 **Context:** `_cast_value` in `database/compact.py`.
 
-**Mistake:** `_row_id` is declared `INTEGER` in the source schema, so SQLite returns it as
+**Mistake:** `_cifflow_row_id` is declared `INTEGER` in the source schema, so SQLite returns it as
 a Python `int`.  Calling `re.sub(pattern, repl, raw)` on an `int` raises `TypeError`.
 
 **Fix:** Guard at the top of `_cast_value`:
@@ -393,11 +393,11 @@ suppression; (b) `audit_dataset` stripped → emission UUID injected consistentl
 
 ---
 
-## Lesson 68 — GROUPED block names changed from _block_id to anchor-key-derived names (2026-04-14)
+## Lesson 68 — GROUPED block names changed from _cifflow_block_id to anchor-key-derived names (2026-04-14)
 
 **Context:** `_collect_grouped` in `output/emit.py`; `_default_block_name`.
 
-**Change:** GROUPED mode previously used the first anchor row's `_block_id` as the output block
+**Change:** GROUPED mode previously used the first anchor row's `_cifflow_block_id` as the output block
 name.  The spec requires names to be derived from the anchor key tuple
 (`{object_id}_{key_value}` joined with underscores, then sanitised).  Block names are now
 built from the anchor key dict (e.g. `expt.id=['myexp']` → `id_myexp`).
@@ -407,7 +407,7 @@ accessed blocks via `cif2.blocks[0]` or `cif2.blocks` index), so no test changes
 for the naming switch.  New `TestDefaultBlockName` tests explicitly assert the new naming form.
 
 **Rule:** When adding new GROUPED tests, access blocks by index or by iterating `cif2.blocks`,
-not by a hardcoded `_block_id` string — the block name is now the anchor key value, not the
+not by a hardcoded `_cifflow_block_id` string — the block name is now the anchor key value, not the
 source block's `data_` header.
 
 ---
@@ -435,9 +435,9 @@ order is known.
 **Context:** `_render_merge_group()` in `output/emit.py`.
 
 **Rule:** Two categories are key-compatible for merge group purposes when they share the
-*same frozenset of non-synthetic primary key column names*.  Synthetic columns (`_block_id`,
-`_row_id`, `_pycifparse_id`) are excluded from the comparison — every table has `_block_id`
-and `_row_id`, so including them would make all tables appear compatible.
+*same frozenset of non-synthetic primary key column names*.  Synthetic columns (`_cifflow_block_id`,
+`_cifflow_row_id`, `_cifflow_id`) are excluded from the comparison — every table has `_cifflow_block_id`
+and `_cifflow_row_id`, so including them would make all tables appear compatible.
 
 **Fallback:** When categories are not key-compatible (different non-synthetic PK sets), emit
 them as plain loops in the listed order — no warning, no error.
@@ -571,7 +571,7 @@ reader derives the value from the target Set's own PK tag.
 **Bug 1: `_flush` uses only `rows[0].keys()` as the INSERT column list.**
 
 Rows in `merged_rows` are Python dicts whose key sets can differ.  A stub created by
-`_apply_fk` starts with only `{_block_id, id}`.  When later merged with real data, the stub
+`_apply_fk` starts with only `{_cifflow_block_id, id}`.  When later merged with real data, the stub
 dict grows in-place — but only for the one row that actually received the merge.  Other rows
 for the same table (created from other stubs that never received real data) keep a smaller
 key set.  If such a "slim" row happens to be `rows[0]`, `_flush` builds its INSERT column
@@ -591,14 +591,14 @@ cols = list(seen)
 
 `diffrn_radiation_wavelength` is in the `pd_phase` keyed-anchor group.  Its rows have
 `phase_id = NULL` (no FK link to any phase), so `_fetch_rows_via_fk_path` returns nothing and
-the second-pass `_block_id` filter covers `pd_phase` block_ids — not the wavelength block_ids.
+the second-pass `_cifflow_block_id` filter covers `pd_phase` block_ids — not the wavelength block_ids.
 `exptl_crystal` has no rows → its entire FK group falls back to `block_id_tables`, causing the
-wavelength block_ids to appear in `remaining_block_ids`.  But only `block_id_tables` were swept
+wavelength block_ids to appear in `remaining_cifflow_block_ids`.  But only `block_id_tables` were swept
 in the remaining-blocks pass, so `diffrn_radiation_wavelength` (a keyed-anchor table) was never
 emitted.
 
 **Fix:** Sweep all schema tables in the remaining-blocks pass.  It is safe because
-`remaining_block_ids` is filtered to block_ids not in `absorbed_all` — those rows were never
+`remaining_cifflow_block_ids` is filtered to block_ids not in `absorbed_all` — those rows were never
 emitted by any keyed-anchor group.
 
 **Rule:** When rows have NULL FK columns they cannot be found via FK-path joins.  Any table
@@ -620,21 +620,21 @@ if not anchor_rows:
     continue
 ```
 
-Tables whose root anchor is unpopulated are promoted to `block_id_tables`, which uses `_block_id` as the grouping key.  They are then emitted in the remaining-blocks sweep, preserving all data.
+Tables whose root anchor is unpopulated are promoted to `block_id_tables`, which uses `_cifflow_block_id` as the grouping key.  They are then emitted in the remaining-blocks sweep, preserving all data.
 
-**Rule:** A keyed anchor with no rows is indistinguishable from a keyless Set for emission purposes — fall back to `_block_id` grouping.  Never silently discard tables because their anchor is empty.
+**Rule:** A keyed anchor with no rows is indistinguishable from a keyless Set for emission purposes — fall back to `_cifflow_block_id` grouping.  Never silently discard tables because their anchor is empty.
 
 ## Lesson 55 — Emit round-trip tests: NULL vs '.' normalisation and the Set-PK stub conflict (2026-04-11)
 
 **Context:** `tests/output/test_emit.py` — `_assert_same_data`, `TestDatabaseRoundTrip`, `TestEmitRoundTripIntegration`.
 
-**Design:** Round-trip tests work by emitting a populated database, re-parsing the emitted CIF, re-ingesting into a fresh database, then comparing the two databases column-by-column.  `_block_id` and `_row_id` are excluded from comparison (they are administrative, not CIF data).  Synthetic columns (`is_synthetic=True`) are also excluded.
+**Design:** Round-trip tests work by emitting a populated database, re-parsing the emitted CIF, re-ingesting into a fresh database, then comparing the two databases column-by-column.  `_cifflow_block_id` and `_cifflow_row_id` are excluded from comparison (they are administrative, not CIF data).  Synthetic columns (`is_synthetic=True`) are also excluded.
 
 **Problem 1 — NULL → '.' transformation:** Loop emission cannot omit columns mid-row; it emits SQL NULL as the CIF placeholder `'.'`.  After re-ingestion `'.'` is stored as the string `'.'`, not NULL.  Naively comparing tuples then fails for every loop column that was absent in the original.
 
 **Fix 1:** Normalise both sides before comparison: `None → None` and `'.' → None` (both mean "absent/not applicable" at the loop level).  `'?'` is kept distinct (it means "unknown", not "not applicable").
 
-**Problem 2 — domain-key PK conflict:** Every structured SQLite table (Set and Loop alike) has `PRIMARY KEY (domain_key_cols)` — `_block_id` is NOT included.  The `_block_id` column appears only in a secondary `UNIQUE (_block_id, _row_id)` constraint.  This means only one row per domain-key value can exist across all blocks.  When the emitted CIF is re-ingested and a dependent block (e.g. a `preferred_orientation` block that FKs into `pd_instr`) is processed before the source block (e.g. `some_characters_instrument`), the ingester creates a stub row for `pd_instr.id = 'chrome_dome'`.  The subsequent insert of real data from the instrument block then fails silently on the PK constraint and the real values are lost.
+**Problem 2 — domain-key PK conflict:** Every structured SQLite table (Set and Loop alike) has `PRIMARY KEY (domain_key_cols)` — `_cifflow_block_id` is NOT included.  The `_cifflow_block_id` column appears only in a secondary `UNIQUE (_cifflow_block_id, _cifflow_row_id)` constraint.  This means only one row per domain-key value can exist across all blocks.  When the emitted CIF is re-ingested and a dependent block (e.g. a `preferred_orientation` block that FKs into `pd_instr`) is processed before the source block (e.g. `some_characters_instrument`), the ingester creates a stub row for `pd_instr.id = 'chrome_dome'`.  The subsequent insert of real data from the instrument block then fails silently on the PK constraint and the real values are lost.
 
 **Root cause:** Block emission order is alphabetical, which can differ from the original ingestion order.  The ingest layer's merge logic keeps the first occurrence and ignores later arrivals for the same PK.  Stubs created by FK scaffolding therefore block real data.
 
@@ -646,9 +646,9 @@ Tables whose root anchor is unpopulated are promoted to `block_id_tables`, which
 
 **Context:** `tests/output/test_emit.py` — `TestDatabaseRoundTrip`.
 
-**Problem:** A test (`test_multiblock_set_one_block`) tried to round-trip a CIF with two blocks each carrying a Set-category row (keyless `cell`) through ONE_BLOCK mode.  Every structured table has `PRIMARY KEY (domain_key_cols)` without `_block_id`, so only one row per domain-key value can exist.  `cell`'s domain key is keyless (no explicit `_category_key`), making rows from different blocks indistinguishable — merging them into one block raises `IngestionError: merge conflict`.
+**Problem:** A test (`test_multiblock_set_one_block`) tried to round-trip a CIF with two blocks each carrying a Set-category row (keyless `cell`) through ONE_BLOCK mode.  Every structured table has `PRIMARY KEY (domain_key_cols)` without `_cifflow_block_id`, so only one row per domain-key value can exist.  `cell`'s domain key is keyless (no explicit `_category_key`), making rows from different blocks indistinguishable — merging them into one block raises `IngestionError: merge conflict`.
 
-**Rule:** ONE_BLOCK mode is only round-trip-safe when every row across all source blocks has a distinct domain key.  Categories where rows are only distinguished by `_block_id` (keyless Sets) cannot be merged into a single block without conflict.  Do not write round-trip tests that attempt to collapse such rows into ONE_BLOCK.
+**Rule:** ONE_BLOCK mode is only round-trip-safe when every row across all source blocks has a distinct domain key.  Categories where rows are only distinguished by `_cifflow_block_id` (keyless Sets) cannot be merged into a single block without conflict.  Do not write round-trip tests that attempt to collapse such rows into ONE_BLOCK.
 
 ## Lesson 53 — ONE_BLOCK: Set categories with multiple rows must render as loops; transitive bridge columns must not be emitted (2026-04-11)
 
@@ -686,10 +686,10 @@ to any other keyed anchor, and are directly FK-referenced from exactly one other
 each exclusive-target anchor generates its own output blocks (one per domain PK value), duplicating
 block names already produced by the referencing anchor group.
 
-**Compounding issue:** The primary anchor row's `_block_id` may differ from the FK-chained rows'
-`_block_id` (e.g. `pd_phase._block_id = Selenium_0_some_chars` vs `structure._block_id = Selenium_0`
-vs `space_group._block_id = Selenium_0`). A simple "skip if block_id already absorbed" check using
-the primary block_id is correct here — using the extended covered_block_ids for the skip check
+**Compounding issue:** The primary anchor row's `_cifflow_block_id` may differ from the FK-chained rows'
+`_cifflow_block_id` (e.g. `pd_phase._cifflow_block_id = Selenium_0_some_chars` vs `structure._cifflow_block_id = Selenium_0`
+vs `space_group._cifflow_block_id = Selenium_0`). A simple "skip if block_id already absorbed" check using
+the primary block_id is correct here — using the extended covered_cifflow_block_ids for the skip check
 would falsely skip legitimate anchor groups (e.g. `pd_phase` would be skipped because pd_instr's
 FK chain covers its primary block_id).
 
@@ -698,32 +698,32 @@ FK chain covers its primary block_id).
    table itself has no FK to any other keyed anchor) and move them to `block_id_tables`.
 2. **Split absorbed tracking:** `absorbed_primary` (anchor-row block_ids, used for the skip check)
    vs `absorbed_all` (all swept block_ids including FK-extended, used to suppress remaining blocks).
-3. **block_id_tables sweep uses extended covered_block_ids**, so exclusive-target anchor rows (e.g.
+3. **block_id_tables sweep uses extended covered_cifflow_block_ids**, so exclusive-target anchor rows (e.g.
    `space_group`) are picked up via the block_ids discovered through FK-chain joins (e.g. structure
-   rows bring in `Selenium_0`, and `space_group._block_id=Selenium_0` is then absorbed).
+   rows bring in `Selenium_0`, and `space_group._cifflow_block_id=Selenium_0` is then absorbed).
 
 **Rule:** When an anchor Set is exclusively referenced from one other anchor group and has no FK
 out, treat it as a `block_id_table`. Use separate "primary claimed" and "all swept" tracking to
 prevent both false skips and duplicate emission.
 
-## Lesson 51 — GROUPED mode: covered_block_ids must be expanded from FK-chained rows, not just the anchor table (2026-04-11)
+## Lesson 51 — GROUPED mode: covered_cifflow_block_ids must be expanded from FK-chained rows, not just the anchor table (2026-04-11)
 
 **Context:** `_collect_grouped` in `output/emit.py`.
 
 **Problem:** When a Set category has a domain PK (e.g. `expt.id`), two input blocks with the same
-key value conflict at ingestion — only the first block's anchor row survives. `covered_block_ids`
-was seeded only from anchor table rows, so the second block's `_block_id` was never recorded.
+key value conflict at ingestion — only the first block's anchor row survives. `covered_cifflow_block_ids`
+was seeded only from anchor table rows, so the second block's `_cifflow_block_id` was never recorded.
 Loop descendants from the second block (which stored their rows without conflict, since their own
 PKs differ) were fetched correctly by the FK JOIN, but the no-anchor tables from that block were
 not absorbed — they produced an orphan standalone block.
 
-**Fix:** Seed `covered_block_ids` from anchor rows as before, then extend it after each FK-chained
-table fetch by scanning the returned rows' `_block_id` values. Only after all FK-chained tables
-are processed are no-anchor tables fetched (using the now-complete `covered_block_ids`) and
-`absorbed_block_ids` updated. A second pass handles tables where the FK path was `None`
-(block-id fallback), using the expanded `covered_block_ids`.
+**Fix:** Seed `covered_cifflow_block_ids` from anchor rows as before, then extend it after each FK-chained
+table fetch by scanning the returned rows' `_cifflow_block_id` values. Only after all FK-chained tables
+are processed are no-anchor tables fetched (using the now-complete `covered_cifflow_block_ids`) and
+`absorbed_cifflow_block_ids` updated. A second pass handles tables where the FK path was `None`
+(block-id fallback), using the expanded `covered_cifflow_block_ids`.
 
-**Rule:** In GROUPED mode, `covered_block_ids` is the union of all `_block_id` values present in
+**Rule:** In GROUPED mode, `covered_cifflow_block_ids` is the union of all `_cifflow_block_id` values present in
 any row belonging to this anchor group — not just those in the anchor table itself.
 
 ## Lesson 50 — GROUPED mode: Set-anchor BFS must explore all FK targets, not just the first (2026-04-11)
@@ -733,7 +733,7 @@ any row belonging to this anchor group — not just those in the anchor table it
 **Problem:** The original implementation followed only the first FK target at each hop (depth-first,
 single path). A table with composite keys may have multiple FKs: some to Loop tables (no Set
 ancestor) and others directly to a Set. If the Loop FK appeared first in the `foreign_keys` list,
-the Set was never found and the table fell through to `_block_id` fallback grouping instead of
+the Set was never found and the table fell through to `_cifflow_block_id` fallback grouping instead of
 being anchored to the Set.
 
 **Example:** A table like ATOM_SITE_ANISO with FK to ATOM_SITE (Loop) and FK to STRUCTURE (Set).
@@ -1223,78 +1223,78 @@ on round-trip.
 
 ---
 
-## Lesson 20 — `_row_id` uniqueness requires a composite constraint (2026-04-08)
+## Lesson 20 — `_cifflow_row_id` uniqueness requires a composite constraint (2026-04-08)
 
 **Context:** `emit_create_statements` in `schema.py`; Stage 4 schema design.
 
-**Mistake:** Emitted `_row_id ... UNIQUE` as an inline column constraint.
-At the time this was written, `_row_id` was assumed to reset to 1 at the start
-of each block, so a multi-block CIF would produce duplicate `_row_id` values in
-the same table. `UNIQUE` on `_row_id` alone would fire on the second block's
+**Mistake:** Emitted `_cifflow_row_id ... UNIQUE` as an inline column constraint.
+At the time this was written, `_cifflow_row_id` was assumed to reset to 1 at the start
+of each block, so a multi-block CIF would produce duplicate `_cifflow_row_id` values in
+the same table. `UNIQUE` on `_cifflow_row_id` alone would fire on the second block's
 first row.
 
-**Later clarification (Stage 4):** `_row_id` is in fact global — it never
-resets between blocks. A composite `UNIQUE (_block_id, _row_id)` constraint
+**Later clarification (Stage 4):** `_cifflow_row_id` is in fact global — it never
+resets between blocks. A composite `UNIQUE (_cifflow_block_id, _cifflow_row_id)` constraint
 is therefore stronger than strictly necessary, but it remains correct and is
 the prescribed form regardless.
 
-**Correct rule:** For tables where `(_block_id, _row_id)` is not already the
+**Correct rule:** For tables where `(_cifflow_block_id, _cifflow_row_id)` is not already the
 `PRIMARY KEY` (i.e. keyed Loop tables and all Set tables), emit a table-level
-`UNIQUE ("_block_id", "_row_id")` constraint. For keyless Loop tables,
-`(_block_id, _row_id)` is already the PK so no extra constraint is needed.
+`UNIQUE ("_cifflow_block_id", "_cifflow_row_id")` constraint. For keyless Loop tables,
+`(_cifflow_block_id, _cifflow_row_id)` is already the PK so no extra constraint is needed.
 
-**How to apply:** Never use `_row_id UNIQUE`. Always use the composite form.
+**How to apply:** Never use `_cifflow_row_id UNIQUE`. Always use the composite form.
 
 ---
 
-## Lesson 21 — Mixed loop cross-tier join requires shared `_row_id` per iteration (2026-04-08)
+## Lesson 21 — Mixed loop cross-tier join requires shared `_cifflow_row_id` per iteration (2026-04-08)
 
 **Context:** `_cif_fallback` table design; Stage 4 ingestion.
 
 **Problem:** A loop whose tags split between a structured table and `_cif_fallback`
-produces rows in both locations. If `_row_id` increments per cell in `_cif_fallback`,
+produces rows in both locations. If `_cifflow_row_id` increments per cell in `_cif_fallback`,
 there is no join key linking a fallback cell to the structured row from the same
 loop iteration.
 
-**Correct rule:** `_row_id` is scoped per table globally across the entire
+**Correct rule:** `_cifflow_row_id` is scoped per table globally across the entire
 `ingest()` call — it never resets between blocks. For a mixed loop, all
-`_cif_fallback` cells from a given iteration share the same `_row_id` as the
+`_cif_fallback` cells from a given iteration share the same `_cifflow_row_id` as the
 corresponding structured table row — both draw from the structured table's counter.
-The join key is `(_block_id, _row_id)` within that table + `_cif_fallback`.
+The join key is `(_cifflow_block_id, _cifflow_row_id)` within that table + `_cif_fallback`.
 
 For pure-fallback loops, `_cif_fallback` uses its own global counter,
 incrementing once per iteration (not per cell).
 
-**Consequence:** `_cif_fallback` PK is `(_block_id, _row_id, tag)` — `tag` is
-needed because multiple cells (different tags) share `(_block_id, _row_id)` within
+**Consequence:** `_cif_fallback` PK is `(_cifflow_block_id, _cifflow_row_id, tag)` — `tag` is
+needed because multiple cells (different tags) share `(_cifflow_block_id, _cifflow_row_id)` within
 the same loop iteration.
 
-**How to apply:** Maintain `_row_id_counters: dict[str, int]` (table name →
+**How to apply:** Maintain `_cifflow_row_id_counters: dict[str, int]` (table name →
 counter). For mixed loops, draw from the structured table's counter for both the
 structured row and all fallback INSERTs for that iteration. For pure-fallback
-loops, draw from `_cif_fallback`'s counter. `_row_id_counters` is initialised
+loops, draw from `_cif_fallback`'s counter. `_cifflow_row_id_counters` is initialised
 once per `ingest()` call and never resets between blocks.
 
 ---
 
-## Lesson 22 — Set category `_row_id` must be reserved at first tag encounter (2026-04-08)
+## Lesson 22 — Set category `_cifflow_row_id` must be reserved at first tag encounter (2026-04-08)
 
 **Context:** Stage 4 ingestion; scalar Set category accumulation strategy.
 
 **Problem:** Scalar Set tags are accumulated during block traversal and INSERTed
-at end of block. If `_row_id` is assigned at INSERT time, Set rows always get
-higher `_row_id` values than Loop rows in the same block, regardless of their
+at end of block. If `_cifflow_row_id` is assigned at INSERT time, Set rows always get
+higher `_cifflow_row_id` values than Loop rows in the same block, regardless of their
 position in the file. This breaks document order and the "scalar Set and
 single-row loop are equivalent" guarantee.
 
 **Correct rule:** When the **first scalar tag** of a Set category is encountered,
-immediately reserve the current `_row_id_counter` for that category's pending row
+immediately reserve the current `_cifflow_row_id_counter` for that category's pending row
 and increment the counter. INSERT at end of block using the reserved value. This
 places the Set row in document order relative to any Loop rows.
 
 **How to apply:** Maintain `set_row_reservations: dict[str, int]` (table_name →
-reserved `_row_id`) populated on first-tag-seen, drawing from that table's entry
-in `_row_id_counters`. Use the reserved values when performing the end-of-block
+reserved `_cifflow_row_id`) populated on first-tag-seen, drawing from that table's entry
+in `_cifflow_row_id_counters`. Use the reserved values when performing the end-of-block
 INSERTs.
 
 ---
@@ -1319,12 +1319,12 @@ _cell.length_a _cell.length_b
 ```
 
 The ingestion layer must handle both. When a Set category appears in a loop, each
-iteration produces a separate row with its own `_row_id`. The scalar accumulation
+iteration produces a separate row with its own `_cifflow_row_id`. The scalar accumulation
 strategy (accumulate then INSERT at end of block) only applies to tags that arrive
 outside a loop.
 
 **How to apply:** Detect Set categories appearing inside a loop at ingestion time
-and treat them as Loop-style rows (assign `_row_id` per iteration, pass through
+and treat them as Loop-style rows (assign `_cifflow_row_id` per iteration, pass through
 merge algorithm). Do not defer these to end-of-block accumulation.
 
 ---
@@ -1339,13 +1339,13 @@ describe the same logical row. The ingestion layer always merges such rows.
 
 **Merge rules:**
 - Rows with the same PK value (across any blocks) are merged into one row.
-- First-seen block provides `_block_id` and `_row_id` for the merged row.
+- First-seen block provides `_cifflow_block_id` and `_cifflow_row_id` for the merged row.
 - First non-NULL value for each column wins; conflicts (two different non-NULL
   values for the same column) emit a semantic error and keep the first value.
 - `_cif_fallback` rows are not merged; they remain block-local.
 
-**`_row_id` implication:** `_row_id_counters` must not reset between blocks.
-`_row_id` is effectively per-table globally across the whole `ingest()` call.
+**`_cifflow_row_id` implication:** `_cifflow_row_id_counters` must not reset between blocks.
+`_cifflow_row_id` is effectively per-table globally across the whole `ingest()` call.
 The counter increments once per new unique PK seen (across all blocks).
 
 **Implementation:** Accumulate all structured rows in a `merged_rows` dict
@@ -1508,7 +1508,7 @@ column count and was the same problem as the discarded status-column approach.
 used solely for alias resolution via `resolve_tag`. This forced the caller to pass
 both `schema` (derived from the dictionary) and `dictionary` as separate arguments —
 redundant and error-prone. It also meant `ingest()` retained an unnecessary dependency
-on `pycifparse.dictionary.ddlm_parser`.
+on `cifflow.dictionary.ddlm_parser`.
 
 **Correct rule:** `SchemaSpec` is self-contained for routing:
 - `alias_to_definition_id: dict[str, str]` — copied from `DdlmDictionary.alias_to_definition_id` by `generate_schema`; used in the tag routing loop to canonicalise aliases.
@@ -1546,19 +1546,19 @@ dependency and makes the ingestion function's contract explicit.
 
 ## Lesson 33 — All public types returned by public functions must be top-level re-exports (2026-04-10)
 
-**Context:** `CifScalar` was missing from `pycifparse/__init__.py`.
+**Context:** `CifScalar` was missing from `cifflow/__init__.py`.
 
-**Gap:** `CifScalar` was exported from `pycifparse.cifmodel` but not re-exported at the
+**Gap:** `CifScalar` was exported from `cifflow.cifmodel` but not re-exported at the
 top level. Any caller receiving a `CifScalar` from `block["_tag"]` could not write
 type annotations, `isinstance` checks, or access `value_type` without importing from
-the internal submodule path `pycifparse.cifmodel.scalar`.
+the internal submodule path `cifflow.cifmodel.scalar`.
 
 **Correct rule:** Any type that appears in the return value of a public function, or
 that a caller must inspect to use the API correctly, must be re-exported from the
-top-level `pycifparse/__init__.py` and listed in the API Reference module layout.
+top-level `cifflow/__init__.py` and listed in the API Reference module layout.
 
 **How to apply:** When adding a new public type at any stage, immediately add it to
-`pycifparse/__init__.py` (import + `__all__`) and to the module layout comment in
+`cifflow/__init__.py` (import + `__all__`) and to the module layout comment in
 `prompts/API Reference.md`. Do not leave public types stranded in submodule paths.
 
 ---
@@ -1596,7 +1596,7 @@ path; non-key FK columns with real data values were never checked.
 
 **Fix:** In `_apply_fk`, after the value-assignment block, add an unconditional stub-creation
 step: for any FK column that ends up with a non-NULL value (explicit, propagated, or UUID-generated),
-call `_merge_into` on the parent table with a stub row containing only `_block_id` and the
+call `_merge_into` on the parent table with a stub row containing only `_cifflow_block_id` and the
 FK target column set to that value. `_merge_into` is idempotent — if the parent row already
 exists from real data, the stub is merged without overwriting any non-NULL values.
 
@@ -1843,7 +1843,7 @@ semicolon).
 
 ## Lesson 60 — Validation is an observation layer; it never gates further processing (2026-04-12)
 
-**Context:** `validate()` in `src/pycifparse/validation/`.
+**Context:** `validate()` in `src/cifflow/validation/`.
 
 **Rule:** The validation layer reports semantic violations in a `ValidationReport` but never
 prevents ingestion, emission, or any other processing step. If a user ignores validation errors
@@ -1873,7 +1873,7 @@ validation must call it explicitly before ingestion and decide what to do with t
 
 **Context:** `tests/fidelity/test_check_fidelity.py` — `_compare_schema_mismatch` tests.
 
-**Problem:** Hand-written INSERT into `_cif_fallback` used `block_id` (wrong) instead of `_block_id` (correct). The actual schema uses underscore-prefixed names (`_block_id`, `_row_id`) for all synthetic columns. The error only surfaced at test runtime.
+**Problem:** Hand-written INSERT into `_cif_fallback` used `block_id` (wrong) instead of `_cifflow_block_id` (correct). The actual schema uses underscore-prefixed names (`_cifflow_block_id`, `_cifflow_row_id`) for all synthetic columns. The error only surfaced at test runtime.
 
 **How to apply:** Before writing raw SQL INSERTs into framework-managed tables in tests, read `emit_fallback_create_statements()` (or the relevant DDL emitter) to confirm exact column names. Never guess — the underscore prefix convention is easy to miss.
 

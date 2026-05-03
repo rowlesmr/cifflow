@@ -4,10 +4,10 @@ import sqlite3
 
 import pytest
 
-from pycifparse.dictionary.ddlm_item import DdlmItem
-from pycifparse.dictionary.ddlm_parser import DdlmDictionary
-from pycifparse.dictionary.schema import generate_schema
-from pycifparse.dictionary.schema_apply import apply_schema
+from cifflow.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.ddlm_parser import DdlmDictionary
+from cifflow.dictionary.schema import generate_schema
+from cifflow.dictionary.schema_apply import apply_schema
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +142,7 @@ class TestDropExisting:
         apply_schema(conn, schema)
         # Insert a row so we can confirm the table is dropped and recreated.
         conn.execute(
-            "INSERT INTO config (_block_id, _row_id, id) VALUES ('b1', 1, 'x1')"
+            "INSERT INTO config (_cifflow_block_id, _cifflow_row_id, id) VALUES ('b1', 1, 'x1')"
         )
         conn.commit()
         apply_schema(conn, schema, drop_existing=True)
@@ -154,7 +154,7 @@ class TestDropExisting:
         schema = _simple_schema()
         apply_schema(conn, schema)
         conn.execute(
-            "INSERT INTO config (_block_id, _row_id, id) VALUES ('b1', 1, 'x1')"
+            "INSERT INTO config (_cifflow_block_id, _cifflow_row_id, id) VALUES ('b1', 1, 'x1')"
         )
         conn.commit()
         apply_schema(conn, schema, drop_existing=False)
@@ -174,11 +174,11 @@ class TestRollback:
         schema = generate_schema(d)
 
         # Monkey-patch emit_create_statements to inject a bad statement.
-        import pycifparse.dictionary.schema_apply as sa_mod
+        import cifflow.dictionary.schema_apply as sa_mod
         original = sa_mod.emit_create_statements
 
         def _bad_emit(s):
-            return ['CREATE TABLE good (_block_id TEXT NOT NULL, PRIMARY KEY (_block_id))',
+            return ['CREATE TABLE good (_cifflow_block_id TEXT NOT NULL, PRIMARY KEY (_cifflow_block_id))',
                     'THIS IS NOT VALID SQL']
 
         sa_mod.emit_create_statements = _bad_emit

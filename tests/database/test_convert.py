@@ -8,11 +8,11 @@ import sqlite3
 
 import pytest
 
-from pycifparse import convert_database
-from pycifparse.dictionary.ddlm_item import DdlmItem
-from pycifparse.dictionary.ddlm_parser import DdlmDictionary
-from pycifparse.dictionary.schema import generate_schema
-from pycifparse.dictionary.schema_apply import apply_fallback_schema, apply_schema
+from cifflow import convert_database
+from cifflow.dictionary.ddlm_item import DdlmItem
+from cifflow.dictionary.ddlm_parser import DdlmDictionary
+from cifflow.dictionary.schema import generate_schema
+from cifflow.dictionary.schema_apply import apply_fallback_schema, apply_schema
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +127,7 @@ def _src(schema, rows):
     c.execute('BEGIN')
     for blk, row_id, label, count, length, name in rows:
         c.execute(
-            'INSERT INTO "vals" ("_block_id","_row_id","label","count","length","name") '
+            'INSERT INTO "vals" ("_cifflow_block_id","_cifflow_row_id","label","count","length","name") '
             'VALUES (?,?,?,?,?,?)',
             (blk, row_id, label, count, length, name),
         )
@@ -143,7 +143,7 @@ def _dst():
 
 def _fetch(conn, tbl, cols):
     col_sql = ', '.join(f'"{c}"' for c in cols)
-    return conn.execute(f'SELECT {col_sql} FROM "{tbl}" ORDER BY "_row_id"').fetchall()
+    return conn.execute(f'SELECT {col_sql} FROM "{tbl}" ORDER BY "_cifflow_row_id"').fetchall()
 
 
 def _col_type(conn, tbl, col):
@@ -335,7 +335,7 @@ class TestFallbackTables:
         apply_fallback_schema(src)  # already applied in _src, idempotent
         src.execute(
             'INSERT INTO "_cif_fallback" '
-            '("_block_id","_row_id","tag","value","value_type") '
+            '("_cifflow_block_id","_cifflow_row_id","tag","value","value_type") '
             'VALUES (?,?,?,?,?)',
             ('B', 1, '_some.tag', 'hello', 'STRING'),
         )
@@ -352,7 +352,7 @@ class TestFallbackTables:
         src = _src(schema, [])
         src.execute(
             'INSERT INTO "_cif_fallback" '
-            '("_block_id","_row_id","tag","value","value_type") '
+            '("_cifflow_block_id","_cifflow_row_id","tag","value","value_type") '
             'VALUES (?,?,?,?,?)',
             ('B', 1, '_some.tag', '42', 'STRING'),
         )
@@ -381,7 +381,7 @@ def _src_matrix(schema, rows):
     c.execute('BEGIN')
     for blk, row_id, label, hkl, xyz in rows:
         c.execute(
-            'INSERT INTO "mat" ("_block_id","_row_id","label","hkl","xyz") '
+            'INSERT INTO "mat" ("_cifflow_block_id","_cifflow_row_id","label","hkl","xyz") '
             'VALUES (?,?,?,?,?)',
             (blk, row_id, label, hkl, xyz),
         )
