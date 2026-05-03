@@ -2,7 +2,7 @@
 
 Parse, store, validate, and emit Crystallographic Information Files (CIF).
 
-**Python ≥ 3.10 · Apache 2.0 · v0.1.2 · pre-release (not yet on PyPI)**
+**Python ≥ 3.10 · Apache 2.0 · v0.1.2 · [PyPI](https://pypi.org/project/cifflow/)**
 
 ---
 
@@ -37,17 +37,20 @@ Parse, store, validate, and emit Crystallographic Information Files (CIF).
 
 ## Installation
 
-cifflow is not yet on PyPI. Install directly from source:
+```
+pip install cifflow
+```
+
+`duckdb` and `pyarrow` are installed automatically.
+
+To install from source (includes the Rust extension):
 
 ```
 git clone https://github.com/rowlesmr/cifflow.git
 cd cifflow
 pip install -e ".[dev]"
-.venv/Scripts/maturin develop   # or: maturin develop, if maturin is on PATH
+maturin develop
 ```
-
-`duckdb` and `pyarrow` are declared dependencies and are installed automatically.
-The Rust extension (`cifflow_core`) is compiled by `maturin` during the second step.
 
 ---
 
