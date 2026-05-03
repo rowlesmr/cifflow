@@ -341,6 +341,8 @@ def _row_diff_hint(row: frozenset, candidates: list[frozenset]) -> str:
     diffs: list[str] = []
     for k in sorted(set(row_d) | set(best_d)):
         va, vb = row_d.get(k), best_d.get(k)
+        if isinstance(va, frozenset) or isinstance(vb, frozenset):
+            continue
         if va != vb:
             if va is None:
                 diffs.append(f'-{k}={vb}')

@@ -621,34 +621,39 @@ def _run_fk_fill_pass(
             col = col_by_name.get(col_name)
             if col is None:
                 continue
-            if not col.is_primary_key and not propagate_fk:
+            do_fk_propagate = col.is_primary_key or propagate_fk
+            # Non-PK items without a default have nothing to do here.
+            if not do_fk_propagate and default_val is None:
                 continue
 
-            # Follow the propagation chain transitively so that across-block
-            # scenarios (ALL_BLOCKS re-ingest) can fall back to deeper ancestors
-            # that share the current block's _block_id.
-            lookup_chain: list[tuple[str, str]] = []
-            current_def_id = target_def_id
-            visited_defs: set[str] = set()
-            for _ in range(8):
-                if current_def_id in visited_defs:
-                    break
-                visited_defs.add(current_def_id)
-                loc = tag_to_column.get(current_def_id)
-                if not loc:
-                    break
-                tgt_tbl_c, tgt_col_c = loc
-                if tgt_tbl_c not in schema.tables:
-                    break
-                lookup_chain.append((tgt_tbl_c, tgt_col_c))
-                next_link = next(
-                    (lnk for lnk in schema.propagation_links.get(tgt_tbl_c, [])
-                     if lnk[0] == tgt_col_c),
-                    None,
-                )
-                if next_link is None:
-                    break
-                current_def_id = next_link[1]
+            if do_fk_propagate:
+                # Follow the propagation chain transitively so that across-block
+                # scenarios (ALL_BLOCKS re-ingest) can fall back to deeper ancestors
+                # that share the current block's _block_id.
+                lookup_chain: list[tuple[str, str]] = []
+                current_def_id = target_def_id
+                visited_defs: set[str] = set()
+                for _ in range(8):
+                    if current_def_id in visited_defs:
+                        break
+                    visited_defs.add(current_def_id)
+                    loc = tag_to_column.get(current_def_id)
+                    if not loc:
+                        break
+                    tgt_tbl_c, tgt_col_c = loc
+                    if tgt_tbl_c not in schema.tables:
+                        break
+                    lookup_chain.append((tgt_tbl_c, tgt_col_c))
+                    next_link = next(
+                        (lnk for lnk in schema.propagation_links.get(tgt_tbl_c, [])
+                         if lnk[0] == tgt_col_c),
+                        None,
+                    )
+                    if next_link is None:
+                        break
+                    current_def_id = next_link[1]
+            else:
+                lookup_chain = []
 
             if lookup_chain:
                 subs: list[str] = []

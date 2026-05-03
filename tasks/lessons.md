@@ -1,5 +1,25 @@
 # pycifparse — Lessons Learned
 
+## Lesson 118 — ALL_BLOCKS re-ingest duplication: propagation links must resolve transitively across block boundaries (2026-05-03)
+
+**Context:** Re-ingesting `output_all_blocks.cif` caused `pd_data` to accumulate 25252 rows (4×6313) instead of 6313. The ALL_BLOCKS emit mode writes one CIF block per category per Set-key, so `data_pd_meas_degaussa_raw_01`, `data_pd_proc_degaussa_raw_01`, etc. are separate blocks with different `_block_id` values.
+
+**Bug chain:**
+1. `_raw_pd_meas` rows have `_block_id = 'pd_meas_degaussa_raw_01'`. Their propagation link says `diffractogram_id ← _pd_data.diffractogram_id`, so the fill queries `_raw_pd_data` filtered by `_block_id = 'pd_meas_degaussa_raw_01'` — but `_raw_pd_data` only has rows from `'pd_data_degaussa_raw_01'`. Fill fails.
+2. `has_single_fk = False` for `diffractogram_id` (only composite FK) → UUID generation fires → each pd_meas row gets a unique random UUID.
+3. Composite FK stub creation: pd_meas's (point_id, diffractogram_id) → pd_data: for each UUID-diffractogram_id not found in `_raw_pd_data`, inserts a stub. 6313 stubs × 3 tables = 18939 spurious rows added to `_raw_pd_data`.
+4. `_merge_keyed` sees 25252 distinct PKs and inserts all of them.
+
+**Root cause:** `_run_fk_fill_pass` resolved propagation links only one level deep. The full chain `pd_meas.diffractogram_id → pd_data.diffractogram_id → pd_diffractogram.id` was not followed. Each ALL_BLOCKS block emits the Set-key scalar (`_pd_diffractogram.id degaussa_raw_01`), so `_raw_pd_diffractogram` has a row with `_block_id = 'pd_meas_degaussa_raw_01'` and `id = 'degaussa_raw_01'` — exactly what pd_meas needs — but the code never looked there.
+
+**Fix:** Modified the propagation link resolution in `_run_fk_fill_pass` to follow the chain transitively (up to 8 levels). For each level, it adds three subqueries (same-loop/iter, scalars-loop, any-row-in-block) to the COALESCE. The direct level is tried first; deeper levels are fallbacks. With `diffractogram_id` correctly filled, composite FK stub insertion finds existing matches and inserts nothing.
+
+**Rule:** Propagation links can form chains (A → B → C). A block-scoped FK fill that only resolves one level silently fails when the direct parent's staging rows live in a different block. Always follow the full transitive chain and include all reachable ancestors in the COALESCE so that any level sharing the current `_block_id` can satisfy the lookup.
+
+**Diagnostic approach:** Added `_pd_diag` checkpoints at 4 points in `propagate_fk_sql` (before/after each FK fill pass and after stubs) and a `[DIAG]`/`[POST-MERGE]` block in `create_final_tables`. The FK-DIAG showed `_raw_pd_data` at 6313 rows through all 4 checkpoints, confirming the spurious rows appeared in the composite FK stub phase that runs after those checkpoints. This narrowed the bug to lines 775–808 within minutes.
+
+---
+
 ## Lesson 117 — DuckDB migration audit: most modules were already DuckDB; only test_check_fidelity.py needed changes (2026-05-01)
 
 **Context:** A post-migration audit swept every non-ingest file for SQLite patterns. Files checked: `fidelity/check.py`, `database/compact.py`, `database/__init__.py`, `inspect/_ingest.py`, `validation/_db_validate.py`, `validation/_validate.py`, `tests/fidelity/test_check_fidelity.py`, `tests/dictionary/test_schema.py`.

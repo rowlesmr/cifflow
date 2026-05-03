@@ -4,6 +4,8 @@ convert_database — one-way export that casts DuckDB columns to typed storage.
 
 from __future__ import annotations
 
+import json as _json
+import re as _re
 from typing import TYPE_CHECKING, Literal
 
 import duckdb
@@ -95,6 +97,88 @@ def _sql_cast_expr(col_name: str, sql_type: str, leaf_type: str, cast_fn: str) -
     )
 
 
+def _scan_for_su(
+    src: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    cols: list,
+    sql_types: dict[str, str],
+    leaf_types: dict[str, str],
+) -> list[str]:
+    """Return 'SU dropped' messages for any SU-suffixed values in *src*."""
+    msgs: list[str] = []
+    for col in cols:
+        col_name = col.name
+        if col_name == '_row_id':
+            continue
+        sql_type = sql_types[col_name]
+        leaf_type = leaf_types[col_name]
+        if sql_type == 'VARCHAR' and leaf_type == 'VARCHAR':
+            continue
+        if sql_type == 'VARCHAR':
+            # JSON container with numeric leaves: check each JSON element.
+            rows = src.execute(f"""
+                SELECT "{col_name}" FROM "{tbl_name}"
+                WHERE "{col_name}" LIKE '[%'
+                  AND "{col_name}" LIKE '%(%'
+                  AND "{col_name}" NOT IN ('.', '?')
+            """).fetchall()
+            for (val,) in rows:
+                if val is None:
+                    continue
+                try:
+                    elements = _json.loads(val)
+                except Exception:
+                    continue
+                for elem in elements:
+                    s = str(elem)
+                    if '(' in s:
+                        stripped = _re.sub(r'\(\d+\)$', '', s)
+                        msgs.append(f"SU dropped: '{s}' → '{stripped}'")
+        else:
+            # Scalar numeric column.
+            rows = src.execute(f"""
+                SELECT DISTINCT "{col_name}",
+                    regexp_replace("{col_name}", '\\(\\d+\\)$', '')
+                FROM "{tbl_name}"
+                WHERE "{col_name}" LIKE '%(%'
+                  AND "{col_name}" NOT IN ('.', '?')
+            """).fetchall()
+            for orig, stripped in rows:
+                if orig != stripped:
+                    msgs.append(f"SU dropped: '{orig}' → '{stripped}'")
+    return msgs
+
+
+def _scan_for_cast_failures(
+    src: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    cols: list,
+    sql_types: dict[str, str],
+) -> list[str]:
+    """Return 'coercion failed' messages for values that cannot be cast."""
+    msgs: list[str] = []
+    for col in cols:
+        col_name = col.name
+        if col_name == '_row_id':
+            continue
+        sql_type = sql_types[col_name]
+        if sql_type == 'VARCHAR':
+            continue
+        rows = src.execute(f"""
+            SELECT DISTINCT "{col_name}" FROM "{tbl_name}"
+            WHERE "{col_name}" IS NOT NULL
+              AND "{col_name}" NOT IN ('.', '?')
+              AND "{col_name}" NOT LIKE '%(%'
+              AND TRY_CAST("{col_name}" AS {sql_type}) IS NULL
+        """).fetchall()
+        for (val,) in rows:
+            msgs.append(
+                f"coercion failed: '{val}' cannot be cast to {sql_type}"
+                f" in '{tbl_name}'.'{col_name}'"
+            )
+    return msgs
+
+
 def _transfer_arrow(src: duckdb.DuckDBPyConnection,
                     dst: duckdb.DuckDBPyConnection,
                     select_sql: str,
@@ -144,17 +228,15 @@ def convert_database(
         ``'null'`` (default) — failed cast → NULL via ``TRY_CAST``.
         ``'keep'``           — same as ``'null'`` (typed columns cannot store
                               non-castable strings; stored as NULL).
-        ``'error'``          — raise on first failure via ``CAST``.
+        ``'error'``          — raise ``ValueError`` on first failure.
 
     Returns
     -------
     list[str]
-        Reserved for future warning messages; currently always empty.
+        Warning messages: SU-dropped values and coercion failures (null/keep
+        policy only — error policy raises instead of returning).
     """
     messages: list[str] = []
-
-    # SQL function for numeric casting: CAST raises, TRY_CAST silently nulls.
-    cast_fn = 'CAST' if on_coercion_failure == 'error' else 'TRY_CAST'
 
     # Topological sort: FK parents before children.
     all_tables = set(schema.tables)
@@ -236,8 +318,17 @@ def convert_database(
             continue
 
         cols, sql_types, leaf_types = table_meta[tbl_name]
+
+        # Detect SU stripping and coercion failures before the transfer.
+        messages.extend(_scan_for_su(src, tbl_name, cols, sql_types, leaf_types))
+        fail_msgs = _scan_for_cast_failures(src, tbl_name, cols, sql_types)
+        if fail_msgs:
+            if on_coercion_failure == 'error':
+                raise ValueError(fail_msgs[0])
+            messages.extend(fail_msgs)
+
         cast_exprs = [
-            _sql_cast_expr(c.name, sql_types[c.name], leaf_types[c.name], cast_fn)
+            _sql_cast_expr(c.name, sql_types[c.name], leaf_types[c.name], 'TRY_CAST')
             for c in cols
         ]
         select_sql = f'SELECT {", ".join(cast_exprs)} FROM "{tbl_name}"'

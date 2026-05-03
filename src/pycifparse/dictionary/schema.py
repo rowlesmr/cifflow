@@ -806,7 +806,12 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             (c for c in tables[src_tbl].columns if c.name == item.object_id),
             None,
         )
-        if src_col_def is None or not src_col_def.is_primary_key:
+        if src_col_def is None:
+            continue
+        is_pk = src_col_def.is_primary_key
+        # Non-PK items: only include when they carry an enumeration_default that
+        # should be applied to absent columns.
+        if not is_pk and item.enumeration_default is None:
             continue
         key = (src_tbl, item.object_id)
         if key in _seen_prop:
@@ -815,8 +820,9 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         propagation_links.setdefault(src_tbl, []).append(
             (item.object_id, item.linked_item_id, item.enumeration_default)
         )
-        # Make the column nullable: FK was skipped, so NULL is valid here.
-        src_col_def.nullable = True
+        if is_pk:
+            # Make PK column nullable: FK was skipped, so NULL is valid here.
+            src_col_def.nullable = True
 
     # Build category parent map: table_name → parent table_name (or None).
     # Used by the output layer for wildcard category expansion.

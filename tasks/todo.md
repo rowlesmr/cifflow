@@ -4,9 +4,91 @@
 
 ## ▶ RESUME FROM HERE
 
-**Current state (2026-05-01, rust branch):** DuckDB migration fully complete and audited. All 1749 tests pass. Lessons 114–117.
+**Current state (2026-05-03, rust branch):** All 1749 tests pass. Two significant bugs fixed and four test failures corrected. Lessons 118.
 
-### What was done this session (2026-05-01)
+---
+
+### What was done today (2026-05-03)
+
+#### Bug fix: ALL_BLOCKS re-ingest duplication (pd_data 25252 → 6313 rows)
+
+**Root cause:** `_run_fk_fill_pass` resolved propagation links only one level deep. In ALL_BLOCKS output, each category is a separate CIF block with a different `_block_id`. When re-ingested:
+- `_raw_pd_meas` rows have `_block_id = 'pd_meas_...'`
+- Propagation link: `pd_meas.diffractogram_id ← _pd_data.diffractogram_id ← _pd_diffractogram.id`
+- The code looked in `_raw_pd_data` filtered by `_block_id = 'pd_meas_...'` — but `_raw_pd_data` only has rows with `_block_id = 'pd_data_...'` → fill fails
+- `has_single_fk=False` for `diffractogram_id` → UUID generation fires → 6313 unique UUIDs per sibling table
+- Composite FK stub creation: each UUID not found in `_raw_pd_data` → 3 × 6313 = 18939 stub rows inserted
+- `_raw_pd_data` total: 6313 + 18939 = 25252 → all inserted as distinct PKs
+
+**Fix (`duckdb_ingest.py` — `_run_fk_fill_pass`):** Propagation link resolution now follows the full transitive chain (up to 8 levels). For each level, three block-scoped subqueries (same-loop/iter, scalars-loop, any-row-in-block) are added to the COALESCE. Each ALL_BLOCKS block emits the Set-key scalar (`_pd_diffractogram.id`) so `_raw_pd_diffractogram` has a row with the correct `_block_id`, and the level-2 lookup finds it.
+
+**File changed:** `src/pycifparse/ingestion/duckdb_ingest.py` — propagation links section of `_run_fk_fill_pass`.
+
+#### Test failures fixed (8 failures → 0)
+
+**1. `convert_database` SU warning and coercion detection (`database/compact.py`)**
+
+Tests expected `convert_database` to return non-empty `messages`:
+- SU stripping: one 'SU dropped' message per distinct SU-valued cell (scalar); per element for JSON container columns
+- Coercion failures: 'coercion failed' message when non-castable value becomes NULL
+- `error` policy: raise `ValueError('coercion failed: ...')` instead of letting DuckDB raise `ConversionException`
+
+Fix: added `_scan_for_su` and `_scan_for_cast_failures` helpers that query src before each table's Arrow transfer. Always uses `TRY_CAST` now (no more `CAST`-vs-`TRY_CAST` toggle); error detection is Python-level.
+
+**2. Enumeration default for non-PK Link columns (`dictionary/schema.py`, `ingestion/duckdb_ingest.py`)**
+
+`_diffrn_radiation.variant` is a non-PK Link item with `_enumeration.default = '.'`. It was absent from CIF, so `variant = NULL`. Expected: `variant = '.'`.
+
+Root cause: `generate_schema` only added PK Link items to `propagation_links`; non-PK items were silently dropped. The ingest code then had no mechanism to apply the enumeration default.
+
+Fix:
+- `schema.py`: extended `propagation_links` to include non-PK Link items that carry `enumeration_default` (they just lack the nullable-PK marking)
+- `duckdb_ingest.py`: replaced `if not is_pk and not propagate_fk: continue` with a flag `do_fk_propagate`; `default_val` is now applied unconditionally regardless of PK status
+
+**3. `_row_diff_hint` frozenset skip (`fidelity/check.py`)**
+
+`_row_diff_hint` was including frozenset-valued columns in the diff output. Fix: added `isinstance(va/vb, frozenset)` guard in the diff loop to skip them.
+
+---
+
+### Test suite state
+
+- **1749 tests pass** (full suite, rust branch, 2026-05-03)
+- Run: `.venv/Scripts/python -m pytest -x -q`
+- ALL_BLOCKS fidelity: now PASS (0 mismatches)
+- ONE_BLOCK fidelity: FAIL (2 mismatches) — **intentional/expected**: ONE_BLOCK emit auto-emits audit-related tags to conform with CIF specs when presenting data in certain ways; `audit`/`audit_conform` rows therefore appear in B (re-ingested) but not in A (original). The fidelity check sees this as a mismatch but it is correct behaviour. The fidelity check or the mismatch classification may need updating to mark this as an expected divergence.
+
+### Open decisions
+
+1. **ONE_BLOCK fidelity mismatch** — `audit` and `audit_conform` tables appear in B (re-ingested ONE_BLOCK output) but not in A (original). This is **intentional**: ONE_BLOCK emit auto-emits audit-related tags to conform with CIF specs when presenting data in certain ways. The fidelity check classifies this as a failure but it is correct behaviour. Decision needed: should the fidelity check be taught to treat auto-emitted audit rows as an expected divergence, or should the round-trip definition exclude auto-emitted conformance data?
+
+2. **`emit_create_statements` DDL target** — generates SQLite DDL and is still exported as public API. The ingest path no longer uses it (DuckDB has its own DDL). Decision: update to DuckDB DDL, or keep as SQLite DDL for backward compat? Currently tested with SQLite in `test_schema.py`.
+
+3. **`_block_id`/`_row_id` rename** — a pervasive rename to `_pycifparse_block_id`/`_pycifparse_row_id` is documented. Large mechanical change touching schema generation, ingest, output, compactification, fidelity, inspect, all tests, and prompts. Decide timing: before or after rust branch merge to main.
+
+4. **rust branch merge to main** — rust branch contains: PyO3-backed `CifFile` (Phase B), Arrow IR pipeline, DuckDB ingest (Phase C), and all associated performance work. Main branch is still on old Python CifFile + SQLite path. Decide merge timing relative to remaining functional work.
+
+5. **`_validation_result` table** — created for two UUID-regime checks; role unclear now that content validator uses a report-object approach. Scope whether to extend, retain, or remove it before adding further validation.
+
+6. **Ingest further optimization** — current 12s ingest is 97× faster than the original Python path. Main remaining bottleneck (`ROW_NUMBER()` sort for 100K+ row tables) would require pre-computing a sort key during `flush_table_batches`. Not in scope unless a specific use case requires it.
+
+### What's next (priority order)
+
+1. **Resolve ONE_BLOCK fidelity mismatch classification** — the 2 mismatches (`audit`/`audit_conform` in B not in A) are intentional auto-emitted conformance data, not bugs. Decide how the fidelity check should handle expected divergences introduced by emit-layer conformance behaviour, then update the check or its pass/fail criteria accordingly.
+
+2. **Fully investigate all options for specifying grouping with `OutputSpec`** — the current emit modes (ORIGINAL, GROUPED, ONE_BLOCK, ALL_BLOCKS) are fixed. Understand what flexible per-user grouping control could look like via `OutputSpec`: which dimensions can be varied (by Set key, by category, by block, custom), what the API surface should be, and what the interaction is with the schema's category hierarchy and sibling groups.
+
+3. **Expand tests for file-based loading**.
+
+4. **Unify severity levels** across parser/ingest/validation.
+
+5. **`CifBuilder` cross-type duplicate tag detection**.
+
+6. **`source_line`/`source_col` propagation to `ValidationIssue`**.
+
+---
+
+### What was done previously (2026-05-01)
 
 **DuckDB migration audit** — swept every non-ingest source file and test for remaining SQLite patterns:
 
@@ -39,33 +121,6 @@
 - `create_final_tables` ~5.6s — `ROW_NUMBER() OVER (ORDER BY ...)` sort in `_merge_keyed` for large tables (pd_meas, pd_calc_component: 100K–240K rows). Sort is inherent to assigning sequential `_row_id` values.
 - `propagate_fk_sql` ~2.4s — FK fill passes.
 - `flush_table_batches` ~0.9s, `load_block_data` ~1.2s.
-
-### Test suite state
-
-- **1749 tests pass** (full suite, rust branch, 2026-05-01)
-- Run: `.venv/Scripts/python -m pytest -x -q`
-- Profiler: `.venv/Scripts/python profile_pipeline.py --input second`
-
-### Open decisions
-
-1. **`emit_create_statements` DDL target** — this function generates SQLite DDL (`TEXT`, `INTEGER`, `DEFERRABLE INITIALLY DEFERRED`) and is still exported as public API. The ingest path no longer uses it (DuckDB ingest has its own DDL). Decision needed: should `emit_create_statements` be updated to generate DuckDB DDL, or kept as SQLite DDL for backward compatibility? Currently tested with SQLite in `test_schema.py`.
-
-2. **`_block_id`/`_row_id` rename** — todo.md documents a pervasive rename to `_pycifparse_block_id`/`_pycifparse_row_id`. This is a large mechanical change touching schema generation, ingest, output, compactification, fidelity, inspect, all tests, and prompts. Decide when/whether to do this before or after the rust branch merges to main.
-
-3. **rust branch merge to main** — the rust branch contains: PyO3-backed `CifFile` (Phase B), Arrow IR pipeline, DuckDB ingest (Phase C), and all associated performance work. Main branch is still on the old Python CifFile + SQLite path. Decide merge timing relative to remaining functional work (severity unification, `_cif_synthetic` table, `CifBuilder` cross-type duplicates).
-
-4. **Ingest further optimization** — current 12s ingest is already 97× faster than the original Python path. The main remaining bottleneck (`ROW_NUMBER()` sort for 100K+ row tables) would require pre-computing a sort key during `flush_table_batches`. Not in scope unless a specific use case requires it.
-
-5. **`_validation_result` table** — created for two UUID-regime checks but its ongoing role is unclear now that the content validator uses a report-object approach. Scope whether to extend, retain, or remove it before adding further validation.
-
-### What's next
-
-The DuckDB migration and performance optimization work is complete. Remaining work in `tasks/todo.md` (see "Remaining items" section):
-- Expand tests for file-based loading
-- Unify severity levels across parser/ingest/validation
-- `CifBuilder` cross-type duplicate tag detection
-- `_cif_synthetic` scoping and `_validation_result` table decision
-- `source_line`/`source_col` propagation to `ValidationIssue`
 
 ---
 
