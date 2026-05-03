@@ -1,6 +1,6 @@
 import pytest
-from pycifparse.parser.version import detect_version
-from pycifparse.types import CifVersion
+from cifflow.parser.version import detect_version
+from cifflow.types import CifVersion
 
 
 def test_cif20_magic():

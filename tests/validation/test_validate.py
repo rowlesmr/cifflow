@@ -8,11 +8,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pycifparse.cifmodel.builder import build
-from pycifparse.cifmodel.model import CifFile
-from pycifparse.ingestion.ingest import IngestionError
-from pycifparse.types import ParseError
-from pycifparse.validation import ValidationIssue, ValidationReport, validate
+from cifflow.cifmodel.builder import build
+from cifflow.cifmodel.model import CifFile
+from cifflow.ingestion.ingest import IngestionError
+from cifflow.types import ParseError
+from cifflow.validation import ValidationIssue, ValidationReport, validate
 
 
 # ---------------------------------------------------------------------------
@@ -156,14 +156,14 @@ class TestIngestStage:
 
     def test_ingest_warning_messages_become_warning_issues(self):
         # Patch ingest to fire on_error with a non-fatal message.
-        original_ingest = __import__('pycifparse.ingestion.ingest', fromlist=['ingest']).ingest
+        original_ingest = __import__('cifflow.ingestion.ingest', fromlist=['ingest']).ingest
 
         def _fake_ingest(cif, conn, schema, *, on_error=None, **kw):
             if on_error:
                 on_error('some warning message')
             return original_ingest(cif, conn, None, on_error=None, **kw)
 
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fake_ingest):
+        with patch('cifflow.validation._validate.ingest', side_effect=_fake_ingest):
             report = validate(_MINIMAL_CIF)
 
         ingest_issues = [i for i in report.issues if i.stage == 'ingest']
@@ -178,7 +178,7 @@ class TestIngestStage:
                 on_error('non-semantic warning B')
             raise IngestionError(['semantic conflict A'])
 
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fail_ingest):
+        with patch('cifflow.validation._validate.ingest', side_effect=_fail_ingest):
             report = validate(_MINIMAL_CIF)
 
         assert report.database is None
@@ -192,7 +192,7 @@ class TestIngestStage:
         def _fail(cif, conn, schema, *, on_error=None, **kw):
             raise IngestionError(['conflict'])
 
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
+        with patch('cifflow.validation._validate.ingest', side_effect=_fail):
             report = validate(_MINIMAL_CIF)  # must not raise
         assert report is not None
 
@@ -200,7 +200,7 @@ class TestIngestStage:
         def _fail(cif, conn, schema, *, on_error=None, **kw):
             raise sqlite3.IntegrityError('FOREIGN KEY constraint failed')
 
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
+        with patch('cifflow.validation._validate.ingest', side_effect=_fail):
             report = validate(_MINIMAL_CIF)
 
         assert report.database is None
@@ -213,7 +213,7 @@ class TestIngestStage:
         def _fail(cif, conn, schema, *, on_error=None, **kw):
             raise ValueError('unknown dataset_id')
 
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
+        with patch('cifflow.validation._validate.ingest', side_effect=_fail):
             report = validate(_MINIMAL_CIF)
 
         assert report.database is None
@@ -226,7 +226,7 @@ class TestIngestStage:
         def _fail(cif, conn, schema, *, on_error=None, **kw):
             raise RuntimeError('unexpected boom')
 
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
+        with patch('cifflow.validation._validate.ingest', side_effect=_fail):
             report = validate(_MINIMAL_CIF)
 
         assert report.database is None
@@ -240,7 +240,7 @@ class TestIngestStage:
                 on_error('warning before crash')
             raise ValueError('crash')
 
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
+        with patch('cifflow.validation._validate.ingest', side_effect=_fail):
             report = validate(_MINIMAL_CIF)
 
         warn_issues = [
@@ -256,7 +256,7 @@ class TestIngestStage:
 
 class TestDatabaseStage:
     def test_validate_database_internal_error_sets_database_none(self):
-        from pycifparse.validation._db_validate import validate_database, DbValidationResult
+        from cifflow.validation._db_validate import validate_database, DbValidationResult
 
         def _fail_validate_database(conn, schema, **kw):
             return [DbValidationResult(
@@ -265,12 +265,12 @@ class TestDatabaseStage:
                 check='internal_error', severity='Error', message='db boom',
             )]
 
-        with patch('pycifparse.validation._validate.validate_database', side_effect=_fail_validate_database):
+        with patch('cifflow.validation._validate.validate_database', side_effect=_fail_validate_database):
             # Use schema=None to skip actual DB stage; but we want to test DB stage.
             # Instead, patch validate_database to return the sentinel directly.
             # We need a real schema for validate() to call validate_database.
             # Use a minimal fake schema.
-            from pycifparse.dictionary.schema import SchemaSpec
+            from cifflow.dictionary.schema import SchemaSpec
             fake_schema = SchemaSpec(tables={}, column_to_tag={})
             report = validate(_MINIMAL_CIF, fake_schema)
 
@@ -279,7 +279,7 @@ class TestDatabaseStage:
         assert len(ie) == 1
 
     def test_valid_db_results_before_internal_error_included(self):
-        from pycifparse.validation._db_validate import DbValidationResult
+        from cifflow.validation._db_validate import DbValidationResult
 
         def _mixed_validate_database(conn, schema, **kw):
             return [
@@ -295,9 +295,9 @@ class TestDatabaseStage:
                 ),
             ]
 
-        from pycifparse.dictionary.schema import SchemaSpec
+        from cifflow.dictionary.schema import SchemaSpec
         fake_schema = SchemaSpec(tables={}, column_to_tag={})
-        with patch('pycifparse.validation._validate.validate_database', side_effect=_mixed_validate_database):
+        with patch('cifflow.validation._validate.validate_database', side_effect=_mixed_validate_database):
             report = validate(_MINIMAL_CIF, fake_schema)
 
         assert report.database is None
@@ -347,8 +347,8 @@ class TestPassedAndOrdering:
             if on_error:
                 on_error('ingest warning')
 
-        from pycifparse.dictionary.schema import SchemaSpec
-        from pycifparse.validation._db_validate import DbValidationResult
+        from cifflow.dictionary.schema import SchemaSpec
+        from cifflow.validation._db_validate import DbValidationResult
 
         def _db(conn, schema, **kw):
             return [DbValidationResult(
@@ -360,8 +360,8 @@ class TestPassedAndOrdering:
         cif, errors = build(_INVALID_CIF)
         fake_schema = SchemaSpec(tables={}, column_to_tag={})
 
-        with patch('pycifparse.validation._validate.ingest', side_effect=_fail):
-            with patch('pycifparse.validation._validate.validate_database', side_effect=_db):
+        with patch('cifflow.validation._validate.ingest', side_effect=_fail):
+            with patch('cifflow.validation._validate.validate_database', side_effect=_db):
                 report = validate(cif, fake_schema, parse_errors=errors)
 
         stages = [i.stage for i in report.issues]
@@ -381,8 +381,8 @@ class TestPassedAndOrdering:
 
 class TestSentinelNormalisation:
     def test_db_result_empty_tag_becomes_none(self):
-        from pycifparse.validation._db_validate import DbValidationResult
-        from pycifparse.validation._validate import _db_result_to_issue
+        from cifflow.validation._db_validate import DbValidationResult
+        from cifflow.validation._validate import _db_result_to_issue
 
         r = DbValidationResult(
             table='t', column='c', tag='', block_id='b', row_id=1,
@@ -392,9 +392,9 @@ class TestSentinelNormalisation:
         assert issue.tag is None
         assert issue.value is None
 
-    def test_db_result_row_id_zero_becomes_none(self):
-        from pycifparse.validation._db_validate import DbValidationResult
-        from pycifparse.validation._validate import _db_result_to_issue
+    def test_db_result_cifflow_row_id_zero_becomes_none(self):
+        from cifflow.validation._db_validate import DbValidationResult
+        from cifflow.validation._validate import _db_result_to_issue
 
         r = DbValidationResult(
             table='t', column='c', tag='_t.c', block_id='b', row_id=0,
@@ -403,9 +403,9 @@ class TestSentinelNormalisation:
         issue = _db_result_to_issue(r)
         assert issue.row_id is None
 
-    def test_db_result_positive_row_id_preserved(self):
-        from pycifparse.validation._db_validate import DbValidationResult
-        from pycifparse.validation._validate import _db_result_to_issue
+    def test_db_result_positive_cifflow_row_id_preserved(self):
+        from cifflow.validation._db_validate import DbValidationResult
+        from cifflow.validation._validate import _db_result_to_issue
 
         r = DbValidationResult(
             table='t', column='c', tag='_t.c', block_id='b', row_id=5,

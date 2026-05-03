@@ -3,9 +3,9 @@ Tests for CifBuilder — event-driven construction of CifFile.
 """
 
 import pytest
-from pycifparse.cifmodel.builder import CifBuilder
-from pycifparse.cifmodel.model import CifBlock, CifSaveFrame
-from pycifparse.types import ParseError, ValueType
+from cifflow.cifmodel.builder import CifBuilder
+from cifflow.cifmodel.model import CifBlock, CifSaveFrame
+from cifflow.types import ParseError, ValueType
 
 
 def make_builder(mode='pad'):

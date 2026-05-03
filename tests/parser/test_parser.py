@@ -11,8 +11,8 @@ from typing import List, Optional, Tuple
 
 import pytest
 
-from pycifparse.parser.parser import CifParser
-from pycifparse.types import CifParserEvents, ParseError, ValueType
+from cifflow.parser.parser import CifParser
+from cifflow.types import CifParserEvents, ParseError, ValueType
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -434,7 +434,7 @@ class TestLists:
     def test_list_without_tag_emits_error_and_attaches_to_error_value(self):
         h = parse('#\\#CIF_2.0\ndata_d\n[1 2]\n')
         assert h.has_error_containing('container without preceding tag')
-        assert any(e == Event('add_tag', ('_pycifparse_error_value',)) for e in h.events)
+        assert any(e == Event('add_tag', ('_cifflow_error_value',)) for e in h.events)
 
     def test_list_with_mixed_value_types(self):
         src = "#\\#CIF_2.0\ndata_d\n_t [bare 'sq' \"dq\" .]\n"
@@ -527,7 +527,7 @@ class TestOrphanValues:
     def test_orphan_scalar_emits_error_and_error_value_tag(self):
         h = parse('data_d\norphan\n')
         assert h.has_error_containing('has no preceding tag')
-        assert Event('add_tag', ('_pycifparse_error_value',)) in h.events
+        assert Event('add_tag', ('_cifflow_error_value',)) in h.events
 
     def test_orphan_value_is_still_emitted(self):
         h = parse('data_d\norphan\n')
@@ -535,7 +535,7 @@ class TestOrphanValues:
 
     def test_second_orphan_also_gets_error_value_tag(self):
         h = parse('data_d\nfirst\nsecond\n')
-        error_tags = [e for e in h.events if e == Event('add_tag', ('_pycifparse_error_value',))]
+        error_tags = [e for e in h.events if e == Event('add_tag', ('_cifflow_error_value',))]
         assert len(error_tags) == 2
 
 

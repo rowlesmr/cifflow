@@ -1,5 +1,5 @@
 """
-Tests for pycifparse.output.quote.
+Tests for cifflow.output.quote.
 
 Each decision-tree rule is tested directly (checking the returned token) and
 via a round-trip: quote() → embed in minimal CIF → build() → compare value.
@@ -15,9 +15,9 @@ PLACEHOLDER values ('.' and '?', length 1) round-trip as themselves.
 
 import pytest
 
-from pycifparse.cifmodel.builder import build
-from pycifparse.output.quote import quote
-from pycifparse.types import CifVersion
+from cifflow.cifmodel.builder import build
+from cifflow.output.quote import quote
+from cifflow.types import CifVersion
 
 CIF20 = CifVersion.CIF_2_0
 CIF11 = CifVersion.CIF_1_1
@@ -586,19 +586,19 @@ class TestEdgeCases:
         assert quote('["a","b"]', CIF20) == """'["a","b"]'"""
 
     def test_sentinel_prefixed_list_emits_cif_list(self):
-        from pycifparse.ingestion.ingest import encode_container
-        from pycifparse.cifmodel.scalar import CifScalar
-        from pycifparse.types import ValueType
+        from cifflow.ingestion.ingest import encode_container
+        from cifflow.cifmodel.scalar import CifScalar
+        from cifflow.types import ValueType
         stored, _ = encode_container(['a', 'b'])
         assert quote(stored, CIF20) == '[a b]'
 
     def test_sentinel_prefixed_table_emits_cif_table(self):
-        from pycifparse.ingestion.ingest import encode_container
+        from cifflow.ingestion.ingest import encode_container
         stored, _ = encode_container({'k': 'v'})
         assert quote(stored, CIF20) == '{k: v}'
 
     def test_sentinel_prefixed_nested_list(self):
-        from pycifparse.ingestion.ingest import encode_container
+        from cifflow.ingestion.ingest import encode_container
         stored, _ = encode_container([['1', '2'], ['3', '4']])
         assert quote(stored, CIF20) == '[[1 2] [3 4]]'
 

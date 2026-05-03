@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pycifparse"
+name = "cifflow"
 version = "0.1.0"
 description = "A streaming, event-driven parser for Crystallographic Information Files (CIF)"
 requires-python = ">=3.10"
@@ -19,21 +19,21 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-"pycifparse.dictionary" = ["js/*.js", "js/LICENSES.txt"]
+"cifflow.dictionary" = ["js/*.js", "js/LICENSES.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
     "slow: large real-world CIF files (deselect with -m 'not slow')",
 ]
-addopts = "--cov=pycifparse --cov-branch --cov-report=term-missing --cov-report=html:tests/test_coverage"
+addopts = "--cov=cifflow --cov-branch --cov-report=term-missing --cov-report=html:tests/test_coverage"
 filterwarnings = [
     "ignore::ResourceWarning",
 ]
 
 [tool.coverage.run]
 branch = true
-source = ["pycifparse"]
+source = ["cifflow"]
 
 [tool.coverage.report]
 show_missing = true
