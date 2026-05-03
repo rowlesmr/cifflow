@@ -23,6 +23,15 @@ jobs:
 
       - run: python -m venv .venv
 
+      - name: Add venv to PATH
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            echo "$GITHUB_WORKSPACE/.venv/Scripts" >> $GITHUB_PATH
+          else
+            echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+          fi
+
       - uses: PyO3/maturin-action@v1
         with:
           command: develop
