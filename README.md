@@ -2,7 +2,10 @@
 
 Parse, store, validate, and emit Crystallographic Information Files (CIF).
 
-**Python ≥ 3.10 · Apache 2.0 · v0.1.4 · [PyPI](https://pypi.org/project/cifflow/)**
+[![PyPI](https://img.shields.io/pypi/v/cifflow)](https://pypi.org/project/cifflow/)
+[![CI](https://github.com/rowlesmr/cifflow/actions/workflows/ci.yml/badge.svg)](https://github.com/rowlesmr/cifflow/actions/workflows/ci.yml)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/cifflow)](https://pypi.org/project/cifflow/)
+[![License](https://img.shields.io/pypi/l/cifflow)](https://pypi.org/project/cifflow/)
 
 ---
 
