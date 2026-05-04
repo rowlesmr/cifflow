@@ -4,45 +4,34 @@
 
 A Python library for parsing, storing, and outputting Crystallographic Information Files (CIF).
 The system is streaming, event-driven, dictionary-aware, and designed for correctness above all else.
+All major development stages are complete. The system is in maintenance and upkeep mode.
 
-Full specifications and future prompts are in the `prompts/` directory.
-Reference material (CIF specifications, grammars, related papers) is in the `references/` directory.
-
-### References
-
-| File | Purpose |
-|------|---------|
-| `references/CIF2.0 specification.pdf` | Authoritative CIF 2.0 spec |
-| `references/CIF1-1 specification.pdf` | Authoritative CIF 1.1 spec |
-| `references/CIF1-1 File syntax.html` | CIF 1.1 file syntax detail |
-| `references/CIF2-ENBF.txt` | CIF 2.0 EBNF grammar |
-| `references/CIF1-1 grammar.txt` | CIF 1.1 grammar |
-| `references/an error-correcting CIF1-1 parser.pdf` | Prior art: error-correcting CIF 1.1 parser |
-| `references/example program that would use this API.pdf` | Target use case for this library |
-
-When in doubt about CIF syntax or behaviour, consult the relevant reference before implementing.
+Full specifications are in `prompts/`. Reference material (CIF specs, grammars) is in `references/`.
+When in doubt about CIF syntax or behaviour, consult `references/` before implementing.
 
 ---
 
 ## Architecture
 
 ```
-Parser -> Event Stream -> IR -> Dictionary-aware Mapping -> SQLite -> Output/API
+Parser -> Event Stream -> IR -> Dictionary-aware Mapping -> DuckDB -> Output/API
 ```
 
-Layer responsibilities are strictly separated. This separation MUST be preserved throughout.
+Layer responsibilities are strictly separated and must remain so. If a proposed change blurs a
+boundary, raise it explicitly before implementing.
 
-| Layer | Responsibility |
-|-------|---------------|
-| **Lexer** | Tokenisation, raw content preservation, ValueType and TokenType assignment only |
-| **Parser** | Token sequence interpretation, event emission, stack state, error events |
-| **IR** | Event accumulation, loop validation, multiline text transformation |
-| **Dictionary** | DDLm parsing, schema derivation, semantic mapping |
-| **SQLite** | Persistent storage; structured tables when a dictionary is present, fallback tier otherwise |
-| **Output** | Valid CIF regeneration, Python/NumPy/pandas API |
-
-Do not allow responsibilities to bleed between layers. If a proposed change would blur a boundary,
-raise it explicitly before implementing.
+| Layer | Module(s) | Responsibility |
+|-------|-----------|----------------|
+| **Lexer** | `lexer/` | Tokenisation, ValueType/TokenType assignment only |
+| **Parser** | `parser/` | Token sequence interpretation, event emission, error events |
+| **IR** | `cifmodel/` | Event accumulation, loop validation, CifFile/CifBlock/CifSaveFrame |
+| **Dictionary** | `dictionary/` | DDLm parsing, SchemaSpec generation |
+| **Ingest** | `ingestion/` | DuckDB staging, merge, FK propagation, final table population |
+| **Output** | `output/` | CIF regeneration (emit.py, quote.py) |
+| **Validation** | `validation/` | Observation only — never gates processing |
+| **Fidelity** | `fidelity/` | Round-trip correctness checking |
+| **Inspect** | `inspect/` | Human-readable database inspection |
+| **Database** | `database/` | compact.py (type coercion), DuckDB connection helpers |
 
 ---
 
@@ -51,13 +40,13 @@ raise it explicitly before implementing.
 These must never be violated under any circumstances:
 
 1. No silent data loss
-2. All parsed values emitted as raw strings
+2. All parsed values emitted as raw strings; ValueType is assigned by the lexer only and never modified downstream
 3. Event ordering must exactly match file order
 4. Duplicate tag values must be preserved — never overwritten
-5. Parser must not crash on malformed input
-6. All malformed constructs must generate explicit on_error events
-7. When no dictionary is provided, all tags are routed to the fallback tier (`_cif_fallback`); no data is discarded
-8. The output layer must never emit invalid CIF
+5. Parser must not crash on malformed input; all malformed constructs generate explicit `on_error` events
+6. When no dictionary is provided, all tags route to `_cif_fallback`; no data is discarded
+7. The output layer must never emit invalid CIF
+8. Validation is an observation layer — `validate()` reports violations but never raises or blocks; `ingest()` must never call `validate()` internally
 
 ---
 
@@ -73,261 +62,6 @@ Optimise only after correctness is established.
 
 ---
 
-## Implementation Stages
-
-Work incrementally. Produce working, testable code at each stage. Validate before advancing.
-
-| Stage | Focus |
-|-------|-------|
-| 1 | CIF 2.0 parser (data blocks, tag-value, loops) then CIF 1.1/1.0 |
-| 2 | Error handling and recovery; malformed structure support |
-| 3 | IR implementation; parser to IR integration |
-| 4 | DDLm dictionary parsing (Phase 1 only); SQLite schema generation |
-| 5 | SQLite ingestion via dictionary-defined schema |
-| 6+ | Dictionary Phase 2 (imports, metadictionaries); output layer; performance |
-
-Implement CIF 2.0 first. The downstream pipeline (IR, SQLite, output) is shared across CIF versions.
-DDL1 and DDL2 are out of scope.
-
----
-
-## Version Detection
-
-Version detection occurs before any tokens are consumed. The lexer is instantiated with the result.
-
-Scan past leading whitespace-only lines to find the first non-whitespace candidate line.
-Match against the file-heading grammar production:
-
-```
-file-heading = [ U+FEFF ], magic-code, { inline-wspace } ;
-```
-
-| Candidate line | Action |
-|---|---|
-| #\\#CIF_2.0 | CIF 2.0; consume line |
-| #\\#CIF_1.1 | CIF 1.1; consume line |
-| #\\#CIF_{anything} | on_error("unrecognised CIF version: {raw}"); default CIF 2.0; consume line |
-| EOF before non-whitespace | CIF 1.1; no line consumed |
-| Anything else | CIF 1.1; line left for normal processing |
-
-- BOM (U+FEFF) and trailing inline whitespace are permitted on the magic line
-- Magic lines appearing after the candidate position are plain comments; no re-evaluation
-- Version is fixed at parse time and never changes mid-file
-- Output MUST only emit #\\#CIF_2.0 or #\\#CIF_1.1
-
----
-
-## Key Types
-
-### ValueType (lexer-assigned only; never modified by any downstream layer)
-
-```python
-from enum import Enum
-
-class ValueType(Enum):
-    MULTILINE_STRING      = "multiline_string"      # <EOL>;...<EOL>;
-    TRIPLE_DOUBLE_QUOTED  = "triple_double_quoted"  # """..."""  CIF 2.0 only
-    TRIPLE_SINGLE_QUOTED  = "triple_single_quoted"  # '''...'''  CIF 2.0 only
-    DOUBLE_QUOTED         = "double_quoted"          # "..."
-    SINGLE_QUOTED         = "single_quoted"          # '...'
-    STRING                = "string"                 # unquoted bare word
-    PLACEHOLDER           = "placeholder"            # unquoted . or ?
-```
-
-Assignment rules:
-- Unquoted . or ? -> PLACEHOLDER only
-- Quoted . or ? -> appropriate quoted ValueType, NOT PLACEHOLDER
-- Numeric values with or without SU (e.g. 12.34(5)) -> STRING
-- Triple-quoted types are CIF 2.0 only; encountering them in CIF 1.x is a lexical error
-- ValueType must survive round-tripping: PLACEHOLDER must never become a quoted string on output
-- No layer other than the lexer may assign or modify ValueType
-
-### TokenType (lexer-internal; not propagated to the event interface)
-
-```python
-class TokenType(Enum):
-    TAG      = "tag"      # bare word beginning with _
-    KEYWORD  = "keyword"  # data_, save_, loop_, stop_, global_  (case-insensitive)
-    VALUE    = "value"    # everything else
-```
-
-- data_ and save_ are prefix keywords: the full raw token is emitted (e.g. data_my_block)
-- Name suffix extraction is the parser's responsibility, not the lexer's
-- _data_foo is always a TAG, never a keyword
-- The lexer classifies tokens; it never validates syntactic position
-
-### ParseError
-
-```python
-class ParseError:
-    error_type: Literal["lexical", "syntactic", "semantic"]
-    message: str
-    line: int
-    column: int
-    context: str
-    recovery_action: str
-```
-
----
-
-## Lexer State Machine
-
-States:
-
-```
-NORMAL
-SINGLE_QUOTED           terminated by closing '
-DOUBLE_QUOTED           terminated by closing "
-TRIPLE_SINGLE_QUOTED    terminated by '''   (CIF 2.0 only)
-TRIPLE_DOUBLE_QUOTED    terminated by """   (CIF 2.0 only)
-MULTILINE               terminated by ; at column 1
-```
-
-Key rules:
-- Triple-quote disambiguation: on ' or " in NORMAL state, peek at next two chars;
-  if all three are identical quote chars, enter the triple-quoted state
-- Triple-quoted states are unreachable in CIF 1.x mode; encountering them is a lexical error
-- A semicolon at column 1 inside a triple-quoted string is NOT a MULTILINE delimiter
-- CIF 1.x character set restrictions are validated per-state;
-  violations emit on_error without terminating the current string
-- EOF in any string state: emit accumulated content as unterminated token,
-  emit on_error("unterminated string"), terminate lexing
-- A regex-based lexer is insufficient; use a line-aware or streaming implementation
-
----
-
-## Event Interface
-
-```python
-from typing import List, Protocol
-
-class CifParserEvents(Protocol):
-    def on_data_block(self, name: str): ...
-    def on_save_frame_start(self, name: str): ...
-    def on_save_frame_end(self): ...
-    def add_tag(self, tag_name: str): ...
-    def add_value(self, value: str, value_type: ValueType): ...
-    def on_list_start(self): ...
-    def on_list_end(self): ...
-    def on_table_start(self): ...
-    def on_table_end(self): ...
-    def on_table_key(self, key: str, value_type: ValueType): ...
-    def on_loop_start(self, tags: List[str]): ...
-    def on_loop_end(self): ...
-    def on_error(self, error: ParseError): ...
-```
-
----
-
-## Critical Parser Rules
-
-**Tags**
-- One tag at a time via add_tag; tag stays active until its value or container is closed
-- New tag while previous still active: on_error + assign ? placeholder to previous tag
-- Loop encountered while tag active: on_error + ? placeholder, close tag, process loop
-
-**Loops**
-- on_loop_start(tags) collects all loop tags at once
-- Values emitted flat between on_loop_start and on_loop_end; no column alignment enforced by parser
-- on_loop_end emitted on: EOF, new tag, new loop, new save frame, new data block, STOP_
-- If loop termination occurs while inside a container: implicitly close all open containers
-  in LIFO order (emitting on_list_end/on_table_end + on_error for each), then emit on_loop_end
-- Nested loops are non-recoverable: on_error, terminate cleanly
-- Loop structural validation (row count) is IR responsibility only
-
-**Lists and Tables**
-- Arbitrarily nestable inside loops and each other
-- Table keys MUST be quoted strings; unquoted key is a parse error (handle leniently)
-- Table key not followed by value before next key: on_error + ? placeholder for that key
-- Duplicate table keys: preserve in insertion order (same rule as duplicate tags)
-
-**Save Frames**
-- Cannot be nested; if a new one is encountered while one is open:
-  on_error("nested save frame"), implicitly close current, start new
-- Correctly terminated by: save_, EOF, or new data block
-
-**Orphan Values** (values outside loops with no preceding tag)
-- on_error + attach to synthetic tag _error_value
-- _error_value is scoped to the current namespace and follows duplicate value semantics
-
-**Keywords**
-- global_ anywhere is fatal: on_error, stop parsing immediately
-- Keyword in value position: on_error + ? placeholder, continue
-- Quoted keywords are always VALUE tokens, never structural events
-
----
-
-## IR Rules
-
-- Schema-agnostic; must not depend on dictionary availability
-- Incrementally constructed from parser events; optimised for low memory
-- All values stored as strings; scalars stored as tag -> list[str]
-- Loop value assignment: tag_index = value_index mod len(tags)
-- Value index increments only on complete value (scalar add_value OR fully closed container)
-- IR maintains its own container nesting depth to track container completion
-- On on_loop_end: validate total value count is divisible by tag count; if not:
-  - strict mode: emit error, stop
-  - pad mode: emit warning, pad incomplete final row with ? placeholders
-
-**Multiline text transformation pipeline (IR layer only; applies to MULTILINE_STRING only):**
-1. Split into physical lines (preserve EOL semantics)
-2. Apply prefix detection and removal (if applicable)
-3. Apply line unfolding (if fold separators present)
-4. Reconstruct final logical string
-
-Fold separator detection MUST occur after prefix removal, operating on prefix-stripped lines.
-
----
-
-## Round-Trip Fidelity
-
-Round-tripping is defined as semantic fidelity, not textual fidelity.
-Only guaranteed for input that produced no on_error events during parsing.
-
-Permitted transformations:
-- Comments stripped (discarded by parser; output layer has no access to them)
-- Line ordering may differ, subject to canonical formatting rules
-- Magic code normalised to canonical form
-- Whitespace and quoting may be normalised
-
-Must be preserved exactly:
-- All data block and save frame names
-- All tag names
-- All values as raw strings
-- ValueType provenance (PLACEHOLDER must remain unquoted on output)
-- Loop structure and column order
-
-Never permitted in output:
-- Invalid CIF constructs
-- Non-canonical magic codes
-- Duplicate tags (error condition; file is not round-trippable if they are present)
-
----
-
-## Project Roadmap
-
-This prompt covers the parser (Stages 1-3) and the dictionary/schema/ingestion/output layers
-(Stages 4-6+). Future prompts in prompts/ will cover:
-
-- Dictionary parsing and SQLite schema generation
-- Database population (ingestion pipeline)
-- Output layer (CIF regeneration, programmatic API)
-
-When starting a new stage, check prompts/ for the relevant specification before beginning.
-
----
-
-## Task Management
-
-1. Write plan to tasks/todo.md before implementing
-2. Confirm plan before starting
-3. Mark items complete as you go
-4. Summarise changes at each step
-5. Add review notes to tasks/todo.md on completion
-6. After any correction, record the lesson in tasks/lessons.md
-
----
-
 ## Guiding Principle
 
 > Be liberal in what you accept, strict in what you emit.
@@ -337,3 +71,181 @@ When starting a new stage, check prompts/ for the relevant specification before 
 - Make every change as simple as possible; prefer deleting lines to adding them
 - Find root causes; no temporary fixes
 - Only touch what is necessary
+
+---
+
+## Key Invariants
+
+These encode non-obvious design decisions that are easy to violate accidentally.
+
+### CIF value encoding in DuckDB
+All value columns store TEXT. Presence states:
+
+| Stored value | CIF meaning |
+|---|---|
+| `NULL` | tag absent from block |
+| `'.'` | inapplicable (bare PLACEHOLDER) |
+| `'?'` | unknown (bare PLACEHOLDER) |
+| `'"."'` | literal `.` in any quoted form |
+| `'"?"'` | literal `?` in any quoted form |
+| anything else | real value, raw string |
+
+`_cif_fallback` additionally has a `value_type` column to distinguish bare-word from quoted values.
+This encoding must be preserved across all ingest, merge, emit, and compact code paths.
+
+### Synthetic columns
+`_cifflow_block_id`, `_cifflow_row_id`, and bridge columns are synthetic — they have no DDLm
+`definition_id` and must be `is_synthetic=True`. `_active_cols` in `emit.py` filters them before
+rendering. Any new infrastructure column must carry the synthetic flag.
+
+### `_cifflow_row_id` scoping
+`_cifflow_row_id` is global across the entire `ingest()` call — it never resets between blocks.
+For tables where `(_cifflow_block_id, _cifflow_row_id)` is not the `PRIMARY KEY`, a table-level
+`UNIQUE ("_cifflow_block_id", "_cifflow_row_id")` constraint is required. Never use `_cifflow_row_id UNIQUE` alone.
+
+### FK-PK suppression in emit
+In ORIGINAL and GROUPED modes, FK-PK columns pointing to a co-emitted Set category are suppressed
+from output (they are implicit from block scope). This does NOT apply to ALL_BLOCKS or ONE_BLOCK.
+
+### `_sort_and_merge` bypassed for ALL_BLOCKS
+ALL_BLOCKS skips `_sort_and_merge` entirely and preserves collector output order directly.
+`_sort_and_merge` is designed for GROUPED/ORIGINAL anchor-key matching only.
+
+### Tag category resolution
+A tag's category is always `_name.category_id` from its save frame — never inferred by splitting
+the tag name on `.`. The dot-notation prefix and `_name.category_id` can differ.
+
+### SQL identifiers
+All SQL identifiers (table names, column names, FK references) must be double-quoted in generated
+DDL using the `_qi(name)` helper. Never interpolate bare names into SQL strings.
+
+### `_name.linked_item_id` is not an identity tag
+`_IMPORT_IDENTITY_TAGS` contains only structural identity tags (`_definition.id`,
+`_name.category_id`, `_name.object_id`, `_definition.scope`, `_definition.class`, `_import.get`).
+`_name.linked_item_id` is a data attribute that must be inheritable from templates — do not add
+it back to the identity set.
+
+### Real value comparison uses `Decimal`
+For fidelity comparison of `Real`-typed columns, use `format(Decimal(value), 'f')` — not `float()`.
+`Decimal` preserves trailing zeros (significant figures). `1.2 ≠ 1.20` in crystallography.
+
+---
+
+## Known Fragile Areas
+
+Tread carefully in these areas. Mistakes here are easy and expensive to debug.
+
+**DuckDB ingest ↔ Python merge path sync**
+`duckdb_ingest.py` and the Python-path merge code must be kept in sync. A change to merge
+logic, `tag_presence_rows` population, or `_cifflow_block_id` handling usually requires a
+corresponding change in the other path. Check both before closing.
+
+**Propagation link resolution**
+`_run_fk_fill_pass` must follow transitive chains (up to 8 levels). In ALL_BLOCKS output, each
+category is a separate CIF block with a different `_cifflow_block_id` — block-scoped fills that
+only look one level deep silently fail. If row counts are unexpectedly multiplied after re-ingest,
+the first place to check is propagation link resolution.
+
+**`_flush` column union**
+`_flush` must compute the union of all row keys, not just `rows[0].keys()`. Stub rows created by
+`_apply_fk` start slim; later merges grow them in-place but only for rows that actually received
+real data. A slim row as `rows[0]` silently omits columns.
+
+**GROUPED remaining-blocks sweep**
+The remaining-blocks pass must sweep all schema tables, not just `block_id_tables`. Tables in
+keyed-anchor groups whose rows have NULL FK columns cannot be found via FK-path joins and must
+fall through to the block_id sweep.
+
+**Emit ordering**
+All emit mode collectors return `list[_BlockData]` — never render during collection. Post-collection
+reordering (spec matching, merge, sort) must operate on `_BlockData` objects. Do not render until
+final emission order is known.
+
+**Bridge column lookups**
+Bridge lookups are keyed by `pk_val` only — not `(block_id, pk_val)`. `merged_rows` is already
+dataset-scoped; adding `_cifflow_block_id` as a discriminator breaks multi-block datasets where
+source and bridge rows originate from different CIF data blocks.
+
+**Windows + DuckDB query count**
+On Windows, each DuckDB `execute()` call triggers Python import machinery that is intercepted by
+AV scanning (~200–500μs overhead per call). Keep DuckDB queries out of hot loops — pre-fetch all
+rows at pass start and serve lookups from in-memory dicts. See `_EmitCache` in `emit.py`.
+
+**`tag_presence_rows` population**
+Every code path that produces merged rows must populate `tag_presence_rows` for non-winning block
+contributions. Omitting this breaks ORIGINAL-mode emit for all shared Set rows.
+
+---
+
+## Round-Trip Fidelity
+
+Round-tripping guarantees semantic fidelity, not textual fidelity. Only guaranteed for input that
+produced no `on_error` events during parsing.
+
+**Must be preserved exactly:**
+- All data block and save frame names
+- All tag names and values as raw strings
+- ValueType provenance (PLACEHOLDER must remain unquoted on output)
+- Loop structure and column order
+
+**Never permitted in output:**
+- Invalid CIF constructs
+- Non-canonical magic codes
+- Duplicate tags (file is not round-trippable if present)
+
+**Fidelity normalisation rules:**
+- `NULL`, `'.'`, and `'?'` are semantically equivalent for structured table comparison — treat as
+  identical. This does NOT apply to `_cif_fallback`.
+- Real values: compare canonical `Decimal` fixed-point form, not floats.
+- `_cifflow_block_id`, `_cifflow_row_id`, and `is_synthetic=True` columns are excluded from
+  round-trip comparison.
+
+---
+
+## Operational Reference
+
+### Run tests
+```
+.venv/Scripts/python -m pytest -x -q
+```
+
+### Full suite (including slow integration tests)
+```
+.venv/Scripts/python -m pytest -q
+```
+
+### Fidelity check (run after any ingest or emit change)
+Ingest a known-good file, emit, re-ingest, compare. `second.cif` is the primary regression target
+(156 blocks, ~1.98M merged rows, exercises most code paths).
+
+### Regenerate schema
+Load `cif_pow.dic` via `DictionaryLoader`, call `generate_schema`, call
+`apply_schema`. See `tests/ingestion/test_integration.py` for the reference pattern.
+
+---
+
+## Checklist Before Any Change
+
+Before changing ingest, emit, schema, or fidelity code:
+
+- [ ] Do both the DuckDB ingest path and the Python merge path need updating?
+- [ ] Does any synthetic column need `is_synthetic=True`?
+- [ ] Does the change affect `tag_presence_rows` population?
+- [ ] Does the change affect emit ordering or `_BlockData` construction?
+- [ ] Run full test suite: all 1749 tests pass
+- [ ] Run fidelity check against `second.cif`
+
+---
+
+## Task Management
+
+1. Before making changes, state what you plan to do and why
+2. Make changes incrementally; run tests after each logical unit of work
+3. After any correction or non-obvious decision, record a lesson in `tasks/lessons.md`
+4. Use `tasks/todo.md` to track what's open, what's next, and what decisions are pending
+5. At session end, produce a session summary containing:
+   - What was done (2–4 sentences) and the current test count/pass state
+   - Any new lesson entries, numbered from the current highest in `tasks/lessons.md`,
+     in the standard format (Context / Mistake / Fix / Rule)
+   - An updated What's Next priority list ready to paste into `tasks/todo.md`
+   - Any Open Decisions that were resolved or newly deferred
