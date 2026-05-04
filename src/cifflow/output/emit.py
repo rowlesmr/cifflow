@@ -960,10 +960,10 @@ def _render_block(
             first_category = False
 
     effective_spec = spec
-    if data.preferred_category_order:
+    if data.preferred_category_order and spec is None:
         effective_spec = BlockSpec(
             category_order=data.preferred_category_order,
-            column_order=spec.column_order if spec is not None else {},
+            column_order={},
         )
 
     for item in _ordered_categories(schema, effective_spec, data.table_rows):
