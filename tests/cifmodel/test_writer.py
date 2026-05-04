@@ -604,6 +604,21 @@ class TestReassignTag:
         bw.reassign_tag("_x", ["a", "b"])
         assert isinstance(w["b"]["_x"][0], list)
 
+    def test_reassign_scalar_single_element_list_unwrapped(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.set_tag("_x", "old")
+        bw.reassign_tag("_x", ["new"])
+        assert w["b"]["_x"] == [CifScalar("new")]
+        assert not isinstance(w["b"]["_x"][0], list)
+
+    def test_reassign_loop_single_element_list_not_unwrapped(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.add_loop({"_a": ["1"]})
+        bw.reassign_tag("_a", ["2"])
+        assert w["b"]["_a"] == [CifScalar("2")]
+
     def test_reassign_loop_column(self):
         w = make_writer()
         bw = w.add_block("b")
@@ -886,6 +901,133 @@ class TestSaveFrameWriter:
         sfw = bw.add_save_frame("sf")
         sfw.add_loop({"_a": ["1"], "_b": ["x"]})
         assert sfw.get_loop_tags("_a") == ["_a", "_b"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Inspection — CifWriter.blocks
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCifWriterBlocks:
+    def test_blocks_empty_initially(self):
+        w = make_writer()
+        assert w.blocks == []
+
+    def test_blocks_after_add(self):
+        w = make_writer()
+        w.add_block("a")
+        w.add_block("b")
+        assert w.blocks == ["a", "b"]
+
+    def test_blocks_after_remove(self):
+        w = make_writer()
+        w.add_block("a")
+        w.add_block("b")
+        w.remove_block("a")
+        assert w.blocks == ["b"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Inspection — BlockWriter / SaveFrameWriter: tags, loops, __getitem__, get
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestWriterInspection:
+    def test_tags_scalar(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.set_tag("_x", "1")
+        bw.set_tag("_y", "2")
+        assert bw.tags == ["_x", "_y"]
+
+    def test_tags_includes_loop_columns(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.add_loop({"_a": ["1"], "_b": ["2"]})
+        assert "_a" in bw.tags
+        assert "_b" in bw.tags
+
+    def test_loops_empty_initially(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        assert bw.loops == []
+
+    def test_loops_after_add(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.add_loop({"_a": ["1"], "_b": ["2"]})
+        assert bw.loops == [["_a", "_b"]]
+
+    def test_loops_multiple(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.add_loop({"_a": ["1"]})
+        bw.add_loop({"_b": ["2"]})
+        assert bw.loops == [["_a"], ["_b"]]
+
+    def test_getitem_scalar(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.set_tag("_x", "v")
+        assert bw["_x"] == ["v"]
+
+    def test_getitem_loop_column(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.add_loop({"_a": ["1", "2"]})
+        assert bw["_a"] == [CifScalar("1"), CifScalar("2")]
+
+    def test_getitem_missing_raises(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        with pytest.raises(KeyError):
+            _ = bw["_missing"]
+
+    def test_get_returns_values(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.set_tag("_x", "v")
+        assert bw.get("_x") == ["v"]
+
+    def test_get_missing_returns_none(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        assert bw.get("_missing") is None
+
+    def test_get_missing_returns_default(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        assert bw.get("_missing", []) == []
+
+    def test_save_frames_empty_initially(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        assert bw.save_frames == []
+
+    def test_save_frames_after_add(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.add_save_frame("sf1")
+        bw.add_save_frame("sf2")
+        assert bw.save_frames == ["sf1", "sf2"]
+
+    def test_save_frames_after_remove(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        bw.add_save_frame("sf1")
+        bw.add_save_frame("sf2")
+        bw.remove_save_frame("sf1")
+        assert bw.save_frames == ["sf2"]
+
+    def test_inspection_on_save_frame_writer(self):
+        w = make_writer()
+        bw = w.add_block("b")
+        sfw = bw.add_save_frame("sf")
+        sfw.set_tag("_x", "1")
+        sfw.add_loop({"_a": ["p"], "_b": ["q"]})
+        assert "_x" in sfw.tags
+        assert sfw.loops == [["_a", "_b"]]
+        assert sfw["_x"] == ["1"]
+        assert sfw.get("_x") == ["1"]
+        assert sfw.get("_missing") is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
