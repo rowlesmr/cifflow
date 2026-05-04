@@ -277,6 +277,8 @@ class SaveFrameWriter:
                 )
             self._ns._tags[tag] = _infer_column(value)
         else:
+            if isinstance(value, list) and len(value) == 1:
+                value = value[0]
             self._ns._tags[tag] = [_infer(value)]
         return self
 
