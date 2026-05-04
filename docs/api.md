@@ -463,6 +463,13 @@ Wraps a `CifSaveFrame` (or `CifBlock`) and exposes mutation methods.  All method
 
 ```python
 class SaveFrameWriter:
+    # Inspection
+    tags: list[str]                                          # tag names in insertion order
+    loops: list[list[str]]                                   # each inner list is one loop's tags
+    def __getitem__(self, tag: str) -> list: ...             # tag values; KeyError if absent
+    def get(self, tag: str, default=None) -> list | None: ...
+
+    # Mutation — all mutating methods return self for chaining
     def set_tag(self, tag: str, value: CifInput) -> 'SaveFrameWriter': ...
     def add_loop(self, columns: dict[str, list[CifInput]]) -> 'SaveFrameWriter': ...
     def add_loop_column(self, loop_tag: str, new_tag: str,
@@ -483,13 +490,17 @@ class SaveFrameWriter:
 
 | Method | Effect |
 |---|---|
+| `tags` | Tag names in insertion order |
+| `loops` | List of loops; each loop is a list of its tag names |
+| `writer[tag]` | Tag values as `list`; `KeyError` if absent |
+| `writer.get(tag)` | Tag values or `None` if absent |
 | `set_tag(tag, value)` | Append a scalar tag–value pair |
 | `add_loop(columns)` | Add a new loop; `columns` is `{tag: [values...]}` in insertion order |
 | `add_loop_column(loop_tag, new_tag, values)` | Append a column to the loop containing `loop_tag` |
 | `reorder_loop_tags(loop_tag, new_order)` | Reorder columns within the loop containing `loop_tag` |
 | `get_loop_tags(loop_tag)` | Return the ordered tag list for the loop containing `loop_tag` |
 | `add_loop_row(loop_tag, row)` | Append one row of values to the loop containing `loop_tag` |
-| `reassign_tag(tag, value)` | Replace all stored values for `tag` with a new single value (or list) |
+| `reassign_tag(tag, value)` | Replace all stored values for `tag`. Scalar tag: pass a scalar value (a single-element list is unwrapped automatically). Loop column: pass a list with one entry per row. |
 | `delete_tag(tag)` | Remove `tag` and its values; if a loop column, removes the column |
 | `remove_loop_tag(loop_tag, tag_to_remove)` | Remove one column from the loop containing `loop_tag` |
 
@@ -504,6 +515,7 @@ Extends `SaveFrameWriter` with save frame management.
 
 ```python
 class BlockWriter(SaveFrameWriter):
+    save_frames: list[str]                                   # save frame names in file order
     def add_save_frame(self, name: str) -> 'SaveFrameWriter': ...
     def get_save_frame(self, name: str, index: int = 0) -> 'SaveFrameWriter': ...
     def remove_save_frame(self, name: str, *,
@@ -526,6 +538,10 @@ Top-level writer.  Wraps an existing `CifFile` or creates a new one.
 class CifWriter:
     def __init__(self, version: CifVersion,
                  cif: CifFile | None = None) -> None: ...
+    blocks: list[str]                                        # block names in file order
+    def __getitem__(self, name: str) -> CifBlock: ...        # raw block; KeyError if absent
+    def __contains__(self, name: str) -> bool: ...
+    def get(self, name: str, default=None) -> CifBlock | None: ...
     def add_block(self, name: str) -> 'BlockWriter': ...
     def get_block(self, name: str, index: int = 0) -> 'BlockWriter': ...
     def remove_block(self, name: str, *,
