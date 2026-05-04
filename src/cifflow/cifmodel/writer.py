@@ -134,6 +134,25 @@ class SaveFrameWriter:
     def _tag_in_any_loop(self, tag: str) -> bool:
         return any(tag in loop for loop in self._ns._loops)
 
+    # ── Inspection ────────────────────────────────────────────────────────────
+
+    @property
+    def tags(self) -> list[str]:
+        return self._ns.tags
+
+    @property
+    def loops(self) -> list[list[str]]:
+        return self._ns.loops
+
+    def __getitem__(self, tag: str) -> list:
+        return self._ns[_casefold(tag)]
+
+    def get(self, tag: str, default: list | None = None) -> list | None:
+        try:
+            return self._ns[_casefold(tag)]
+        except KeyError:
+            return default
+
     # ── Tag / scalar values ───────────────────────────────────────────────────
 
     def set_tag(self, tag: str, value: CifInput) -> 'SaveFrameWriter':
@@ -258,6 +277,8 @@ class SaveFrameWriter:
                 )
             self._ns._tags[tag] = _infer_column(value)
         else:
+            if isinstance(value, list) and len(value) == 1:
+                value = value[0]
             self._ns._tags[tag] = [_infer(value)]
         return self
 
@@ -343,6 +364,12 @@ class BlockWriter(SaveFrameWriter):
         super().remove_loop_tag(loop_tag, tag_to_remove)
         return self
 
+    # ── Inspection ────────────────────────────────────────────────────────────
+
+    @property
+    def save_frames(self) -> list[str]:
+        return self._block.save_frames
+
     # ── Save frame management ─────────────────────────────────────────────────
 
     def add_save_frame(self, name: str) -> SaveFrameWriter:
@@ -424,6 +451,12 @@ class CifWriter:
     @property
     def version(self) -> CifVersion:
         return self._version
+
+    # ── Inspection ────────────────────────────────────────────────────────────
+
+    @property
+    def blocks(self) -> list[str]:
+        return self._file.blocks
 
     # ── Read access ───────────────────────────────────────────────────────────
 
