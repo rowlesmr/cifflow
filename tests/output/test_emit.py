@@ -1642,6 +1642,11 @@ def multi_one_conn(pow_schema):
     return _ingest_file(_CIF_DIR / 'multi_one.cif', pow_schema)
 
 
+@pytest.fixture(scope='module')
+def powder_loop_conn(pow_schema):
+    return _ingest_file(_CIF_DIR / 'cifflow' / 'powder_loop.cif', pow_schema)
+
+
 @pytest.mark.slow
 class TestEmitRoundTripIntegration:
     """Full pipeline: real CIF → ingest → emit → re-ingest → compare databases."""
@@ -1672,6 +1677,47 @@ class TestEmitRoundTripIntegration:
         conn2 = _emit_and_reingest(multi_one_conn, pow_schema, EmitMode.ONE_BLOCK)
         _assert_same_data(multi_one_conn, conn2, pow_schema,
                           exclude_tables={'audit', 'audit_conform'})
+
+    def test_powder_loop_original_round_trip(self, powder_loop_conn, pow_schema):
+        """Multi-category source loop survives ORIGINAL emit round-trip."""
+        conn2 = _emit_and_reingest(powder_loop_conn, pow_schema, EmitMode.ORIGINAL)
+        _assert_same_data(powder_loop_conn, conn2, pow_schema)
+
+    def test_powder_loop_original_single_loop(self, powder_loop_conn, pow_schema):
+        """All four source-loop categories are emitted in a single loop_, not split."""
+        cif_text = emit(powder_loop_conn, pow_schema, mode=EmitMode.ORIGINAL)
+        tags_in_one_loop = {
+            '_pd_data.point_id',
+            '_pd_meas.2theta_scan',
+            '_pd_proc.2theta_corrected',
+            '_pd_proc.intensity_total',
+            '_pd_proc.ls_weight',
+            '_pd_calc.intensity_total',
+            '_pd_calc.intensity_bkg',
+        }
+        lines = cif_text.splitlines()
+        loop_tag_sets: list[set[str]] = []
+        i = 0
+        while i < len(lines):
+            if lines[i].strip() == 'loop_':
+                current: set[str] = set()
+                j = i + 1
+                while j < len(lines) and lines[j].strip().startswith('_'):
+                    current.add(lines[j].strip())
+                    j += 1
+                loop_tag_sets.append(current)
+                i = j
+            else:
+                i += 1
+        assert any(tags_in_one_loop <= loop_tags for loop_tags in loop_tag_sets), (
+            f'Expected all of {tags_in_one_loop} in one loop_; '
+            f'found loops: {loop_tag_sets}'
+        )
+
+    def test_powder_loop_original_fk_suppressed(self, powder_loop_conn, pow_schema):
+        """diffractogram_id FK is suppressed when pd_diffractogram scalar is co-emitted."""
+        cif_text = emit(powder_loop_conn, pow_schema, mode=EmitMode.ORIGINAL)
+        assert '_pd_data.diffractogram_id' not in cif_text
 
 
 _SHARED_DATASET_CIF = """\

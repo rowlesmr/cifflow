@@ -49,7 +49,7 @@ class _BlockData:
     suppress_fk_pk: bool
     suppress_loop_fk_pk: bool = False  # ORIGINAL mode only: suppress FK cols from Loop categories
     dataset_id: str | list[str] | None = None
-    preferred_category_order: list[str] | None = None  # ALL_BLOCKS: parent tables before child
+    preferred_category_order: list | None = None  # ALL_BLOCKS: parent tables before child; ORIGINAL: with merge groups
     conformance_tags: list[tuple[str, str]] | None = None  # ONE_BLOCK: injected before all data
 
 
@@ -359,7 +359,20 @@ def _collect_original(
                 table_rows[table_name] = rows
 
         fallback = cache.fallback_for_block(bid)
-        result.append(_make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True, suppress_loop_fk_pk=True))
+        cat_order = _compute_original_category_order(conn, bid, table_rows, schema)
+        bd = _make_block_data(bid, table_rows, fallback, schema, suppress_fk_pk=True, suppress_loop_fk_pk=True)
+        bd = _BlockData(
+            name=bd.name,
+            table_rows=bd.table_rows,
+            fallback_rows=bd.fallback_rows,
+            anchor_frozenset=bd.anchor_frozenset,
+            anchor_key_dict=bd.anchor_key_dict,
+            suppress_fk_pk=bd.suppress_fk_pk,
+            suppress_loop_fk_pk=bd.suppress_loop_fk_pk,
+            dataset_id=bd.dataset_id,
+            preferred_category_order=cat_order,
+        )
+        result.append(bd)
     return result
 
 
@@ -956,7 +969,14 @@ def _render_block(
     for item in _ordered_categories(schema, effective_spec, data.table_rows):
         if isinstance(item, list):
             # Merge group
-            cat_lines = _render_merge_group(item, data.table_rows, schema, version, spec, reconstruct_su, pretty, line_limit)
+            if data.suppress_loop_fk_pk:
+                # ORIGINAL mode: join positionally by _loop_id + _iter_idx
+                cat_lines = _render_original_loop_group(
+                    item, data.table_rows, data, schema, version, spec,
+                    reconstruct_su, pretty, line_limit, extra_cols_for,
+                )
+            else:
+                cat_lines = _render_merge_group(item, data.table_rows, schema, version, spec, reconstruct_su, pretty, line_limit)
             if cat_lines:
                 if not first_category:
                     lines.append('')
@@ -1072,6 +1092,110 @@ def _ordered_categories(
     return result
 
 
+def _compute_original_category_order(
+    conn: 'duckdb.DuckDBPyConnection',
+    block_id: str,
+    table_rows: dict[str, list[dict]],
+    schema: 'SchemaSpec',
+) -> list:
+    """Compute category order for ORIGINAL mode, grouping tables that shared a source loop.
+
+    Set categories appear first (individually, sorted alphabetically).
+    Loop categories that shared a _loop_id are grouped as lists (merge groups).
+    Singletons appear as plain strings.
+    Groups are ordered by their earliest _cifflow_row_id in the raw staging table.
+    """
+    _SCALARS = '__scalars__'
+
+    set_tables = sorted(
+        t for t in table_rows
+        if schema.tables.get(t) and schema.tables[t].category_class == 'Set'
+    )
+    set_set = set(set_tables)
+    loop_tables = [t for t in table_rows if t not in set_set]
+
+    if not loop_tables:
+        return list(set_tables)
+
+    # Query the _loop_groups infrastructure table (populated during ingest from _raw_* tables
+    # before they were dropped) to find which loop_ids each table had for this block.
+    table_to_lids: dict[str, set[str]] = {t: set() for t in loop_tables}
+    lid_min_row: dict[str, int] = {}
+
+    try:
+        rows_info = conn.execute(
+            'SELECT "table_name", "loop_id", "min_row_id" '
+            'FROM "_loop_groups" '
+            'WHERE "_cifflow_block_id" = ?',
+            [block_id],
+        ).fetchall()
+    except Exception:
+        rows_info = []
+
+    for tbl, lid, min_row in rows_info:
+        if tbl in table_to_lids:
+            table_to_lids[tbl].add(lid)
+        if lid not in lid_min_row or min_row < lid_min_row[lid]:
+            lid_min_row[lid] = min_row
+
+    # Union-find: group tables that share any _loop_id
+    parent: dict[str, str] = {t: t for t in loop_tables}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    lid_to_tables: dict[str, list[str]] = {}
+    for t, lids in table_to_lids.items():
+        for lid in lids:
+            lid_to_tables.setdefault(lid, []).append(t)
+
+    for tables_list in lid_to_tables.values():
+        for i in range(1, len(tables_list)):
+            union(tables_list[0], tables_list[i])
+
+    # Collect components
+    components: dict[str, list[str]] = {}
+    for t in loop_tables:
+        root = find(t)
+        components.setdefault(root, []).append(t)
+
+    # Order components by earliest loop_id row_id
+    def component_key(root: str) -> int:
+        lids = set()
+        for t in components[root]:
+            lids.update(table_to_lids[t])
+        if lids:
+            return min(lid_min_row.get(lid, 0) for lid in lids)
+        all_rows = [r for t in components[root] for r in table_rows[t]]
+        return min((r.get('_cifflow_row_id') or 0) for r in all_rows) if all_rows else 0
+
+    sorted_roots = sorted(components.keys(), key=component_key)
+
+    result: list = list(set_tables)
+    for root in sorted_roots:
+        group = components[root]
+
+        def table_key(t: str) -> int:
+            lids = table_to_lids[t]
+            if lids:
+                return min(lid_min_row.get(lid, 0) for lid in lids)
+            rows = table_rows[t]
+            return min((r.get('_cifflow_row_id') or 0) for r in rows) if rows else 0
+
+        group_sorted = sorted(group, key=table_key)
+        result.append(group_sorted if len(group_sorted) > 1 else group_sorted[0])
+
+    return result
+
+
 def _expand_wildcard(pattern: str, schema: SchemaSpec) -> list[str]:
     """Expand ``'CATEGORY*'`` to the base category plus all schema descendants.
 
@@ -1119,6 +1243,7 @@ def _render_merge_group(
     reconstruct_su: bool,
     pretty: bool,
     line_limit: int | None = None,
+    suppress_pk_cols: 'set[str] | None' = None,
 ) -> list[str]:
     """Render a merge group as a single loop_ or as plain loops.
 
@@ -1189,7 +1314,8 @@ def _render_merge_group(
     first_cat = present[0]
     first_tdef = schema.tables[first_cat]
     first_active = _active_cols(first_tdef, list(table_index[first_cat].values()), spec, reconstruct_su)
-    pk_in_first = [pk for pk in shared_pks if pk in set(first_active)]
+    _suppress = suppress_pk_cols or set()
+    pk_in_first = [pk for pk in shared_pks if pk in set(first_active) and pk not in _suppress]
 
     merged_cols: list[tuple[str, str]] = [(first_cat, pk) for pk in pk_in_first]
     pk_set = set(shared_pks)
@@ -1235,6 +1361,125 @@ def _render_merge_group(
 
     col_widths = _col_widths(matrix) if pretty else None
 
+    for tokens in matrix:
+        lines.extend(_format_row(tokens, col_widths, line_limit))
+
+    return lines
+
+
+def _render_original_loop_group(
+    group: list[str],
+    table_rows: dict[str, list[dict]],
+    data: '_BlockData',
+    schema: 'SchemaSpec',
+    version: 'CifVersion',
+    spec: 'BlockSpec | None',
+    reconstruct_su: bool,
+    pretty: bool,
+    line_limit: int | None,
+    extra_cols_for: dict,
+) -> list[str]:
+    """Render multiple Loop categories that shared a source loop (ORIGINAL mode).
+
+    Tables are joined positionally by (_loop_id, _iter_idx).  If only one table
+    has data, falls back to plain loop rendering.  If tables are PK-compatible,
+    delegates to _render_merge_group.
+    """
+    # Collect active columns per table
+    per_table: list[tuple[str, list[str], list[dict]]] = []
+    for table_name in group:
+        rows = table_rows.get(table_name)
+        if not rows:
+            continue
+        tdef = schema.tables[table_name]
+        cols = _active_cols(tdef, rows, spec, reconstruct_su)
+        if data.suppress_loop_fk_pk:
+            suppressed = _suppressed_fk_pk_cols(tdef, rows, data.table_rows, schema)
+            cols = [c for c in cols if c not in suppressed]
+        if cols:
+            per_table.append((table_name, cols, rows))
+
+    if not per_table:
+        return []
+
+    if len(per_table) == 1:
+        table_name, cols, rows = per_table[0]
+        tdef = schema.tables[table_name]
+        extra = extra_cols_for.get(table_name)
+        return _render_loop_category(rows, cols, table_name, schema, version, tdef,
+                                     reconstruct_su, pretty, line_limit,
+                                     extra_fallback_cols=extra)
+
+    # Check PK compatibility — if all tables share the same non-synthetic PKs, use merge group
+    pk_sets = [
+        frozenset(pk for pk in schema.tables[t].primary_keys if pk not in _SYNTHETIC)
+        for t, _, _ in per_table
+    ]
+    if len(set(pk_sets)) <= 1:
+        # Compute suppressed FK-PK cols (shared PKs are the same for all tables, so check first)
+        suppress_pks: set[str] = set()
+        if data.suppress_loop_fk_pk and per_table:
+            first_tname, _, first_rows = per_table[0]
+            suppress_pks = _suppressed_fk_pk_cols(
+                schema.tables[first_tname], first_rows, data.table_rows, schema
+            )
+        return _render_merge_group(group, table_rows, schema, version, spec,
+                                   reconstruct_su, pretty, line_limit,
+                                   suppress_pk_cols=suppress_pks)
+
+    # Positional join: sort each table's rows by _cifflow_row_id and zip by index.
+    # (_loop_id/_iter_idx are not copied to the final tables; positional order is equivalent.)
+    sorted_sets: list[tuple[str, list[str], list[dict]]] = [
+        (t, cols, sorted(rows, key=lambda r: r.get('_cifflow_row_id') or 0))
+        for t, cols, rows in per_table
+    ]
+
+    num_rows = max((len(rows) for _, _, rows in sorted_sets), default=0)
+    if num_rows == 0:
+        return []
+
+    su_maps = {
+        t: (_su_col_map(schema.tables[t]) if reconstruct_su else {})
+        for t, _, _ in sorted_sets
+    }
+
+    lines = ['loop_']
+    for table_name, cols, _ in sorted_sets:
+        for col in cols:
+            lines.append(f'  {_col_tag(table_name, col, schema)}')
+
+    matrix: list[list[str]] = []
+    for i in range(num_rows):
+        tokens: list[str] = []
+        for table_name, cols, sorted_rows in sorted_sets:
+            row = sorted_rows[i] if i < len(sorted_rows) else {}
+            su_map = su_maps[table_name]
+            for col in cols:
+                value = row.get(col)
+                if value is None:
+                    tokens.append('.')
+                else:
+                    if reconstruct_su and col in su_map:
+                        su_val = row.get(su_map[col])
+                        if su_val is not None:
+                            value = _merge_su(value, su_val)
+                    token = quote(value, version)
+                    if line_limit is not None:
+                        token = _apply_line_limit(value, token, line_limit)
+                    tokens.append(token)
+        matrix.append(tokens)
+
+    if pretty:
+        real_idx: list[int] = []
+        offset = 0
+        for table_name, cols, _ in sorted_sets:
+            for i in _real_col_indices(cols, schema.tables[table_name]):
+                real_idx.append(i + offset)
+            offset += len(cols)
+        if real_idx:
+            matrix = _apply_decimal_align(matrix, real_idx)
+
+    col_widths = _col_widths(matrix) if pretty else None
     for tokens in matrix:
         lines.extend(_format_row(tokens, col_widths, line_limit))
 

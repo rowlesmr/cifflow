@@ -870,6 +870,15 @@ def _create_infrastructure_tables(db: duckdb.DuckDBPyConnection) -> None:
             PRIMARY KEY ("table", "column")
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS "_loop_groups" (
+            "_cifflow_block_id" TEXT    NOT NULL,
+            "table_name"        TEXT    NOT NULL,
+            "loop_id"           TEXT    NOT NULL,
+            "min_row_id"        INTEGER NOT NULL,
+            PRIMARY KEY ("_cifflow_block_id", "table_name", "loop_id")
+        )
+    """)
 
 
 def _create_final_table_ddl(tbl_name: str, table: TableDef) -> str:
@@ -1094,4 +1103,12 @@ def create_final_tables(
         all_cif_cols = ns_pks + data_cols
         if all_cif_cols:
             _populate_metatable(db, tbl_name, all_cif_cols)
+        db.execute(f"""
+            INSERT INTO "_loop_groups" ("_cifflow_block_id", "table_name", "loop_id", "min_row_id")
+            SELECT _cifflow_block_id, '{tbl_name}', _loop_id, MIN(_cifflow_row_id)
+            FROM "_raw_{tbl_name}"
+            WHERE _loop_id != '{_SCALARS_LOOP_ID}'
+            GROUP BY _cifflow_block_id, _loop_id
+            ON CONFLICT DO NOTHING
+        """)
         db.execute(f'DROP TABLE IF EXISTS "_raw_{tbl_name}"')
