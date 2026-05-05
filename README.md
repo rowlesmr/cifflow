@@ -105,6 +105,12 @@ schema = generate_schema(dictionary)
 # 3. Parse CIF
 cif, errors = build(open('all_the_data.cif', encoding='utf-8').read())
 
+# # 3.5 Edit CIF - to fix errors or alter content
+# writer = CifWriter(cif.version, cif)
+# for block in writer.blocks:
+#    # Do alterations
+# cif = writer.build() # raises ValueError if any errors present
+
 # 4. Ingest into an in-memory DuckDB database
 #    Pass a file path string to persist: ingest(cif, 'output.db', schema=schema)
 conn, warnings = ingest(cif, schema=schema)
