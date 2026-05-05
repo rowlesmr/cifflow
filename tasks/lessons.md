@@ -4,9 +4,10 @@
 
 - **Arrow / PyO3 / Rust:** 103, 104, 105, 106, 107
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
-- **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118
+- **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64
-- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74
+- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124
+- **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
 - **Lexer / parser:** 1, 2, 3, 4, 10, 11, 37, 49b, 65, 68L
@@ -1110,3 +1111,98 @@
 **Rule:** Propagation links can form chains (A → B → C). Always follow the full transitive chain. Include all reachable ancestors in the COALESCE so any level sharing the current `_cifflow_block_id` can satisfy the lookup.
 
 **Diagnostic note:** Add `[DIAG]` checkpoints before/after each FK fill pass to count raw table rows. If spurious rows appear after the composite FK stub phase (not during fill passes), the bug is in stub creation, not fill logic.
+
+---
+
+## Lesson 119 — `_loop_id`/`_iter_idx` do not survive to final structured tables (2026-05-05)
+
+  **Context:** `duckdb_ingest.py` `_run_merge_tables`; `emit.py` `_compute_original_category_order`.
+
+  **Mistake:** Assumed `_loop_id` was available in rows fetched from final structured tables. It exists only in `_raw_*` staging tables, which are dropped at the end of `_run_merge_tables`.
+
+  **Fix:** Created `_loop_groups` infrastructure table. Populated it from `_raw_*` before each drop; queried it at emit time for union-find grouping.
+
+  **Rule:** Any information that exists only in `_raw_*` staging tables is inaccessible at emit time. If it is needed downstream, it must be written to a persistent infrastructure table
+  before `_raw_*` is dropped.
+
+  **Diagnostic note:** When a new emit-time feature requires per-row ingest metadata, first verify the metadata survives ingest by querying `information_schema.tables` and spot-checking the
+  relevant columns in a real connection.
+
+  ---
+
+  ## Lesson 120 — `preferred_category_order` must yield to user plan specs (2026-05-05)
+
+  **Context:** `_render_block` in `emit.py`; ORIGINAL mode category ordering.
+
+  **Mistake:** `preferred_category_order` (computed loop groupings) unconditionally replaced the user-supplied `BlockSpec` in `effective_spec`, so any user plan provided to ORIGINAL mode was
+  silently discarded — including wildcard expansion and its associated warnings.
+
+  **Fix:** Changed the override condition to `if data.preferred_category_order and spec is None`, so computed groupings only apply when the user has not provided a plan.
+
+  **Rule:** Computed "default" ordering must never silently override an explicit user plan. Gate any auto-generated `preferred_category_order` application on `spec is None`; if both exist and
+   must coexist, merge them explicitly rather than letting one shadow the other.
+
+  ---
+
+  ## Lesson 122 — ORIGINAL mode must ignore `OutputPlan`; use GROUPED for custom ordering (2026-05-05)
+
+  **Context:** `emit()` in `emit.py`; ORIGINAL vs GROUPED mode semantics.
+
+  **Mistake:** ORIGINAL mode passed the user-supplied `OutputPlan` to `_sort_and_merge`, which could reorder blocks and assign spec-based rendering that bypassed `preferred_category_order`. This silently broke ORIGINAL's fidelity guarantee.
+
+  **Fix:** Added a dedicated ORIGINAL branch in `emit()` that always produces `[(b, None) for b in raw_blocks]` and emits a `UserWarning` if a plan was supplied.
+
+  **Rule:** ORIGINAL mode's contract is to reconstruct blocks exactly as they were before ingestion — block order, loop groupings, and all. Any user customisation belongs in GROUPED mode. When adding a mode-specific bypass in `emit()`, handle it before the `_sort_and_merge` call, not inside `_render_block`.
+
+  **Corollary:** When updating tests that use `OutputPlan`, pick the mode that matches the feature under test: GROUPED or ONE_BLOCK for plan features, ORIGINAL only when testing fidelity reconstruction. A blanket `replace_all` across emit mode strings will corrupt tests in other classes — edit each class individually.
+
+  ---
+
+  ## Lesson 121 — Positional join by `_cifflow_row_id` is equivalent to `_iter_idx` for same-block source loops (2026-05-05)
+
+  **Context:** `_render_original_loop_group` in `emit.py`.
+
+  **Finding:** Rows from different DDLm categories that came from the same source `loop_` block have the same count, are assigned sequential `_cifflow_row_id` values within the block, and
+  appear in the same original order. Sorting each table's rows by `_cifflow_row_id` and zipping by index is exactly equivalent to joining by `_iter_idx`.
+
+  **Rule:** When `_iter_idx` is unavailable in final tables, `_cifflow_row_id` order within a `_cifflow_block_id` is a safe positional proxy for source-loop row correspondence — provided the
+  tables are known to originate from the same source loop (established via `_loop_groups`).
+
+  ---
+
+  ## Lesson 122 — `_render_merge_group` is oblivious to ORIGINAL-mode FK-PK suppression (2026-05-05)
+
+  **Context:** `_render_original_loop_group` → `_render_merge_group` delegation path; `_suppressed_fk_pk_cols`.
+
+  **Mistake:** `_render_original_loop_group` computed suppressed FK-PK columns and removed them from `per_table` column lists, but then delegated to `_render_merge_group` which re-read
+  columns from `table_rows` independently — discarding all suppression work.
+
+  **Fix:** Added `suppress_pk_cols: set[str] | None = None` parameter to `_render_merge_group`. The caller computes suppressed cols (from the first table, since PKs are shared) and passes
+  them; `_render_merge_group` excludes them from `pk_in_first`.
+
+  **Rule:** When a rendering function re-derives its own column list from raw data, any pre-filtering done by the caller is lost. Either pass the pre-filtered columns explicitly, or add a
+  suppression parameter to the inner function.
+
+  ---
+
+  ## Lesson 123 — `_cifflow_row_id` is per-table, not globally comparable across tables (2026-05-05)
+
+  **Context:** `_compute_original_category_order` in `emit.py`; ORIGINAL mode interleaving of Set scalars and Loop categories.
+
+  **Mistake:** Attempted to use `_cifflow_row_id` values from different tables as a global ordering key to interleave Set categories with Loop categories. All Set scalar rows receive `row_id=1`; loop rows start at 1 within each table. The values are not comparable across tables.
+
+  **Fix:** Introduced a shared `event_counter` in `load_block_data` (Python ingest path) that increments for each new Set-table first-encounter and each loop. These event positions are stored in `_loop_groups` as `min_row_id` via `executemany` after `flush_table_batches`. At emit time, `_compute_original_category_order` queries `_loop_groups` and uses these event positions as the sort key for all categories.
+
+  **Rule:** Never use `_cifflow_row_id` as an ordering key across different tables — it is scoped to a single table's row batch and resets for each table. If intra-block ordering metadata is needed at emit time, it must be recorded explicitly during ingest and stored in a persistent infrastructure table.
+
+  ---
+
+  ## Lesson 124 — Winning-block column provenance is not tracked; extra columns appear in shared Set rows (2026-05-05)
+
+  **Context:** `_fetch_rows_for_block` in `emit.py`; ORIGINAL mode output for shared Set categories (e.g. `pd_phase`, `pd_diffractogram`).
+
+  **Finding:** `_tag_presence` records non-winning block contributions per column, so `_fetch_rows_for_block` can mask them for non-owning blocks. However, it does NOT record which columns were contributed by the winning block itself. A Set row "owned" by block A is returned fully unmasked, including columns contributed by other blocks B, C that happened to win that row for those columns.
+
+  **Known gap:** ORIGINAL output for shared Set rows may include extra columns not present in the original source block. Fixing this requires tracking per-column winning-block provenance in `_populate_tag_presence` and applying masking to owned rows — a significant expansion of `_tag_presence` semantics.
+
+  **Rule:** Record this as a known gap rather than attempting a partial fix. The overall ordering is correct; only column presence within shared rows is slightly over-inclusive.

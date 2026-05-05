@@ -181,7 +181,7 @@ class TestIngestNoSchema:
                 "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
             ).fetchall()
         }
-        assert tables == {'_cif_fallback', '_block_dataset_membership', '_validation_result', '_block_order', '_tag_presence', '_metatable'}
+        assert tables == {'_cif_fallback', '_block_dataset_membership', '_validation_result', '_block_order', '_tag_presence', '_metatable', '_loop_groups'}
 
 
 # ---------------------------------------------------------------------------

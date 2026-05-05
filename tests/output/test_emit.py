@@ -1261,11 +1261,24 @@ class TestOutputPlan:
         )
         spec = BlockSpec(column_order={'cell': ['length_c', 'length_a', 'length_b']})
         plan = OutputPlan(specs=[spec])
-        result = emit(conn, schema, plan=plan)
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
         lines = result.splitlines()
         tag_lines = [l for l in lines if l.startswith('_cell.length')]
         names = [l.split('  ')[0] for l in tag_lines]
         assert names == ['_cell.length_c', '_cell.length_a', '_cell.length_b']
+
+    def test_plan_ignored_in_original_mode_warns(self, schema):
+        conn = _ingest_src(
+            '#\\#CIF_2.0\ndata_b\n_cell.length_a  5.4\n',
+            schema,
+        )
+        plan = OutputPlan(specs=[BlockSpec()])
+        import warnings
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            emit(conn, schema, mode=EmitMode.ORIGINAL, plan=plan)
+        msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+        assert any('ORIGINAL' in m and 'GROUPED' in m for m in msgs)
 
     def test_empty_specs_matches_no_block(self):
         """OutputPlan.match returns (None, None) when specs list is empty."""
@@ -2043,10 +2056,9 @@ class TestOutputPlanCategoryOrder:
             '_expt.id  E1\n_expt.title  hello\n'
         )
         conn = _ingest_src(cif_src, schema)
-        # Force peak before expt in emission
         spec = BlockSpec(category_order=['peak', 'expt'])
         plan = OutputPlan(specs=[spec])
-        result = emit(conn, schema, plan=plan)
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
         expt_pos = result.find('_expt.id')
         peak_pos = result.find('loop_')  # peak would produce a loop_ if present
         # expt should still appear (peak absent → skip), no crash
@@ -2062,7 +2074,7 @@ class TestOutputPlanCategoryOrder:
         conn = _ingest_src(cif_src, schema)
         spec = BlockSpec(category_order=['expt*'])
         plan = OutputPlan(specs=[spec])
-        result = emit(conn, schema, plan=plan)
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
         # Both expt and expt_detail should be present
         assert '_expt.id' in result
         assert '_expt_detail.id' in result
@@ -2078,7 +2090,7 @@ class TestOutputPlanCategoryOrder:
         import warnings
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('always')
-            result = emit(conn, schema, plan=plan)
+            result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
         assert any('nonexistent_category' in str(warning.message) for warning in w)
         # Data still emitted (via default ordering)
         assert '_expt.id' in result
@@ -2223,7 +2235,7 @@ class TestBlockNamer:
 
         spec = BlockSpec(matches=None, block_namer=namer)
         plan = OutputPlan(specs=[spec])
-        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
         assert 'data_custom_name' in result
         assert called_with  # namer was called
 
@@ -2234,7 +2246,7 @@ class TestBlockNamer:
 
         spec = BlockSpec(matches=None)  # no block_namer on spec
         plan = OutputPlan(specs=[spec], block_namer=lambda d: 'plan_name')
-        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
         assert 'data_plan_name' in result
 
     def test_spec_namer_takes_priority_over_plan_namer(self, schema):
@@ -2244,7 +2256,7 @@ class TestBlockNamer:
 
         spec = BlockSpec(matches=None, block_namer=lambda d: 'spec_name')
         plan = OutputPlan(specs=[spec], block_namer=lambda d: 'plan_name')
-        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
         assert 'data_spec_name' in result
         assert 'data_plan_name' not in result
 
@@ -2271,7 +2283,7 @@ class TestBlockNamer:
 
         spec = BlockSpec(matches=None, block_namer=lambda d: 'my block/name!')
         plan = OutputPlan(specs=[spec])
-        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
         assert 'data_my_block_name' in result
 
     def test_default_block_name_from_anchor_key(self, schema):

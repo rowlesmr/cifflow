@@ -665,7 +665,7 @@ class EmitMode(Enum):
     GROUPED    = "grouped"     # one block per Set-anchor key combination
 ```
 
-**`ORIGINAL`** reconstructs the CIF blocks as they were before ingestion — the simple inverse of `ingest()`.
+**`ORIGINAL`** reconstructs the CIF blocks as they were before ingestion — the simple inverse of `ingest()`.  Any `OutputPlan` passed to `emit()` is silently ignored and a `UserWarning` is emitted; use `GROUPED` mode for custom ordering.
 
 **`GROUPED`** traverses the FK graph (BFS) from each table to find the nearest Set-class ancestor.  Tables whose FK chains share the same Set anchor and the same anchor key values are emitted together.  This merges rows from multiple original blocks that carry the same Set-level identity.  Tables with no Set ancestor fall back to `_cifflow_block_id` grouping and are absorbed into co-located Set-anchored blocks; truly orphaned block IDs produce standalone blocks.
 
@@ -749,6 +749,8 @@ stripped).  Duplicate names after sanitization get `_2`, `_3` suffixes.
 Pass an `OutputPlan` to `emit()` to control category and column ordering.
 `OutputPlan(specs=[])` (the default) applies alphabetical ordering throughout.
 
+`OutputPlan` is **not applicable to `ORIGINAL` mode**.  Passing one emits a `UserWarning` and the plan is ignored; use `GROUPED` mode instead.
+
 ---
 
 ### `emit(conn, schema, *, mode, version, plan, pretty, line_limit, line_ending, reconstruct_su, emit_defaults)`
@@ -807,7 +809,7 @@ CIF string.
 | `schema` | `SchemaSpec` | The schema used when `conn` was ingested |
 | `mode` | `EmitMode` | Block partitioning strategy; default `ORIGINAL` |
 | `version` | `CifVersion` | Controls magic line and quoting strategy |
-| `plan` | `OutputPlan \| None` | Custom category/column ordering; `None` = default |
+| `plan` | `OutputPlan \| None` | Custom category/column ordering; `None` = default.  Ignored (with `UserWarning`) in `ORIGINAL` mode |
 | `pretty` | `bool` | Column alignment and decimal alignment; default `True` |
 | `line_limit` | `int \| None` | Max physical line length; triggers folding/re-quoting; default `2048` |
 | `line_ending` | `str` | Line separator for the output string; default `'\n'` |

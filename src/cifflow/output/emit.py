@@ -188,6 +188,14 @@ def emit(
     if mode == EmitMode.ALL_BLOCKS:
         plan_spec = plan.specs[0] if plan and plan.specs else None
         ordered = [(b, plan_spec) for b in raw_blocks]
+    elif mode == EmitMode.ORIGINAL:
+        if plan is not None:
+            _warnings.warn(
+                'OutputPlan is ignored in ORIGINAL mode; use GROUPED mode for custom ordering.',
+                UserWarning,
+                stacklevel=2,
+            )
+        ordered = [(b, None) for b in raw_blocks]
     else:
         ordered = _sort_and_merge(raw_blocks, plan)
 
@@ -1100,27 +1108,28 @@ def _compute_original_category_order(
 ) -> list:
     """Compute category order for ORIGINAL mode, grouping tables that shared a source loop.
 
-    Set categories appear first (individually, sorted alphabetically).
+    All categories (Set and Loop alike) are ordered by the minimum _cifflow_row_id captured
+    in _loop_groups from the _raw_* staging tables before they were dropped.  This is the
+    only reliable cross-table ordering signal: final-table row_ids are not comparable between
+    tables because Set rows can be created or updated by FK propagation at any point.
+
     Loop categories that shared a _loop_id are grouped as lists (merge groups).
     Singletons appear as plain strings.
-    Groups are ordered by their earliest _cifflow_row_id in the raw staging table.
     """
     _SCALARS = '__scalars__'
+    _MAX_ROW = 10 ** 18
 
-    set_tables = sorted(
+    set_tables = {
         t for t in table_rows
         if schema.tables.get(t) and schema.tables[t].category_class == 'Set'
-    )
-    set_set = set(set_tables)
-    loop_tables = [t for t in table_rows if t not in set_set]
+    }
+    loop_tables = [t for t in table_rows if t not in set_tables]
 
-    if not loop_tables:
-        return list(set_tables)
-
-    # Query the _loop_groups infrastructure table (populated during ingest from _raw_* tables
-    # before they were dropped) to find which loop_ids each table had for this block.
+    # Query _loop_groups for all entries for this block.
+    # Scalar entries (loop_id = '__scalars__') give first-appearance row_id for Set tables.
+    # Non-scalar entries are used for Loop table union-find grouping.
+    table_min_row: dict[str, int] = {}
     table_to_lids: dict[str, set[str]] = {t: set() for t in loop_tables}
-    lid_min_row: dict[str, int] = {}
 
     try:
         rows_info = conn.execute(
@@ -1133,12 +1142,14 @@ def _compute_original_category_order(
         rows_info = []
 
     for tbl, lid, min_row in rows_info:
-        if tbl in table_to_lids:
+        if tbl not in table_rows:
+            continue
+        if tbl not in table_min_row or min_row < table_min_row[tbl]:
+            table_min_row[tbl] = min_row
+        if tbl in table_to_lids and lid != _SCALARS:
             table_to_lids[tbl].add(lid)
-        if lid not in lid_min_row or min_row < lid_min_row[lid]:
-            lid_min_row[lid] = min_row
 
-    # Union-find: group tables that share any _loop_id
+    # Union-find: group Loop tables that share any non-scalar _loop_id.
     parent: dict[str, str] = {t: t for t in loop_tables}
 
     def find(x: str) -> str:
@@ -1161,39 +1172,35 @@ def _compute_original_category_order(
         for i in range(1, len(tables_list)):
             union(tables_list[0], tables_list[i])
 
-    # Collect components
     components: dict[str, list[str]] = {}
     for t in loop_tables:
         root = find(t)
         components.setdefault(root, []).append(t)
 
-    # Order components by earliest loop_id row_id
-    def component_key(root: str) -> int:
-        lids = set()
-        for t in components[root]:
-            lids.update(table_to_lids[t])
-        if lids:
-            return min(lid_min_row.get(lid, 0) for lid in lids)
-        all_rows = [r for t in components[root] for r in table_rows[t]]
-        return min((r.get('_cifflow_row_id') or 0) for r in all_rows) if all_rows else 0
+    def table_pos(t: str) -> int:
+        return table_min_row.get(t, _MAX_ROW)
 
-    sorted_roots = sorted(components.keys(), key=component_key)
+    def item_pos(item: 'str | list') -> int:
+        if isinstance(item, list):
+            return min(table_pos(t) for t in item)
+        return table_pos(item)
 
-    result: list = list(set_tables)
-    for root in sorted_roots:
-        group = components[root]
+    # Build unified list of Set singletons and Loop components, sort by first appearance.
+    items: list[str | list] = []
 
-        def table_key(t: str) -> int:
-            lids = table_to_lids[t]
-            if lids:
-                return min(lid_min_row.get(lid, 0) for lid in lids)
-            rows = table_rows[t]
-            return min((r.get('_cifflow_row_id') or 0) for r in rows) if rows else 0
+    for t in set_tables:
+        items.append(t)
 
-        group_sorted = sorted(group, key=table_key)
-        result.append(group_sorted if len(group_sorted) > 1 else group_sorted[0])
+    seen_roots: set[str] = set()
+    for t in loop_tables:
+        root = find(t)
+        if root not in seen_roots:
+            seen_roots.add(root)
+            group = sorted(components[root], key=table_pos)
+            items.append(group if len(group) > 1 else group[0])
 
-    return result
+    items.sort(key=item_pos)
+    return items
 
 
 def _expand_wildcard(pattern: str, schema: SchemaSpec) -> list[str]:
