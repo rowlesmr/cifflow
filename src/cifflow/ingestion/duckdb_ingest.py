@@ -265,6 +265,12 @@ def load_block_data(
     loop_scalar_bufs: dict[str, dict[str, Any]] = {}
     loop_id_counter = 0
 
+    # Shared event counter: increments once per loop encountered and once per new
+    # Set-category table first seen.  Stored in _loop_groups so that Set and Loop
+    # categories can be sorted in their original file order at emit time.
+    event_counter = 0
+    loop_group_entries: list[tuple] = []  # (block_id, table_name, loop_id, event_pos)
+
     for tag in block.tags:
         if tag in loop_tag_to_idx:
             loop_idx = loop_tag_to_idx[tag]
@@ -273,6 +279,7 @@ def load_block_data(
             processed_loops.add(loop_idx)
             loop_tags_list = block.loops[loop_idx]
             loop_id_counter += 1
+            event_counter += 1
             loop_id_str = f'__loop_{loop_id_counter}__'
             loop_batch = _load_loop(
                 block, block_id, block_idx, loop_id_str, loop_id_counter,
@@ -280,13 +287,19 @@ def load_block_data(
                 deprecated_warned, emit, fallback_rows,
             )
             for tbl, rows in loop_batch.items():
+                loop_group_entries.append((block_id, tbl, loop_id_str, event_counter))
                 if tbl in table_batch:
                     table_batch[tbl].extend(rows)
                 else:
                     table_batch[tbl] = rows
         else:
+            set_before = set(set_bufs)
+            lsb_before = set(loop_scalar_bufs)
             _load_scalar_tag(block, block_id, tag, schema, tag_to_column, su_map,
                              deprecated_warned, emit, set_bufs, loop_scalar_bufs, fallback_rows)
+            for tbl in (set(set_bufs) - set_before) | (set(loop_scalar_bufs) - lsb_before):
+                event_counter += 1
+                loop_group_entries.append((block_id, tbl, _SCALARS_LOOP_ID, event_counter))
 
     # Scalar buffers → one table_batch entry per table per block
     for tbl_name, cols in set_bufs.items():
@@ -298,7 +311,7 @@ def load_block_data(
             (block_id, block_idx, _SCALARS_LOOP_ID, 0, cols)
         )
 
-    return fallback_rows, table_batch
+    return fallback_rows, table_batch, loop_group_entries
 
 
 def _route_tag(
@@ -1109,6 +1122,14 @@ def create_final_tables(
             FROM "_raw_{tbl_name}"
             WHERE _loop_id != '{_SCALARS_LOOP_ID}'
             GROUP BY _cifflow_block_id, _loop_id
+            ON CONFLICT DO NOTHING
+        """)
+        db.execute(f"""
+            INSERT INTO "_loop_groups" ("_cifflow_block_id", "table_name", "loop_id", "min_row_id")
+            SELECT _cifflow_block_id, '{tbl_name}', '{_SCALARS_LOOP_ID}', MIN(_cifflow_row_id)
+            FROM "_raw_{tbl_name}"
+            WHERE _loop_id = '{_SCALARS_LOOP_ID}'
+            GROUP BY _cifflow_block_id
             ON CONFLICT DO NOTHING
         """)
         db.execute(f'DROP TABLE IF EXISTS "_raw_{tbl_name}"')
