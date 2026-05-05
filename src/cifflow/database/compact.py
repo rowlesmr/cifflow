@@ -184,7 +184,7 @@ def _transfer_arrow(src: duckdb.DuckDBPyConnection,
                     select_sql: str,
                     tbl_name: str) -> None:
     """Execute *select_sql* against *src*, transfer result into *dst* via Arrow."""
-    arrow_tbl = src.execute(select_sql).fetch_arrow_table()
+    arrow_tbl = src.execute(select_sql).to_arrow_table()
     if arrow_tbl.num_rows == 0:
         return
     dst.register('_conv_tmp', arrow_tbl)

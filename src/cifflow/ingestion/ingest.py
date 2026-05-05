@@ -418,18 +418,26 @@ def ingest(
         setup_duckdb(schema, db)
         populated: set[str] = set()
         global_batch: dict[str, list[tuple]] = {}
+        all_loop_group_entries: list[tuple] = []
         for position, block in enumerate(blocks):
-            fallback, table_batch = load_block_data(
+            fallback, table_batch, blk_entries = load_block_data(
                 block, block.name, position, schema, tag_to_column, su_map,
                 set(), emit,
             )
             fallback_rows.extend(fallback)
+            all_loop_group_entries.extend(blk_entries)
             for tbl, rows in table_batch.items():
                 if tbl in global_batch:
                     global_batch[tbl].extend(rows)
                 else:
                     global_batch[tbl] = rows
         flush_table_batches(db, global_batch, populated)
+        if all_loop_group_entries:
+            db.executemany(
+                'INSERT INTO "_loop_groups" ("_cifflow_block_id", "table_name", "loop_id", "min_row_id") '
+                'VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING',
+                all_loop_group_entries,
+            )
         propagate_fk_sql(db, schema, tag_to_column, propagate_fk, emit, populated)
         create_final_tables(db, schema, populated, errors)
         id_regimes = _compute_id_regimes(db, schema, [b.name for b in blocks], populated)

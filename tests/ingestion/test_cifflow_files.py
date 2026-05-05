@@ -564,7 +564,7 @@ class TestFallbackScalars:
         }
         assert tables == {'_cif_fallback', '_block_dataset_membership',
                           '_validation_result', '_block_order', '_tag_presence',
-                          '_metatable'}
+                          '_metatable', '_loop_groups'}
 
 
 # ---------------------------------------------------------------------------
