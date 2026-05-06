@@ -10,7 +10,7 @@ usage.
 
 ## Overview
 
-The output layer reads from a SQLite database that was previously populated by `ingest()`.
+The output layer reads from a DuckDB database that was previously populated by `ingest()`.
 It does not write to the database.
 
 The central entry point is `emit()`:
