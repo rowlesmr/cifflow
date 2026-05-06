@@ -45,7 +45,7 @@ from cifflow import EmitMode
 ### `EmitMode.ORIGINAL` (default)
 
 One output block per distinct `_cifflow_block_id` value.  Reconstructs the original CIF blocks
-exactly as they were before ingestion — the inverse of `ingest()`.
+(almost) exactly as they were before ingestion; the inverse of `ingest()`.
 
 - FK-PK columns are suppressed: if a FK column is redundant because the referenced Set
   category is co-emitted in the same block, the FK column is omitted.
