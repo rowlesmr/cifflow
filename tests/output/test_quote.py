@@ -632,3 +632,295 @@ class TestBothQuoteTypesTripleConflict:
         assert value.endswith('"')
         result = quote(value, CIF20)
         assert result.startswith("'''") and result.endswith("'''")
+
+
+class TestStringsWithAllDelimiterCombinations:
+    STRINGS = ["hello world how you",
+
+               "hello 'world how you", "hello ''world how you", "hello '''world how you",
+               'hello "world how you', 'hello ""world how you', 'hello """world how you',
+
+               "hello 'world \"how you", "hello ''world \"how you", "hello '''world \"how you",
+               "hello 'world \"\"how you", "hello ''world \"\"how you", "hello '''world \"\"how you",
+               "hello 'world \"\"\"how you", "hello ''world \"\"\"how you", "hello '''world \"\"\"how you",
+
+               'hello "world \'how you', 'hello ""world \'how you', 'hello """world \'how you',
+               'hello "world \'\'how you', 'hello ""world \'\'how you', 'hello """world \'\'how you',
+               'hello "world \'\'\'how you', 'hello ""world \'\'\'how you', 'hello """world \'\'\'how you',
+
+               "hello 'world \'how you", "hello ''world \'how you", "hello '''world \'how you",
+               "hello 'world \'\'how you", "hello ''world \'\'how you", "hello '''world \'\'how you",
+               "hello 'world \'\'\'how you", "hello ''world \'\'\'how you", "hello '''world \'\'\'how you",
+
+               'hello "world \"how you', 'hello ""world \"how you', 'hello """world \"how you',
+               'hello "world \"\"how you', 'hello ""world \"\"how you', 'hello """world \"\"how you',
+               'hello "world \"\"\"how you', 'hello ""world \"\"\"how you', 'hello """world \"\"\"how you',
+
+               "hello world how you\'",
+
+               "hello 'world how you\'", "hello ''world how you\'", "hello '''world how you\'",
+               'hello "world how you\'', 'hello ""world how you\'', 'hello """world how you\'',
+
+               "hello 'world \"how you\'", "hello ''world \"how you\'", "hello '''world \"how you\'",
+               "hello 'world \"\"how you\'", "hello ''world \"\"how you\'", "hello '''world \"\"how you\'",
+               "hello 'world \"\"\"how you\'", "hello ''world \"\"\"how you\'", "hello '''world \"\"\"how you\'",
+
+               'hello "world \'how you\'', 'hello ""world \'how you\'', 'hello """world \'how you\'',
+               'hello "world \'\'how you\'', 'hello ""world \'\'how you\'', 'hello """world \'\'how you\'',
+               'hello "world \'\'\'how you\'', 'hello ""world \'\'\'how you\'', 'hello """world \'\'\'how you\'',
+
+               "hello 'world \'how you\'", "hello ''world \'how you\'", "hello '''world \'how you\'",
+               "hello 'world \'\'how you\'", "hello ''world \'\'how you\'", "hello '''world \'\'how you\'",
+               "hello 'world \'\'\'how you\'", "hello ''world \'\'\'how you\'", "hello '''world \'\'\'how you\'",
+
+               'hello "world \"how you\'', 'hello ""world \"how you\'', 'hello """world \"how you\'',
+               'hello "world \"\"how you\'', 'hello ""world \"\"how you\'', 'hello """world \"\"how you\'',
+               'hello "world \"\"\"how you\'', 'hello ""world \"\"\"how you\'', 'hello """world \"\"\"how you\'',
+
+               "hello world how you\"",
+
+               "hello 'world how you\"", "hello ''world how you\"", "hello '''world how you\"",
+               'hello "world how you\"', 'hello ""world how you\"', 'hello """world how you\"',
+
+               "hello 'world \"how you\"", "hello ''world \"how you\"", "hello '''world \"how you\"",
+               "hello 'world \"\"how you\"", "hello ''world \"\"how you\"", "hello '''world \"\"how you\"",
+               "hello 'world \"\"\"how you\"", "hello ''world \"\"\"how you\"", "hello '''world \"\"\"how you\"",
+
+               'hello "world \'how you\"', 'hello ""world \'how you\"', 'hello """world \'how you\"',
+               'hello "world \'\'how you\"', 'hello ""world \'\'how you\"', 'hello """world \'\'how you\"',
+               'hello "world \'\'\'how you\"', 'hello ""world \'\'\'how you\"', 'hello """world \'\'\'how you\"',
+
+               "hello 'world \'how you\"", "hello ''world \'how you\"", "hello '''world \'how you\"",
+               "hello 'world \'\'how you\"", "hello ''world \'\'how you\"", "hello '''world \'\'how you\"",
+               "hello 'world \'\'\'how you\"", "hello ''world \'\'\'how you\"", "hello '''world \'\'\'how you\"",
+
+               'hello "world \"how you\"', 'hello ""world \"how you\"', 'hello """world \"how you\"',
+               'hello "world \"\"how you\"', 'hello ""world \"\"how you\"', 'hello """world \"\"how you\"',
+               'hello "world \"\"\"how you\"', 'hello ""world \"\"\"how you\"', 'hello """world \"\"\"how you\"',
+
+               "hello wor\nld how you",
+
+               "hello 'wor\nld how you", "hello ''wor\nld how you", "hello '''wor\nld how you",
+               'hello "wor\nld how you', 'hello ""wor\nld how you', 'hello """wor\nld how you',
+
+               "hello 'wor\nld \"how you", "hello ''wor\nld \"how you", "hello '''wor\nld \"how you",
+               "hello 'wor\nld \"\"how you", "hello ''wor\nld \"\"how you", "hello '''wor\nld \"\"how you",
+               "hello 'wor\nld \"\"\"how you", "hello ''wor\nld \"\"\"how you", "hello '''wor\nld \"\"\"how you",
+
+               'hello "wor\nld \'how you', 'hello ""wor\nld \'how you', 'hello """wor\nld \'how you',
+               'hello "wor\nld \'\'how you', 'hello ""wor\nld \'\'how you', 'hello """wor\nld \'\'how you',
+               'hello "wor\nld \'\'\'how you', 'hello ""wor\nld \'\'\'how you', 'hello """wor\nld \'\'\'how you',
+
+               "hello 'wor\nld \'how you", "hello ''wor\nld \'how you", "hello '''wor\nld \'how you",
+               "hello 'wor\nld \'\'how you", "hello ''wor\nld \'\'how you", "hello '''wor\nld \'\'how you",
+               "hello 'wor\nld \'\'\'how you", "hello ''wor\nld \'\'\'how you", "hello '''wor\nld \'\'\'how you",
+
+               'hello "wor\nld \"how you', 'hello ""wor\nld \"how you', 'hello """wor\nld \"how you',
+               'hello "wor\nld \"\"how you', 'hello ""wor\nld \"\"how you', 'hello """wor\nld \"\"how you',
+               'hello "wor\nld \"\"\"how you', 'hello ""wor\nld \"\"\"how you', 'hello """wor\nld \"\"\"how you',
+
+               "hello wor\nld how you\'",
+
+               "hello 'wor\nld how you\'", "hello ''wor\nld how you\'", "hello '''wor\nld how you\'",
+               'hello "wor\nld how you\'', 'hello ""wor\nld how you\'', 'hello """wor\nld how you\'',
+
+               "hello 'wor\nld \"how you\'", "hello ''wor\nld \"how you\'", "hello '''wor\nld \"how you\'",
+               "hello 'wor\nld \"\"how you\'", "hello ''wor\nld \"\"how you\'", "hello '''wor\nld \"\"how you\'",
+               "hello 'wor\nld \"\"\"how you\'", "hello ''wor\nld \"\"\"how you\'", "hello '''wor\nld \"\"\"how you\'",
+
+               'hello "wor\nld \'how you\'', 'hello ""wor\nld \'how you\'', 'hello """wor\nld \'how you\'',
+               'hello "wor\nld \'\'how you\'', 'hello ""wor\nld \'\'how you\'', 'hello """wor\nld \'\'how you\'',
+               'hello "wor\nld \'\'\'how you\'', 'hello ""wor\nld \'\'\'how you\'', 'hello """wor\nld \'\'\'how you\'',
+
+               "hello 'wor\nld \'how you\'", "hello ''wor\nld \'how you\'", "hello '''wor\nld \'how you\'",
+               "hello 'wor\nld \'\'how you\'", "hello ''wor\nld \'\'how you\'", "hello '''wor\nld \'\'how you\'",
+               "hello 'wor\nld \'\'\'how you\'", "hello ''wor\nld \'\'\'how you\'", "hello '''wor\nld \'\'\'how you\'",
+
+               'hello "wor\nld \"how you\'', 'hello ""wor\nld \"how you\'', 'hello """wor\nld \"how you\'',
+               'hello "wor\nld \"\"how you\'', 'hello ""wor\nld \"\"how you\'', 'hello """wor\nld \"\"how you\'',
+               'hello "wor\nld \"\"\"how you\'', 'hello ""wor\nld \"\"\"how you\'', 'hello """wor\nld \"\"\"how you\'',
+
+               "hello wor\nld how you\"",
+
+               "hello 'wor\nld how you\"", "hello ''wor\nld how you\"", "hello '''wor\nld how you\"",
+               'hello "wor\nld how you\"', 'hello ""wor\nld how you\"', 'hello """wor\nld how you\"',
+
+               "hello 'wor\nld \"how you\"", "hello ''wor\nld \"how you\"", "hello '''wor\nld \"how you\"",
+               "hello 'wor\nld \"\"how you\"", "hello ''wor\nld \"\"how you\"", "hello '''wor\nld \"\"how you\"",
+               "hello 'wor\nld \"\"\"how you\"", "hello ''wor\nld \"\"\"how you\"", "hello '''wor\nld \"\"\"how you\"",
+
+               'hello "wor\nld \'how you\"', 'hello ""wor\nld \'how you\"', 'hello """wor\nld \'how you\"',
+               'hello "wor\nld \'\'how you\"', 'hello ""wor\nld \'\'how you\"', 'hello """wor\nld \'\'how you\"',
+               'hello "wor\nld \'\'\'how you\"', 'hello ""wor\nld \'\'\'how you\"', 'hello """wor\nld \'\'\'how you\"',
+
+               "hello 'wor\nld \'how you\"", "hello ''wor\nld \'how you\"", "hello '''wor\nld \'how you\"",
+               "hello 'wor\nld \'\'how you\"", "hello ''wor\nld \'\'how you\"", "hello '''wor\nld \'\'how you\"",
+               "hello 'wor\nld \'\'\'how you\"", "hello ''wor\nld \'\'\'how you\"", "hello '''wor\nld \'\'\'how you\"",
+
+               'hello "wor\nld \"how you\"', 'hello ""wor\nld \"how you\"', 'hello """wor\nld \"how you\"',
+               'hello "wor\nld \"\"how you\"', 'hello ""wor\nld \"\"how you\"', 'hello """wor\nld \"\"how you\"',
+               'hello "wor\nld \"\"\"how you\"', 'hello ""wor\nld \"\"\"how you\"', 'hello """wor\nld \"\"\"how you\"',
+
+               "hello world how\n; you",
+
+               "hello 'world how\n; you", "hello ''world how\n; you", "hello '''world how\n; you",
+               'hello "world how\n; you', 'hello ""world how\n; you', 'hello """world how\n; you',
+
+               "hello 'world \"how\n; you", "hello ''world \"how\n; you", "hello '''world \"how\n; you",
+               "hello 'world \"\"how\n; you", "hello ''world \"\"how\n; you", "hello '''world \"\"how\n; you",
+               "hello 'world \"\"\"how\n; you", "hello ''world \"\"\"how\n; you", "hello '''world \"\"\"how\n; you",
+
+               'hello "world \'how\n; you', 'hello ""world \'how\n; you', 'hello """world \'how\n; you',
+               'hello "world \'\'how\n; you', 'hello ""world \'\'how\n; you', 'hello """world \'\'how\n; you',
+               'hello "world \'\'\'how\n; you', 'hello ""world \'\'\'how\n; you', 'hello """world \'\'\'how\n; you',
+
+               "hello 'world \'how\n; you", "hello ''world \'how\n; you", "hello '''world \'how\n; you",
+               "hello 'world \'\'how\n; you", "hello ''world \'\'how\n; you", "hello '''world \'\'how\n; you",
+               "hello 'world \'\'\'how\n; you", "hello ''world \'\'\'how\n; you", "hello '''world \'\'\'how\n; you",
+
+               'hello "world \"how\n; you', 'hello ""world \"how\n; you', 'hello """world \"how\n; you',
+               'hello "world \"\"how\n; you', 'hello ""world \"\"how\n; you', 'hello """world \"\"how\n; you',
+               'hello "world \"\"\"how\n; you', 'hello ""world \"\"\"how\n; you', 'hello """world \"\"\"how\n; you',
+
+               "hello world how\n; you\'",
+
+               "hello 'world how\n; you\'", "hello ''world how\n; you\'", "hello '''world how\n; you\'",
+               'hello "world how\n; you\'', 'hello ""world how\n; you\'', 'hello """world how\n; you\'',
+
+               "hello 'world \"how\n; you\'", "hello ''world \"how\n; you\'", "hello '''world \"how\n; you\'",
+               "hello 'world \"\"how\n; you\'", "hello ''world \"\"how\n; you\'", "hello '''world \"\"how\n; you\'",
+               "hello 'world \"\"\"how\n; you\'", "hello ''world \"\"\"how\n; you\'",
+               "hello '''world \"\"\"how\n; you\'",
+
+               'hello "world \'how\n; you\'', 'hello ""world \'how\n; you\'', 'hello """world \'how\n; you\'',
+               'hello "world \'\'how\n; you\'', 'hello ""world \'\'how\n; you\'', 'hello """world \'\'how\n; you\'',
+               'hello "world \'\'\'how\n; you\'', 'hello ""world \'\'\'how\n; you\'',
+               'hello """world \'\'\'how\n; you\'',
+
+               "hello 'world \'how\n; you\'", "hello ''world \'how\n; you\'", "hello '''world \'how\n; you\'",
+               "hello 'world \'\'how\n; you\'", "hello ''world \'\'how\n; you\'", "hello '''world \'\'how\n; you\'",
+               "hello 'world \'\'\'how\n; you\'", "hello ''world \'\'\'how\n; you\'",
+               "hello '''world \'\'\'how\n; you\'",
+
+               'hello "world \"how\n; you\'', 'hello ""world \"how\n; you\'', 'hello """world \"how\n; you\'',
+               'hello "world \"\"how\n; you\'', 'hello ""world \"\"how\n; you\'', 'hello """world \"\"how\n; you\'',
+               'hello "world \"\"\"how\n; you\'', 'hello ""world \"\"\"how\n; you\'',
+               'hello """world \"\"\"how\n; you\'',
+
+               "hello world how\n; you\"",
+
+               "hello 'world how\n; you\"", "hello ''world how\n; you\"", "hello '''world how\n; you\"",
+               'hello "world how\n; you\"', 'hello ""world how\n; you\"', 'hello """world how\n; you\"',
+
+               "hello 'world \"how\n; you\"", "hello ''world \"how\n; you\"", "hello '''world \"how\n; you\"",
+               "hello 'world \"\"how\n; you\"", "hello ''world \"\"how\n; you\"", "hello '''world \"\"how\n; you\"",
+               "hello 'world \"\"\"how\n; you\"", "hello ''world \"\"\"how\n; you\"",
+               "hello '''world \"\"\"how\n; you\"",
+
+               'hello "world \'how\n; you\"', 'hello ""world \'how\n; you\"', 'hello """world \'how\n; you\"',
+               'hello "world \'\'how\n; you\"', 'hello ""world \'\'how\n; you\"', 'hello """world \'\'how\n; you\"',
+               'hello "world \'\'\'how\n; you\"', 'hello ""world \'\'\'how\n; you\"',
+               'hello """world \'\'\'how\n; you\"',
+
+               "hello 'world \'how\n; you\"", "hello ''world \'how\n; you\"", "hello '''world \'how\n; you\"",
+               "hello 'world \'\'how\n; you\"", "hello ''world \'\'how\n; you\"", "hello '''world \'\'how\n; you\"",
+               "hello 'world \'\'\'how\n; you\"", "hello ''world \'\'\'how\n; you\"",
+               "hello '''world \'\'\'how\n; you\"",
+
+               'hello "world \"how\n; you\"', 'hello ""world \"how\n; you\"', 'hello """world \"how\n; you\"',
+               'hello "world \"\"how\n; you\"', 'hello ""world \"\"how\n; you\"', 'hello """world \"\"how\n; you\"',
+               'hello "world \"\"\"how\n; you\"', 'hello ""world \"\"\"how\n; you\"',
+               'hello """world \"\"\"how\n; you\"',
+
+               "hello wor\nld how\n; you",
+
+               "hello 'wor\nld how\n; you", "hello ''wor\nld how\n; you", "hello '''wor\nld how\n; you",
+               'hello "wor\nld how\n; you', 'hello ""wor\nld how\n; you', 'hello """wor\nld how\n; you',
+
+               "hello 'wor\nld \"how\n; you", "hello ''wor\nld \"how\n; you", "hello '''wor\nld \"how\n; you",
+               "hello 'wor\nld \"\"how\n; you", "hello ''wor\nld \"\"how\n; you", "hello '''wor\nld \"\"how\n; you",
+               "hello 'wor\nld \"\"\"how\n; you", "hello ''wor\nld \"\"\"how\n; you",
+               "hello '''wor\nld \"\"\"how\n; you",
+
+               'hello "wor\nld \'how\n; you', 'hello ""wor\nld \'how\n; you', 'hello """wor\nld \'how\n; you',
+               'hello "wor\nld \'\'how\n; you', 'hello ""wor\nld \'\'how\n; you', 'hello """wor\nld \'\'how\n; you',
+               'hello "wor\nld \'\'\'how\n; you', 'hello ""wor\nld \'\'\'how\n; you',
+               'hello """wor\nld \'\'\'how\n; you',
+
+               "hello 'wor\nld \'how\n; you", "hello ''wor\nld \'how\n; you", "hello '''wor\nld \'how\n; you",
+               "hello 'wor\nld \'\'how\n; you", "hello ''wor\nld \'\'how\n; you", "hello '''wor\nld \'\'how\n; you",
+               "hello 'wor\nld \'\'\'how\n; you", "hello ''wor\nld \'\'\'how\n; you",
+               "hello '''wor\nld \'\'\'how\n; you",
+
+               'hello "wor\nld \"how\n; you', 'hello ""wor\nld \"how\n; you', 'hello """wor\nld \"how\n; you',
+               'hello "wor\nld \"\"how\n; you', 'hello ""wor\nld \"\"how\n; you', 'hello """wor\nld \"\"how\n; you',
+               'hello "wor\nld \"\"\"how\n; you', 'hello ""wor\nld \"\"\"how\n; you',
+               'hello """wor\nld \"\"\"how\n; you',
+
+               "hello wor\nld how\n; you\'",
+
+               "hello 'wor\nld how\n; you\'", "hello ''wor\nld how\n; you\'", "hello '''wor\nld how\n; you\'",
+               'hello "wor\nld how\n; you\'', 'hello ""wor\nld how\n; you\'', 'hello """wor\nld how\n; you\'',
+
+               "hello 'wor\nld \"how\n; you\'", "hello ''wor\nld \"how\n; you\'", "hello '''wor\nld \"how\n; you\'",
+               "hello 'wor\nld \"\"how\n; you\'", "hello ''wor\nld \"\"how\n; you\'",
+               "hello '''wor\nld \"\"how\n; you\'",
+               "hello 'wor\nld \"\"\"how\n; you\'", "hello ''wor\nld \"\"\"how\n; you\'",
+               "hello '''wor\nld \"\"\"how\n; you\'",
+
+               'hello "wor\nld \'how\n; you\'', 'hello ""wor\nld \'how\n; you\'', 'hello """wor\nld \'how\n; you\'',
+               'hello "wor\nld \'\'how\n; you\'', 'hello ""wor\nld \'\'how\n; you\'',
+               'hello """wor\nld \'\'how\n; you\'',
+               'hello "wor\nld \'\'\'how\n; you\'', 'hello ""wor\nld \'\'\'how\n; you\'',
+               'hello """wor\nld \'\'\'how\n; you\'',
+
+               "hello 'wor\nld \'how\n; you\'", "hello ''wor\nld \'how\n; you\'", "hello '''wor\nld \'how\n; you\'",
+               "hello 'wor\nld \'\'how\n; you\'", "hello ''wor\nld \'\'how\n; you\'",
+               "hello '''wor\nld \'\'how\n; you\'",
+               "hello 'wor\nld \'\'\'how\n; you\'", "hello ''wor\nld \'\'\'how\n; you\'",
+               "hello '''wor\nld \'\'\'how\n; you\'",
+
+               'hello "wor\nld \"how\n; you\'', 'hello ""wor\nld \"how\n; you\'', 'hello """wor\nld \"how\n; you\'',
+               'hello "wor\nld \"\"how\n; you\'', 'hello ""wor\nld \"\"how\n; you\'',
+               'hello """wor\nld \"\"how\n; you\'',
+               'hello "wor\nld \"\"\"how\n; you\'', 'hello ""wor\nld \"\"\"how\n; you\'',
+               'hello """wor\nld \"\"\"how\n; you\'',
+
+               "hello wor\nld how\n; you\"",
+
+               "hello 'wor\nld how\n; you\"", "hello ''wor\nld how\n; you\"", "hello '''wor\nld how\n; you\"",
+               'hello "wor\nld how\n; you\"', 'hello ""wor\nld how\n; you\"', 'hello """wor\nld how\n; you\"',
+
+               "hello 'wor\nld \"how\n; you\"", "hello ''wor\nld \"how\n; you\"", "hello '''wor\nld \"how\n; you\"",
+               "hello 'wor\nld \"\"how\n; you\"", "hello ''wor\nld \"\"how\n; you\"",
+               "hello '''wor\nld \"\"how\n; you\"",
+               "hello 'wor\nld \"\"\"how\n; you\"", "hello ''wor\nld \"\"\"how\n; you\"",
+               "hello '''wor\nld \"\"\"how\n; you\"",
+
+               'hello "wor\nld \'how\n; you\"', 'hello ""wor\nld \'how\n; you\"', 'hello """wor\nld \'how\n; you\"',
+               'hello "wor\nld \'\'how\n; you\"', 'hello ""wor\nld \'\'how\n; you\"',
+               'hello """wor\nld \'\'how\n; you\"',
+               'hello "wor\nld \'\'\'how\n; you\"', 'hello ""wor\nld \'\'\'how\n; you\"',
+               'hello """wor\nld \'\'\'how\n; you\"',
+
+               "hello 'wor\nld \'how\n; you\"", "hello ''wor\nld \'how\n; you\"", "hello '''wor\nld \'how\n; you\"",
+               "hello 'wor\nld \'\'how\n; you\"", "hello ''wor\nld \'\'how\n; you\"",
+               "hello '''wor\nld \'\'how\n; you\"",
+               "hello 'wor\nld \'\'\'how\n; you\"", "hello ''wor\nld \'\'\'how\n; you\"",
+               "hello '''wor\nld \'\'\'how\n; you\"",
+
+               'hello "wor\nld \"how\n; you\"', 'hello ""wor\nld \"how\n; you\"', 'hello """wor\nld \"how\n; you\"',
+               'hello "wor\nld \"\"how\n; you\"', 'hello ""wor\nld \"\"how\n; you\"',
+               'hello """wor\nld \"\"how\n; you\"',
+               'hello "wor\nld \"\"\"how\n; you\"', 'hello ""wor\nld \"\"\"how\n; you\"',
+               'hello """wor\nld \"\"\"how\n; you\"',
+
+               ]
+
+    def test_delimiter_combinations_roundtrip_20(self):
+        for value in self.STRINGS:
+            rt(value, CIF20), value
+
+    def test_delimiter_combinations_roundtrip_11(self):
+        for value in self.STRINGS:
+            rt(value, CIF11)
