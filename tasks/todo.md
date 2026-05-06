@@ -4,6 +4,21 @@
 
 ## ▶ RESUME FROM HERE
 
+  ## What was done (2026-05-05, debug-original-output branch) — session 3
+
+  Implemented `OutputPlan`/`BlockSpec` enhancements from `prompts/enhance outputspec.md`. All 1813 non-slow tests pass (219s).
+
+  - **`dictionary/schema.py` `SchemaSpec.descendants(root)`**: New method; returns frozenset of `root` and all table names whose `category_parent` chain reaches `root`. Returns `frozenset()` for unknown root.
+  - **`output/plan.py`**: Added `_Matcher` class (`.excluding()`, `__or__`, `__and__`), helper functions (`only`, `any_of`, `all_of`, `has`), `MatchPredicate` type alias, `str`/`set` shorthand normalisation in `BlockSpec.__post_init__`, `attach_to: MatchPredicate` field on `BlockSpec`, two-arg `OutputPlan.match(anchors, tables)`.
+  - **`output/emit.py` `_sort_and_merge`**: Passes `frozenset(block.table_rows.keys())` as second arg to `plan.match`; two-pass resolution for `attach_to` blocks (first pass: normal matching; second pass: merge into target or emit standalone with warning).
+  - **Exports**: `only`, `any_of`, `all_of`, `has` re-exported from `cifflow.output` and `cifflow`.
+  - **Tests**: Updated all one-arg `plan.match()` calls and `lambda a:` predicates to two-arg form; added `TestMatchHelpers` (35 unit tests for helpers/combinators/shorthands), `TestAttachTo` (2 integration tests), `TestDescendants` (7 tests in `test_schema.py`).
+  - **No new lessons**: Implementation followed the spec without surprises.
+
+  Run tests: `.venv/Scripts/python -m pytest -x -q`
+
+  ---
+
   ## What was done (2026-05-05, debug-original-output branch) — session 2
 
   Fixed ORIGINAL mode category ordering so that Set scalars and Loop categories interleave correctly, matching source block order. All 1779 non-slow tests pass (219s).
@@ -99,16 +114,13 @@ Run tests: `.venv/Scripts/python -m pytest -x -q`
 
   1. **Resolve ONE_BLOCK fidelity mismatch classification** — 2 mismatches are intentional (`audit`/`audit_conform` auto-emitted by ONE_BLOCK); update the fidelity check or its pass/fail criteria accordingly.
 
+  2. **Document `OutputPlan` enhancements** — update `docs/outputspec.md` and `prompts/API Reference.md` with `_Matcher` helpers, `has()`, `attach_to`, `SchemaSpec.descendants()`, and the two-arg callable signature.
 
-   3. **Expand tests for file-based loading** — dictionary from `.dic`, cached from `.json`,
+  3. **Expand tests for file-based loading** — dictionary from `.dic`, cached from `.json`,
      ingest a real `.cif` to file-backed SQLite, emit to `.cif` and re-ingest, property-based
      tests for `_BlockData` helpers.
 
-  4. **Scope `OutputSpec` grouping options** — understand what flexible per-user grouping
-     control could look like: which dimensions can be varied, what the API surface should be,
-     interaction with schema category hierarchy and sibling groups.
-
-  5. **Unify severity levels** across parser/ingest/validation — audit every `on_error` /
+  4. **Unify severity levels** across parser/ingest/validation — audit every `on_error` /
      `ParseError` site; assign `'Error' | 'Warning' | 'Info'`; standardise message phrasing;
      decide `ingest()` return type.
 

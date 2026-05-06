@@ -229,12 +229,16 @@ def _sort_and_merge(
         return [(b, None) for b in blocks]
 
     matched: dict[int, list[_BlockData]] = {}
+    attach_pending: list[tuple[_BlockData, BlockSpec]] = []
     unmatched: list[_BlockData] = []
 
     for block in blocks:
-        spec_idx, _spec = plan.match(block.anchor_frozenset)
+        all_tables = frozenset(block.table_rows.keys())
+        spec_idx, spec = plan.match(block.anchor_frozenset, all_tables)
         if spec_idx is None:
             unmatched.append(block)
+        elif spec is not None and spec.attach_to is not None:
+            attach_pending.append((block, spec))
         else:
             matched.setdefault(spec_idx, []).append(block)
 
@@ -254,6 +258,45 @@ def _sort_and_merge(
 
     for block in sorted(unmatched, key=lambda b: b.name):
         result.append((block, None))
+
+    # Second pass: merge attach_to blocks into their targets (spec-index order).
+    for attach_block, attach_spec in attach_pending:
+        attach_pred = attach_spec.attach_to
+        target_found = False
+        for i, (target_block, target_spec) in enumerate(result):
+            target_tables = frozenset(target_block.table_rows.keys())
+            if attach_pred(target_block.anchor_frozenset, target_tables):
+                merged_table_rows = dict(target_block.table_rows)
+                for tbl, rows in attach_block.table_rows.items():
+                    if tbl in merged_table_rows:
+                        merged_table_rows[tbl] = merged_table_rows[tbl] + rows
+                    else:
+                        merged_table_rows[tbl] = list(rows)
+                result[i] = (
+                    _BlockData(
+                        name=target_block.name,
+                        table_rows=merged_table_rows,
+                        fallback_rows=target_block.fallback_rows + attach_block.fallback_rows,
+                        anchor_frozenset=target_block.anchor_frozenset,
+                        anchor_key_dict=target_block.anchor_key_dict,
+                        suppress_fk_pk=target_block.suppress_fk_pk,
+                        suppress_loop_fk_pk=target_block.suppress_loop_fk_pk,
+                        dataset_id=target_block.dataset_id,
+                        preferred_category_order=target_block.preferred_category_order,
+                        conformance_tags=target_block.conformance_tags,
+                    ),
+                    target_spec,
+                )
+                target_found = True
+                break
+        if not target_found:
+            _warnings.warn(
+                f"BlockSpec.attach_to: no matching target block found for "
+                f"'{attach_block.name}'; emitting standalone.",
+                UserWarning,
+                stacklevel=2,
+            )
+            result.append((attach_block, attach_spec))
 
     return result
 

@@ -17,6 +17,7 @@ The central entry point is `emit()`:
 
 ```python
 from cifflow import emit, EmitMode, OutputPlan, BlockSpec, CifVersion
+from cifflow import only, any_of, all_of, has   # block routing helpers
 
 cif_text = emit(conn, schema, mode=EmitMode.ORIGINAL, version=CifVersion.CIF_2_0)
 ```
@@ -190,7 +191,7 @@ behaviour (how those blocks are rendered).
 
 ```python
 spec = BlockSpec(
-    matches=lambda fs: 'cell' in fs,
+    matches=any_of('cell'),
     category_order=['symmetry', 'cell', 'atom_site'],
     column_order={'atom_site': ['label', 'type_symbol', 'fract_x', 'fract_y', 'fract_z']},
     single_block=False,
@@ -200,22 +201,40 @@ spec = BlockSpec(
 
 ### Fields
 
-#### `matches: Callable[[frozenset[str]], bool] | None` — default `None`
+#### `matches: MatchPredicate` — default `None`
 
-Predicate applied to the block's anchor frozenset (the set of Set-category table names
-present in the block).  Returns `True` if the spec applies.
+Determines which output blocks this spec applies to.  Accepts several forms — see the
+[Block routing helpers](#block-routing-helpers) section for the full `MatchPredicate`
+type and helper functions.
 
-`None` acts as a catch-all: the spec matches every block.  Useful as the last entry in
-`OutputPlan.specs` to set default formatting for all unmatched blocks.
+| Form | Semantics |
+|---|---|
+| `None` | Catch-all — matches every block |
+| `str` | Equivalent to `any_of(name)` — matches if the name is in the anchor frozenset |
+| `set[str]` / `frozenset[str]` | Equivalent to `all_of(*names)` — matches if every listed name is in the anchor frozenset |
+| `_Matcher` | Returned by `only()`, `any_of()`, `all_of()`, `has()`; supports `.excluding()`, `\|`, `&` |
+| `Callable[[frozenset[str], frozenset[str]], bool]` | Two-arg callable: first arg is the Set-anchor frozenset, second is the full tables frozenset |
+
+The first arg of a callable predicate is the frozenset of **Set-class** category table names
+that have rows in the block.  The second arg is the frozenset of **all** table names present
+(Set + Loop).  Both frozensets use SQL table names (lowercased, underscored).
 
 ```python
-# Match blocks containing both 'cell' and 'atom_site'
-matches=lambda fs: 'cell' in fs and 'atom_site' in fs
+# Using helper functions (preferred)
+matches=any_of('diffrn')
+matches=all_of('pd_phase', 'pd_diffractogram')
+matches=only('cell')
 
-# Match blocks containing any table whose name starts with 'pd_'
-matches=lambda fs: any(t.startswith('pd_') for t in fs)
+# String shorthand (equivalent to any_of('diffrn'))
+matches='diffrn'
 
-# Catch-all
+# Set shorthand (equivalent to all_of('pd_phase', 'pd_diffractogram'))
+matches={'pd_phase', 'pd_diffractogram'}
+
+# Two-arg callable
+matches=lambda anchors, tables: 'cell' in anchors and 'atom_site' in tables
+
+# Catch-all (matches every block)
 matches=None
 ```
 
@@ -289,6 +308,311 @@ overrides the category ordering.
 
 Per-spec block name override.  Same signature and semantics as `OutputPlan.block_namer`
 but takes priority over it.
+
+#### `attach_to: MatchPredicate` — default `None`
+
+When set, this block is not emitted as a standalone `data_` block.  Instead its table
+rows are merged into the first already-resolved output block whose anchor and tables
+frozensets satisfy the predicate (same forms as `matches`).
+
+Use this to pull loop-only data (categories with no Set ancestor and therefore an empty
+anchor frozenset) into a co-located Set-anchored block:
+
+```python
+# pd_instr_detector has no Set parent FK; by default it becomes its own block.
+# attach_to='pd_instr' merges it into whatever block holds the pd_instr anchor.
+BlockSpec(
+    matches=has('pd_instr_detector'),
+    attach_to='pd_instr',
+)
+
+# audit_author absorbed into the block that contains publication-family data
+BlockSpec(
+    matches=has('audit_author'),
+    attach_to=has(*schema.descendants('publication')),
+)
+```
+
+**Merge semantics:**
+- `table_rows` from the attached block are appended to the target's `table_rows`.
+- `fallback_rows` are likewise appended.
+- The target block's name, anchor frozenset, and key dict are unchanged.
+- Category ordering within the merged block follows the **target** spec's `category_order`.
+  If the target spec lists the attached categories explicitly they appear at that position;
+  otherwise they are appended alphabetically after the listed categories.
+- When multiple `attach_to` specs match the same target, they are merged in spec-index order.
+
+**If no target is found** the block is emitted standalone and a `UserWarning` is raised.
+
+`attach_to` and `single_block` are mutually exclusive; specifying both raises `ValueError`.
+
+---
+
+## Block routing helpers
+
+```python
+from cifflow import only, any_of, all_of, has
+# also available as: from cifflow.output import only, any_of, all_of, has
+```
+
+These functions return `_Matcher` objects that implement the `MatchPredicate` protocol.
+They are the preferred way to express routing predicates — clearer and more composable
+than raw lambdas.
+
+### `MatchPredicate` type
+
+```python
+MatchPredicate = (
+    str                                                    # 'diffrn' → any_of('diffrn')
+    | set[str] | frozenset[str]                            # {'a','b'} → all_of('a','b')
+    | Callable[[frozenset[str], frozenset[str]], bool]     # two-arg callable
+    | _Matcher                                             # helper return value
+    | None                                                 # catch-all
+)
+```
+
+The two-arg callable form receives:
+- **arg 1** — `frozenset[str]` of Set-class category table names **with rows** in the block.
+- **arg 2** — `frozenset[str]` of **all** table names present (Set + Loop).
+
+### Helper functions
+
+#### `only(*categories: str) → _Matcher`
+
+Matches blocks whose anchor frozenset is **exactly** the given set — no more, no less.
+
+```python
+only('pd_instr')                     # blocks anchored only on pd_instr
+only('pd_phase', 'pd_diffractogram') # blocks anchored on exactly these two
+```
+
+#### `any_of(*categories: str) → _Matcher`
+
+Matches blocks containing **at least one** of the given names in the **anchor** frozenset
+(Set-class only).
+
+```python
+any_of('diffrn')              # blocks that have a diffrn anchor
+any_of('cell', 'pd_phase')   # blocks that have cell or pd_phase (or both) as anchor
+```
+
+#### `all_of(*categories: str) → _Matcher`
+
+Matches blocks containing **all** of the given names in the **anchor** frozenset.
+
+```python
+all_of('pd_phase', 'pd_diffractogram')   # blocks anchored on BOTH
+```
+
+#### `has(*categories: str) → _Matcher`
+
+Matches blocks containing **at least one** of the given names in the **full tables**
+frozenset (Set **or** Loop).  The key difference from `any_of` is that `has()` sees Loop
+categories — use it to route blocks that have no Set anchor (loop-only blocks).
+
+```python
+has('audit_author')          # block contains audit_author (even if anchor is empty)
+has('pd_instr_detector')     # loop-only category; invisible to any_of/all_of
+has('atom_site', 'geom')    # block contains atom_site or geom (or both)
+```
+
+### `_Matcher` combinators
+
+All four helpers return `_Matcher` objects that support composition:
+
+#### `.excluding(*categories: str) → _Matcher`
+
+Returns a new matcher that additionally requires none of the given names appear in
+**either** the anchor frozenset or the tables frozenset.  Chainable.
+
+```python
+any_of('diffrn').excluding('pd_diffractogram')
+# blocks that have diffrn anchor AND do not contain pd_diffractogram anywhere
+
+has('pd_instr_detector').excluding('pd_instr')
+# loop-only pd_instr_detector blocks that don't also have the pd_instr Set anchor
+```
+
+#### `matcher_a | matcher_b → _Matcher`
+
+Logical OR — matches if either matcher matches.
+
+```python
+any_of('pd_instr') | has('pd_instr_detector')
+```
+
+#### `matcher_a & matcher_b → _Matcher`
+
+Logical AND — matches if both matchers match.
+
+```python
+any_of('diffrn') & has('diffrn_radiation')
+```
+
+### `SchemaSpec.descendants(root) → frozenset[str]`
+
+Returns the frozenset of `root` plus all table names whose `category_parent` chain
+passes through `root`.  Returns `frozenset()` if `root` is not in the schema.
+
+```python
+schema.descendants('cell')
+# → frozenset({'cell', 'cell_measurement', 'cell_measurement_refln', ...})
+
+schema.descendants('publication')
+# → frozenset({'publication', 'citation', 'citation_author', ...})
+```
+
+Useful with `has()` and `any_of()` to match entire category families:
+
+```python
+any_of(*schema.descendants('cell')).excluding('cell_measurement')
+has(*schema.descendants('publication'))
+```
+
+---
+
+## Using multiple specs to control block-type ordering
+
+When you want different types of blocks to appear in a specific order in the output file,
+and/or to receive different category ordering within each type, use multiple `BlockSpec`
+entries.  Emission order follows spec order: all blocks matched by `specs[0]` are written
+first, then `specs[1]`, and so on.
+
+### Only Set categories appear in the anchor frozenset
+
+The `matches` predicate receives a `frozenset` of **Set-class** category table names only.
+Loop categories (e.g. `diffrn_radiation`, `atom_site`) are never anchors — they appear in
+a block because their FK chains lead back to a Set ancestor, but they are not represented
+in the frozenset.
+
+To see which categories are Set-class in your schema:
+
+```python
+set_cats = sorted(name for name, tbl in schema.tables.items() if tbl.category_class == 'Set')
+print(set_cats)
+```
+
+### Discovering what anchors your data actually produces
+
+To see the exact anchor frozenset for each output block, temporarily use a catch-all spec
+that prints and matches everything:
+
+```python
+plan = OutputPlan(specs=[
+    BlockSpec(matches=lambda anchors, tables: print(anchors, tables) or True)
+])
+emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+```
+
+Each line printed shows `(anchor_frozenset, all_tables_frozenset)` for one block.  If a
+block's anchor frozenset is empty (`frozenset()`) it is a loop-only block with no Set
+ancestor; use `has()` to route it.
+
+### Example: ordering blocks by category type
+
+```python
+from cifflow import OutputPlan, BlockSpec, any_of, has
+
+GROUPED_PLAN = OutputPlan(
+    specs=[
+        BlockSpec(
+            matches=any_of('publication'),
+            category_order=['publication'],   # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=any_of('diffrn').excluding('pd_diffractogram'),
+            category_order=['diffrn', 'diffrn_radiation', 'diffrn_radiation_wavelength'],
+        ),
+        BlockSpec(
+            matches=any_of('pd_instr'),
+            category_order=['pd_instr'],
+        ),
+        BlockSpec(
+            matches=any_of('pd_diffractogram'),
+            category_order=[
+                'pd_diffractogram',
+                ['pd_data', 'pd_meas', 'pd_proc', 'pd_calc'],  # merge group
+            ],
+        ),
+        # Loop-only blocks (e.g. pd_instr_detector) — attach to the pd_instr block
+        BlockSpec(
+            matches=has('pd_instr_detector'),
+            attach_to=any_of('pd_instr'),
+        ),
+        BlockSpec(
+            matches=None,   # catch-all: anything not matched above, alphabetical order
+        ),
+    ],
+)
+```
+
+Each block is assigned to exactly one spec (first-match wins).  Blocks are emitted in
+spec-index order; `attach_to` blocks are merged into their target instead of standing
+alone.
+
+The `.excluding()` on the `diffrn` spec is needed here because a block anchored on
+**both** `diffrn` and `pd_diffractogram` would otherwise match `any_of('diffrn')` before
+reaching the `pd_diffractogram` spec.
+
+### `category_order` is optional
+
+`category_order` defaults to `[]`.  An empty list means: emit all categories in the
+matched block alphabetically (Set-class before Loop-class).  You can use `matches` alone
+to control *which section of the file* a block appears in without specifying any internal
+ordering:
+
+```python
+BlockSpec(
+    matches=any_of('pd_phase'),
+    # no category_order — alphabetical output, but this block type is grouped
+    # together in the file and appears after all 'diffrn' blocks
+)
+```
+
+### Matching on multiple Set anchors
+
+If a block contains more than one Set anchor (two Set categories with rows in the same
+GROUPED block), use `all_of` or `any_of`:
+
+```python
+# Block must contain BOTH pd_phase and pd_diffractogram
+matches=all_of('pd_phase', 'pd_diffractogram')
+
+# Block must contain EITHER
+matches=any_of('pd_phase', 'pd_diffractogram')
+
+# Set shorthand for all_of
+matches={'pd_phase', 'pd_diffractogram'}
+```
+
+### Routing loop-only blocks
+
+Loop-class categories that have no Set ancestor produce blocks with an empty anchor
+frozenset.  They are invisible to `any_of`, `all_of`, and `only` (which operate on the
+anchor frozenset).  Use `has()` which checks the full tables frozenset:
+
+```python
+# Standalone block for audit_author (loop-only)
+BlockSpec(
+    matches=has('audit_author', 'audit_author_role'),
+    category_order=['audit_author', 'audit_author_role'],
+)
+
+# Collapse all remaining loop-only blocks into one
+BlockSpec(
+    matches=lambda anchors, tables: not anchors,
+    single_block=True,
+)
+```
+
+Or merge them into a co-located Set-anchored block with `attach_to`:
+
+```python
+BlockSpec(
+    matches=has('audit_author'),
+    attach_to=any_of('publication'),  # or has(*schema.descendants('publication'))
+)
+```
 
 ---
 
@@ -550,6 +874,7 @@ Prefix and fold may be combined when both conditions apply simultaneously.
 ```python
 import sqlite3
 import cifflow as cif
+from cifflow import any_of, all_of, has
 
 # Load dictionary and generate schema
 loader = cif.DictionaryLoader()
@@ -578,14 +903,21 @@ plan = cif.OutputPlan(specs=[
 ])
 print(cif.emit(conn, schema, mode=cif.EmitMode.ONE_BLOCK, plan=plan))
 
-# Emit in GROUPED mode with a custom block namer
+# Emit in GROUPED mode with routing helpers and a custom block namer
 def my_namer(anchor_dict):
     for key, vals in anchor_dict.items():
         if key.endswith('.id'):
             return vals[0]
     return 'block'
 
-plan2 = cif.OutputPlan(block_namer=my_namer)
+plan2 = cif.OutputPlan(
+    specs=[
+        cif.BlockSpec(matches=any_of('cell'), category_order=['cell', 'symmetry', 'atom*']),
+        cif.BlockSpec(matches=has('audit_author'), attach_to=any_of('cell')),
+        cif.BlockSpec(matches=None),
+    ],
+    block_namer=my_namer,
+)
 print(cif.emit(conn, schema, mode=cif.EmitMode.GROUPED, plan=plan2))
 
 # Emit in ALL_BLOCKS mode with category ordering
@@ -619,13 +951,17 @@ All categories not listed appear after the listed ones, alphabetically.
 
 | Parameter / field | ONE_BLOCK | ORIGINAL | GROUPED | ALL_BLOCKS |
 |---|---|---|---|---|
-| `BlockSpec.matches` | consulted | consulted | consulted | ignored |
-| `BlockSpec.category_order` | applied | applied | applied | first spec only |
-| `BlockSpec.column_order` | applied | applied | applied | applied |
-| `BlockSpec.single_block` | applied | applied | applied | ignored |
-| `BlockSpec.block_namer` | ignored (name is always 'output') | applied | applied | ignored |
-| `OutputPlan.block_namer` | ignored | applied | applied | ignored |
+| `BlockSpec.matches` | consulted | ignored¹ | consulted | ignored |
+| `BlockSpec.category_order` | applied | ignored¹ | applied | first spec only |
+| `BlockSpec.column_order` | applied | ignored¹ | applied | applied |
+| `BlockSpec.single_block` | applied | ignored¹ | applied | ignored |
+| `BlockSpec.attach_to` | applied | ignored¹ | applied | ignored |
+| `BlockSpec.block_namer` | ignored (name is always 'output') | ignored¹ | applied | ignored |
+| `OutputPlan.block_namer` | ignored | ignored¹ | applied | ignored |
 | FK-PK suppression | off | on (Set + Loop) | on (Set only) | on (Set-key columns) |
 | `_audit_dataset.id` injection | no | no | no | yes (per block) |
 | Conformance tag injection | yes (if dict metadata present) | no | no | no |
 | `_cif_fallback` rows | allowed | allowed | allowed | raises ValueError |
+
+¹ `OutputPlan` is entirely ignored in `ORIGINAL` mode; passing one emits a `UserWarning`.
+Use `GROUPED` mode for custom ordering.

@@ -27,7 +27,7 @@ from cifflow import (
 )
 from cifflow.dictionary import DictionaryLoader
 from cifflow.dictionary.schema import SchemaSpec
-from cifflow.output import BlockSpec, OutputPlan
+from cifflow.output import BlockSpec, OutputPlan, only, any_of, all_of, has
 from cifflow.types import CifVersion
 
 _DATA_DIR = pathlib.Path(__file__).parents[2] / 'data' / 'dictionaries'
@@ -1283,31 +1283,215 @@ class TestOutputPlan:
     def test_empty_specs_matches_no_block(self):
         """OutputPlan.match returns (None, None) when specs list is empty."""
         plan = OutputPlan(specs=[])
-        assert plan.match(frozenset()) == (None, None)
-        assert plan.match(frozenset({'cell'})) == (None, None)
+        assert plan.match(frozenset(), frozenset()) == (None, None)
+        assert plan.match(frozenset({'cell'}), frozenset({'cell'})) == (None, None)
 
     def test_catchall_spec_matches_any_block(self):
         """A spec with matches=None is a catch-all."""
         spec = BlockSpec(matches=None)
         plan = OutputPlan(specs=[spec])
-        idx, matched = plan.match(frozenset({'cell'}))
+        idx, matched = plan.match(frozenset({'cell'}), frozenset({'cell'}))
         assert idx == 0
         assert matched is spec
 
     def test_predicate_spec_matches_correctly(self):
         """A spec with a predicate matches only blocks satisfying it."""
-        spec_phase = BlockSpec(matches=lambda a: 'pd_phase' in a)
+        spec_phase = BlockSpec(matches=lambda a, t: 'pd_phase' in a)
         spec_all = BlockSpec(matches=None)
         plan = OutputPlan(specs=[spec_phase, spec_all])
 
-        idx, _ = plan.match(frozenset({'pd_phase'}))
+        idx, _ = plan.match(frozenset({'pd_phase'}), frozenset({'pd_phase'}))
         assert idx == 0
 
-        idx, _ = plan.match(frozenset({'cell'}))
+        idx, _ = plan.match(frozenset({'cell'}), frozenset({'cell'}))
         assert idx == 1
 
-        idx, _ = plan.match(frozenset())
+        idx, _ = plan.match(frozenset(), frozenset())
         assert idx == 1
+
+
+# ---------------------------------------------------------------------------
+# _Matcher helpers (only / any_of / all_of / has / .excluding / | / &)
+# ---------------------------------------------------------------------------
+
+class TestMatchHelpers:
+    """Unit tests for the _Matcher helper functions and combinators."""
+
+    A = frozenset({'a', 'b'})
+    T = frozenset({'a', 'b', 'loop_x'})
+
+    # --- only ---
+
+    def test_only_exact_match(self):
+        assert only('a', 'b')(self.A, self.T) is True
+
+    def test_only_extra_anchor_no_match(self):
+        assert only('a')(self.A, self.T) is False
+
+    def test_only_empty_anchor(self):
+        assert only()(frozenset(), frozenset({'loop_x'})) is True
+
+    # --- any_of ---
+
+    def test_any_of_one_present(self):
+        assert any_of('a')(self.A, self.T) is True
+
+    def test_any_of_none_present(self):
+        assert any_of('z')(self.A, self.T) is False
+
+    def test_any_of_multiple_one_present(self):
+        assert any_of('a', 'z')(self.A, self.T) is True
+
+    # --- all_of ---
+
+    def test_all_of_all_present(self):
+        assert all_of('a', 'b')(self.A, self.T) is True
+
+    def test_all_of_missing_one(self):
+        assert all_of('a', 'z')(self.A, self.T) is False
+
+    # --- has ---
+
+    def test_has_anchor_category(self):
+        assert has('a')(self.A, self.T) is True
+
+    def test_has_loop_category(self):
+        assert has('loop_x')(self.A, self.T) is True
+
+    def test_has_absent_category(self):
+        assert has('z')(self.A, self.T) is False
+
+    def test_has_matches_loop_only_block(self):
+        """has() works on blocks with empty anchor frozenset."""
+        assert has('loop_x')(frozenset(), frozenset({'loop_x'})) is True
+
+    # --- excluding ---
+
+    def test_excluding_no_excluded_present(self):
+        assert any_of('a').excluding('z')(self.A, self.T) is True
+
+    def test_excluding_anchor_present(self):
+        """excluded name in anchor → no match."""
+        assert any_of('a').excluding('b')(self.A, self.T) is False
+
+    def test_excluding_tables_present(self):
+        """excluded name in tables (not anchor) → no match."""
+        assert any_of('a').excluding('loop_x')(self.A, self.T) is False
+
+    def test_excluding_multiple_args(self):
+        assert any_of('a').excluding('z', 'w')(self.A, self.T) is True
+
+    def test_excluding_chainable(self):
+        assert any_of('a').excluding('z').excluding('w')(self.A, self.T) is True
+        assert any_of('a').excluding('z').excluding('b')(self.A, self.T) is False
+
+    # --- | (or) ---
+
+    def test_or_first_matches(self):
+        assert (any_of('a') | any_of('z'))(self.A, self.T) is True
+
+    def test_or_second_matches(self):
+        assert (any_of('z') | any_of('a'))(self.A, self.T) is True
+
+    def test_or_neither_matches(self):
+        assert (any_of('z') | any_of('w'))(self.A, self.T) is False
+
+    # --- & (and) ---
+
+    def test_and_both_match(self):
+        assert (any_of('a') & any_of('b'))(self.A, self.T) is True
+
+    def test_and_one_misses(self):
+        assert (any_of('a') & any_of('z'))(self.A, self.T) is False
+
+    # --- shorthand: str ---
+
+    def test_str_shorthand_normalized(self):
+        """matches='a' is equivalent to any_of('a')."""
+        spec = BlockSpec(matches='a')
+        plan = OutputPlan(specs=[spec])
+        idx, _ = plan.match(frozenset({'a'}), frozenset({'a'}))
+        assert idx == 0
+        idx, _ = plan.match(frozenset({'b'}), frozenset({'b'}))
+        assert idx is None
+
+    # --- shorthand: set ---
+
+    def test_set_shorthand_normalized(self):
+        """matches={'a','b'} is equivalent to all_of('a','b')."""
+        spec = BlockSpec(matches={'a', 'b'})
+        plan = OutputPlan(specs=[spec])
+        idx, _ = plan.match(frozenset({'a', 'b'}), frozenset({'a', 'b'}))
+        assert idx == 0
+        idx, _ = plan.match(frozenset({'a'}), frozenset({'a'}))
+        assert idx is None
+
+    # --- attach_to / single_block mutual exclusion ---
+
+    def test_attach_to_single_block_raises(self):
+        """BlockSpec with both attach_to and single_block=True raises ValueError."""
+        import pytest
+        with pytest.raises(ValueError, match='mutually exclusive'):
+            BlockSpec(matches=None, single_block=True, attach_to=any_of('x'))
+
+
+# ---------------------------------------------------------------------------
+# attach_to — merging loop-only blocks into Set-anchored blocks
+# ---------------------------------------------------------------------------
+
+class TestAttachTo:
+    """attach_to merges a matched block's rows into its target block."""
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_HIERARCHY_DIC)
+
+    def test_attach_to_merges_loop_into_set_block(self, schema):
+        """A loop-only block with attach_to is merged into the Set-anchored block."""
+        cif_src = (
+            '#\\#CIF_2.0\ndata_x\n'
+            '_expt.id  E1\n_expt.title  hello\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p1  E1\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+        plan = OutputPlan(specs=[
+            BlockSpec(
+                matches=any_of('expt'),
+                category_order=['expt'],
+            ),
+            BlockSpec(
+                matches=has('peak'),
+                attach_to=any_of('expt'),
+            ),
+        ])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        # Should be one block with both expt and peak data
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        assert len(headers) == 1
+        assert '_expt.id' in result
+        assert '_peak.id' in result
+
+    def test_attach_to_no_target_emits_warning(self, schema):
+        """When no target matches attach_to, block is emitted standalone with warning."""
+        import warnings
+        cif_src = (
+            '#\\#CIF_2.0\ndata_x\n'
+            'loop_\n  _peak.id\n  _peak.expt_id\n  p1  E1\n'
+        )
+        conn = _ingest_src(cif_src, schema)
+        plan = OutputPlan(specs=[
+            BlockSpec(
+                matches=has('peak'),
+                attach_to=any_of('nonexistent'),
+            ),
+        ])
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert any('attach_to' in str(w.message) for w in caught if issubclass(w.category, UserWarning))
+        # block is still emitted standalone
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        assert len(headers) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -2011,7 +2195,7 @@ class TestOutputPlanMatches:
 
         # spec0 matches only blocks with expt.id containing 'X1'
         spec0 = BlockSpec(
-            matches=lambda a: 'expt' in a,
+            matches=lambda a, t: 'expt' in a,
             block_namer=namer,
         )
         plan = OutputPlan(specs=[spec0])
@@ -2033,7 +2217,7 @@ class TestOutputPlanMatches:
 
         # spec0 matches only 'A' block via block_namer returning a name
         spec0 = BlockSpec(
-            matches=lambda a: False,  # matches nothing
+            matches=lambda a, t: False,  # matches nothing
         )
         plan = OutputPlan(specs=[spec0])
         result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
@@ -2316,7 +2500,7 @@ class TestEmissionOrder:
         # spec0 catches only blocks with expt.id == 'B'; spec1 is catch-all.
         # B block → spec0 → emitted first.  A block → spec1 → emitted second.
         spec0 = BlockSpec(
-            matches=lambda a: False,  # no block matches spec0
+            matches=lambda a, t: False,  # no block matches spec0
         )
         spec1 = BlockSpec(matches=None, block_namer=lambda d: '_'.join(d.get('expt.id', ['x'])))
         plan = OutputPlan(specs=[spec0, spec1])
