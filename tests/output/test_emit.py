@@ -16,6 +16,7 @@ import pathlib
 
 import duckdb
 import pytest
+from pycifparse_core import CifFile
 
 from cifflow import (
     build,
@@ -28,7 +29,9 @@ from cifflow import (
 from cifflow.dictionary import DictionaryLoader
 from cifflow.dictionary.schema import SchemaSpec
 from cifflow.output import BlockSpec, OutputPlan, only, any_of, all_of, has
-from cifflow.types import CifVersion
+from cifflow.types import CifVersion, ParseError
+
+
 
 _DATA_DIR = pathlib.Path(__file__).parents[2] / 'data' / 'dictionaries'
 _CIF_DIR  = pathlib.Path(__file__).parents[2] / 'tests' / 'cif_files'
@@ -691,7 +694,7 @@ class TestAllBlocks:
         result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
         cif2, errors = build(result)
         assert not errors
-        expt_blocks = [n for n in cif2.blocks if '_expt.id' in cif2[n]]
+        expt_blocks = [n for n in cif2.blocks if n.startswith('expt_')]
         assert len(expt_blocks) == 2
 
     def test_set_table_merged_key_one_block(self, grouped_schema):
@@ -700,18 +703,18 @@ class TestAllBlocks:
         result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
         cif2, errors = build(result)
         assert not errors
-        expt_blocks = [n for n in cif2.blocks if '_expt.id' in cif2[n]]
+        expt_blocks = [n for n in cif2.blocks if n.startswith('expt_')]
         assert len(expt_blocks) == 1
 
-    def test_loop_table_in_own_block(self, grouped_schema):
-        """Loop table (no Set FK in PK) goes into its own single block."""
+    def test_loop_table_one_block_per_set_key(self, grouped_schema):
+        """Loop table with Set FK in composite PK → one block per Set-key value."""
         conn = _ingest_src(_GROUPED_SEPARATE_CIF, grouped_schema)
         result = emit(conn, schema=grouped_schema, mode=EmitMode.ALL_BLOCKS)
         cif2, errors = build(result)
         assert not errors
         peak_blocks = [n for n in cif2.blocks if '_peak.intensity' in cif2[n]]
-        assert len(peak_blocks) == 1
-        assert len(cif2[peak_blocks[0]]['_peak.intensity']) == 2
+        assert len(peak_blocks) == 2
+        assert all(len(cif2[b]['_peak.intensity']) == 1 for b in peak_blocks)
 
     def test_block_name_derived_from_table_name(self, grouped_schema):
         """Block names start with the table name."""
@@ -990,7 +993,10 @@ save_PEAK
   _definition.scope     Category
   _definition.class     Loop
   _name.category_id     peak
-  _category_key.name    '_peak.id'
+  loop_
+    _category_key.name
+    '_peak.expt_id'
+    '_peak.id'
 save_
 
 save_peak.id
@@ -1059,9 +1065,8 @@ _GROUPED_SEPARATE_CIF = (
 
 # Schema for composite-key test.
 # SCAN (Loop, no FK to any Set — pure Loop chain)
-# RESULT (Loop, composite FK: scan_id → SCAN (Loop) AND expt_id → EXPT (Set))
-# The BFS anchor search must find EXPT as RESULT's Set anchor even though the
-# first FK target (SCAN) has no Set ancestor.
+# RESULT (Loop, composite PK key: expt_id → EXPT (Set) AND result.id (local))
+# scan_id is a non-PK reference FK to SCAN.
 _COMPOSITE_DIC = """\
 #\\#CIF_2.0
 data_composite_dic
@@ -1109,7 +1114,10 @@ save_RESULT
   _definition.scope     Category
   _definition.class     Loop
   _name.category_id     result
-  _category_key.name    '_result.id'
+  loop_
+    _category_key.name
+    '_result.expt_id'
+    '_result.id'
 save_
 
 save_result.id
@@ -1159,9 +1167,8 @@ save_result.value
 save_
 """
 
-# Two blocks share the same expt_id; RESULT rows have FK to both SCAN (Loop,
-# no Set ancestor) and EXPT (Set).  GROUPED must anchor RESULT to EXPT and
-# merge the two blocks into one.
+# Two blocks share the same expt_id; RESULT has expt_id in its composite PK
+# so EXPT is its Set anchor.  GROUPED merges the two blocks into one.
 _COMPOSITE_MERGE_CIF = (
     '#\\#CIF_2.0\n'
     'data_run1\n'
@@ -1209,12 +1216,18 @@ class TestGroupedMode:
         result = emit(conn, schema, mode=EmitMode.GROUPED)
         cif2, errors = build(result)
         assert not errors
-        # Each block has the expt.id value matching its peaks
+        # Each block has exactly one peak; _peak.expt_id is suppressed in GROUPED
+        # mode (implicit from the co-emitted _expt.id), so verify routing via _peak.id.
+        expt_to_peak: dict[str, str] = {}
         for block_name in cif2.blocks:
             block = cif2[block_name]
             expt_id = str(block['_expt.id'][0])
-            peak_expt_ids = [str(v) for v in block['_peak.expt_id']]
-            assert all(eid == expt_id for eid in peak_expt_ids)
+            peak_ids = [str(v) for v in block['_peak.id']]
+            assert len(peak_ids) == 1, f"Expected 1 peak in block {block_name}, got {peak_ids}"
+            expt_to_peak[expt_id] = peak_ids[0]
+        # E1 block has peak p1, E2 block has peak p2
+        assert expt_to_peak.get('X1') == 'p1'
+        assert expt_to_peak.get('X2') == 'p2'
 
 
 class TestGroupedCompositeKey:
@@ -1811,9 +1824,13 @@ def _load_schema(dic_file: pathlib.Path) -> SchemaSpec:
     d = DictionaryLoader(resolver=resolver).load(source, base_uri=dic_file.name)
     return generate_schema(d)
 
+def _parse_file(cif_path: pathlib.Path) -> tuple[CifFile, list[ParseError]]:
+    cif, errors = build(cif_path.read_text(encoding='utf-8'))
+    assert not errors, f'Parse errors in {cif_path.name}: {errors}'
+    return cif, errors
 
 def _ingest_file(cif_path: pathlib.Path, schema: SchemaSpec) -> duckdb.DuckDBPyConnection:
-    cif, errors = build(cif_path.read_text(encoding='utf-8'))
+    cif, errors = _parse_file(cif_path)
     assert not errors, f'Parse errors in {cif_path.name}: {errors}'
     conn, _ = ingest(cif, None, schema)
     return conn
@@ -1843,6 +1860,18 @@ def multi_one_conn(pow_schema):
 def powder_loop_conn(pow_schema):
     return _ingest_file(_CIF_DIR / 'cifflow' / 'powder_loop.cif', pow_schema)
 
+
+@pytest.fixture(scope='module')
+def second_short_decimated_conn(pow_schema):
+    return _ingest_file(_CIF_DIR / 'second_short_decimated.cif', pow_schema)
+
+@pytest.fixture(scope='module')
+def ssd_grouped_conn(pow_schema):
+    return _ingest_file(_CIF_DIR / 'ssd_grouped.cif', pow_schema)
+
+@pytest.fixture(scope='module')
+def ssd_grouped_cif():
+    return _parse_file(_CIF_DIR / 'ssd_grouped.cif')
 
 @pytest.mark.slow
 class TestEmitRoundTripIntegration:
@@ -1915,6 +1944,22 @@ class TestEmitRoundTripIntegration:
         """diffractogram_id FK is suppressed when pd_diffractogram scalar is co-emitted."""
         cif_text = emit(powder_loop_conn, pow_schema, mode=EmitMode.ORIGINAL)
         assert '_pd_data.diffractogram_id' not in cif_text
+
+    def test_second_short_decimated_original(self, second_short_decimated_conn, pow_schema):
+        """second_short_decimated.cif round-trips faithfully in ORIGINAL mode."""
+        conn2 = _emit_and_reingest(second_short_decimated_conn, pow_schema, EmitMode.ORIGINAL)
+        _assert_same_data(second_short_decimated_conn, conn2, pow_schema)
+
+    def test_second_short_decimated_grouped(self, second_short_decimated_conn, pow_schema):
+        """second_short_decimated.cif round-trips faithfully in GROUPED mode."""
+        conn2 = _emit_and_reingest(second_short_decimated_conn, pow_schema, EmitMode.GROUPED)
+        _assert_same_data(second_short_decimated_conn, conn2, pow_schema)
+
+    def test_second_short_decimated_one_block(self, second_short_decimated_conn, pow_schema):
+        """second_short_decimated.cif round-trips faithfully in ONE_BLOCK mode."""
+        conn2 = _emit_and_reingest(second_short_decimated_conn, pow_schema, EmitMode.ONE_BLOCK)
+        _assert_same_data(second_short_decimated_conn, conn2, pow_schema,
+                          exclude_tables={'audit', 'audit_conform'})
 
 
 _SHARED_DATASET_CIF = """\
@@ -2057,7 +2102,10 @@ save_PEAK
   _definition.scope     Category
   _definition.class     Loop
   _name.category_id     peak
-  _category_key.name    '_peak.id'
+  loop_
+    _category_key.name
+    '_peak.expt_id'
+    '_peak.id'
 save_
 
 save_peak.id
@@ -3138,3 +3186,382 @@ class TestOriginalModeFallbackLoop:
                         unknown_in_loop = True
                     j += 1
         assert unknown_in_loop, "_unknown tags not found inside a loop_ header"
+
+
+# ---------------------------------------------------------------------------
+# GROUPED structure tests — second_short_decimated.cif
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+class TestGroupedStructureSecondShortDecimated:
+    """Structural and plan-matching tests for second_short_decimated.cif in GROUPED mode.
+
+    second_short_decimated.cif has 9 source blocks.  After GROUPED emit each
+    output block gets an anchor_frozenset reflecting all keyed Set-class tables
+    that owned rows in the contributing source block(s):
+
+      - data_publication / data_instrument_detector → pure-loop (no keyed Set rows)
+      - data_wavelength → {diffrn_radiation, ...}
+      - data_instrument → {pd_instr}
+      - data_anatase/rutile_10000_degaussa_raw_01 (bridge) → {pd_phase, pd_diffractogram, ...}
+      - data_anatase/rutile_10000 (crystal structure) → {pd_phase, model, structure, ...}
+      - data_degaussa_raw_01 → {pd_diffractogram, diffrn, ...}
+
+    Multi-anchor frozensets allow plan predicates such as
+    all_of('pd_diffractogram', 'pd_phase') to match bridge blocks correctly.
+    """
+
+    @pytest.fixture(scope='class')
+    def grouped_cif(self, second_short_decimated_conn, pow_schema):
+        result = emit(second_short_decimated_conn, pow_schema, mode=EmitMode.GROUPED)
+        cif2, errors = build(result)
+        assert not errors
+        return cif2
+
+    # ── basic validity ────────────────────────────────────────────────────────
+
+    def test_no_parse_errors(self, second_short_decimated_conn, pow_schema):
+        result = emit(second_short_decimated_conn, pow_schema, mode=EmitMode.GROUPED)
+        _, errors = build(result)
+        assert not errors
+
+    # ── phase blocks ─────────────────────────────────────────────────────────
+
+    def test_four_blocks_have_pd_phase_id(self, grouped_cif):
+        """Four blocks contain _pd_phase.id: 2 bridge (phase+diffractogram) and 2 structure."""
+        phase_blocks = [b for b in grouped_cif.blocks if '_pd_phase.id' in grouped_cif[b]]
+        assert len(phase_blocks) == 4
+
+    def test_phase_block_ids(self, grouped_cif):
+        """Anatase_10000 and Rutile_10000 each appear in 2 blocks (bridge + structure)."""
+        ids = sorted(
+            str(grouped_cif[b]['_pd_phase.id'][0])
+            for b in grouped_cif.blocks
+            if '_pd_phase.id' in grouped_cif[b]
+        )
+        assert ids == ['Anatase_10000', 'Anatase_10000', 'Rutile_10000', 'Rutile_10000']
+
+    def test_structure_blocks_have_cell_and_atom_data(self, grouped_cif):
+        """Crystal-structure blocks (anchored to structure) carry cell and atom-site data."""
+        struct_blocks = [b for b in grouped_cif.blocks if '_structure.id' in grouped_cif[b]]
+        assert len(struct_blocks) >= 2, "Expected at least 2 structure blocks"
+        for b in struct_blocks:
+            blk = grouped_cif[b]
+            assert '_cell.length_a' in blk, f"Structure block '{b}' missing _cell.length_a"
+            assert '_atom_site.label' in blk, f"Structure block '{b}' missing _atom_site.label"
+
+    # ── diffractogram block ───────────────────────────────────────────────────
+
+    def test_one_pure_diffractogram_block(self, grouped_cif):
+        """Exactly one block carries _pd_diffractogram.id without _pd_phase.id.
+        Blocks with both IDs (bridge blocks) are counted separately."""
+        pure_diff = [
+            b for b in grouped_cif.blocks
+            if '_pd_diffractogram.id' in grouped_cif[b] and '_pd_phase.id' not in grouped_cif[b]
+        ]
+        assert len(pure_diff) == 1
+
+    def test_diffractogram_block_has_measurement(self, grouped_cif):
+        """Pure diffractogram block contains scan-method metadata."""
+        pure_diff = [
+            b for b in grouped_cif.blocks
+            if '_pd_diffractogram.id' in grouped_cif[b] and '_pd_phase.id' not in grouped_cif[b]
+        ]
+        assert '_pd_meas.scan_method' in grouped_cif[pure_diff[0]]
+
+    def test_phase_mass_in_diffractogram_block(self, grouped_cif):
+        """Both phase-mass rows appear in diffractogram-anchored blocks in total."""
+        diff_blocks = [b for b in grouped_cif.blocks if '_pd_diffractogram.id' in grouped_cif[b]]
+        all_percents: list[str] = []
+        for b in diff_blocks:
+            blk = grouped_cif[b]
+            if '_pd_phase_mass.percent' in blk:
+                all_percents.extend(str(v) for v in blk['_pd_phase_mass.percent'])
+        assert sorted(all_percents) == ['13.4', '86.6']
+
+    # ── block naming ─────────────────────────────────────────────────────────
+
+    def test_block_names_not_too_long(self, second_short_decimated_conn, pow_schema):
+        """GROUPED block names stay short — child-Set PKs (all-FK domain keys) are excluded."""
+        result = emit(second_short_decimated_conn, pow_schema, mode=EmitMode.GROUPED)
+        block_names = [l[5:] for l in result.splitlines() if l.startswith('data_')]
+        long = [n for n in block_names if len(n) > 80]
+        assert not long, f"Block name(s) too long: {long}"
+
+    # ── plan spec matching ────────────────────────────────────────────────────
+
+    def test_all_of_pd_phase_and_model_routes_structure_blocks(
+        self, second_short_decimated_conn, pow_schema
+    ):
+        """all_of('pd_phase', 'model') routes exactly the 2 crystal-structure blocks.
+
+        Structure blocks have both pd_phase and model in their anchor_frozenset;
+        bridge blocks (pd_phase + pd_diffractogram, no model) are not matched.
+        """
+        plan = OutputPlan(specs=[
+            BlockSpec(matches=all_of('pd_phase', 'model')),
+            BlockSpec(matches=None),
+        ])
+        result = emit(second_short_decimated_conn, pow_schema, mode=EmitMode.GROUPED, plan=plan)
+        cif2, errors = build(result)
+        assert not errors
+
+        struct_blocks = [
+            b for b in cif2.blocks
+            if '_pd_phase.id' in cif2[b] and '_model.id' in cif2[b]
+        ]
+        assert len(struct_blocks) == 2
+        for b in struct_blocks:
+            assert '_pd_diffractogram.id' not in cif2[b]
+
+    def test_all_of_diffractogram_and_diffrn_routes_pure_diffractogram_block(
+        self, second_short_decimated_conn, pow_schema
+    ):
+        """all_of('pd_diffractogram', 'diffrn') matches the single pure diffractogram block.
+
+        The pure diffractogram block (data_degaussa_raw_01) has both pd_diffractogram
+        and diffrn as keyed Set anchors.  Bridge blocks only have pd_diffractogram +
+        pd_phase, so they are not matched by this predicate.
+        """
+        plan = OutputPlan(specs=[
+            BlockSpec(matches=all_of('pd_diffractogram', 'diffrn')),
+            BlockSpec(matches=None),
+        ])
+        result = emit(second_short_decimated_conn, pow_schema, mode=EmitMode.GROUPED, plan=plan)
+        cif2, errors = build(result)
+        assert not errors
+
+        pure_diff = [
+            b for b in cif2.blocks
+            if '_pd_diffractogram.id' in cif2[b] and '_pd_phase.id' not in cif2[b]
+        ]
+        assert len(pure_diff) == 1
+        assert '_structure.id' not in cif2[pure_diff[0]]
+
+    def test_all_of_diffractogram_and_phase_matches_bridge_blocks(
+        self, second_short_decimated_conn, pow_schema
+    ):
+        """all_of('pd_diffractogram', 'pd_phase') matches exactly the 2 bridge blocks.
+
+        Bridge source blocks (data_anatase/rutile_10000_degaussa_raw_01) carry
+        both pd_phase and pd_diffractogram as keyed Set anchors, giving them
+        anchor_frozenset that satisfies all_of('pd_diffractogram', 'pd_phase').
+        """
+        matched_names: list[str] = []
+
+        def namer(d):
+            matched_names.append(str(d))
+            return '_'.join(v for vals in d.values() for v in vals)
+
+        plan = OutputPlan(specs=[
+            BlockSpec(matches=all_of('pd_diffractogram', 'pd_phase'), block_namer=namer),
+            BlockSpec(matches=None),
+        ])
+        emit(second_short_decimated_conn, pow_schema, mode=EmitMode.GROUPED, plan=plan)
+        assert len(matched_names) == 2, f"Expected 2 bridge blocks; got: {matched_names}"
+
+
+# ---------------------------------------------------------------------------
+# GROUPED plan emit — ssd_grouped.cif
+# ---------------------------------------------------------------------------
+
+
+class TestSsdGroupedInput:
+    """GROUPED emit with an explicit OutputPlan applied to second_short_decimated.cif.
+
+    The plan uses block_namer to assign stable, predictable block names so that
+    per-block assertions are not fragile against default name-construction changes.
+
+    Expected named output blocks
+    ----------------------------
+    bridge_Anatase_10000, bridge_Rutile_10000
+        Matched by all_of('pd_phase', 'pd_diffractogram').  These are the source
+        blocks that carry both a phase identity and a diffractogram identity.
+    diffractogram
+        Matched by all_of('pd_diffractogram', 'diffrn').  The single source block
+        that owns the diffractogram + diffrn + pd_instr rows.
+    structure_Anatase_10000, structure_Rutile_10000
+        Matched by all_of('pd_phase', 'model').  Crystal-structure source blocks
+        (cell parameters, atom sites, space group, etc.).
+    Catch-all blocks
+        Instrument, wavelength, publication, detector — auto-named by the emitter.
+    """
+
+    # _SSD_GROUPED_PLAN = OutputPlan(specs=[
+    #     BlockSpec(
+    #         matches=all_of('pd_phase', 'pd_diffractogram'),
+    #         block_namer=lambda d: 'bridge_' + next(
+    #             v for k, vs in sorted(d.items()) if 'pd_phase' in k for v in vs
+    #         ).replace(' ', '_'),
+    #     ),
+    #     BlockSpec(
+    #         matches=all_of('pd_diffractogram', 'diffrn'),
+    #         block_namer=lambda d: 'diffractogram',
+    #     ),
+    #     BlockSpec(
+    #         matches=all_of('pd_phase', 'model'),
+    #         block_namer=lambda d: 'structure_' + next(
+    #             v for k, vs in sorted(d.items()) if 'pd_phase' in k for v in vs
+    #         ).replace(' ', '_'),
+    #     ),
+    #     BlockSpec(matches=None),
+    # ])
+
+    @pytest.fixture(scope='class')
+    def _SSD_GROUPED_PLAN(self, pow_schema):
+        return OutputPlan(
+                            specs=[
+                                BlockSpec(
+                                    matches=has(*pow_schema.descendants('publication')),
+                                    category_order=[],  # other categories follow alphabetically
+                                ),
+                                BlockSpec(
+                                    matches=only("diffrn_radiation"),
+                                    category_order=[],  # other categories follow alphabetically
+                                ),
+                                BlockSpec(
+                                    matches=only("pd_instr"),
+                                    category_order=[],  # other categories follow alphabetically
+                                ),
+                                BlockSpec(
+                                    matches=has("pd_instr_detector"),
+                                    category_order=[],  # other categories follow alphabetically
+                                ),
+                                BlockSpec(
+                                    matches=only("diffrn"),
+                                    category_order=[],  # other categories follow alphabetically
+                                ),
+
+                                BlockSpec(
+                                    matches=all_of('pd_diffractogram', "pd_phase"),
+                                    category_order=[],
+                                ),
+                                BlockSpec(
+                                    matches=only("structure"),
+                                    category_order=[],  # other categories follow alphabetically
+                                ),
+                                BlockSpec(
+                                    matches=only("pd_phase"),
+                                    category_order=[],
+                                ),
+                                BlockSpec(
+                                    matches=only("model"),
+                                    category_order=[],
+                                ),
+                                BlockSpec(
+                                    matches=only("space_group"),
+                                    category_order=[],
+                                ),
+                                BlockSpec(
+                                    matches=only("pd_diffractogram"),
+                                    category_order=[
+                                        "pd_diffractogram",
+                                        ['pd_data', 'pd_meas', 'pd_proc', 'pd_calc'],  # merge group
+                                    ],
+                                ),
+                                BlockSpec(
+                                    matches=None,  # catch-all: anything not matched above, alphabetical order
+                                ),
+                            ],
+                        )
+
+    @pytest.fixture(scope='class')
+    def grouped_text(self, ssd_grouped_conn, pow_schema, _SSD_GROUPED_PLAN):
+        return emit(
+            ssd_grouped_conn,
+            pow_schema,
+            mode=EmitMode.GROUPED,
+            plan=_SSD_GROUPED_PLAN,
+        )
+
+    @pytest.fixture(scope='class')
+    def grouped_cif(self, grouped_text):
+        cif2, errors = build(grouped_text)
+        assert not errors
+        return cif2
+
+    # ── smoke ─────────────────────────────────────────────────────────────────
+
+    def test_no_parse_errors(self, grouped_text):
+        print(grouped_text)
+        _, errors = build(grouped_text)
+        assert not errors
+
+    def test_num_block(self, grouped_cif):
+        num_tags = [7, 11, 8, 5, 3, 15, 20, 28, 28, 10, 10, 17, 17, 6, 6, 18, 2]
+        cif = grouped_cif
+        assert len(cif.blocks) == len(num_tags), f"Wrong number of blocks; expected {len(num_tags)}, got {len(cif.blocks)}."
+
+    def test_tags_per_block(self, grouped_cif):
+        num_tags = [7, 11, 8, 5, 3, 15, 20, 28, 28, 10, 10, 17, 17, 6, 6, 18, 2]
+        cif = grouped_cif
+        errors = []
+
+        for i, block_name in enumerate(cif.blocks):
+            block = cif[block_name]
+            if len(block.tags) != num_tags[i]:
+                errors.append(f"Wrong number of tags in {block_name}; expected {num_tags[i]}, got {len(block.tags)}.")
+        assert not errors, errors
+
+
+    def test_tags_in_block(self, grouped_cif):
+        tags_startswith = [("_audit_dataset.id", "_audit_"),
+                           ("_audit_dataset.id", "_diffrn_"),
+                           ("_audit_dataset.id", "_pd_instr."),
+                           ("_audit_dataset.id", "_pd_instr"),
+                           ("_audit_dataset.id", "_diffrn."),
+                           ("_audit_dataset.id", "_pd_phase.id", "_pd_diffractogram.id", "_pd_phase_mass.", "_refln.", "_pd_calc_component."),
+                           ("_audit_dataset.id", "_pd_phase.id", "_pd_diffractogram.id", "_pd_phase_mass.", "_refln.", "_pd_calc_component.", "_pd_pref_orient"),
+                           ("_audit_dataset.id", "_structure.", "_cell", "_atom_site"),
+                           ("_audit_dataset.id", "_structure.", "_cell", "_atom_site"),
+                           ("_audit_dataset.id", "_pd_phase.", "_chemical_formula."),
+                           ("_audit_dataset.id", "_pd_phase.", "_chemical_formula."),
+                           ("_audit_dataset.id", "_model.", "_geom_"),
+                           ("_audit_dataset.id", "_model.", "_geom_"),
+                           ("_audit_dataset.id", "_space_group"),
+                           ("_audit_dataset.id", "_space_group"),
+                           ("_audit_dataset.id", "_pd_diffractogram.", "_pd_meas.", "_pd_calc", "_pd_proc", "_pd_data."),
+                           ("_audit_dataset.id", "_atom_type.symbol"),
+                           ]
+
+        cif = grouped_cif
+        errors = []
+
+        for i, block_name in enumerate(cif.blocks):
+            block = cif[block_name]
+            for tag in block.tags:
+                if not tag.startswith(tags_startswith[i]):
+                    errors.append(f"Found wrong tag: {tag} in data_{block_name}.")
+        assert not errors, errors
+
+    def test_fk_linked_pk_tags(self, grouped_cif):
+        #they shouldn't both be present in the same block
+        pkfk_pairs = {"_diffrn_radiation.id": set("_diffrn_radiation_wavelength.radiation_id"),
+                      "_pd_diffractogram.id": {"_pd_calc_component.diffractogram_id", "_pd_phase_mass.diffractogram_id",
+                                               "_refln.diffractogram_id",
+                                               "_pd_pref_orient_march_dollase.diffractogram_id",
+                                               "_pd_data.diffractogram_id"},
+                      "_model.id": {"_geom_angle.model_id", "_geom_bond.model_id"},
+                      "_space_group.id": set("_space_group_symop.space_group_id"),
+                      }
+        cif = grouped_cif
+        errors = []
+
+        for bn in cif.blocks:
+            block = cif[bn]
+            for pk, fks in pkfk_pairs.items():
+                if pk in block:
+                    if not fks.isdisjoint(block.tags):
+                        errors.append(f"An FK ({fks}) found in {block.tags} in block {bn}.")
+        assert not errors, errors
+
+
+    def test_audit_dataset_tags(self, grouped_cif):
+        cif = grouped_cif
+        for bn in cif.blocks:
+            block = cif[bn]
+            assert "_audit_dataset.id" in block.tags, f"_audit_dataset.id not found in {bn}."
+            audit = block["_audit_dataset.id"][0]
+            assert audit == "3eb54f2e-5c48-4748-89f2-6d417efd205c", f"Incorrect _audit_dataset.id value: {audit}"
+
+

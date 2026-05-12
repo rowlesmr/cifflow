@@ -1,5 +1,33 @@
 #\#CIF_2.0
 
+data_publication
+loop_
+_audit_dataset.id	3eb54f2e-5c48-4748-89f2-6d417efd205c
+
+loop_
+_audit_author.id
+_audit_author.address
+_audit_author.email
+_audit_author.name
+a "14 Greenfield Avenue, Subiaco WA 6008, Australia" olivia.turner@examplemail.com "Olivia Turner"
+b "52 Riverbend Drive, East Perth WA 6004, Australia" marcus.chen@examplemail.com "Marcus Chen"
+c "9 Coral Street, Fremantle WA 6160, Australia" sophie.williams@examplemail.com "Sophie Williams"
+d "27 Banksia Crescent, Joondalup WA 6027, Australia" daniel.hughes@examplemail.com "Daniel Hughes"
+
+loop_
+_audit_author_role.id
+_audit_author_role.role
+a  design
+b  design
+c  design
+d  design
+a  synthesis
+a  preparation
+a  characterisation
+a  measurement
+b  analysis
+c  software
+a  submission
 
 #######  Begin wavelength information  #######
 data_degaussa_raw_01_wavelength
