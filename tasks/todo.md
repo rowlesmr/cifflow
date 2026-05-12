@@ -193,3 +193,7 @@ Run tests: `.venv/Scripts/python -m pytest -x -q`
 
 - **`CifBlock`/`CifSaveFrame` inheritance refactor** — mild LSP violation; mechanical change
   when either class is passed polymorphically.
+
+- **`_sanitize_block_name` correctness** (`emit.py:376`) — current implementation replaces
+  all non-`[a-zA-Z0-9_]` characters with `_`, which is not strictly correct per CIF block
+  name rules. Revisit against the CIF spec and tighten.

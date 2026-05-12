@@ -27,7 +27,7 @@ from cifflow.dictionary import (
     visualise_schema,
     visualise_schema_html,
 )
-from cifflow.output import emit, quote, EmitMode, OutputPlan, BlockSpec, only, any_of, all_of, has
+from cifflow.output import emit, quote, EmitMode, OutputPlan, BlockSpec, only, any_of, all_of, has, namer
 from cifflow.fidelity import check_fidelity, FidelityReport, FidelityMismatch
 from cifflow.validation import validate, validate_database, ValidationReport, ValidationIssue, DbValidationResult
 from cifflow.inspect import (
@@ -62,7 +62,7 @@ __all__ = [
     'save_dictionary', 'load_dictionary',
     'visualise_schema', 'visualise_schema_html',
     # Output
-    'emit', 'quote', 'EmitMode', 'OutputPlan', 'BlockSpec', 'only', 'any_of', 'all_of', 'has',
+    'emit', 'quote', 'EmitMode', 'OutputPlan', 'BlockSpec', 'only', 'any_of', 'all_of', 'has', 'namer',
     # Fidelity
     'check_fidelity', 'FidelityReport', 'FidelityMismatch',
     # Validation
