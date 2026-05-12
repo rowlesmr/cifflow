@@ -116,6 +116,57 @@ def has(*categories: str) -> _Matcher:
 
 
 # ---------------------------------------------------------------------------
+# block_namer helper
+# ---------------------------------------------------------------------------
+
+def namer(*keys: str, prefix: str = '', suffix: str = '', sep: str = '_', fallback: str = '?') -> Callable[[dict[str, list[str]]], str]:
+    """
+    Return a block_namer that builds a name from anchor key values.
+
+    Parameters
+    ----------
+    *keys : str
+        Anchor key identifiers in ``'{category}.{object_id}'`` form.  The
+        first value of each key is extracted from the ``kd`` dict passed by
+        the emitter.  Keys absent from ``kd`` contribute *fallback*.
+
+          For example, a block anchored to diffrn with id='D1' would receive: {'diffrn.id': ['D1']}
+          A bridge block with both pd_phase and pd_diffractogram: {'pd_diffractogram.id': ['D1'], 'pd_phase.id': ['Al2O3']}
+    prefix : str, optional
+        String prepended to the result.
+    suffix : str, optional
+        String appended to the result.
+    sep : str, optional
+        Separator inserted between the extracted values.  Default ``'_'``.
+    fallback : str, optional
+        Value used when a key is absent from ``kd``.  Default ``'?'``.
+
+    Returns
+    -------
+    Callable[[dict[str, list[str]]], str]
+        A ``block_namer`` compatible with :class:`BlockSpec` and
+        :class:`OutputPlan`.
+
+    Examples
+    --------
+    Single key with prefix:
+
+    >>> plan = OutputPlan(specs=[BlockSpec(matches='diffrn',
+    ...                                   block_namer=namer('diffrn.id', prefix='structure_'))])
+    'structure_
+
+    Multi-key bridge block:
+
+    >>> namer('pd_phase.id', 'pd_diffractogram.id')({'pd_phase.id': ['Al2O3'], 'pd_diffractogram.id': ['D1']})
+    'Al2O3_D1'
+    """
+    def _fn(kd: dict[str, list[str]]) -> str:
+        parts = [kd.get(k, [fallback])[0] for k in keys]
+        return prefix + sep.join(parts) + suffix
+    return _fn
+
+
+# ---------------------------------------------------------------------------
 # Type alias
 # ---------------------------------------------------------------------------
 
