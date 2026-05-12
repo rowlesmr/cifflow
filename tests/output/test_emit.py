@@ -16,7 +16,7 @@ import pathlib
 
 import duckdb
 import pytest
-from pycifparse_core import CifFile
+from cifflow.cifmodel.model import CifFile
 
 from cifflow import (
     build,
