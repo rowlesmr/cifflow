@@ -929,4 +929,67 @@ class TestPropagationLinks:
         assert col_def.nullable is True
 
 
+# ---------------------------------------------------------------------------
+# SchemaSpec.descendants()
+# ---------------------------------------------------------------------------
+
+class TestDescendants:
+    """Tests for SchemaSpec.descendants(root)."""
+
+    @pytest.fixture
+    def schema(self):
+        # Category hierarchy:
+        #   root (Set)
+        #     child_a (Loop)  — child_a.category_id == 'root'
+        #       grandchild (Loop) — grandchild.category_id == 'child_a'
+        #     child_b (Loop)  — child_b.category_id == 'root'
+        #   unrelated (Set)
+        cats = [
+            _cat('root',       'root',    'Set',  ['_root.id']),
+            _cat('child_a',    'root',    'Loop', ['_child_a.id']),
+            _cat('grandchild', 'child_a', 'Loop', ['_grandchild.id']),
+            _cat('child_b',    'root',    'Loop', ['_child_b.id']),
+            _cat('unrelated',  'unrelated', 'Set', ['_unrelated.id']),
+        ]
+        items = [
+            _item('_root.id',       'root',       'id',  type_purpose='Key', type_contents='Text'),
+            _item('_child_a.id',    'child_a',    'id',  type_purpose='Key', type_contents='Text'),
+            _item('_grandchild.id', 'grandchild', 'id',  type_purpose='Key', type_contents='Text'),
+            _item('_child_b.id',    'child_b',    'id',  type_purpose='Key', type_contents='Text'),
+            _item('_unrelated.id',  'unrelated',  'id',  type_purpose='Key', type_contents='Text'),
+        ]
+        return generate_schema(_make_dict(cats, items))
+
+    def test_root_includes_itself(self, schema):
+        result = schema.descendants('root')
+        assert 'root' in result
+
+    def test_root_includes_direct_children(self, schema):
+        result = schema.descendants('root')
+        assert 'child_a' in result
+        assert 'child_b' in result
+
+    def test_root_includes_grandchildren(self, schema):
+        result = schema.descendants('root')
+        assert 'grandchild' in result
+
+    def test_root_excludes_unrelated(self, schema):
+        result = schema.descendants('root')
+        assert 'unrelated' not in result
+
+    def test_child_excludes_parent(self, schema):
+        result = schema.descendants('child_a')
+        assert 'root' not in result
+        assert 'child_a' in result
+        assert 'grandchild' in result
+        assert 'child_b' not in result
+
+    def test_leaf_returns_singleton(self, schema):
+        result = schema.descendants('grandchild')
+        assert result == frozenset({'grandchild'})
+
+    def test_unknown_root_returns_empty(self, schema):
+        assert schema.descendants('does_not_exist') == frozenset()
+
+
 

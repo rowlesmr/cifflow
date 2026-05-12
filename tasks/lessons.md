@@ -6,7 +6,7 @@
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64
-- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124
+- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
@@ -1197,6 +1197,52 @@
 
   ---
 
+  ## Lesson 128 — GROUPED mode: fingerprint approach replaces FK-graph BFS (2026-05-06)
+
+  **Context:** `_collect_grouped` in `emit.py`; fundamental GROUPED mode architecture.
+
+  **Problem:** The original FK-graph BFS approach assigned each source block a single "anchor" Set category via FK-chain walking. Bridge blocks containing BOTH `pd_phase.id` AND `pd_diffractogram.id` had their dual Set identity destroyed — only one anchor was found, so `all_of('pd_diffractogram', 'pd_phase')` matched nothing.
+
+  **Fix:** Replaced ~200 lines of FK-graph logic with fingerprint-based grouping (~100 lines). Each `_cifflow_block_id` gets a fingerprint: `frozenset` of `(table_name, sorted_pk_value_tuples)` for every keyed Set-class table with rows (winner or non-winner). Blocks with identical fingerprints are merged. `anchor_frozenset` is the frozenset of table names in the fingerprint.
+
+  **Rule:** GROUPED block identity is determined by Set-category fingerprint, not FK-graph topology. Any block-matching predicate (`only`, `all_of`, `any_of`, `has`) operates on the full `anchor_frozenset`, which reflects all Set identities a source block participates in — including non-winner contributions recorded in `_tag_presence`.
+
+  ---
+
+  ## Lesson 127 — GROUPED Set data collection must use `_fetch_rows_for_block`, not `rows_for_block` (2026-05-06)
+
+  **Context:** `_collect_grouped` in `emit.py`; Set-category data collection.
+
+  **Mistake:** `cache.rows_for_block(t, bid)` returns only winner rows. Non-winner contributions to shared Set rows (columns contributed by a non-owning block) are silently omitted.
+
+  **Fix:** Use `_fetch_rows_for_block(conn, bid, t, td, cache=cache)` for Set categories. It merges winner rows with masked non-winner contributions from `_tag_presence`, then deduplicates by PK (prefer first/winner occurrence across merged block_ids).
+
+  **Rule:** In GROUPED mode, Set category rows must be fetched via `_fetch_rows_for_block`. Loop categories can use `cache.rows_for_block` — they have no winner/non-winner split.
+
+  ---
+
+  ## Lesson 126 — GROUPED block naming must exclude child-Set tables (2026-05-06)
+
+  **Context:** `anchor_kd` construction in `_collect_grouped` in `emit.py`.
+
+  **Problem:** Set-class tables whose domain PKs are ALL FK columns pointing to other anchor tables in the fingerprint (e.g. `pd_pref_orient` with composite PK `[diffractogram_id, phase_id]`, `cell` with PK `structure_id`) add no independent naming information. Including them causes name inflation with redundant repeated IDs.
+
+  **Rule:** When building `anchor_kd` for block naming, compute `anchor_fk_cols` (FK source columns pointing within the fingerprint anchors), then skip any Set-class table where `all(pk in anchor_fk_cols for pk in domain_pks)`. This is a "child-Set" table — its identity is fully expressed by its parent anchors.
+
+  ---
+
+  ## Lesson 125 — GROUPED fingerprint must include tag_presence (non-winner) entries (2026-05-06)
+
+  **Context:** `_block_fingerprint` inside `_collect_grouped` in `emit.py`.
+
+  **Mistake:** Winner-rows-only fingerprint. A non-winner block contributing `expt.id = X1` via `_tag_presence` had an empty fingerprint, so it was not grouped with the winner block for `expt.id = X1`.
+
+  **Fix:** Added `cache.tag_presence(bid, t)` iteration to `_block_fingerprint`. Decodes `pk_json` (JSON array of domain PK values in schema order) and adds the tuple to `pk_vals_set` alongside winner-row tuples.
+
+  **Rule:** A block's Set-identity fingerprint must include BOTH rows it owns (winner) AND rows it contributed but lost ownership of (non-winner, recorded in `_tag_presence`). Query both sources — winner-only misses non-owner source blocks.
+
+  ---
+
   ## Lesson 124 — Winning-block column provenance is not tracked; extra columns appear in shared Set rows (2026-05-05)
 
   **Context:** `_fetch_rows_for_block` in `emit.py`; ORIGINAL mode output for shared Set categories (e.g. `pd_phase`, `pd_diffractogram`).
@@ -1206,3 +1252,55 @@
   **Known gap:** ORIGINAL output for shared Set rows may include extra columns not present in the original source block. Fixing this requires tracking per-column winning-block provenance in `_populate_tag_presence` and applying masking to owned rows — a significant expansion of `_tag_presence` semantics.
 
   **Rule:** Record this as a known gap rather than attempting a partial fix. The overall ordering is correct; only column presence within shared rows is slightly over-inclusive.
+
+  ---
+
+  ## Lesson 129 — GROUPED orphan routing for no-FK-to-Set tables needs a hybrid approach (2026-05-12)
+
+  **Context:** `_collect_grouped` in `emit.py`; deciding whether a no-FK-to-Set table belongs to a fingerprint group or is a shared orphan.
+
+  **Problem:** Two conflicting requirements for tables in `no_set_fk_tables` (tables with no FK path to any Set):
+  1. `atom_type` — rows are deduplicated to one source block (Anatase wins), but `atom_site` rows appear in BOTH Anatase and Rutile fingerprint groups. A rows_for_block check on `atom_type` sees only one block → `single_fp_tables` → incorrectly includes it in Anatase's block.
+  2. `space_group_symop` — no reverse FKs at all (its parent `space_group` is keyless, so no FK column exists). A reverse-FK check finds zero child tables → `table_to_needed_by` stays empty → skipped entirely.
+
+  **Fix:** Hybrid strategy based on whether the table has reverse FKs (children pointing to it):
+  - **Has reverse FKs**: use reverse-FK reachability — a group "needs" T if any table with a FK→T has rows in that group's source blocks. This correctly handles deduplication.
+  - **No reverse FKs (leaf table)**: use direct row ownership — a group "owns" T if any of its source block_ids have rows of T.
+
+  **Rule:** Never use a single strategy for `no_set_fk_tables` routing. Check `reverse_fk.get(t, set())` first: if non-empty, use reverse-FK reachability; if empty (leaf table), fall back to direct row ownership.
+
+  ---
+
+  ## Lesson 130 — Only FK-PK columns are implicit from block scope; non-PK FKs must never be suppressed (2026-05-12)
+
+  **Context:** `_suppressed_fk_pk_cols` in `emit.py`; GROUPED mode FK suppression.
+
+  **Mistake:** `suppress_all_to_set=True` was being used to suppress any FK column pointing to a co-emitted Set, regardless of whether it was also a PK. This silently dropped `model.structure_id` (FK from Set to Set, but not a PK of `model`) and `pd_instr_detector.instr_id` (FK from Loop to Set, but not a PK of `pd_instr_detector`). Re-ingest cannot recover these via FK propagation because propagation only fills FK-PK columns that match the parent's key exactly.
+
+  **Fix:** `_suppressed_fk_pk_cols` already has the `is_fk_pk` guard (`all(c in pk_cols for c in fk.source_columns)`); removed the path that bypassed this guard when `suppress_all_to_set=True`. Non-PK FK columns are now never suppressed.
+
+  **Rule:** FK-PK suppression is only safe when the FK column is ALSO a PK of the child table — meaning re-ingest can recover it from the parent Set's key. Non-PK FK columns carry independent data; suppressing them causes irreversible data loss.
+
+  ---
+
+  ## Lesson 131 — GROUPED `fallback_id` must be `None`; do not generate fresh UUIDs (2026-05-12)
+
+  **Context:** `_collect_grouped` in `emit.py`; `_audit_dataset.id` injection.
+
+  **Mistake:** `fallback_id = str(uuid.uuid4())` caused every GROUPED block without an existing `_audit_dataset.id` to receive a freshly generated UUID. On re-ingest the emitted CIF had a real `_audit_dataset.id` value, which then routed to `audit_dataset` structured table — a table absent in re-ingest schema if using a minimal schema — causing `TestDatabaseRoundTrip::test_set_grouped` to fail because the new `audit_dataset` row appeared in re-ingest but not in original.
+
+  **Fix:** `fallback_id = None`. GROUPED mode only propagates existing dataset IDs found in the source blocks; blocks with no prior `_audit_dataset.id` emit no dataset tag.
+
+  **Rule:** In GROUPED mode, `fallback_id = None`. Fresh UUID injection belongs in ONE_BLOCK (which explicitly tracks conformance metadata). Never auto-generate IDs in GROUPED — the fingerprint approach preserves existing identity; inserting a new UUID creates spurious identity.
+
+  ---
+
+  ## Lesson 132 — Bridge-block PK-stripping must only apply to Sets that have their own single-anchor block (2026-05-12)
+
+  **Context:** `_collect_grouped` in `emit.py`; multi-anchor (bridge) block rendering.
+
+  **Mistake:** In bridge blocks (fingerprint with multiple anchor Sets), ALL anchor Set rows were stripped to PK-only columns. This destroyed `diffrn.ambient_temperature` and other non-PK data in cases where `diffrn` appeared ONLY in bridge blocks (no dedicated single-anchor `diffrn` block existed).
+
+  **Fix:** Two-pass approach using `sets_with_own_block`. First pass: for each fingerprint, compute `anchor_fs` and record any Set that appears as a sole anchor (`len(anchor_fs) == 1`) into `sets_with_own_block`. Second pass: in bridge block assembly, only strip to PK-only for Sets in `sets_with_own_block` — Sets that appear exclusively in bridge blocks keep their full data.
+
+  **Rule:** PK-stripping in bridge blocks is only safe for Sets that have a dedicated single-anchor block where their full data is emitted. A Set appearing only in bridge blocks must carry its full data there — it has no other home.

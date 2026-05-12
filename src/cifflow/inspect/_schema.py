@@ -167,5 +167,5 @@ def inspect_schema(
 
 if __name__ == '__main__':
     from pathlib import Path
-    p = Path(r"C:\Users\User\Documents\github\cifflow\data\dictionaries\cif_pow.dic")
+    p = Path(r"C:\Users\User\Documents\github\pycifparse\data\dictionaries\cif_pow.dic")
     inspect_schema(p)

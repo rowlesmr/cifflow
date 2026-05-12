@@ -248,6 +248,25 @@ class SchemaSpec:
     Each entry records the target ``_definition.id`` to look up.
     """
 
+    def descendants(self, root: str) -> frozenset[str]:
+        """Return all table names that are *root* or a descendant of *root*
+        in the ``category_parent`` hierarchy.
+
+        Returns ``frozenset({root})`` if *root* has no children, or
+        ``frozenset()`` if *root* is not in the schema at all.
+        """
+        if root not in self.tables and root not in self.category_parent.values():
+            return frozenset()
+        result: set[str] = {root}
+        for tbl in self.tables:
+            p = self.category_parent.get(tbl)
+            while p is not None:
+                if p == root:
+                    result.add(tbl)
+                    break
+                p = self.category_parent.get(p)
+        return frozenset(result)
+
 
 # ---------------------------------------------------------------------------
 # Private helpers

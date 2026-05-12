@@ -4,6 +4,48 @@
 
 ## ▶ RESUME FROM HERE
 
+  ## What was done (2026-05-12, debug_grouped branch) — session 2
+
+  Fixed seven cascading correctness bugs in GROUPED emit mode. All 1760 non-slow + 199 slow tests pass (1959 total).
+
+  - **`_collect_grouped` orphan routing**: Replaced the `rows_for_block`-only check for `no_set_fk_tables` with a hybrid approach: tables with reverse FKs use reverse-FK reachability (handles deduplication correctly); leaf tables with no reverse FKs use direct row ownership. Fixes `atom_type` (needed by multiple structure fingerprint groups → orphan) and `space_group_symop` (leaf table → single-group inclusion).
+  - **`_suppressed_fk_pk_cols`**: Removed the `suppress_all_to_set` bypass that was suppressing non-PK FK columns. Non-PK FKs (e.g. `model.structure_id`, `pd_instr_detector.instr_id`) are now never suppressed — FK propagation during re-ingest cannot recover them.
+  - **`fallback_id = None`**: GROUPED mode no longer generates fresh UUIDs; only propagates existing `_audit_dataset.id` values. Fresh UUIDs caused spurious rows in re-ingest tests.
+  - **`sets_with_own_block` two-pass**: Bridge-block PK-stripping only applies to Sets that have a dedicated single-anchor block elsewhere. Sets appearing exclusively in bridge blocks now keep their full data (fixes `diffrn.ambient_temperature` loss).
+  - **Fix B removed**: The stub-only suppression (skip table if all columns are domain PKs) was too broad — incorrectly skipped `peak` table after FK-PK suppression left only `_peak.id`. Replaced with a simpler `'.'`-only check.
+  - **`_fingerprint_anchor_fs` helper**: New function computing anchor frozenset (after child-Set stripping) for a fingerprint; used by `sets_with_own_block` precomputation.
+  - **Lessons added**: 129 (hybrid orphan routing), 130 (non-PK FK never suppress), 131 (fallback_id = None), 132 (sets_with_own_block bridge stripping).
+
+  ---
+
+  ## What was done (2026-05-06, debug_grouped branch) — session 1
+
+  Completely redesigned GROUPED emit mode using a Set-identity fingerprint approach. All 1827 non-slow + 73 slow tests pass (1900 total, 278s).
+
+  - **`emit.py` `_collect_grouped`**: Replaced ~200 lines of FK-graph BFS logic with ~100 lines of fingerprint-based grouping. Each `_cifflow_block_id` receives a fingerprint: `frozenset` of `(table_name, sorted_pk_value_tuples)` drawn from BOTH winner rows AND `_tag_presence` (non-winner) entries. Blocks with identical fingerprints are merged. Set data collection uses `_fetch_rows_for_block` (not `cache.rows_for_block`) to include non-winner contributions. Block naming excludes child-Set tables (tables whose all domain PKs are FK columns pointing to other anchors in the fingerprint).
+  - **Root cause fixed**: Bridge CIF blocks containing BOTH `pd_phase.id` AND `pd_diffractogram.id` had their dual Set identity destroyed by the old FK-graph single-anchor approach. The fingerprint approach preserves full multi-anchor identity; `all_of('pd_diffractogram', 'pd_phase')` now correctly matches bridge blocks.
+  - **Bugfix**: `_all_cifflow_block_ids_for_tables` returns `list`, not `set`; must wrap in `set()` before using `|` operator.
+  - **Test class `TestGroupedStructureSecondShortDecimated`**: Updated to reflect new multi-anchor behavior — bridge blocks now routed by `all_of('pd_diffractogram', 'pd_phase')`, phase-only blocks by `all_of('pd_phase', 'model')`, pure diffractogram by `all_of('pd_diffractogram', 'diffrn')`.
+  - **Lessons added**: 125 (fingerprint needs tag_presence), 126 (child-Set naming exclusion), 127 (Set data via `_fetch_rows_for_block`), 128 (fingerprint replaces FK-graph).
+  - **debug_output.py**: Updated `GROUPED_PLAN` to use new multi-anchor predicates for `second_short_decimated.cif`; output 9 blocks, 16,861 chars.
+
+  ---
+
+  ## What was done (2026-05-05, debug-original-output branch) — session 3
+
+  Implemented `OutputPlan`/`BlockSpec` enhancements from `prompts/enhance outputspec.md`. All 1813 non-slow tests pass (219s).
+
+  - **`dictionary/schema.py` `SchemaSpec.descendants(root)`**: New method; returns frozenset of `root` and all table names whose `category_parent` chain reaches `root`. Returns `frozenset()` for unknown root.
+  - **`output/plan.py`**: Added `_Matcher` class (`.excluding()`, `__or__`, `__and__`), helper functions (`only`, `any_of`, `all_of`, `has`), `MatchPredicate` type alias, `str`/`set` shorthand normalisation in `BlockSpec.__post_init__`, `attach_to: MatchPredicate` field on `BlockSpec`, two-arg `OutputPlan.match(anchors, tables)`.
+  - **`output/emit.py` `_sort_and_merge`**: Passes `frozenset(block.table_rows.keys())` as second arg to `plan.match`; two-pass resolution for `attach_to` blocks (first pass: normal matching; second pass: merge into target or emit standalone with warning).
+  - **Exports**: `only`, `any_of`, `all_of`, `has` re-exported from `cifflow.output` and `cifflow`.
+  - **Tests**: Updated all one-arg `plan.match()` calls and `lambda a:` predicates to two-arg form; added `TestMatchHelpers` (35 unit tests for helpers/combinators/shorthands), `TestAttachTo` (2 integration tests), `TestDescendants` (7 tests in `test_schema.py`).
+  - **No new lessons**: Implementation followed the spec without surprises.
+
+  Run tests: `.venv/Scripts/python -m pytest -x -q`
+
+  ---
+
   ## What was done (2026-05-05, debug-original-output branch) — session 2
 
   Fixed ORIGINAL mode category ordering so that Set scalars and Loop categories interleave correctly, matching source block order. All 1779 non-slow tests pass (219s).
@@ -99,16 +141,13 @@ Run tests: `.venv/Scripts/python -m pytest -x -q`
 
   1. **Resolve ONE_BLOCK fidelity mismatch classification** — 2 mismatches are intentional (`audit`/`audit_conform` auto-emitted by ONE_BLOCK); update the fidelity check or its pass/fail criteria accordingly.
 
+  2. **Document `OutputPlan` enhancements** — update `docs/outputspec.md` and `prompts/API Reference.md` with `_Matcher` helpers, `has()`, `attach_to`, `SchemaSpec.descendants()`, and the two-arg callable signature.
 
-   3. **Expand tests for file-based loading** — dictionary from `.dic`, cached from `.json`,
+  3. **Expand tests for file-based loading** — dictionary from `.dic`, cached from `.json`,
      ingest a real `.cif` to file-backed SQLite, emit to `.cif` and re-ingest, property-based
      tests for `_BlockData` helpers.
 
-  4. **Scope `OutputSpec` grouping options** — understand what flexible per-user grouping
-     control could look like: which dimensions can be varied, what the API surface should be,
-     interaction with schema category hierarchy and sibling groups.
-
-  5. **Unify severity levels** across parser/ingest/validation — audit every `on_error` /
+  4. **Unify severity levels** across parser/ingest/validation — audit every `on_error` /
      `ParseError` site; assign `'Error' | 'Warning' | 'Info'`; standardise message phrasing;
      decide `ingest()` return type.
 

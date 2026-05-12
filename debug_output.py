@@ -14,18 +14,18 @@ Output files:
     output_all_blocks.cif        — ALL_BLOCKS mode (one block per schema category)
     *.fidelity.txt               — fidelity report for each mode vs. the input
 """
-
+import sys
 import pathlib
 import duckdb
 
 ROOT     = pathlib.Path(__file__).parent
 DIC_DIR  = ROOT / 'data' / 'dictionaries'
 
-FILE_NAME = "multi_one" # "pathological_key_block""tmp" #
+FILE_NAME = "second_short_decimated" #"multi_one" # "pathological_key_block""tmp" #
 
 CIF_FILE = ROOT / 'tests' / 'cif_files' / (FILE_NAME +'.cif')
 
-DB_CONVERT_FILE = ROOT / (FILE_NAME +'_covert_db.duckdb')
+DB_CONVERT_FILE = ROOT / (FILE_NAME +'_convert_db.duckdb')
 
 
 
@@ -48,6 +48,7 @@ from cifflow import (
 )
 from cifflow.fidelity import check_fidelity
 from cifflow.types import CifVersion
+from cifflow import OutputPlan, BlockSpec, any_of, has, all_of, only
 
 # ---------------------------------------------------------------------------
 # Step 1 — Dictionary
@@ -81,7 +82,7 @@ print(f'Schema: {len(schema.tables)} tables, {len(schema.bridge_columns)} bridge
 # Step 2 — Validate (builds the in-memory database)
 # ---------------------------------------------------------------------------
 
-report = validate(CIF_FILE, schema)
+report = validate(CIF_FILE, schema, propagate_fk=True)
 
 # ---------------------------------------------------------------------------
 # Step 3 — Pretty-print the validation report
@@ -202,35 +203,107 @@ MODES = [
 # at the top, followed by all pd_* descendants, then everything else.
 # ---------------------------------------------------------------------------
 
+
+conn = report.database
+
+
+def _set_anchors(schema, table: str) -> frozenset[str]:
+    """BFS forward along FKs; return every Set-class table reached, stopping at each Set."""
+    visited, queue, anchors = set(), [table], set()
+    while queue:
+        cur = queue.pop()
+        if cur in visited:
+            continue
+        visited.add(cur)
+        td = schema.tables.get(cur)
+        if td is None:
+            continue
+        if cur != table and td.category_class == 'Set':
+            anchors.add(cur)
+            # don't traverse through Set tables
+        else:
+            for fk in td.foreign_keys:
+                queue.append(fk.target_table)
+    return frozenset(anchors)
+
+
+anchored_to_diffractogram = sorted(
+    t for t, td in schema.tables.items()
+    if td.category_class in ['Loop', "Set"]
+    and _set_anchors(schema, t) == frozenset({'pd_diffractogram'})
+)
+
+
+for t, td in schema.tables.items():
+    print(f"{t}: {td}")
+
+for t in anchored_to_diffractogram:
+    print(t)
+sys.exit()
+
+pd_phase_mass: TableDef(name='pd_phase_mass', definition_id='pd_phase_mass', category_class='Loop',
+                        columns=[ColumnDef(name='_cifflow_block_id', definition_id='', type_contents=None, nullable=False, is_primary_key=False, is_synthetic=True, linked_item_id=None, type_container=None, enumeration_states=[], enumeration_range=None, type_dimension=None),
+                                 ColumnDef(name='_cifflow_row_id', definition_id='', type_contents=None, nullable=False, is_primary_key=False, is_synthetic=True, linked_item_id=None, type_container=None, enumeration_states=[], enumeration_range=None, type_dimension=None),
+                                 ColumnDef(name='diffractogram_id', definition_id='_pd_phase_mass.diffractogram_id', type_contents='Text', nullable=True, is_primary_key=True, is_synthetic=False, linked_item_id=None, type_container='Single', enumeration_states=[], enumeration_range=None, type_dimension=None),
+                                 ColumnDef(name='phase_id', definition_id='_pd_phase_mass.phase_id', type_contents='Text', nullable=True, is_primary_key=True, is_synthetic=False, linked_item_id=None, type_container='Single', enumeration_states=[], enumeration_range=None, type_dimension=None),
+                                 ColumnDef(name='absolute', definition_id='_pd_phase_mass.absolute', type_contents='Real', nullable=True, is_primary_key=False, is_synthetic=False, linked_item_id=None, type_container='Single', enumeration_states=[], enumeration_range='0.0:100.0', type_dimension=None),
+                                 ColumnDef(name='absolute_su', definition_id='_pd_phase_mass.absolute_su', type_contents='Real', nullable=True, is_primary_key=False, is_synthetic=False, linked_item_id='_pd_phase_mass.absolute', type_container='Single', enumeration_states=[], enumeration_range=None, type_dimension=None),
+                                 ColumnDef(name='original', definition_id='_pd_phase_mass.original', type_contents='Real', nullable=True, is_primary_key=False, is_synthetic=False, linked_item_id=None, type_container='Single', enumeration_states=[], enumeration_range='0.0:100.0', type_dimension=None),
+                                 ColumnDef(name='original_su', definition_id='_pd_phase_mass.original_su', type_contents='Real', nullable=True, is_primary_key=False, is_synthetic=False, linked_item_id='_pd_phase_mass.original', type_container='Single', enumeration_states=[], enumeration_range=None, type_dimension=None),
+                                 ColumnDef(name='percent', definition_id='_pd_phase_mass.percent', type_contents='Real', nullable=True, is_primary_key=False, is_synthetic=False, linked_item_id=None, type_container='Single', enumeration_states=[], enumeration_range='0.0:100.0', type_dimension=None),
+                                 ColumnDef(name='percent_su', definition_id='_pd_phase_mass.percent_su', type_contents='Real', nullable=True, is_primary_key=False, is_synthetic=False, linked_item_id='_pd_phase_mass.percent', type_container='Single', enumeration_states=[], enumeration_range=None, type_dimension=None)],
+                        primary_keys=['diffractogram_id', 'phase_id'],
+                        foreign_keys=[ForeignKeyDef(source_table='pd_phase_mass', source_columns=['diffractogram_id'], target_table='pd_diffractogram', target_columns=['id']),
+                                      ForeignKeyDef(source_table='pd_phase_mass', source_columns=['phase_id'], target_table='pd_phase', target_columns=['id'])]
+                        )
+
+structure: TableDef(name='structure', definition_id='structure', category_class='Set',
+                    columns=[ColumnDef(name='_cifflow_block_id', definition_id='', type_contents=None, nullable=False, is_primary_key=False, is_synthetic=True, linked_item_id=None, type_container=None, enumeration_states=[], enumeration_range=None, type_dimension=None),
+                             ColumnDef(name='_cifflow_row_id', definition_id='', type_contents=None, nullable=False, is_primary_key=False, is_synthetic=True, linked_item_id=None, type_container=None, enumeration_states=[], enumeration_range=None, type_dimension=None),
+                             ColumnDef(name='id', definition_id='_structure.id', type_contents='Word', nullable=False, is_primary_key=True, is_synthetic=False, linked_item_id=None, type_container='Single', enumeration_states=[], enumeration_range=None, type_dimension=None),
+                             ColumnDef(name='diffrn_id', definition_id='_structure.diffrn_id', type_contents='Word', nullable=True, is_primary_key=False, is_synthetic=False, linked_item_id=None, type_container='Single', enumeration_states=[], enumeration_range=None, type_dimension=None),
+                             ColumnDef(name='phase_id', definition_id='_structure.phase_id', type_contents='Text', nullable=True, is_primary_key=False, is_synthetic=False, linked_item_id=None, type_container='Single', enumeration_states=[], enumeration_range=None, type_dimension=None),
+                             ColumnDef(name='space_group_id', definition_id='_structure.space_group_id', type_contents='Word', nullable=True, is_primary_key=False, is_synthetic=False, linked_item_id=None, type_container='Single', enumeration_states=[], enumeration_range=None, type_dimension=None)],
+                    primary_keys=['id'],
+                    foreign_keys=[ForeignKeyDef(source_table='structure', source_columns=['diffrn_id'], target_table='diffrn', target_columns=['id']),
+                                  ForeignKeyDef(source_table='structure', source_columns=['phase_id'], target_table='pd_phase', target_columns=['id']),
+                                  ForeignKeyDef(source_table='structure', source_columns=['space_group_id'], target_table='space_group', target_columns=['id'])])
+
+
 GROUPED_PLAN = OutputPlan(
     specs=[
         BlockSpec(
-            matches=None,           # catch-all: applies to every output block
+            matches=only("diffrn"),
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=has(*schema.descendants('publication')),
+            category_order=['publication'],   # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=all_of('pd_diffractogram', "pd_phase"),
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=only("pd_diffractogram"),
             category_order=[
-                'diffrn',           # diffrn Set first
-                'diffrn_radiation', # its radiation entry
-                'diffrn_radiation_wavelength',  # wavelengths loop
-                'pd_instr',         # instrument Set
-                'pd_diffractogram', # per-experiment Set
-                [                   # merge group: compatible powder data loops
-                    'pd_data',
-                    'pd_meas',
-                    'pd_proc',
-                    'pd_calc',
-                ],
-                'pd_peak',          # peak list loop
-                'refln',            # reflection loop
+                 "pd_diffractogram",
+                ['pd_data', 'pd_meas', 'pd_proc', 'pd_calc'],  # merge group
             ],
-            column_order={
-                'diffrn': ['id'],
-                'diffrn_radiation': ['id', 'probe'],
-                'pd_diffractogram': ['id', 'diffrn_id', 'instr_id'],
-                'pd_peak': ['id', '2theta_centroid', 'intensity'],
-            },
-            single_block=False,     # one output block per anchor key combo
+        ),
+        BlockSpec(
+            matches=only("pd_phase"),
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=None,   # catch-all: anything not matched above, alphabetical order
         ),
     ],
 )
+
+# GROUPED_PLAN = OutputPlan(specs=[
+#     BlockSpec(matches=lambda anchors: print(anchors) or True)
+# ])
 
 ALL_BLOCK_PLAN = OutputPlan(specs=[
     BlockSpec(
@@ -271,6 +344,9 @@ for mode, filename in MODES:
     print(f'{mode.value:12s}  ->  {filename}  ({block_count} block(s), {len(cif_text):,} chars)')
 
 print()
+
+
+sys.exit()
 
 # ---------------------------------------------------------------------------
 # Step 5 — Fidelity check: compare each output CIF against the original input

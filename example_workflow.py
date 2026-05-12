@@ -240,6 +240,7 @@ cif, parse_errors = build(
                   # 'strict' — stop accumulating on first semantic error
 )
 
+
 if parse_errors:
     for e in parse_errors:
         print(f'  [{e.error_type}] line {e.line}: {e.message}')
