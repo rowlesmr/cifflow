@@ -71,7 +71,27 @@
       "Bash(git stash *)",
       "Bash(cargo test *)",
       "Bash(.venv\\\\Scripts\\\\python -m pytest tests/ -q --tb=no)",
-      "Bash(python -m maturin develop)"
+      "Bash(python -m maturin develop)",
+      "Bash(.venv/Scripts/ruff --version)",
+      "Bash(.venv/Scripts/pydoclint --version)",
+      "Bash(.venv/Scripts/ruff check *)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/output/plan.py)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/types.py)",
+      "Bash(.venv/Scripts/mkdocs build *)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/cifflow_core.pyi)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/cifmodel/clean.py)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/cifmodel/builder.py)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/cifmodel/writer.py)",
+      "Bash(Get-Content \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-User-Documents-github-pycifparse\\\\7ced4543-088a-4787-95d0-796e95f866a2\\\\tasks\\\\boz4rr77o.output\" -Wait -Tail 10)",
+      "Bash(Select-Object -First 1)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/dictionary/)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/ingestion/)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/output/)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/validation/)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/fidelity/)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/inspect/)",
+      "Bash(.venv/Scripts/pydoclint src/cifflow/database/)",
+      "Bash(.venv/Scripts/pydoclint src/)"
     ]
   }
 }

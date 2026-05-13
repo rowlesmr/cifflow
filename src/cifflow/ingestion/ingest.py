@@ -35,11 +35,18 @@ from cifflow.ingestion.duckdb_ingest import (
 class IngestionError(Exception):
     """Raised when one or more semantic errors prevent successful ingestion.
 
+    Parameters
+    ----------
+    errors
+        Ordered list of error message strings.
+
     Attributes
     ----------
-    errors:
+    errors
         Ordered list of error message strings.
     """
+
+    errors: list[str]
 
     def __init__(self, errors: list[str]) -> None:
         self.errors = errors

@@ -1,6 +1,4 @@
-"""
-SQLite schema generation from a loaded DDLm dictionary.
-"""
+"""SQLite schema generation from a loaded DDLm dictionary."""
 
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -46,6 +44,11 @@ class BridgeColumnDef:
     bridge_value_column:
         Column in the *last* hop's ``bridge_table`` whose value is copied
         into ``column_name`` (e.g. ``'structure_id'``).
+    fallback_chains:
+        Alternative resolution chains tried in order when the primary chain
+        yields ``None`` for a given row.  Each entry is a
+        ``(hops, bridge_value_column)`` pair with the same structure as the
+        primary fields.
     """
 
     table_name: str
@@ -53,11 +56,6 @@ class BridgeColumnDef:
     hops: list[tuple[str, str, str]]
     bridge_value_column: str
     fallback_chains: 'list[tuple[list[tuple[str, str, str]], str]]' = field(default_factory=list)
-    """Alternative resolution chains tried in order when the primary chain
-    yields ``None`` for a given row.  Each entry is a
-    ``(hops, bridge_value_column)`` pair with the same structure as the
-    primary ``hops`` / ``bridge_value_column`` fields.
-    """
 
     # ------------------------------------------------------------------
     # Backward-compat properties (single-hop case; also useful for
@@ -126,12 +124,6 @@ class ColumnDef:
         ``"Real"``, ``"List"``); ``None`` if absent from the dictionary or for
         synthetic columns.  Informational only — DDL always emits ``TEXT`` for
         all value columns; ``_cifflow_row_id`` always emits ``INTEGER``.
-    type_container:
-        DDLm ``_type.container`` value (e.g. ``"Single"``, ``"List"``,
-        ``"Matrix"``); ``None`` for synthetic columns, ``"Single"`` as the
-        DDLm default for domain columns when the attribute is absent.
-        Non-``"Single"`` containers store JSON text in SQLite regardless of
-        ``type_contents``.
     nullable:
         ``False`` for synthetic and primary-key columns; ``True`` for all
         other domain columns.
@@ -146,6 +138,19 @@ class ColumnDef:
         measurand item, lowercased.  ``None`` for all other column types.
         Does not produce a ``FOREIGN KEY`` constraint; used by the ingestion
         and output layers.
+    type_container:
+        DDLm ``_type.container`` value (e.g. ``"Single"``, ``"List"``,
+        ``"Matrix"``); ``None`` for synthetic columns, ``"Single"`` as the
+        DDLm default for domain columns when the attribute is absent.
+        Non-``"Single"`` containers store JSON text in SQLite regardless of
+        ``type_contents``.
+    enumeration_states:
+        Allowed enumeration values from ``_enumeration_set.state``.  Empty
+        list when not present.
+    enumeration_range:
+        Value of ``_enumeration.range``.  ``None`` if absent.
+    type_dimension:
+        Value of ``_type.dimension``.  ``None`` if absent.
     """
 
     name: str
@@ -224,6 +229,30 @@ class SchemaSpec:
     warnings:
         Non-fatal issues encountered during schema generation, in emission
         order.
+    bridge_columns:
+        Transitive bridge column definitions — derived columns whose values
+        are resolved through one or more FK lookup hops.
+    propagation_links:
+        Mapping from table name to a list of
+        ``(column_name, target_def_id, default)`` tuples for PK ``Link``
+        columns whose FK constraint was skipped at schema generation time.
+    dictionary_name:
+        ``data_`` block name from the source dictionary CIF (e.g.
+        ``"CIF_CORE"``).  Copied from
+        :attr:`~cifflow.dictionary.ddlm_parser.DdlmDictionary.name`.
+    dictionary_title:
+        Value of ``_dictionary.title`` from the source.  ``None`` if absent.
+    dictionary_version:
+        Value of ``_dictionary.version`` from the source.  ``None`` if absent.
+    dictionary_uri:
+        Value of ``_dictionary.uri`` from the source.  ``None`` if absent.
+    source_files:
+        Absolute file paths of every dictionary file loaded.  Empty when no
+        ``path_resolver`` was supplied to
+        :class:`~cifflow.dictionary.loader.DictionaryLoader`.
+    category_parent:
+        Mapping from table name to its parent table name (or ``None`` for
+        root categories) in the DDLm category-parent hierarchy.
     """
 
     tables: dict[str, TableDef]
@@ -239,18 +268,9 @@ class SchemaSpec:
     dictionary_uri: str | None = None
     source_files: list[str] = field(default_factory=list)
     category_parent: dict[str, str | None] = field(default_factory=dict)
-    """Mapping from table name to ``[(column_name, target_def_id, default), ...]``.
-
-    For PK columns that are DDLm ``Link`` items but whose ``FOREIGN KEY``
-    constraint was skipped at schema generation time (e.g. because the FK
-    target is not a PK of the target table), the ingest layer still needs to
-    propagate the value from the ``fk_accumulator`` or the current loop row.
-    Each entry records the target ``_definition.id`` to look up.
-    """
 
     def descendants(self, root: str) -> frozenset[str]:
-        """Return all table names that are *root* or a descendant of *root*
-        in the ``category_parent`` hierarchy.
+        """Return all table names that are *root* or a descendant of *root* in the ``category_parent`` hierarchy.
 
         Returns ``frozenset({root})`` if *root* has no children, or
         ``frozenset()`` if *root* is not in the schema at all.

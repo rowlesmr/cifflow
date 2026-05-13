@@ -41,6 +41,7 @@ _SU_RE = re.compile(
 @dataclass
 class _BlockData:
     """All data needed to render one output CIF block."""
+
     name: str
     table_rows: dict[str, list[dict]]
     fallback_rows: list[dict]
@@ -109,7 +110,7 @@ def emit(
     pretty: bool = True,
     line_limit: int | None = 2048,
 ) -> str:
-    """Emit CIF text from a populated SQLite database.
+    r"""Emit CIF text from a populated SQLite database.
 
     Parameters
     ----------
@@ -480,7 +481,7 @@ def _collect_grouped(
     schema: SchemaSpec,
     version: CifVersion,
 ) -> list[_BlockData]:
-    """GROUPED: group source blocks by their Set-identity fingerprint.
+    """Group source blocks by Set-identity fingerprint (GROUPED mode).
 
     The fingerprint of a source ``_cifflow_block_id`` is the frozenset of
     ``(table_name, sorted_pk_value_tuples)`` for every keyed Set-class table
@@ -2073,9 +2074,9 @@ def _render_fallback(
 # ---------------------------------------------------------------------------
 
 def _col_widths(matrix: list[list[str]]) -> list[int]:
-    """Compute per-column max token width for pretty-printing.
+    r"""Compute per-column max token width for pretty-printing.
 
-    Columns that contain any multiline token (``token.startswith('\\n')``)
+    Columns that contain any multiline token (``token.startswith('\n')``)
     are given width 0 — they cannot be padded inline.
     """
     if not matrix:

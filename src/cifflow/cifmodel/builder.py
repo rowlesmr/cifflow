@@ -25,6 +25,7 @@ from typing import Callable, Literal, Union
 
 
 def _casefold(s: str) -> str:
+    """Apply Unicode NFC(casefold(NFD)) normalisation for canonical caseless comparison."""
     return unicodedata.normalize('NFC', unicodedata.normalize('NFD', s).casefold())
 
 from cifflow.types import ParseError, ValueType
@@ -51,16 +52,17 @@ _Container = Union[list, _TableInProgress]
 
 class CifBuilder:
     """
-    Implements CifParserEvents.  Accumulates events into a CifFile.
+    Implements :class:`~cifflow.types.CifParserEvents`; accumulates events into a CifFile.
 
     Parameters
     ----------
-    on_error:
-        Called with a ParseError for each semantic error detected by the IR
-        layer.  Pass ``handler.on_error`` to unify parser and IR errors.
-    mode:
-        'strict' — stop accumulating on the first semantic error.
-        'pad'    — emit a warning and pad incomplete loop rows with '?'.
+    on_error
+        Called with a :class:`~cifflow.types.ParseError` for each semantic error
+        detected by the IR layer.  Pass ``handler.on_error`` to unify parser and
+        IR errors into a single stream.
+    mode
+        ``'strict'`` — stop accumulating on the first semantic error.
+        ``'pad'`` — continue and pad incomplete loop rows with ``'?'`` placeholders.
     """
 
     def __init__(
@@ -102,9 +104,11 @@ class CifBuilder:
 
     @property
     def _current_ns(self) -> CifBlock | CifSaveFrame | None:
+        """Return the active namespace: the current save frame, or the current block."""
         return self._save_frame if self._save_frame is not None else self._block
 
     def _semantic_error(self, message: str, recovery: str) -> None:
+        """Emit a semantic error event and set stopped=True in strict mode."""
         self._on_error(ParseError(
             error_type='semantic',
             message=message,
@@ -142,6 +146,7 @@ class CifBuilder:
     # ── CifParserEvents ───────────────────────────────────────────────────────
 
     def on_data_block(self, name: str) -> None:
+        """Casefold name, emit error on duplicate, and open a new data block."""
         if self._stopped:
             return
         name = _casefold(name)
@@ -161,6 +166,7 @@ class CifBuilder:
         self._container_stack = []
 
     def on_save_frame_start(self, name: str) -> None:
+        """Casefold name, emit error on duplicate, and open a new save frame."""
         if self._stopped or self._block is None:
             return
         name = _casefold(name)
@@ -172,6 +178,7 @@ class CifBuilder:
         self._save_frame = CifSaveFrame(name)
 
     def on_save_frame_end(self) -> None:
+        """Close the current save frame and register it with the block."""
         if self._stopped or self._block is None:
             return
         if self._save_frame is not None:
@@ -179,11 +186,13 @@ class CifBuilder:
         self._save_frame = None
 
     def add_tag(self, tag_name: str) -> None:
+        """Casefold and register the pending tag name."""
         if self._stopped:
             return
         self._active_tag = _casefold(tag_name)
 
     def add_value(self, value: str, value_type: ValueType) -> None:
+        """Transform multiline fields; quote bare dots/questions; dispatch the value."""
         if self._stopped:
             return
         if value_type == ValueType.MULTILINE_STRING:
@@ -193,22 +202,26 @@ class CifBuilder:
         self._dispatch_value(value)
 
     def on_list_start(self) -> None:
+        """Push a new list container onto the nesting stack."""
         if self._stopped:
             return
         self._container_stack.append([])
 
     def on_list_end(self) -> None:
+        """Pop the completed list and dispatch it as a value."""
         if self._stopped or not self._container_stack:
             return
         completed = self._container_stack.pop()
         self._dispatch_value(completed)
 
     def on_table_start(self) -> None:
+        """Push a new table container onto the nesting stack."""
         if self._stopped:
             return
         self._container_stack.append(_TableInProgress())
 
     def on_table_key(self, key: str, value_type: ValueType) -> None:
+        """Set the current key on the pending table container."""
         if self._stopped or not self._container_stack:
             return
         top = self._container_stack[-1]
@@ -216,6 +229,7 @@ class CifBuilder:
             top.current_key = key
 
     def on_table_end(self) -> None:
+        """Pop the completed table and dispatch it as a value."""
         if self._stopped or not self._container_stack:
             return
         top = self._container_stack.pop()
@@ -223,6 +237,7 @@ class CifBuilder:
             self._dispatch_value(top.data)
 
     def on_loop_start(self, tags: list[str]) -> None:
+        """Initialise loop tracking with casefolded tag names and empty buffers."""
         if self._stopped:
             return
         self._in_loop = True
@@ -231,6 +246,7 @@ class CifBuilder:
         self._loop_buffers = {_casefold(t): [] for t in tags}
 
     def on_loop_end(self) -> None:
+        """Validate row count; pad in pad mode; commit loop to the namespace."""
         if self._stopped:
             return
         n = len(self._loop_tags)
@@ -270,6 +286,7 @@ class CifBuilder:
         self._loop_buffers = {}
 
     def on_error(self, error: ParseError) -> None:
+        """Forward the parse error to the registered on_error callback."""
         self._on_error(error)
 
 
@@ -278,15 +295,23 @@ class CifBuilder:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def cif_to_arrow(cif: CifFile) -> list:
-    """
+    r"""
     Convert any CifFile (parsed or programmatic) to Arrow RecordBatches.
 
-    Produces the same batch format as build_arrow(): five metadata columns
-    plus one Utf8 column per tag, one batch per scalar group and per loop.
-    Container values (Python list/dict) are encoded as ``\\x00`` + JSON.
+    Produces the same batch format as :func:`build_arrow`: five metadata columns
+    plus one UTF-8 column per tag, one batch per scalar group and per loop.
+    Container values (Python list/dict) are encoded as ``\x00`` + JSON.
 
-    Returns a plain list of RecordBatches (no errors — the CifFile is already
-    validated).
+    Parameters
+    ----------
+    cif
+        The CifFile to convert.
+
+    Returns
+    -------
+    list
+        A list of ``pa.RecordBatch`` objects, one per logical namespace section.
+        No errors are returned — the CifFile is assumed to be valid.
     """
     import json  # noqa: PLC0415
     import pyarrow as pa  # noqa: PLC0415
@@ -366,11 +391,23 @@ def build_arrow(
     mode: Literal['strict', 'pad'] = 'pad',
 ) -> tuple[list, list[ParseError]]:
     """
-    Parse *source* and return ``(list[pa.RecordBatch], errors)``.
+    Parse CIF source text and return Arrow RecordBatches.
 
-    Each RecordBatch covers one logical namespace section: either the scalar
-    tags of a block/save-frame or one loop within it.  The schema per batch
-    contains only the five metadata columns plus the tags present in that batch.
+    Each batch covers one logical namespace section: the scalar tags of a
+    block/save frame, or one loop within it.  The per-batch schema contains
+    five metadata columns plus one column per tag present in that section.
+
+    Parameters
+    ----------
+    source
+        Full CIF source text.
+    mode
+        Error-handling mode: ``'pad'`` (default) or ``'strict'``.
+
+    Returns
+    -------
+    tuple[list, list[ParseError]]
+        A ``(batches, errors)`` pair.
     """
     from cifflow import cifflow_core  # noqa: PLC0415
     batches, error_dicts = cifflow_core.parse_arrow(source, mode)
@@ -384,9 +421,21 @@ def build_arrow_file(
     mode: Literal['strict', 'pad'] = 'pad',
 ) -> tuple[list, list[ParseError]]:
     """
-    Parse the CIF file at *path* and return ``(list[pa.RecordBatch], errors)``.
+    Parse a CIF file from disk and return Arrow RecordBatches.
 
     File I/O is performed entirely in Rust — no Python file objects are created.
+
+    Parameters
+    ----------
+    path
+        Filesystem path to the CIF file.
+    mode
+        Error-handling mode: ``'pad'`` (default) or ``'strict'``.
+
+    Returns
+    -------
+    tuple[list, list[ParseError]]
+        A ``(batches, errors)`` pair.
     """
     from cifflow import cifflow_core  # noqa: PLC0415
     batches, error_dicts = cifflow_core.parse_arrow_file(path, mode)
@@ -400,11 +449,23 @@ def build(
     mode: Literal['strict', 'pad'] = 'pad',
 ) -> tuple[CifFile, list[ParseError]]:
     """
-    Parse *source* and return ``(CifFile, errors)``.
+    Parse CIF source text and return a CifFile.
 
-    *errors* contains both parser-level and IR-level errors in emission order.
-    Uses the Rust IR builder (parse_cif) — no per-token Python callbacks and
-    no intermediate Python dict.
+    Uses the Rust IR builder directly — no per-token Python callbacks and no
+    intermediate Python dict.  Both parser-level and IR-level errors are
+    returned in emission order.
+
+    Parameters
+    ----------
+    source
+        Full CIF source text.
+    mode
+        Error-handling mode: ``'pad'`` (default) or ``'strict'``.
+
+    Returns
+    -------
+    tuple[CifFile, list[ParseError]]
+        A ``(cif, errors)`` pair.  ``errors`` is empty for well-formed input.
     """
     from cifflow import cifflow_core  # noqa: PLC0415
     cif, error_dicts = cifflow_core.parse_cif(source, mode)

@@ -1,6 +1,4 @@
-"""
-CifScalar — a CIF scalar value that behaves as a str but carries ValueType.
-"""
+"""CifScalar — a CIF scalar value that behaves as a str but carries ValueType."""
 
 from cifflow.types import ValueType
 
@@ -34,6 +32,7 @@ class CifScalar(str):
     value_type: ValueType
 
     def __new__(cls, value: str, value_type: ValueType = ValueType.STRING) -> 'CifScalar':
+        """Construct a new CifScalar with the given value and ValueType."""
         instance = super().__new__(cls, value)
         instance.value_type = value_type
         return instance
