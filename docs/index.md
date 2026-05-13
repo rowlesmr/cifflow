@@ -105,12 +105,6 @@ schema = generate_schema(dictionary)
 # 3. Parse CIF
 cif, errors = build(open('all_the_data.cif', encoding='utf-8').read())
 
-# # 3.5 Edit CIF - to fix errors or alter content
-# writer = CifWriter(cif.version, cif)
-# for block in writer.blocks:
-#    # Do alterations
-# cif = writer.build() # raises ValueError if any errors present
-
 # 4. Ingest into an in-memory DuckDB database
 #    Pass a file path string to persist: ingest(cif, 'output.db', schema=schema)
 conn, warnings = ingest(cif, schema=schema)
@@ -122,7 +116,7 @@ open('output.cif', 'w', encoding='utf-8').write(output)
 
 See `example_workflow.py` in the repository root for a fully annotated end-to-end demonstration covering all four emission modes, type-cast export, and fidelity checking.
 
-The full API reference is in the [API Reference](docs/api/index.md).
+The full API reference is in the [API Reference](api/index.md).
 
 ---
 
@@ -164,19 +158,19 @@ All stages are complete and tested.
 Run the fast test suite (excludes tests that load large real-world CIF files):
 
 ```
-.venv/Scripts/python.exe -m pytest -m "not slow"
+python -m pytest -m "not slow"
 ```
 
 Run the full suite including slow tests:
 
 ```
-.venv/Scripts/python.exe -m pytest
+python -m pytest
 ```
 
 After modifying the Rust extension, recompile before running Python tests:
 
 ```
-.venv/Scripts/maturin develop
+maturin develop
 ```
 
 ---
