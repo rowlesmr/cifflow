@@ -1,0 +1,33 @@
+site_name: cifflow
+site_description: CIF parsing, ingestion, and emission library
+repo_url: https://github.com/rowlesmr/cifflow
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+            members_order: source
+
+nav:
+  - Home: index.md
+  - API Reference:
+    - Overview: api/index.md
+    - Types: api/types.md
+    - CIF Model: api/model.md
+    - Parser: api/parser.md
+    - Dictionary: api/dictionary.md
+    - Ingestion: api/ingestion.md
+    - Output: api/output.md
+    - Validation: api/validation.md
+    - Fidelity: api/fidelity.md
+    - Inspect: api/inspect.md
+    - Database: api/database.md
+  - Output spec: outputspec.md
