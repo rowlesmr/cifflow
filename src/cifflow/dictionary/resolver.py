@@ -1,6 +1,4 @@
-"""
-Tag resolution — maps a CIF tag name to its current DDLm definition.
-"""
+"""Tag resolution — maps a CIF tag name to its current DDLm definition."""
 
 from dataclasses import dataclass
 
@@ -61,11 +59,10 @@ def resolve_tag(tag: str, dictionary: DdlmDictionary) -> ResolvedTag | None:
 
     Returns
     -------
-    ResolvedTag
+    ResolvedTag | None
         Resolution result including canonical name, table, column, and
-        alias/deprecation flags.
-    None
-        If the tag is not known to this dictionary.
+        alias/deprecation flags; ``None`` if the tag is not known to this
+        dictionary.
     """
     item = dictionary.tag_to_item.get(tag.lower())
     if item is None:

@@ -515,6 +515,12 @@ def visualise_schema(
     nodesep:
         Minimum separation in inches between adjacent nodes in the same rank.
         Default ``0.4``.
+
+    Returns
+    -------
+    str
+        A Graphviz DOT source string ready to pass to a Graphviz renderer or
+        embed in an HTML page via viz.js.
     """
     ghost_tables = _collect_ghost_tables(schema)
     bridge_only, orphans, pass1_components = _classify_tables(schema)
@@ -730,15 +736,43 @@ def visualise_schema_html(
 
     Parameters
     ----------
-    title:
+    schema
+        The :class:`~cifflow.dictionary.schema.SchemaSpec` to render.
+    title
         ``<title>`` element text.  Defaults to ``schema.dictionary_name``
         or ``'Schema'`` when not given.
-    show_legend:
+    show_columns
+        ``'all'``, ``'sparse'``, or ``'none'``.  Forwarded to :func:`visualise_schema`.
+    show_bridge
         Forwarded to :func:`visualise_schema`.
-    concentrate:
+    show_parent_edges
         Forwarded to :func:`visualise_schema`.
-    hide_deprecated:
+    highlight_orphans
         Forwarded to :func:`visualise_schema`.
+    highlight_components
+        Forwarded to :func:`visualise_schema`.
+    show_orphans
+        Forwarded to :func:`visualise_schema`.
+    show_legend
+        Forwarded to :func:`visualise_schema`.
+    concentrate
+        Forwarded to :func:`visualise_schema`.
+    hide_deprecated
+        Forwarded to :func:`visualise_schema`.
+    layout
+        Forwarded to :func:`visualise_schema`.
+    splines
+        Forwarded to :func:`visualise_schema`.
+    ranksep
+        Forwarded to :func:`visualise_schema`.
+    nodesep
+        Forwarded to :func:`visualise_schema`.
+
+    Returns
+    -------
+    str
+        A self-contained HTML document with the schema rendered as an
+        interactive SVG via viz.js and svg-pan-zoom.
     """
     dot_string = visualise_schema(
         schema,

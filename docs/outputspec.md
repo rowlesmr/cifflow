@@ -3,7 +3,7 @@
 This document describes how CIF emission is controlled: the `EmitMode` enum, `OutputPlan`,
 `BlockSpec`, the `emit()` function, and the formatting options that govern the final text.
 
-See `docs/api.md` for the broader API reference.  See `example_workflow.py` for end-to-end
+See the [API Reference](api/index.md) for the broader API reference.  See `example_workflow.py` for end-to-end
 usage.
 
 ---

@@ -1,4 +1,4 @@
-"""
+r"""
 Multiline text field transformation pipeline (IR layer only).
 
 Applies exclusively to ValueType.MULTILINE_STRING tokens.
@@ -101,10 +101,9 @@ def _apply_prefix(lines: list[str]) -> tuple[list[str], bool]:
 
 
 def _apply_unfolding(lines: list[str]) -> list[str]:
-    """
-    Reverse line folding.
+    r"""Reverse line folding.
 
-    A fold separator is a '\\' as the last non-whitespace character on a line.
+    A fold separator is a ``'\'`` as the last non-whitespace character on a line.
     Remove it (and trailing whitespace) and concatenate with the next line.
     """
     result: list[str] = []

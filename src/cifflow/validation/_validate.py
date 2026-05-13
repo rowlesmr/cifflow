@@ -130,9 +130,9 @@ def validate(
     dataset_id: str | None = None,
     propagate_fk: bool = False,
 ) -> ValidationReport:
-    """
-    Parse (if needed), ingest to an in-memory database, and validate against
-    the schema.  Returns a unified ValidationReport.  Never raises.
+    """Parse (if needed), ingest to an in-memory database, and validate against the schema.
+
+    Returns a unified :class:`ValidationReport`.  Never raises.
     """
     issues: list[ValidationIssue] = []
 

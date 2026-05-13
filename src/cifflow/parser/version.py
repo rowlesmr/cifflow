@@ -20,14 +20,20 @@ _MAGIC_RE = re.compile(r'^\ufeff?#\\#CIF_(\S+)\s*$')
 def detect_version(
     source: str,
 ) -> Tuple[CifVersion, str, int, List[ParseError]]:
-    """
-    Detect the CIF version from *source*.
+    """Detect the CIF version from *source*.
 
-    Returns:
-        version       – detected CifVersion
-        remaining     – source with the magic line consumed (or full source if not consumed)
-        line_offset   – number of lines consumed before the lexer starts (for line-number tracking)
-        errors        – any ParseErrors generated during detection
+    Parameters
+    ----------
+    source
+        Full CIF source string to inspect.
+
+    Returns
+    -------
+    Tuple[CifVersion, str, int, List[ParseError]]
+        ``(version, remaining, line_offset, errors)`` — the detected
+        :class:`~cifflow.types.CifVersion`, the source with the magic line
+        consumed, the number of lines consumed before the lexer starts, and
+        any :class:`~cifflow.types.ParseError` objects found during detection.
     """
     errors: List[ParseError] = []
     lines = source.splitlines(keepends=True)

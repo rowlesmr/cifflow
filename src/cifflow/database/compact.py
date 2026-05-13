@@ -1,6 +1,4 @@
-"""
-convert_database — one-way export that casts DuckDB columns to typed storage.
-"""
+"""convert_database — one-way export that casts DuckDB columns to typed storage."""
 
 from __future__ import annotations
 
@@ -55,7 +53,7 @@ def _leaf_sql_type(col: 'ColumnDef') -> str:
 # ---------------------------------------------------------------------------
 
 def _sql_cast_expr(col_name: str, sql_type: str, leaf_type: str, cast_fn: str) -> str:
-    """SQL SELECT expression that casts a VARCHAR source column to its target type.
+    """Return a SQL SELECT expression that casts a VARCHAR source column to its target type.
 
     *cast_fn* is ``'TRY_CAST'`` (null on failure) or ``'CAST'`` (raise on failure).
     ``_cifflow_row_id`` is already INTEGER in src and is passed through unchanged.
@@ -235,6 +233,15 @@ def convert_database(
     list[str]
         Warning messages: SU-dropped values and coercion failures (null/keep
         policy only — error policy raises instead of returning).
+
+    Raises
+    ------
+    ValueError
+        When ``on_coercion_failure='error'`` and a value cannot be cast to
+        the target type.
+    Exception
+        DDL or data-transfer failures propagate directly after rolling back
+        the destination transaction.
     """
     messages: list[str] = []
 
@@ -335,10 +342,7 @@ def convert_database(
 
         dst.begin()
         try:
-            try:
-                _transfer_arrow(src, dst, select_sql, tbl_name)
-            except Exception as exc:
-                raise type(exc)(f"converting '{tbl_name}': {exc}") from exc
+            _transfer_arrow(src, dst, select_sql, tbl_name)
             dst.commit()
         except Exception:
             dst.rollback()

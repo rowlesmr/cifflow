@@ -37,6 +37,7 @@ _SU_RE = re.compile(
 
 
 def encode_value(value):
+    """Encode a CIF value to (stored_string, value_type_str) for DuckDB storage."""
     if isinstance(value, (list, dict)):
         vtype = 'list' if isinstance(value, list) else 'table'
         def _enc(v):
@@ -52,6 +53,7 @@ def encode_value(value):
 
 
 def split_su(raw: str):
+    """Split 'numeric(su)' -> (measurand, scaled_su) or None."""
     m = _SU_RE.match(raw)
     if not m:
         return None
@@ -198,9 +200,10 @@ def setup_duckdb(
     schema: SchemaSpec,
     db: duckdb.DuckDBPyConnection | None = None,
 ) -> duckdb.DuckDBPyConnection:
-    """Create _raw_* staging tables on *db*, creating a new in-memory connection
-    if *db* is None.  Infrastructure tables are created (idempotent) before staging
-    tables.  Any leftover _raw_* tables from a prior failed call are dropped first.
+    """Create ``_raw_*`` staging tables on *db*, creating a new in-memory connection if *db* is None.
+
+    Infrastructure tables are created (idempotent) before staging tables.
+    Any leftover ``_raw_*`` tables from a prior failed call are dropped first.
     """
     if db is None:
         db = duckdb.connect(':memory:')

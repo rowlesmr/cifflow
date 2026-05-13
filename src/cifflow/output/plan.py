@@ -1,6 +1,4 @@
-"""
-Output plan dataclasses and EmitMode enum.
-"""
+"""Output plan dataclasses and EmitMode enum."""
 
 from __future__ import annotations
 
@@ -67,9 +65,12 @@ class _Matcher:
         return self._fn(anchors, tables)
 
     def excluding(self, *categories: str) -> _Matcher:
-        """Return a new :class:`_Matcher` that additionally requires none of
-        the given category names appear in either the anchor or tables frozenset.
-        Chainable: ``.excluding('a').excluding('b')`` ≡ ``.excluding('a', 'b')``."""
+        """Return a new :class:`_Matcher` excluding any of the given categories.
+
+        Additionally requires none of the given category names appear in either
+        the anchor or tables frozenset.
+        Chainable: ``.excluding('a').excluding('b')`` ≡ ``.excluding('a', 'b')``.
+        """
         excluded = frozenset(categories)
         original = self._fn
         def _fn(anchors: frozenset[str], tables: frozenset[str]) -> bool:
@@ -108,9 +109,11 @@ def all_of(*categories: str) -> _Matcher:
 
 
 def has(*categories: str) -> _Matcher:
-    """Match blocks containing at least one of *categories* in the full tables
-    frozenset (Set **or** Loop).  Use this to route loop-only blocks that have
-    no Set anchor without writing a lambda."""
+    """Match blocks containing at least one of *categories* in the full tables frozenset.
+
+    Checks the Set **or** Loop tables frozenset.  Use this to route loop-only
+    blocks that have no Set anchor without writing a lambda.
+    """
     cats = frozenset(categories)
     return _Matcher(lambda anchors, tables: bool(cats & tables))
 
@@ -125,20 +128,20 @@ def namer(*keys: str, prefix: str = '', suffix: str = '', sep: str = '_', fallba
 
     Parameters
     ----------
-    *keys : str
+    *keys
         Anchor key identifiers in ``'{category}.{object_id}'`` form.  The
         first value of each key is extracted from the ``kd`` dict passed by
         the emitter.  Keys absent from ``kd`` contribute *fallback*.
 
           For example, a block anchored to diffrn with id='D1' would receive: {'diffrn.id': ['D1']}
           A bridge block with both pd_phase and pd_diffractogram: {'pd_diffractogram.id': ['D1'], 'pd_phase.id': ['Al2O3']}
-    prefix : str, optional
+    prefix
         String prepended to the result.
-    suffix : str, optional
+    suffix
         String appended to the result.
-    sep : str, optional
+    sep
         Separator inserted between the extracted values.  Default ``'_'``.
-    fallback : str, optional
+    fallback
         Value used when a key is absent from ``kd``.  Default ``'?'``.
 
     Returns
@@ -249,6 +252,13 @@ class BlockSpec:
     attach_to: MatchPredicate = None
 
     def __post_init__(self) -> None:
+        """Normalise and validate fields after dataclass initialisation.
+
+        Raises
+        ------
+        ValueError
+            If both ``single_block=True`` and ``attach_to`` are set.
+        """
         if isinstance(self.matches, str):
             self.matches = any_of(self.matches)
         elif isinstance(self.matches, (set, frozenset)):
@@ -298,10 +308,16 @@ class OutputPlan:
 
         Parameters
         ----------
-        anchors:
+        anchors
             Frozenset of Set-category table names that have rows in the block.
-        tables:
+        tables
             Frozenset of all table names present in the block (Set + Loop).
+
+        Returns
+        -------
+        tuple[int, BlockSpec] | tuple[None, None]
+            ``(index, spec)`` of the first matching spec, or ``(None, None)``
+            if no spec matches.
         """
         for i, spec in enumerate(self.specs):
             if spec.matches is None or spec.matches(anchors, tables):

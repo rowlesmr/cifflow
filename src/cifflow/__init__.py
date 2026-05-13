@@ -1,3 +1,5 @@
+"""cifflow — CIF parsing, ingestion, emission, and validation library."""
+
 from cifflow.types import CifVersion
 from cifflow.database import convert_database
 from cifflow.cifmodel.model import CifFile, CifBlock, CifSaveFrame

@@ -1,4 +1,4 @@
-"""
+r"""
 CIF Lexer — hand-written state machine.
 
 Tokenises a CIF source string and yields Token objects.
@@ -124,7 +124,7 @@ class Lexer:
         return self._pos >= len(self._src)
 
     def _skip_to_eol(self) -> None:
-        """Advance past all characters up to but not including the next \\n (or EOF)."""
+        r"""Advance past all characters up to but not including the next '\n' (or EOF)."""
         while not self._at_end() and self._peek() != '\n':
             self._advance()
 
@@ -357,10 +357,7 @@ class Lexer:
         yield Token(TokenType.VALUE, ''.join(buf), vtype, line, col, errors)
 
     def _read_triple_cif1(self, delimiter: str) -> Iterator[Token]:
-        """
-        Triple-quoted string encountered in CIF 1.x mode.
-        Emit a lexer error and treat the content as STRING.
-        """
+        """Emit a lexer error for a triple-quoted string in CIF 1.x mode and treat content as STRING."""
         line, col = self._line, self._col
         triple = delimiter * 3
 
@@ -395,13 +392,12 @@ class Lexer:
                     line, col, errors)
 
     def _read_multiline(self) -> Iterator[Token]:
-        """
-        Semicolon-delimited multiline text field.
+        r"""Read a semicolon-delimited multiline text field.
 
         Per CIF 2.0 EBNF:  text-delim = line-term, ';'
-        The opening delimiter is the '\\n' before this ';' (already consumed as
+        The opening delimiter is the '\n' before this ';' (already consumed as
         whitespace) plus this ';' itself.  Content starts at the character
-        immediately following the opening ';' and ends just before the '\\n'
+        immediately following the opening ';' and ends just before the '\n'
         that precedes the closing ';' at column 1.
         """
         assert self._col == 1 and self._peek() == ';'

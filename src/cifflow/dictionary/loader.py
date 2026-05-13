@@ -1,6 +1,4 @@
-"""
-DDLm dictionary loader — parses a DDLm CIF and resolves _import.get directives.
-"""
+"""DDLm dictionary loader — parses a DDLm CIF and resolves _import.get directives."""
 
 import pathlib
 from collections.abc import Callable
@@ -139,10 +137,7 @@ def _str_list(data: dict[str, list], tag: str) -> list[str]:
 
 
 def _extract_item(data: dict[str, list], warn: Callable[[str], None]) -> DdlmItem | None:
-    """
-    Extract a DdlmItem from a working dict, or return None if the frame should
-    be skipped.
-    """
+    """Extract a DdlmItem from a working dict, or return None if the frame should be skipped."""
     raw_id = _scalar(data, '_definition.id')
     if raw_id is None:
         warn('save frame missing _definition.id — skipped')
@@ -299,14 +294,18 @@ class DictionaryLoader:
 
     Parameters
     ----------
-    resolver:
+    resolver
         Callable that maps a URI string to a raw CIF source string, or ``None``
         if the file is unavailable.  If ``None``, import directives that require
         an external file will trigger the ``if_miss`` policy.
-    on_warning:
+    path_resolver
+        Optional companion to *resolver* that maps the same URI to an absolute
+        filesystem path.  When provided, the resolved paths are recorded in
+        :attr:`~cifflow.dictionary.ddlm_parser.DdlmDictionary.source_files`.
+    on_warning
         Optional callback for non-fatal warnings.  If ``None``, warnings are
         silently discarded.
-    ignore_head_imports:
+    ignore_head_imports
         When ``True``, ``_import.get`` directives in save frames with
         ``_definition.class = Head`` are silently skipped.  Only the save
         frames physically present in the file being loaded are parsed.
@@ -331,8 +330,7 @@ class DictionaryLoader:
 
     def load(self, source: str, *, base_uri: str | None = None) -> DdlmDictionary:
         """
-        Parse a DDLm dictionary source string and resolve all ``_import.get``
-        directives.
+        Parse a DDLm dictionary source string and resolve all ``_import.get`` directives.
 
         Both ``mode="Contents"`` (frame-level attribute merge) and
         ``mode="Full"`` (constituent dictionary incorporation) are supported.
@@ -748,11 +746,7 @@ class DictionaryLoader:
         tag: str,
         source_cif: CifFile,
     ) -> None:
-        """
-        If *tag* belongs to a Loop category in *source_cif*, remove all tags
-        from that category in *frame_data* before the caller inserts the new
-        value.
-        """
+        """If *tag* belongs to a Loop category in *source_cif*, remove all tags from that category in *frame_data* before the caller inserts the new value."""
         if not source_cif.blocks:
             return
         block = source_cif[source_cif.blocks[0]]

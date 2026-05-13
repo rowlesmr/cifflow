@@ -78,13 +78,35 @@ def _is_uuid(value: str) -> bool:
 
 @dataclass
 class FidelityMismatch:
-    kind: str                           # machine-readable category
-    source: Literal['a', 'b', 'both']  # which source(s) the mismatch is tied to
-    description: str                    # human-readable explanation
+    """A single semantic difference found between two CIF sources.
+
+    Attributes
+    ----------
+    kind
+        Machine-readable category (e.g. ``'missing_block'``, ``'value_mismatch'``).
+    source
+        Which source the mismatch is tied to: ``'a'``, ``'b'``, or ``'both'``.
+    description
+        Human-readable explanation of the difference.
+    """
+
+    kind: str
+    source: Literal['a', 'b', 'both']
+    description: str
 
 
 @dataclass
 class FidelityReport:
+    """Result of a :func:`check_fidelity` call.
+
+    Attributes
+    ----------
+    passed
+        ``True`` when no mismatches were found.
+    mismatches
+        Ordered list of all :class:`FidelityMismatch` objects found.
+    """
+
     passed: bool
     mismatches: list[FidelityMismatch]
 
@@ -648,32 +670,27 @@ def check_fidelity(
 
     Parameters
     ----------
-    source_a, source_b:
-        CIF sources to compare.  Each may be a file path (``str`` or
+    source_a
+        First CIF source to compare.  May be a file path (``str`` or
         ``pathlib.Path``) or a pre-parsed ``CifFile`` object.
-    schema:
+    source_b
+        Second CIF source to compare.  Same accepted types as *source_a*.
+    schema
         Schema to use for ingestion.  ``None`` compares only
         ``_cif_fallback``.  Accepts ``SchemaSpec``, ``.json`` cache path, or
         ``.dic`` DDLm dictionary path.
-    version:
+    version
         Fallback CIF version for files without a magic line.  Default
-        ``CIF_2_0``.  (Not yet propagated to the parser; see module
-        docstring.)
-    report_file:
+        ``CIF_2_0``.
+    report_file
         Optional path for a human-readable text report.  If provided, the
-        report is written (UTF-8) before returning.  The file is always
-        written regardless of whether the comparison passed or failed.
+        report is written (UTF-8) before returning, regardless of pass/fail.
 
     Returns
     -------
     FidelityReport
-        Never raises.  Parse and ingestion errors are captured in the report.
-
-    Raises
-    ------
-    Exception
-        Schema loading failures propagate directly (programming error, not
-        data error).
+        Parse and ingestion errors are captured in the report; never raises
+        for data errors.  Schema loading failures propagate directly.
     """
     mismatches: list[FidelityMismatch] = []
 

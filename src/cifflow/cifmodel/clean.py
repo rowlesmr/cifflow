@@ -25,7 +25,21 @@ _ERROR_TAG = '_cifflow_error_value'
 
 @dataclass
 class CleanWarning:
-    category: str        # step name, e.g. 'deduplicate_blocks'
+    """Record of one removal action performed by :func:`clean`.
+
+    Attributes
+    ----------
+    category
+        Cleaning step name, e.g. ``'deduplicate_blocks'``.
+    block
+        Name of the affected block, or ``None`` if not block-scoped.
+    save_frame
+        Name of the affected save frame, or ``None`` if not save-frame-scoped.
+    message
+        Human-readable description of what was removed.
+    """
+
+    category: str
     block: str | None
     save_frame: str | None
     message: str
@@ -42,10 +56,36 @@ def clean(
     strip_loop_padding: bool = True,
 ) -> tuple[CifFile, list[CleanWarning]]:
     """
-    Clean parse-time artefacts from a CifFile.
+    Remove common parse-time artefacts from a CifFile.
 
-    Returns (cleaned_cif, warnings).  When copy=True (default) the input is
-    not modified.  When copy=False the input is mutated in place and returned.
+    Parameters
+    ----------
+    cif
+        The source CifFile to clean.
+    copy
+        If ``True`` (default), operate on a deep copy and leave the original
+        unchanged.  If ``False``, mutate the input in place and return it.
+    remove_error_values
+        Remove orphan ``_cifflow_error_value`` synthetic tags left by the
+        parser's error-recovery path.
+    deduplicate_blocks
+        ``'first'`` or ``'last'`` — which duplicate block to keep — or
+        ``False`` to skip deduplication.
+    deduplicate_save_frames
+        ``'first'`` or ``'last'`` — which duplicate save frame to keep — or
+        ``False`` to skip deduplication.
+    deduplicate_tags
+        ``'first'`` or ``'last'`` — which duplicate scalar tag value to keep
+        — or ``False`` to skip deduplication.
+    strip_loop_padding
+        Remove trailing ``'?'`` placeholder rows added by :class:`CifBuilder`
+        in pad mode to complete incomplete loop rows.
+
+    Returns
+    -------
+    tuple[CifFile, list[CleanWarning]]
+        A ``(cleaned_cif, warnings)`` pair.  Each :class:`CleanWarning`
+        describes one removal action.
     """
     target = cif.deepcopy() if copy else cif
     out: list[CleanWarning] = []
@@ -78,6 +118,7 @@ def _step_remove_error_values(
     writer: CifWriter,
     out: list[CleanWarning],
 ) -> None:
+    """Remove orphan _cifflow_error_value tags from every namespace."""
     for block in cif._block_list:
         bw = writer.get_block(block.name)
         _remove_error_from_ns(block, bw, block.name, None, out)
@@ -93,6 +134,7 @@ def _remove_error_from_ns(
     save_frame_name: str | None,
     out: list[CleanWarning],
 ) -> None:
+    """Remove the error tag from a single namespace, recording a warning if found."""
     if _ERROR_TAG in ns:
         count = len(ns[_ERROR_TAG])
         nsw.delete_tag(_ERROR_TAG)
@@ -110,6 +152,7 @@ def _step_deduplicate_blocks(
     keep: Keep,
     out: list[CleanWarning],
 ) -> None:
+    """Remove all but one copy of each duplicate block name."""
     # Collect counts first — do not iterate _block_list while removing
     seen: dict[str, int] = {}
     for b in cif._block_list:
@@ -134,6 +177,7 @@ def _step_deduplicate_save_frames(
     keep: Keep,
     out: list[CleanWarning],
 ) -> None:
+    """Remove all but one copy of each duplicate save frame name within every block."""
     for block in cif._block_list:
         bw = writer.get_block(block.name)
         seen: dict[str, int] = {}
@@ -162,6 +206,7 @@ def _step_deduplicate_tags(
     keep: Keep,
     out: list[CleanWarning],
 ) -> None:
+    """Collapse multi-value scalar tags to a single value in every namespace."""
     for block in cif._block_list:
         bw = writer.get_block(block.name)
         _dedup_tags_in_ns(block, bw, block.name, None, keep, out)
@@ -178,6 +223,7 @@ def _dedup_tags_in_ns(
     keep: Keep,
     out: list[CleanWarning],
 ) -> None:
+    """Collapse multi-value scalar tags in a single namespace."""
     loop_tags: set[str] = {t for loop in ns._loops for t in loop}
     for tag in list(ns._tag_order):
         if tag in loop_tags:
@@ -203,6 +249,7 @@ def _step_strip_loop_padding(
     writer: CifWriter,
     out: list[CleanWarning],
 ) -> None:
+    """Strip trailing placeholder rows from every loop in every namespace."""
     for block in cif._block_list:
         bw = writer.get_block(block.name)
         _strip_padding_in_ns(block, bw, block.name, None, out)
@@ -212,6 +259,7 @@ def _step_strip_loop_padding(
 
 
 def _trailing_placeholder_count(values: list) -> int:
+    """Count consecutive trailing ``'?'`` entries at the end of a value list."""
     count = 0
     for v in reversed(values):
         if v == '?':
@@ -228,6 +276,7 @@ def _strip_padding_in_ns(
     save_frame_name: str | None,
     out: list[CleanWarning],
 ) -> None:
+    """Strip trailing placeholder rows from every loop in a single namespace."""
     for loop in list(ns._loops):
         n = len(loop)
         if n == 0:

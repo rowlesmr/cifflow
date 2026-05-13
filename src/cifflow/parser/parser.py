@@ -42,6 +42,7 @@ class _TableFrame:
 @dataclass
 class _FakeToken:
     """Minimal token substitute used for EOF error construction."""
+
     line: int
     column: int
     value: str = 'EOF'
@@ -107,6 +108,7 @@ class CifParser:
     # ------------------------------------------------------------------
 
     def parse(self, source: str) -> None:
+        """Parse *source* CIF text, firing CifParserEvents on the registered handler."""
         version, remaining, line_offset, v_errors = detect_version(source)
         for ve in v_errors:
             self._h.on_error(ParseError(
@@ -239,7 +241,7 @@ class CifParser:
         self._loop_has_values = False
 
     def _after_close_container(self) -> None:
-        """Called immediately after a container frame is popped."""
+        """Update parent table state and active-tag depth after a container frame is popped."""
         # Notify a parent table that its value container just closed.
         if (self._container_stack
                 and isinstance(self._container_stack[-1], _TableFrame)):
@@ -445,10 +447,7 @@ class CifParser:
     # ── Container open/close ───────────────────────────────────────────
 
     def _ensure_value_context(self, tok: Token) -> None:
-        """
-        If there is no enclosing context for a container value, set up a
-        synthetic _cifflow_error_value tag so the container has somewhere to go.
-        """
+        """Set up a synthetic ``_cifflow_error_value`` tag if there is no enclosing context for a container value."""
         if (not self._in_loop
                 and self._active_tag is None
                 and not self._container_stack):
@@ -460,10 +459,7 @@ class CifParser:
             self._tag_base_depth = 0
 
     def _notify_parent_table_of_container_open(self, tok: Token) -> None:
-        """
-        When a container opens while inside a table, ensure the table is in
-        'value' state (adjusting from 'key' or 'colon' with errors if needed).
-        """
+        """Ensure the parent table is in 'value' state when a container opens inside it."""
         if not (self._container_stack
                 and isinstance(self._container_stack[-1], _TableFrame)):
             return
@@ -521,12 +517,7 @@ class CifParser:
 
     @staticmethod
     def _key_adjacent_col(key_tok: Token) -> Optional[int]:
-        """
-        Return the column at which a colon would sit if immediately adjacent
-        to *key_tok* (no intervening whitespace).  Returns None for token
-        types where the calculation is unreliable (e.g. multi-line triple
-        quoted keys).
-        """
+        """Return the column where a colon sits if immediately adjacent to *key_tok*, or None for unreliable types."""
         vt = key_tok.value_type
         if vt in (ValueType.SINGLE_QUOTED, ValueType.DOUBLE_QUOTED):
             # token width = 1 (open quote) + len(value) + 1 (close quote)

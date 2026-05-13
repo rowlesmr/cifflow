@@ -1,6 +1,4 @@
-"""
-DDLm item definition — one save frame extracted from a DDLm dictionary.
-"""
+"""DDLm item definition — one save frame extracted from a DDLm dictionary."""
 
 from dataclasses import dataclass, field
 
@@ -71,6 +69,10 @@ class DdlmItem:
     is_deprecated:
         ``True`` if any ``_definition_replaced`` row exists for this item,
         regardless of the replacement value.
+    enumeration_range:
+        Value of ``_enumeration.range``.  ``None`` if absent.
+    type_dimension:
+        Value of ``_type.dimension``.  ``None`` if absent.
     """
 
     definition_id: str

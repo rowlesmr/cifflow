@@ -35,9 +35,9 @@ CheckResult = tuple[str, str, str, str]
 # ---------------------------------------------------------------------------
 
 def parse_type_dimension(dim_str: str) -> tuple[int, ...] | None:
-    """
-    Parse '[3,4]' → (3, 4).  Returns None for '[]', malformed strings, or any
-    dimension value <= 0.
+    """Parse ``'[3,4]'`` → ``(3, 4)``.
+
+    Returns ``None`` for ``'[]'``, malformed strings, or any dimension value <= 0.
     """
     s = dim_str.strip()
     if not (s.startswith('[') and s.endswith(']')):
@@ -125,11 +125,10 @@ def check_type_container(
     value: str,
     col: ColumnDef,
 ) -> tuple[list[CheckResult], bool, Any]:
-    """
-    Returns (results, block_bce, parsed_json).
+    """Return ``(results, block_bce, parsed_json)`` for container-type checking.
 
-    block_bce is True when Checks B–E must be skipped for this value.
-    parsed_json is the decoded JSON object, or None for Single / parse failure.
+    ``block_bce`` is ``True`` when Checks B–E must be skipped for this value.
+    ``parsed_json`` is the decoded JSON object, or ``None`` for Single / parse failure.
     """
     tc = col.type_container
 

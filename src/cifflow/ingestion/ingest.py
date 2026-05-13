@@ -35,11 +35,18 @@ from cifflow.ingestion.duckdb_ingest import (
 class IngestionError(Exception):
     """Raised when one or more semantic errors prevent successful ingestion.
 
+    Parameters
+    ----------
+    errors
+        Ordered list of error message strings.
+
     Attributes
     ----------
-    errors:
+    errors
         Ordered list of error message strings.
     """
+
+    errors: list[str]
 
     def __init__(self, errors: list[str]) -> None:
         self.errors = errors
@@ -395,7 +402,9 @@ def ingest(
         value from the FK target already known in the same block.
     dataset_id:
         The _audit_dataset.id value to ingest. When None, auto-detected.
-        Raises ValueError if specified but not found in any dataset block.
+        Raises ``ValueError`` if specified but not found in any dataset block,
+        or if None and the file contains blocks belonging to incompatible
+        datasets (no common ``_audit_dataset.id``).
 
     Returns
     -------

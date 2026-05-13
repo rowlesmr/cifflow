@@ -122,7 +122,7 @@ open('output.cif', 'w', encoding='utf-8').write(output)
 
 See `example_workflow.py` in the repository root for a fully annotated end-to-end demonstration covering all four emission modes, type-cast export, and fidelity checking.
 
-The full API reference is in [`docs/api.md`](docs/api.md).
+The full API reference is in the [API Reference](docs/api/index.md).
 
 ---
 

@@ -8,6 +8,8 @@ from typing import Optional, TextIO
 
 import duckdb
 
+from cifflow.cifmodel.model import CifFile
+from cifflow.dictionary.schema import SchemaSpec
 from cifflow.inspect._common import (
     c, BOLD, DIM, RED, YELLOW, GREEN, CYAN,
 )
@@ -42,12 +44,12 @@ class TraceEvent:
 
 
 def inspect_ingest(
-    cif,
+    cif: CifFile,
     db: duckdb.DuckDBPyConnection | None = None,
-    schema=None,
+    schema: SchemaSpec | None = None,
     *,
     propagate_fk: bool = False,
-    dataset_id=None,
+    dataset_id: str | None = None,
     file: Optional[TextIO] = None,
 ) -> list[TraceEvent]:
     """Run ingestion, capture events, and pretty-print a diagnostic trace.

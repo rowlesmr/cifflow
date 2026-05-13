@@ -1,6 +1,4 @@
-"""
-DDLm dictionary data container produced by DictionaryLoader.
-"""
+"""DDLm dictionary data container produced by DictionaryLoader."""
 
 from dataclasses import dataclass, field
 
@@ -41,6 +39,13 @@ class DdlmDictionary:
         replaced (``is_deprecated == True``).
     warnings:
         Non-fatal issues encountered during loading, in emission order.
+    source_files:
+        Absolute file paths (or URIs) of every dictionary file loaded,
+        in load order.  Populated when ``path_resolver`` is supplied to
+        :class:`~cifflow.dictionary.loader.DictionaryLoader`.
+    uri:
+        Value of ``_dictionary.uri`` from the top-level dictionary source,
+        or ``None`` if absent.
     """
 
     name: str
