@@ -252,7 +252,8 @@ class BlockSpec:
     attach_to: MatchPredicate = None
 
     def __post_init__(self) -> None:
-        """
+        """Normalise and validate fields after dataclass initialisation.
+
         Raises
         ------
         ValueError
