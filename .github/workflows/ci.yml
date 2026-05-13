@@ -67,7 +67,7 @@ jobs:
       - name: Lint docstrings
         run: |
           ruff check src/
-          python -m pydoclint src/
+          pydoclint src/
 
       - name: Build docs
         run: mkdocs build --strict

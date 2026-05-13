@@ -43,14 +43,14 @@ Run against a single module while converting it:
 
 ```
 ruff check src/cifflow/types.py
-python -m pydoclint src/cifflow/types.py
+pydoclint src/cifflow/types.py
 ```
 
 Run across the full source tree:
 
 ```
 ruff check src/
-python -m pydoclint src/
+pydoclint src/
 ```
 
 Both must pass clean before opening a pull request.
