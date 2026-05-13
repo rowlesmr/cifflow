@@ -965,3 +965,108 @@ All categories not listed appear after the listed ones, alphabetically.
 
 ¹ `OutputPlan` is entirely ignored in `ORIGINAL` mode; passing one emits a `UserWarning`.
 Use `GROUPED` mode for custom ordering.
+
+---
+
+## Complete example
+
+A realistic `OutputPlan` for a powder-diffraction dataset, showing most features together:
+`has`/`only`/`all_of` routing, custom `block_namer` callables, `namer()`, `category_order`,
+merge groups, `column_order`, and a catch-all final spec.
+
+```python
+from cifflow import (
+    OutputPlan, BlockSpec,
+    only, any_of, all_of, has, namer,
+)
+
+output_plan = OutputPlan(
+    specs=[
+        BlockSpec(
+            matches=has(*schema.descendants('publication')),
+            category_order=[],  # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=only("diffrn_radiation"),
+            category_order=[],  # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=only("pd_instr"),
+            block_namer=lambda kd: f"MPD_{kd.get('pd_instr.id', ['?'])[0]}",
+            category_order=[],  # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=has("pd_instr_detector"),
+            category_order=[],  # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=only("diffrn"),
+            block_namer=namer('diffrn.id', prefix="diffrn_"),
+            category_order=[],  # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=all_of('pd_diffractogram', "pd_phase"),
+            block_namer=namer("pd_phase.id", 'pd_diffractogram.id', prefix="pd_"),
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=only("structure"),
+            category_order=[
+                "structure",
+                "cell",
+                "atom_site",
+            ],  # other categories follow alphabetically
+            column_order={
+                'cell': [
+                    'length_a', 'length_b', 'length_c',
+                    'angle_alpha', 'angle_beta', 'angle_gamma',
+                    'volume',
+                ],
+                'atom_site': [
+                    'label', 'type_symbol',
+                    'fract_x', 'fract_y', 'fract_z',
+                    'occupancy', 'site_symmetry_multiplicity',
+                ],
+            },
+        ),
+        BlockSpec(
+            matches=only("pd_phase"),
+            block_namer=lambda kd: f"phase_{kd.get('pd_phase.id', ['?'])[0]}_suffix",
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=only("model"),
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=only("space_group"),
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=only("pd_diffractogram"),
+            category_order=[
+                "pd_diffractogram",
+                "pd_calc_overall",
+                "pd_meas_overall",
+                "pd_proc_ls",
+                ['pd_data', 'pd_meas', 'pd_proc', 'pd_calc'],  # merge group
+            ],
+        ),
+        BlockSpec(
+            matches=None,  # catch-all: anything not matched above, alphabetical order
+        ),
+    ],
+)
+```
+
+Key points illustrated:
+
+- `has(*schema.descendants('publication'))` — route any block that contains any category
+  in the `publication` subtree of the schema hierarchy
+- `only("pd_instr")` — route blocks whose Set anchor is exactly `pd_instr`
+- `all_of('pd_diffractogram', 'pd_phase')` — route blocks anchored to both categories
+- `namer('diffrn.id', prefix="diffrn_")` — build the block name from the `diffrn.id` key
+  value with a fixed prefix; falls back to the next key argument if the first is absent
+- `['pd_data', 'pd_meas', 'pd_proc', 'pd_calc']` inside `category_order` — emit these four
+  loop categories as a single merged loop (columns interleaved, one row per row-id)
+- `matches=None` as the last spec — catch-all that captures everything not claimed above
