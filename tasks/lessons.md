@@ -14,6 +14,7 @@
 - **Performance:** 102, 109, 111, 112, 113, 114, 115, 116
 - **SQLite:** 18, 19, 20, 75, 76
 - **Testing:** 32, 33, 34, 43, 60, 66L, 67L, 68L, 87, 88, 89, 91, 92, 93, 94, 95, 96
+- **CI / tooling:** 133, 134, 135
 - **Working practices:** 9, 13, 87
 
 ---
@@ -1294,6 +1295,42 @@
   **Rule:** In GROUPED mode, `fallback_id = None`. Fresh UUID injection belongs in ONE_BLOCK (which explicitly tracks conformance metadata). Never auto-generate IDs in GROUPED — the fingerprint approach preserves existing identity; inserting a new UUID creates spurious identity.
 
   ---
+
+## Lesson 133 — `pydoclint` is a console script, not a Python module (2026-05-13)
+
+**Context:** CI `docs` job in `.github/workflows/ci.yml`.
+
+**Mistake:** Used `python -m pydoclint src/`, which fails with "No module named pydoclint.__main__; 'pydoclint' is a package and cannot be directly executed".
+
+**Fix:** Use `pydoclint src/` directly (the console-script entry point installed by pip).
+
+**Rule:** `pydoclint` installs only a console-script entry point, not a `__main__` module. Always invoke it as `pydoclint`, never as `python -m pydoclint`.
+
+---
+
+## Lesson 134 — Transitive raises from `_`-prefixed helpers: document in parameter description, not `Raises` section (2026-05-13)
+
+**Context:** `writer.py` — `add_loop_column`, `reorder_loop_tags`, `add_loop_row`, `get_loop_tags`; all call `_find_loop_index` which raises `KeyError`.
+
+**Problem:** The `KeyError` is real and propagates to callers, so it should be documented. But placing it in the `Raises` section triggers pydoclint DOC502 ("documented raise not found in function body") because there is no direct `raise KeyError` in the public method — only in the `_`-prefixed helper.
+
+**Fix:** Document it in the `loop_tag` parameter description: "Raises `KeyError` if not found in any loop."
+
+**Rule:** When the only source of an exception is a `_`-prefixed internal helper (no direct `raise` in the public method body), document it in the relevant parameter description rather than the `Raises` section. This avoids DOC502 while still informing callers.
+
+---
+
+## Lesson 135 — CI `maturin develop` requires a virtualenv; create and activate one first (2026-05-13)
+
+**Context:** CI `docs` job.
+
+**Mistake:** Called `maturin develop` without first creating a virtualenv. Failed with "Couldn't find a virtualenv or conda environment".
+
+**Fix:** Added `python -m venv .venv` and `echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH` steps before the `maturin-action` step — mirroring the pattern already used in the `test` job.
+
+**Rule:** Any CI job that calls `maturin develop` must first create a virtualenv and add it to `PATH`. `maturin develop` installs into a virtualenv; it will not run without one.
+
+---
 
   ## Lesson 132 — Bridge-block PK-stripping must only apply to Sets that have their own single-anchor block (2026-05-12)
 
