@@ -47,6 +47,8 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
@@ -71,3 +73,7 @@ jobs:
 
       - name: Build docs
         run: mkdocs build --strict
+
+      - name: Deploy docs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: mkdocs gh-deploy --force
