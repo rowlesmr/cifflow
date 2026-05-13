@@ -402,7 +402,9 @@ def ingest(
         value from the FK target already known in the same block.
     dataset_id:
         The _audit_dataset.id value to ingest. When None, auto-detected.
-        Raises ValueError if specified but not found in any dataset block.
+        Raises ``ValueError`` if specified but not found in any dataset block,
+        or if None and the file contains blocks belonging to incompatible
+        datasets (no common ``_audit_dataset.id``).
 
     Returns
     -------

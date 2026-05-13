@@ -91,7 +91,8 @@
       "Bash(.venv/Scripts/pydoclint src/cifflow/fidelity/)",
       "Bash(.venv/Scripts/pydoclint src/cifflow/inspect/)",
       "Bash(.venv/Scripts/pydoclint src/cifflow/database/)",
-      "Bash(.venv/Scripts/pydoclint src/)"
+      "Bash(.venv/Scripts/pydoclint src/)",
+      "Bash(.venv\\\\Scripts\\\\python -m pydoclint src/)"
     ]
   }
 }

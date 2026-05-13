@@ -185,7 +185,8 @@ class SaveFrameWriter:
         Raises
         ------
         ValueError
-            If the tag already exists in this namespace.
+            If the tag name is not a legal CIF identifier for the current
+            version, or if the tag already exists in this namespace.
         """
         _check_tag(tag, self._version)
         tag = _casefold(tag)
@@ -216,7 +217,8 @@ class SaveFrameWriter:
         Raises
         ------
         ValueError
-            If ``columns`` is empty, any tag already exists, or column lengths differ.
+            If ``columns`` is empty, any tag name is not a legal CIF identifier,
+            any tag already exists, or column lengths differ.
         """
         if not columns:
             raise ValueError("columns must not be empty")
@@ -253,6 +255,7 @@ class SaveFrameWriter:
         ----------
         loop_tag
             Any tag already in the target loop (used to identify it).
+            Raises ``KeyError`` if not found in any loop.
         new_tag
             Tag name for the new column.
         values
@@ -266,8 +269,8 @@ class SaveFrameWriter:
         Raises
         ------
         ValueError
-            If ``new_tag`` already exists, ``values`` length does not match
-            the loop row count, or ``loop_tag`` is not found in any loop.
+            If ``new_tag`` is not a legal CIF identifier, ``new_tag`` already
+            exists, or ``values`` length does not match the loop row count.
         """
         loop_idx = _find_loop_index(self._ns, _casefold(loop_tag))
         _check_tag(new_tag, self._version)
@@ -305,6 +308,7 @@ class SaveFrameWriter:
         ----------
         loop_tag
             Any tag already in the target loop (used to identify it).
+            Raises ``KeyError`` if not found in any loop.
         new_order
             Complete list of tag names in the desired order; must be a
             permutation of the loop's current tag list.
@@ -317,8 +321,7 @@ class SaveFrameWriter:
         Raises
         ------
         ValueError
-            If ``new_order`` is not a permutation of the current loop tags,
-            or if ``loop_tag`` is not found in any loop.
+            If ``new_order`` is not a permutation of the current loop tags.
         """
         loop_idx = _find_loop_index(self._ns, _casefold(loop_tag))
         new_order = [_casefold(t) for t in new_order]
@@ -337,7 +340,19 @@ class SaveFrameWriter:
         return self
 
     def get_loop_tags(self, loop_tag: str) -> list[str]:
-        """Return a copy of the ordered tag list for the loop containing loop_tag."""
+        """Return a copy of the ordered tag list for the loop containing loop_tag.
+
+        Parameters
+        ----------
+        loop_tag
+            Any tag already in the target loop (used to identify it).
+
+        Returns
+        -------
+        list[str]
+            Ordered list of tag names in the loop.  Raises ``KeyError`` if
+            ``loop_tag`` is not found in any loop.
+        """
         loop_idx = _find_loop_index(self._ns, _casefold(loop_tag))
         return list(self._ns._loops[loop_idx])
 
@@ -353,6 +368,7 @@ class SaveFrameWriter:
         ----------
         loop_tag
             Any tag already in the target loop (used to identify it).
+            Raises ``KeyError`` if not found in any loop.
         row
             Ordered list of values matching the loop's tag order.
 
@@ -364,8 +380,7 @@ class SaveFrameWriter:
         Raises
         ------
         ValueError
-            If ``row`` length does not match the loop's tag count, or if
-            ``loop_tag`` is not found in any loop.
+            If ``row`` length does not match the loop's tag count.
         """
         loop_idx = _find_loop_index(self._ns, _casefold(loop_tag))
         loop_tags = self._ns._loops[loop_idx]
@@ -423,7 +438,24 @@ class SaveFrameWriter:
         return self
 
     def delete_tag(self, tag: str) -> 'SaveFrameWriter':
-        """Delete a tag; removes it from its loop if it is a loop column."""
+        """
+        Delete a tag; removes it from its loop if it is a loop column.
+
+        Parameters
+        ----------
+        tag
+            Tag name to delete.
+
+        Returns
+        -------
+        SaveFrameWriter
+            Returns self for method chaining.
+
+        Raises
+        ------
+        KeyError
+            If the tag does not exist in this namespace.
+        """
         tag = _casefold(tag)
         if tag not in self._ns._tags:
             raise KeyError(tag)
@@ -442,7 +474,27 @@ class SaveFrameWriter:
         loop_tag: str,
         tag_to_remove: str,
     ) -> 'SaveFrameWriter':
-        """Remove one tag from a loop, deleting the loop entirely if it becomes empty."""
+        """
+        Remove one tag from a loop, deleting the loop entirely if it becomes empty.
+
+        Parameters
+        ----------
+        loop_tag
+            Any tag already in the target loop (used to identify it).
+        tag_to_remove
+            Tag name to remove from the loop.
+
+        Returns
+        -------
+        SaveFrameWriter
+            Returns self for method chaining.
+
+        Raises
+        ------
+        KeyError
+            If ``loop_tag`` is not found in any loop, or if ``tag_to_remove``
+            is not in the identified loop.
+        """
         loop_idx = _find_loop_index(self._ns, _casefold(loop_tag))
         tag_to_remove = _casefold(tag_to_remove)
         if tag_to_remove not in self._ns._loops[loop_idx]:
@@ -538,7 +590,8 @@ class BlockWriter(SaveFrameWriter):
         Raises
         ------
         ValueError
-            If a save frame with that name already exists in the block.
+            If ``name`` is not a legal CIF identifier for the current version,
+            or if a save frame with that name already exists in the block.
         """
         _check_name(name, self._version, "save-frame")
         name = _casefold(name)
@@ -636,7 +689,8 @@ class BlockWriter(SaveFrameWriter):
         KeyError
             If ``old_name`` does not exist in the block.
         ValueError
-            If ``new_name`` already exists in the block.
+            If ``new_name`` is not a legal CIF identifier for the current
+            version, or if ``new_name`` already exists in the block.
         """
         old_name = _casefold(old_name)
         if old_name not in self._block._save_frames:
@@ -733,7 +787,8 @@ class CifWriter:
         Raises
         ------
         ValueError
-            If a block with that name already exists.
+            If ``name`` is not a legal CIF identifier for the current version,
+            or if a block with that name already exists.
         """
         _check_name(name, self._version, "block")
         name = _casefold(name)
@@ -829,7 +884,8 @@ class CifWriter:
         KeyError
             If ``old_name`` does not exist.
         ValueError
-            If ``new_name`` already exists.
+            If ``new_name`` is not a legal CIF identifier for the current
+            version, or if ``new_name`` already exists.
         """
         old_name = _casefold(old_name)
         if old_name not in self._file:

@@ -252,6 +252,12 @@ class BlockSpec:
     attach_to: MatchPredicate = None
 
     def __post_init__(self) -> None:
+        """
+        Raises
+        ------
+        ValueError
+            If both ``single_block=True`` and ``attach_to`` are set.
+        """
         if isinstance(self.matches, str):
             self.matches = any_of(self.matches)
         elif isinstance(self.matches, (set, frozenset)):
