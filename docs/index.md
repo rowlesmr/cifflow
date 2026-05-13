@@ -116,7 +116,7 @@ open('output.cif', 'w', encoding='utf-8').write(output)
 
 See `example_workflow.py` in the repository root for a fully annotated end-to-end demonstration covering all four emission modes, type-cast export, and fidelity checking.
 
-The full API reference is in the [API Reference](api/index.md).
+The full API reference is hosted at [rowlesmr.github.io/cifflow](https://rowlesmr.github.io/cifflow/).
 
 ---
 
