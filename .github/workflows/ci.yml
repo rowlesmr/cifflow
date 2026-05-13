@@ -54,6 +54,11 @@ jobs:
         with:
           python-version: "3.13"
 
+      - run: python -m venv .venv
+
+      - name: Add venv to PATH
+        run: echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+
       - uses: PyO3/maturin-action@v1
         with:
           command: develop
