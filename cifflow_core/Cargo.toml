@@ -12,5 +12,5 @@ name = "profile_cif"
 path = "src/bin/profile_cif.rs"
 
 [dependencies]
-pyo3 = { version = "0.23", features = ["extension-module"] }
-arrow = { version = "54", features = ["ipc", "pyarrow"] }
+pyo3 = { version = "0.28", features = ["extension-module"] }
+arrow = { version = "58", features = ["ipc", "pyarrow"] }
