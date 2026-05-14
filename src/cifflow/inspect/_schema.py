@@ -86,12 +86,21 @@ def inspect_schema(
         for stmt, table in zip(ddl_stmts, schema.tables.values()):
             ddl_by_table[table.name] = stmt
 
+    def _depr_suffix(definition_id: str) -> str:
+        if definition_id not in schema.deprecated_ids:
+            return ''
+        replacements = [r for r in schema.deprecated_replacements.get(definition_id, []) if r]
+        if replacements:
+            return '  ' + c('DEPRECATED -> ' + ', '.join(replacements), RED, file=file)
+        return '  ' + c('DEPRECATED', RED, file=file)
+
     for table in sorted(schema.tables.values(), key=lambda t: t.name):
         cls_colour = CYAN if table.category_class == 'Loop' else BLUE
         header = (
             c(table.name, BOLD, file=file)
             + '  '
             + c(f'[{table.category_class}]', cls_colour, file=file)
+            + _depr_suffix(table.definition_id)
         )
         print(header, file=file)
 
@@ -124,8 +133,9 @@ def inspect_schema(
             tag_part = ''
             if not col.is_synthetic:
                 tag_part = '  ' + c(col.definition_id, DIM, file=file)
-            if col.linked_item_id:
+            if col.linked_item_id and not col.is_primary_key:
                 tag_part += '  ' + c(f'->su {col.linked_item_id}', MAGENTA, file=file)
+            tag_part += _depr_suffix(col.definition_id)
 
             flag_str = '  '.join(flags)
             print(f'    {name_part}  {type_part}  {flag_str}{tag_part}', file=file)
@@ -157,6 +167,69 @@ def inspect_schema(
 
         print(file=file)
 
+    set_tables = {name for name, t in schema.tables.items() if t.category_class == 'Set'}
+
+    # Reverse map: definition_id → (table_name, col_name), for transitive chain-following.
+    tag_to_table_col: dict[str, tuple[str, str]] = {
+        defn_id: (tbl, col_name)
+        for (tbl, col_name), defn_id in schema.column_to_tag.items()
+    }
+    col_by_key: dict[tuple[str, str], object] = {
+        (tbl, col.name): col
+        for tbl, tbl_def in schema.tables.items()
+        for col in tbl_def.columns
+    }
+
+    def _resolves_to_set(linked_item_id: str, visited: set) -> bool:
+        """Return True if linked_item_id transitively reaches a Set category."""
+        if not linked_item_id or linked_item_id in visited:
+            return False
+        visited.add(linked_item_id)
+        canonical = schema.alias_to_definition_id.get(linked_item_id, linked_item_id)
+        cls = schema.tag_to_category_class.get(canonical)
+        if cls == 'Set':
+            return True
+        if cls != 'Loop':
+            return False
+        entry = tag_to_table_col.get(canonical)
+        if entry is None:
+            return False
+        target_col = col_by_key.get(entry)
+        if target_col is not None and target_col.linked_item_id:
+            return _resolves_to_set(target_col.linked_item_id, visited)
+        return False
+
+    bridge_by_table: dict[str, list] = {}
+    for bc in schema.bridge_columns:
+        bridge_by_table.setdefault(bc.table_name, []).append(bc)
+
+    floating_loops = []
+    for table in schema.tables.values():
+        if table.category_class != 'Loop':
+            continue
+        pk_set = set(table.primary_keys)
+
+        has_set_link = any(
+            _resolves_to_set(col.linked_item_id, set())
+            for col in table.columns
+            if col.is_primary_key and not col.is_synthetic and col.linked_item_id
+        )
+
+        has_set_bridge = any(
+            bc.column_name in pk_set and bc.hops[-1][1] in set_tables
+            for bc in bridge_by_table.get(table.name, [])
+        )
+
+        if not has_set_link and not has_set_bridge:
+            floating_loops.append(table)
+
+    if floating_loops:
+        print(c('-- loop tables without Set-derived category key --', BOLD, DIM, file=file), file=file)
+        for table in sorted(floating_loops, key=lambda t: t.name):
+            pk_str = ', '.join(c(k, YELLOW, file=file) for k in table.primary_keys)
+            print(f'  {c(table.name, BOLD, file=file)}  PK: {pk_str}', file=file)
+        print(file=file)
+
     if schema.warnings:
         print(c('-- schema warnings --', BOLD, DIM, file=file), file=file)
         for w in schema.warnings:
@@ -167,5 +240,5 @@ def inspect_schema(
 
 if __name__ == '__main__':
     from pathlib import Path
-    p = Path(r"C:\Users\User\Documents\github\pycifparse\data\dictionaries\cif_pow.dic")
+    p = Path(r"C:\Users\User\Documents\github\pycifparse\data\dictionaries\testing\cif_pow.dic")
     inspect_schema(p)
