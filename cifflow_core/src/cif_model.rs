@@ -64,13 +64,13 @@ pub struct PyCifSaveFrame {
     pub _id: usize,
     // Python dict[str, list]  — mutable from Python
     #[pyo3(get, set)]
-    pub _tags: PyObject,
+    pub _tags: Py<PyAny>,
     // Python list[str]  — mutable from Python
     #[pyo3(get, set)]
-    pub _tag_order: PyObject,
+    pub _tag_order: Py<PyAny>,
     // Python list[list[str]]  — mutable from Python
     #[pyo3(get, set)]
-    pub _loops: PyObject,
+    pub _loops: Py<PyAny>,
 }
 
 #[pymethods]
@@ -89,7 +89,7 @@ impl PyCifSaveFrame {
 
     fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
         let norm = casefold(key);
-        let tags = self._tags.bind(py).downcast::<PyDict>()?;
+        let tags = self._tags.bind(py).cast::<PyDict>()?;
         match tags.get_item(norm.as_str())? {
             Some(v) => Ok(v),
             None    => Err(PyKeyError::new_err(key.to_string())),
@@ -97,12 +97,12 @@ impl PyCifSaveFrame {
     }
 
     fn __contains__(&self, py: Python<'_>, key: &str) -> PyResult<bool> {
-        self._tags.bind(py).downcast::<PyDict>()?.contains(casefold(key).as_str())
+        self._tags.bind(py).cast::<PyDict>()?.contains(casefold(key).as_str())
     }
 
     #[getter]
     fn tags<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        let order = self._tag_order.bind(py).downcast::<PyList>()?;
+        let order = self._tag_order.bind(py).cast::<PyList>()?;
         let copy = PyList::empty(py);
         for item in order.iter() {
             copy.append(item)?;
@@ -112,11 +112,11 @@ impl PyCifSaveFrame {
 
     #[getter]
     fn loops<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        let src = self._loops.bind(py).downcast::<PyList>()?;
+        let src = self._loops.bind(py).cast::<PyList>()?;
         let copy = PyList::empty(py);
         for inner in src.iter() {
             let inner_copy = PyList::empty(py);
-            for tag in inner.downcast::<PyList>()?.iter() {
+            for tag in inner.cast::<PyList>()?.iter() {
                 inner_copy.append(tag)?;
             }
             copy.append(inner_copy)?;
@@ -130,13 +130,13 @@ impl PyCifSaveFrame {
         tag: &str,
         value: Bound<'py, PyAny>,
     ) -> PyResult<()> {
-        let tags  = self._tags.bind(py).downcast::<PyDict>()?;
-        let order = self._tag_order.bind(py).downcast::<PyList>()?;
+        let tags  = self._tags.bind(py).cast::<PyDict>()?;
+        let order = self._tag_order.bind(py).cast::<PyList>()?;
         if !tags.contains(tag)? {
             order.append(tag)?;
             tags.set_item(tag, PyList::empty(py))?;
         }
-        let val_list: &Bound<'_, PyList> = &tags.get_item(tag)?.unwrap().downcast_into()?;
+        let val_list: &Bound<'_, PyList> = &tags.get_item(tag)?.unwrap().cast_into()?;
         val_list.append(value)?;
         Ok(())
     }
@@ -147,9 +147,9 @@ impl PyCifSaveFrame {
         tags: Vec<String>,
         buffers: Bound<'py, PyDict>,
     ) -> PyResult<()> {
-        let self_tags = self._tags.bind(py).downcast::<PyDict>()?;
-        let order     = self._tag_order.bind(py).downcast::<PyList>()?;
-        let loops     = self._loops.bind(py).downcast::<PyList>()?;
+        let self_tags = self._tags.bind(py).cast::<PyDict>()?;
+        let order     = self._tag_order.bind(py).cast::<PyList>()?;
+        let loops     = self._loops.bind(py).cast::<PyList>()?;
 
         let loop_tags_py = PyList::empty(py);
         for tag in &tags {
@@ -179,17 +179,17 @@ pub struct PyCifBlock {
     #[pyo3(get, set)]
     pub _id: usize,
     #[pyo3(get, set)]
-    pub _tags: PyObject,
+    pub _tags: Py<PyAny>,
     #[pyo3(get, set)]
-    pub _tag_order: PyObject,
+    pub _tag_order: Py<PyAny>,
     #[pyo3(get, set)]
-    pub _loops: PyObject,
+    pub _loops: Py<PyAny>,
     // Save frame lookup dict: name → first PyCifSaveFrame  (mutable from Python)
     #[pyo3(get, set)]
-    pub _save_frames: PyObject,
+    pub _save_frames: Py<PyAny>,
     // Save frame ordered list  (mutable from Python)
     #[pyo3(get, set)]
-    pub _save_frame_list: PyObject,
+    pub _save_frame_list: Py<PyAny>,
 }
 
 #[pymethods]
@@ -211,13 +211,13 @@ impl PyCifBlock {
     fn __getitem__<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
         let norm = casefold(key);
         if norm.starts_with('_') {
-            let tags = self._tags.bind(py).downcast::<PyDict>()?;
+            let tags = self._tags.bind(py).cast::<PyDict>()?;
             match tags.get_item(norm.as_str())? {
                 Some(v) => Ok(v),
                 None    => Err(PyKeyError::new_err(key.to_string())),
             }
         } else {
-            let sfs = self._save_frames.bind(py).downcast::<PyDict>()?;
+            let sfs = self._save_frames.bind(py).cast::<PyDict>()?;
             match sfs.get_item(norm.as_str())? {
                 Some(v) => Ok(v),
                 None    => Err(PyKeyError::new_err(key.to_string())),
@@ -228,15 +228,15 @@ impl PyCifBlock {
     fn __contains__(&self, py: Python<'_>, key: &str) -> PyResult<bool> {
         let norm = casefold(key);
         if norm.starts_with('_') {
-            self._tags.bind(py).downcast::<PyDict>()?.contains(norm.as_str())
+            self._tags.bind(py).cast::<PyDict>()?.contains(norm.as_str())
         } else {
-            self._save_frames.bind(py).downcast::<PyDict>()?.contains(norm.as_str())
+            self._save_frames.bind(py).cast::<PyDict>()?.contains(norm.as_str())
         }
     }
 
     #[getter]
     fn tags<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        let order = self._tag_order.bind(py).downcast::<PyList>()?;
+        let order = self._tag_order.bind(py).cast::<PyList>()?;
         let copy = PyList::empty(py);
         for item in order.iter() {
             copy.append(item)?;
@@ -246,11 +246,11 @@ impl PyCifBlock {
 
     #[getter]
     fn loops<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        let src = self._loops.bind(py).downcast::<PyList>()?;
+        let src = self._loops.bind(py).cast::<PyList>()?;
         let copy = PyList::empty(py);
         for inner in src.iter() {
             let inner_copy = PyList::empty(py);
-            for tag in inner.downcast::<PyList>()?.iter() {
+            for tag in inner.cast::<PyList>()?.iter() {
                 inner_copy.append(tag)?;
             }
             copy.append(inner_copy)?;
@@ -260,7 +260,7 @@ impl PyCifBlock {
 
     #[getter]
     fn save_frames<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        let sf_list = self._save_frame_list.bind(py).downcast::<PyList>()?;
+        let sf_list = self._save_frame_list.bind(py).cast::<PyList>()?;
         let names = PyList::empty(py);
         for sf in sf_list.iter() {
             let name = sf.getattr("name")?;
@@ -271,7 +271,7 @@ impl PyCifBlock {
 
     fn get_all<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyList>> {
         let norm = casefold(name);
-        let sf_list = self._save_frame_list.bind(py).downcast::<PyList>()?;
+        let sf_list = self._save_frame_list.bind(py).cast::<PyList>()?;
         let result = PyList::empty(py);
         for sf in sf_list.iter() {
             let sf_name: String = sf.getattr("name")?.extract()?;
@@ -288,13 +288,13 @@ impl PyCifBlock {
         tag: &str,
         value: Bound<'py, PyAny>,
     ) -> PyResult<()> {
-        let tags  = self._tags.bind(py).downcast::<PyDict>()?;
-        let order = self._tag_order.bind(py).downcast::<PyList>()?;
+        let tags  = self._tags.bind(py).cast::<PyDict>()?;
+        let order = self._tag_order.bind(py).cast::<PyList>()?;
         if !tags.contains(tag)? {
             order.append(tag)?;
             tags.set_item(tag, PyList::empty(py))?;
         }
-        let val_list: &Bound<'_, PyList> = &tags.get_item(tag)?.unwrap().downcast_into()?;
+        let val_list: &Bound<'_, PyList> = &tags.get_item(tag)?.unwrap().cast_into()?;
         val_list.append(value)?;
         Ok(())
     }
@@ -305,9 +305,9 @@ impl PyCifBlock {
         tags: Vec<String>,
         buffers: Bound<'py, PyDict>,
     ) -> PyResult<()> {
-        let self_tags = self._tags.bind(py).downcast::<PyDict>()?;
-        let order     = self._tag_order.bind(py).downcast::<PyList>()?;
-        let loops     = self._loops.bind(py).downcast::<PyList>()?;
+        let self_tags = self._tags.bind(py).cast::<PyDict>()?;
+        let order     = self._tag_order.bind(py).cast::<PyList>()?;
+        let loops     = self._loops.bind(py).cast::<PyList>()?;
 
         let loop_tags_py = PyList::empty(py);
         for tag in &tags {
@@ -330,8 +330,8 @@ impl PyCifBlock {
         py: Python<'py>,
         frame: Bound<'py, PyAny>,
     ) -> PyResult<bool> {
-        let sf_list = self._save_frame_list.bind(py).downcast::<PyList>()?;
-        let sfs     = self._save_frames.bind(py).downcast::<PyDict>()?;
+        let sf_list = self._save_frame_list.bind(py).cast::<PyList>()?;
+        let sfs     = self._save_frames.bind(py).cast::<PyDict>()?;
         let new_id  = sf_list.len();
         frame.setattr("_id", new_id)?;
         sf_list.append(&frame)?;
@@ -352,9 +352,9 @@ impl PyCifBlock {
 pub struct PyCifFile {
     version: CifVersion,
     #[pyo3(get, set)]
-    pub _blocks: PyObject,
+    pub _blocks: Py<PyAny>,
     #[pyo3(get, set)]
-    pub _block_list: PyObject,
+    pub _block_list: Py<PyAny>,
 }
 
 #[pymethods]
@@ -378,7 +378,7 @@ impl PyCifFile {
 
     fn __getitem__<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
         let norm = casefold(name);
-        let blocks = self._blocks.bind(py).downcast::<PyDict>()?;
+        let blocks = self._blocks.bind(py).cast::<PyDict>()?;
         match blocks.get_item(norm.as_str())? {
             Some(v) => Ok(v),
             None    => Err(PyKeyError::new_err(name.to_string())),
@@ -386,7 +386,7 @@ impl PyCifFile {
     }
 
     fn __contains__(&self, py: Python<'_>, name: &str) -> PyResult<bool> {
-        self._blocks.bind(py).downcast::<PyDict>()?.contains(casefold(name).as_str())
+        self._blocks.bind(py).cast::<PyDict>()?.contains(casefold(name).as_str())
     }
 
     #[getter]
@@ -409,7 +409,7 @@ impl PyCifFile {
 
     #[getter]
     fn blocks<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        let bl = self._block_list.bind(py).downcast::<PyList>()?;
+        let bl = self._block_list.bind(py).cast::<PyList>()?;
         let names = PyList::empty(py);
         for b in bl.iter() {
             names.append(b.getattr("name")?)?;
@@ -419,7 +419,7 @@ impl PyCifFile {
 
     fn get_all<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyList>> {
         let norm = casefold(name);
-        let bl = self._block_list.bind(py).downcast::<PyList>()?;
+        let bl = self._block_list.bind(py).cast::<PyList>()?;
         let result = PyList::empty(py);
         for b in bl.iter() {
             let b_name: String = b.getattr("name")?.extract()?;
@@ -431,8 +431,8 @@ impl PyCifFile {
     }
 
     fn _add_block<'py>(&self, py: Python<'py>, block: Bound<'py, PyAny>) -> PyResult<bool> {
-        let bl     = self._block_list.bind(py).downcast::<PyList>()?;
-        let blocks = self._blocks.bind(py).downcast::<PyDict>()?;
+        let bl     = self._block_list.bind(py).cast::<PyList>()?;
+        let blocks = self._blocks.bind(py).cast::<PyDict>()?;
         let new_id = bl.len();
         block.setattr("_id", new_id)?;
         bl.append(&block)?;
@@ -450,7 +450,7 @@ impl PyCifFile {
         let new_bl     = PyList::empty(py);
         let new_blocks = PyDict::new(py);
 
-        let src_bl = self._block_list.bind(py).downcast::<PyList>()?;
+        let src_bl = self._block_list.bind(py).cast::<PyList>()?;
         for b_obj in src_bl.iter() {
             // Deep-copy per-block Python containers
             let b_tags     = copy_mod.call_method1("deepcopy", (b_obj.getattr("_tags")?,))?;
@@ -460,7 +460,7 @@ impl PyCifFile {
             // Deep-copy save frames
             let new_sf_list = PyList::empty(py);
             let new_sfs     = PyDict::new(py);
-            for sf_obj in b_obj.getattr("_save_frame_list")?.downcast::<PyList>()?.iter() {
+            for sf_obj in b_obj.getattr("_save_frame_list")?.cast::<PyList>()?.iter() {
                 let sf_id: usize  = sf_obj.getattr("_id")?.extract()?;
                 let sf_name: String = sf_obj.getattr("name")?.extract()?;
                 let new_sf = Py::new(py, PyCifSaveFrame {

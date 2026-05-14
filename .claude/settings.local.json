@@ -92,7 +92,13 @@
       "Bash(.venv/Scripts/pydoclint src/cifflow/inspect/)",
       "Bash(.venv/Scripts/pydoclint src/cifflow/database/)",
       "Bash(.venv/Scripts/pydoclint src/)",
-      "Bash(.venv\\\\Scripts\\\\python -m pydoclint src/)"
+      "Bash(.venv\\\\Scripts\\\\python -m pydoclint src/)",
+      "WebFetch(domain:pyo3.rs)",
+      "Bash(cargo check *)",
+      "Bash(cargo search *)",
+      "Bash(cargo add *)",
+      "Bash(cargo tree *)",
+      "Bash(curl -s https://crates.io/api/v1/crates/arrow/__TRACKED_VAR__.0.0)"
     ]
   }
 }

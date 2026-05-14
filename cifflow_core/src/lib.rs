@@ -294,7 +294,7 @@ fn parse_arrow_file<'py>(
 // Module
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[pymodule]
+#[pymodule(gil_used = true)]
 fn cifflow_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCifSaveFrame>()?;
     m.add_class::<PyCifBlock>()?;
