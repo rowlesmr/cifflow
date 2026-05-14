@@ -122,7 +122,7 @@ class ColumnDef:
     type_contents:
         DDLm ``_type.contents`` value (e.g. ``"Text"``, ``"Integer"``,
         ``"Real"``, ``"List"``); ``None`` if absent from the dictionary or for
-        synthetic columns.  Informational only — DDL always emits ``TEXT`` for
+        synthetic columns.  Informational only -- DDL always emits ``TEXT`` for
         all value columns; ``_cifflow_row_id`` always emits ``INTEGER``.
     nullable:
         ``False`` for synthetic and primary-key columns; ``True`` for all
@@ -230,7 +230,7 @@ class SchemaSpec:
         Non-fatal issues encountered during schema generation, in emission
         order.
     bridge_columns:
-        Transitive bridge column definitions — derived columns whose values
+        Transitive bridge column definitions -- derived columns whose values
         are resolved through one or more FK lookup hops.
     propagation_links:
         Mapping from table name to a list of
@@ -253,6 +253,19 @@ class SchemaSpec:
     category_parent:
         Mapping from table name to its parent table name (or ``None`` for
         root categories) in the DDLm category-parent hierarchy.
+    tag_to_category_class:
+        Mapping from canonical ``_definition.id`` to the DDLm class
+        (``"Set"`` or ``"Loop"``) of the category that contains it.
+        Covers *all* dictionary items, including those in categories that do
+        not generate schema tables.  Used by ``inspect_schema`` to trace
+        Set-derived category keys transitively without requiring a live
+        dictionary reference.
+    deprecated_replacements:
+        Mapping from deprecated ``_definition.id`` to the list of replacement
+        tag names from ``_definition_replaced.by``.  An empty string in the
+        list represents a ``PLACEHOLDER`` (``"."``), meaning deprecated with
+        no named replacement.  Covers both deprecated items and deprecated
+        categories.
     """
 
     tables: dict[str, TableDef]
@@ -268,6 +281,8 @@ class SchemaSpec:
     dictionary_uri: str | None = None
     source_files: list[str] = field(default_factory=list)
     category_parent: dict[str, str | None] = field(default_factory=dict)
+    tag_to_category_class: dict[str, str] = field(default_factory=dict)
+    deprecated_replacements: dict[str, list[str]] = field(default_factory=dict)
 
     def descendants(self, root: str) -> frozenset[str]:
         """Return all table names that are *root* or a descendant of *root* in the ``category_parent`` hierarchy.
@@ -330,7 +345,7 @@ def _find_transitive_bridge(
     """BFS over valid single-column-to-sole-PK hops from *src_tbl*.
 
     Returns **all** shortest paths, each expressed as a list of
-    ``(via_column, bridge_table, bridge_pk_col, bridge_val_col)`` tuples —
+    ``(via_column, bridge_table, bridge_pk_col, bridge_val_col)`` tuples --
     one entry per hop.  Intermediate entries carry ``None`` as
     ``bridge_val_col``; only the final entry of each path carries the real
     column name.
@@ -375,7 +390,7 @@ def _find_transitive_bridge(
             continue
         hop_adj[s].append((b_tgt_to_srcs[bridge_pk][0], bridge_tbl, bridge_pk))
 
-    # BFS — each queue entry: (current_table, path_of_hops_taken_so_far)
+    # BFS -- each queue entry: (current_table, path_of_hops_taken_so_far)
     # A hop in the path: (via_col, bridge_tbl, bridge_pk_col, val_col_or_None)
     queue: deque[tuple[str, list]] = deque([(src_tbl, [])])
     visited: set[str] = {src_tbl}   # memoisation: tables already enqueued
@@ -457,7 +472,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         if cat_class not in ('Set', 'Loop'):
             if cat_class not in ('Head', 'Functions'):
                 warnings.append(
-                    f"category {cat_id!r} has unsupported class {cat_class!r} — skipped"
+                    f"category {cat_id!r} has unsupported class {cat_class!r} -- skipped"
                 )
             continue
 
@@ -479,13 +494,13 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             if key_item is None:
                 warnings.append(
                     f"category {cat_id!r}: category key {key_tag!r} not found "
-                    f"in dictionary — skipped"
+                    f"in dictionary -- skipped"
                 )
                 continue
             if key_item.object_id is None:
                 warnings.append(
                     f"category {cat_id!r}: category key {key_tag!r} has no "
-                    f"object_id — skipped"
+                    f"object_id -- skipped"
                 )
                 continue
             non_synthetic_pks.append(key_item.object_id)
@@ -494,13 +509,13 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         if use_fallback_pk:
             if cat_class == 'Set':
                 warnings.append(
-                    f"category {cat_id!r} (Set) has no _category_key.name — "
+                    f"category {cat_id!r} (Set) has no _category_key.name -- "
                     f"using _cifflow_id as primary key"
                 )
                 primary_keys = ['_cifflow_id']
             else:  # Loop
                 warnings.append(
-                    f"category {cat_id!r} (Loop) has no _category_key.name — "
+                    f"category {cat_id!r} (Loop) has no _category_key.name -- "
                     f"using _cifflow_block_id + _cifflow_row_id as primary key"
                 )
                 primary_keys = ['_cifflow_block_id', '_cifflow_row_id']
@@ -555,7 +570,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
             if item is None:
                 warnings.append(
                     f"table {tbl_name!r}: primary key column {obj_id!r} not "
-                    f"found in category items — using TEXT"
+                    f"found in category items -- using TEXT"
                 )
                 col = ColumnDef(
                     name=obj_id,
@@ -576,9 +591,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                     nullable=False,
                     is_primary_key=True,
                     is_synthetic=False,
-                    linked_item_id=(
-                        item.linked_item_id if item.type_purpose == 'SU' else None
-                    ),
+                    linked_item_id=item.linked_item_id,
                     enumeration_states=item.enumeration_states,
                     enumeration_range=item.enumeration_range,
                     type_dimension=item.type_dimension,
@@ -644,7 +657,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         if target_item is None:
             warnings.append(
                 f"FK: linked_item_id {item.linked_item_id!r} for "
-                f"{item.definition_id!r} not found in dictionary — skipped"
+                f"{item.definition_id!r} not found in dictionary -- skipped"
             )
             continue
 
@@ -661,7 +674,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         if tgt_tbl not in tables:
             warnings.append(
                 f"FK: target table {tgt_tbl!r} for {item.definition_id!r} "
-                f"not in schema — skipped"
+                f"not in schema -- skipped"
             )
             continue
 
@@ -669,8 +682,10 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         tgt_cat = dictionary.categories.get(target_item.category_id)
         if tgt_cat and item.linked_item_id not in tgt_cat.category_keys:
             warnings.append(
-                f"FK: {item.linked_item_id!r} is not declared as a category "
-                f"key of {target_item.category_id!r} — recording FK anyway"
+                f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                f"target is not a declared category key of "
+                f"{target_item.category_id!r} "
+                f"(PKs={sorted(dictionary.tag_to_item[k].object_id for k in tgt_cat.category_keys if k in dictionary.tag_to_item)}) -- attempting FK resolution"
             )
 
         _link_groups[(src_tbl, tgt_tbl)].append(
@@ -681,17 +696,33 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         tgt_pks: list[str] = tables[tgt_tbl].primary_keys
         tgt_pks_set = set(tgt_pks)
 
+        # Strip pairs that target non-PK columns and warn about each one.
+        # A mixed group must not prevent valid PK-targeting pairs from forming FKs.
+        pk_pairs = []
+        for src_col, tgt_col, item in pairs:
+            if tgt_col not in tgt_pks_set:
+                warnings.append(
+                    f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                    f"target column '{tgt_col}' is not a PK of "
+                    f"'{tgt_tbl}' (PKs={tgt_pks}) -- skipping FK constraint"
+                )
+            else:
+                pk_pairs.append((src_col, tgt_col, item))
+
+        if not pk_pairs:
+            continue
+        pairs = pk_pairs
+
         # tgt_col → [src_col, ...]: detect full coverage and duplicate targets
         tgt_to_srcs: dict[str, list[str]] = defaultdict(list)
         for src_col, tgt_col, _ in pairs:
             tgt_to_srcs[tgt_col].append(src_col)
 
         tgt_cols_covered = set(tgt_to_srcs.keys())
-        non_pk_tgt_cols  = tgt_cols_covered - tgt_pks_set
         missing_pk_cols  = tgt_pks_set - tgt_cols_covered
         has_conflicts    = any(len(v) > 1 for v in tgt_to_srcs.values())
 
-        if has_conflicts and not missing_pk_cols and not non_pk_tgt_cols:
+        if has_conflicts and not missing_pk_cols:
             # Multiple source columns each independently reference the full PK
             # (e.g. bond.atom_1 and bond.atom_2 both → atom.number).
             # Emit one separate single/composite FK per source column.
@@ -703,10 +734,10 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                         target_table=tgt_tbl,
                         target_columns=[tgt_col],
                     ))
-        elif not non_pk_tgt_cols and len(missing_pk_cols) == 1:
+        elif len(missing_pk_cols) == 1:
             # All covered columns are PKs; exactly one PK column is missing.
             # Sub-case A: the missing column already exists in src_tbl (self-ref
-            #   or previously bridged) — use it directly.
+            #   or previously bridged) -- use it directly.
             # Sub-case B: try to derive it via a transitive bridge table.
             [missing_pk_col] = missing_pk_cols
             src_col_names = {c.name for c in tables[src_tbl].columns}
@@ -741,7 +772,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                         type_container=None,
                         nullable=True,
                         is_primary_key=False,
-                        is_synthetic=True,  # transitive bridge — no CIF tag
+                        is_synthetic=True,  # transitive bridge -- no CIF tag
                         linked_item_id=None,
                     ))
                     bridge_columns.append(BridgeColumnDef(
@@ -781,7 +812,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                         target_columns=list(tgt_pks),
                     ))
             else:
-                # No bridge found — warn per pair
+                # No bridge found -- warn per pair
                 for src_col, tgt_col, item in pairs:
                     warnings.append(
                         f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
@@ -789,7 +820,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                         f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}, "
                         f"no transitive bridge found -- skipping FK constraint"
                     )
-        elif non_pk_tgt_cols or missing_pk_cols or has_conflicts:
+        elif missing_pk_cols or has_conflicts:
             # Cannot form a complete, unambiguous (composite) FK.
             # Emit one warning per failing pair so each source item is named.
             for src_col, tgt_col, item in pairs:
@@ -798,15 +829,16 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                         f"ambiguous composite FK -- multiple source columns "
                         f"link to '{tgt_tbl}'.'{tgt_col}'"
                     )
-                elif tgt_col not in tgt_pks_set:
+                elif len(missing_pk_cols) > 1:
                     msg = (
-                        f"target column '{tgt_col}' is not a PK of "
-                        f"'{tgt_tbl}' (PKs={tgt_pks})"
+                        f"partial FK to '{tgt_tbl}' -- covers "
+                        f"['{tgt_col}'] of PKs={tgt_pks} "
+                        f"({len(missing_pk_cols)} missing PKs, bridge search skipped)"
                     )
                 else:
                     msg = (
                         f"partial FK to '{tgt_tbl}' -- covers "
-                        f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}"
+                        f"['{tgt_col}'] of PKs={tgt_pks}"
                     )
                 warnings.append(
                     f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
@@ -883,6 +915,16 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         else:
             category_parent[tbl_name] = None
 
+    tag_to_category_class: dict[str, str] = {}
+    deprecated_replacements: dict[str, list[str]] = {}
+    for defn_id, item in dictionary.tag_to_item.items():
+        if item.category_id:
+            cat = dictionary.categories.get(item.category_id)
+            if cat and cat.definition_class in ('Set', 'Loop'):
+                tag_to_category_class[defn_id] = cat.definition_class
+        if item.is_deprecated:
+            deprecated_replacements[defn_id] = item.replaced_by
+
     return SchemaSpec(
         tables=tables,
         column_to_tag=column_to_tag,
@@ -897,6 +939,8 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         dictionary_uri=dictionary.uri or None,
         source_files=list(dictionary.source_files),
         category_parent=category_parent,
+        tag_to_category_class=tag_to_category_class,
+        deprecated_replacements=deprecated_replacements,
     )
 
 

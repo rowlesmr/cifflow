@@ -132,7 +132,7 @@ def build_su_map(schema: SchemaSpec) -> dict[str, str]:
     result: dict[str, str] = {}
     for table in schema.tables.values():
         for col in table.columns:
-            if col.linked_item_id is not None:
+            if col.linked_item_id is not None and not col.is_primary_key:
                 result[col.linked_item_id] = col.name
     return result
 
