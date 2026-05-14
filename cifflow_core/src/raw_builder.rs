@@ -702,7 +702,7 @@ fn frame_to_batches(
 }
 
 impl ParsedCif {
-    pub fn to_py_batches<'py>(&self, py: Python<'py>) -> PyResult<Vec<PyObject>> {
+    pub fn to_py_batches<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
         use arrow::pyarrow::ToPyArrow;
         let mut result = Vec::new();
         for (block_idx, block) in self.blocks.iter().enumerate() {
