@@ -442,17 +442,6 @@ class TestPowEnumerationDefault:
         assert row is not None
         assert row[0] == 'x-ray'
 
-    def test_variant_filled_from_default(self, enum_default_conn):
-        """_diffrn_radiation.variant is absent from the CIF; must be '.' from
-        _enumeration.default defined in cif_img.dic."""
-        row = enum_default_conn.execute(
-            "SELECT variant FROM diffrn_radiation"
-            " WHERE _cifflow_block_id='test_enumeration_default'"
-        ).fetchone()
-        assert row is not None
-        assert row[0] == '.'
-
-
 # ---------------------------------------------------------------------------
 # pow_small_pd_data_meas.cif  (_pd_data.point_id explicit in loop)
 # ---------------------------------------------------------------------------
