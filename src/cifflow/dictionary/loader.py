@@ -1,5 +1,6 @@
 """DDLm dictionary loader — parses a DDLm CIF and resolves _import.get directives."""
 
+import json
 import pathlib
 from collections.abc import Callable
 from typing import Any
@@ -40,6 +41,12 @@ _FRAME_TAGS = frozenset({
     '_enumeration_set.state',
     '_enumeration.default',
     '_enumeration.range',
+    '_enumeration.def_index_ids',
+    '_enumeration.def_index_id',    # deprecated alias
+    '_enumeration_defaults.index',
+    '_enumeration_defaults.value',
+    '_enumeration_default.index',   # deprecated alias
+    '_enumeration_default.value',   # deprecated alias
     '_type.dimension',
     '_category_key.name',
     '_alias.definition_id',
@@ -47,6 +54,33 @@ _FRAME_TAGS = frozenset({
     '_definition_replaced.by',
     '_import.get',
 })
+
+def _apply_tag_aliases(frame_data: dict[str, list]) -> None:
+    """Rename deprecated DDLm tag keys in *frame_data* to their canonical forms.
+
+    Also normalises values so the canonical tag always holds the expected type:
+
+    - ``_enumeration.def_index_id`` (bare string) → ``_enumeration.def_index_ids``
+      (CIF2 list): wraps the string values in a list so the canonical form is
+      ``[['tag1', ...]]`` rather than ``['tag1']``.
+    - ``_enumeration_default.index`` (bare strings) → ``_enumeration_defaults.index``
+      (CIF2 lists): wraps each string element in a list so the canonical form is
+      ``[['H'], ['D'], ...]`` rather than ``['H', 'D', ...]``.
+    - ``_enumeration_default.value`` → ``_enumeration_defaults.value``: directly
+      comparable; values are moved without transformation.
+    """
+    if '_enumeration.def_index_id' in frame_data and '_enumeration.def_index_ids' not in frame_data:
+        old_vals = frame_data.pop('_enumeration.def_index_id')
+        # old_vals = ['_atom_type.symbol']  →  canonical = [['_atom_type.symbol']]
+        frame_data['_enumeration.def_index_ids'] = [old_vals]
+
+    if '_enumeration_default.index' in frame_data and '_enumeration_defaults.index' not in frame_data:
+        old_vals = frame_data.pop('_enumeration_default.index')
+        # old_vals = ['H', 'D', ...]  →  canonical = [['H'], ['D'], ...]
+        frame_data['_enumeration_defaults.index'] = [[v] for v in old_vals]
+
+    if '_enumeration_default.value' in frame_data and '_enumeration_defaults.value' not in frame_data:
+        frame_data['_enumeration_defaults.value'] = frame_data.pop('_enumeration_default.value')
 
 
 def directory_resolver(path: str | pathlib.Path) -> SourceResolver:
@@ -180,6 +214,35 @@ def _extract_item(data: dict[str, list], warn: Callable[[str], None]) -> DdlmIte
     enumeration_range = _scalar(data, '_enumeration.range')
     type_dimension    = _scalar(data, '_type.dimension')
 
+    # _enumeration.def_index_ids — a single CIF2 list value
+    raw_index_ids = data.get('_enumeration.def_index_ids', [])
+    if raw_index_ids and isinstance(raw_index_ids[0], list):
+        enumeration_def_index_ids = [
+            v.lower() for v in raw_index_ids[0]
+            if isinstance(v, str) and v not in ('.', '?')
+        ]
+    else:
+        enumeration_def_index_ids = []
+
+    # _enumeration_defaults loop
+    index_raw = data.get('_enumeration_defaults.index', [])
+    value_raw = data.get('_enumeration_defaults.value', [])
+    enumeration_defaults: list[tuple[list[str], str]] = []
+    for idx_val, def_val in zip(index_raw, value_raw):
+        if isinstance(idx_val, list):
+            key = [str(k) for k in idx_val if isinstance(k, str) and k not in ('.', '?')]
+        elif isinstance(idx_val, str) and idx_val not in ('.', '?'):
+            key = [idx_val]
+        else:
+            continue
+        if isinstance(def_val, (list, dict)):
+            val_str = json.dumps(def_val, separators=(',', ':'), ensure_ascii=False)
+        elif isinstance(def_val, str) and def_val != '?':
+            val_str = def_val
+        else:
+            continue
+        enumeration_defaults.append((key, val_str))
+
     return DdlmItem(
         definition_id=definition_id,
         scope=scope,
@@ -201,6 +264,8 @@ def _extract_item(data: dict[str, list], warn: Callable[[str], None]) -> DdlmIte
         is_deprecated=is_deprecated,
         enumeration_range=enumeration_range,
         type_dimension=type_dimension,
+        enumeration_def_index_ids=enumeration_def_index_ids,
+        enumeration_defaults=enumeration_defaults,
     )
 
 
@@ -418,6 +483,7 @@ class DictionaryLoader:
         for sf_name in block.save_frames:
             sf = block[sf_name]
             frame_data = {tag: sf[tag] for tag in sf.tags if tag in _FRAME_TAGS}
+            _apply_tag_aliases(frame_data)
 
             frame_class = (_scalar(frame_data, '_definition.class') or '').lower()
             is_head = frame_class == 'head'
@@ -696,10 +762,14 @@ class DictionaryLoader:
             if '_definition.id' in sf:
                 raw_id = sf['_definition.id'][0]
                 if isinstance(raw_id, str) and raw_id.lower() == target:
-                    return {tag: sf[tag] for tag in sf.tags if tag in _FRAME_TAGS}
+                    fd = {tag: sf[tag] for tag in sf.tags if tag in _FRAME_TAGS}
+                    _apply_tag_aliases(fd)
+                    return fd
             elif sf_name.lower() == target:
                 # Template files carry no _definition.id; match by frame label.
-                return {tag: sf[tag] for tag in sf.tags if tag in _FRAME_TAGS}
+                fd = {tag: sf[tag] for tag in sf.tags if tag in _FRAME_TAGS}
+                _apply_tag_aliases(fd)
+                return fd
         return None
 
     def _merge_frame(
