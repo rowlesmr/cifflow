@@ -442,6 +442,7 @@ class TestPowEnumerationDefault:
         assert row is not None
         assert row[0] == 'x-ray'
 
+
 # ---------------------------------------------------------------------------
 # pow_small_pd_data_meas.cif  (_pd_data.point_id explicit in loop)
 # ---------------------------------------------------------------------------
