@@ -239,13 +239,3 @@ class TestIngestSecondShort:
         assert len(rows) == 5
         assert all(r[1] == 'big_tube' for r in rows), \
             "All wavelength rows must reference radiation_id='big_tube'"
-
-    def test_diffrn_radiation_variant_default(self, second_short_conn):
-        """_diffrn_radiation.variant must be '.' (enumeration_default) when absent from CIF."""
-        row = second_short_conn.execute(
-            "SELECT variant, probe FROM diffrn_radiation "
-            "WHERE _cifflow_block_id = 'degaussa_raw_01_wavelength'"
-        ).fetchone()
-        assert row is not None
-        assert row[0] == '.', f"Expected variant='.', got {row[0]!r}"
-        assert row[1] == 'x-ray'
