@@ -73,6 +73,13 @@ class DdlmItem:
         Value of ``_enumeration.range``.  ``None`` if absent.
     type_dimension:
         Value of ``_type.dimension``.  ``None`` if absent.
+    enumeration_def_index_ids:
+        Ordered list of canonical tag names from ``_enumeration.def_index_ids``
+        whose values form the lookup key for keyed defaults.  Empty when absent.
+    enumeration_defaults:
+        Keyed default table from a ``_enumeration_defaults`` loop: each entry is
+        ``(key_components, default_value)`` where ``key_components`` aligns
+        positionally with ``enumeration_def_index_ids``.  Empty when absent.
     """
 
     definition_id: str
@@ -95,3 +102,5 @@ class DdlmItem:
     is_deprecated: bool = False
     enumeration_range: str | None = None
     type_dimension: str | None = None
+    enumeration_def_index_ids: list[str] = field(default_factory=list)
+    enumeration_defaults: list[tuple[list[str], str]] = field(default_factory=list)
