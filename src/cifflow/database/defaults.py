@@ -47,9 +47,10 @@ def generate_defaults(
 
     Raises
     ------
-    duckdb.Error
-        If any SQL statement fails (e.g. a schema table is absent from
-        *connection*).  The transaction is rolled back before re-raising.
+    Exception
+        If the transaction cannot be started, or if any SQL statement fails
+        (e.g. a schema table is absent from *connection*).  The transaction
+        is rolled back before re-raising.
     """
     tag_to_col: dict[str, tuple[str, str]] = {
         v: k for k, v in schema.column_to_tag.items()
@@ -61,13 +62,9 @@ def generate_defaults(
         return 0
 
     # Wrap in one transaction to avoid per-statement WAL flushes on file DBs.
-    try:
-        connection.execute('BEGIN TRANSACTION')
-        own_txn = True
-    except duckdb.Error:
-        own_txn = False
-
+    connection.execute('BEGIN TRANSACTION')
     total_filled = 0
+    ok = False
     try:
         for i in range(max_iterations):
             # Scalar defaults are monotone — once applied they never change.
@@ -77,16 +74,17 @@ def generate_defaults(
             total_filled += pass_filled
             if pass_filled == 0:
                 break
+        ok = True
     except Exception:
-        if own_txn:
+        raise
+    finally:
+        if ok:
+            connection.execute('COMMIT')
+        else:
             try:
                 connection.execute('ROLLBACK')
             except duckdb.Error:
                 pass
-        raise
-    else:
-        if own_txn:
-            connection.execute('COMMIT')
 
     return total_filled
 
