@@ -151,6 +151,15 @@ class ColumnDef:
         Value of ``_enumeration.range``.  ``None`` if absent.
     type_dimension:
         Value of ``_type.dimension``.  ``None`` if absent.
+    enumeration_default:
+        Scalar default value from ``_enumeration.default``.  ``None`` if absent.
+    enumeration_def_index_ids:
+        Ordered index tag names from ``_enumeration.def_index_ids`` for keyed
+        default lookup.  Empty when absent.
+    enumeration_defaults:
+        Keyed default table: ``[(key_components, default_value), ...]``.
+        ``key_components`` aligns positionally with ``enumeration_def_index_ids``.
+        Empty when absent.
     """
 
     name: str
@@ -164,6 +173,9 @@ class ColumnDef:
     enumeration_states: list[str] = field(default_factory=list)
     enumeration_range: str | None = None
     type_dimension: str | None = None
+    enumeration_default: str | None = None
+    enumeration_def_index_ids: list[str] = field(default_factory=list)
+    enumeration_defaults: list[tuple[list[str], str]] = field(default_factory=list)
 
 
 @dataclass
@@ -595,6 +607,9 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                     enumeration_states=item.enumeration_states,
                     enumeration_range=item.enumeration_range,
                     type_dimension=item.type_dimension,
+                    enumeration_default=item.enumeration_default,
+                    enumeration_def_index_ids=item.enumeration_def_index_ids,
+                    enumeration_defaults=item.enumeration_defaults,
                 )
                 column_to_tag[(tbl_name, obj_id)] = item.definition_id
             columns.append(col)
@@ -618,6 +633,9 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                 enumeration_states=item.enumeration_states,
                 enumeration_range=item.enumeration_range,
                 type_dimension=item.type_dimension,
+                enumeration_default=item.enumeration_default,
+                enumeration_def_index_ids=item.enumeration_def_index_ids,
+                enumeration_defaults=item.enumeration_defaults,
             )
             columns.append(col)
             column_to_tag[(tbl_name, obj_id)] = item.definition_id

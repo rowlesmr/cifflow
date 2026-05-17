@@ -1,0 +1,1271 @@
+#\#CIF_2.0
+# SPDX-License-Identifier: CC-BY-4.0
+##########################################################################
+#                                                                        #
+#  CIF CORE DICTIONARY                                                   #
+#                                                                        #
+##########################################################################
+
+data_CIF_CORE
+
+    _dictionary.title             CIF_CORE
+    _dictionary.class             Instance
+    _dictionary.version           3.3.0
+    _dictionary.date              2026-04-30
+    _dictionary.uri
+        https://raw.githubusercontent.com/COMCIFS/cif_core/master/cif_core.dic
+    _dictionary.ddl_conformance   4.2.0
+    _dictionary.licensing_SPDX    CC-BY-4.0
+    _dictionary.namespace         CifCore
+    _description.text
+;
+    The CIF_CORE dictionary defines data items that are common to all domains
+    of crystallographic studies. These definitions are mostly used within the
+    Crystallographic Information Framework (CIF).
+;
+
+save_CIF_CORE_HEAD
+
+    _definition.id                CIF_CORE_HEAD
+    _definition.scope             Category
+    _definition.class             Head
+    _definition.update            2024-05-15
+    _description.text
+;
+    The CIF_CORE_HEAD category is the top-level category for all categories in
+    the CIF_CORE dictionary.
+;
+    _name.category_id             CIF_CORE
+    _name.object_id               CIF_CORE_HEAD
+
+save_
+
+save_STRUCTURE
+
+    _definition.id                STRUCTURE
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2024-05-15
+    _description.text
+;
+    The dictionary group encompassing the core structure data items defined
+    and used within the Crystallographic Information Framework (CIF).
+;
+    _name.category_id             CIF_CORE_HEAD
+    _name.object_id               STRUCTURE
+
+save_
+
+save_ATOM
+
+    _definition.id                ATOM
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2012-11-20
+    _description.text
+;
+    The category of data items used to describe atomic information
+    used in crystallographic structure studies.
+;
+    _name.category_id             STRUCTURE
+    _name.object_id               ATOM
+
+save_
+
+save_ATOM_SITE
+
+    _definition.id                ATOM_SITE
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2023-02-03
+    _description.text
+;
+    The category of data items used to describe atom site information
+    used in crystallographic structure studies.
+;
+    _name.category_id             ATOM
+    _name.object_id               ATOM_SITE
+    _category_key.name            '_atom_site.label'
+
+save_
+
+save_atom_site.b_iso_or_equiv
+
+    _definition.id                '_atom_site.B_iso_or_equiv'
+    _alias.definition_id          '_atom_site_B_iso_or_equiv'
+    _definition.update            2023-01-16
+    _description.text
+;
+    Isotropic atomic displacement parameter, or equivalent isotropic
+    atomic displacement parameter, B(equiv), in angstroms squared,
+    calculated from anisotropic atomic displacement parameters.
+
+        B(equiv) = (1/3) sum~i~[sum~j~(B^ij^ a*~i~ a*~j~ a~i~.a~j~)]
+
+    a     = the real-space cell vectors
+    a*    = the reciprocal-space cell lengths
+    B^ij^ = 8 π^2^ U^ij^
+    Ref: Fischer, R. X. & Tillmanns, E. (1988). Acta Cryst. C44, 775-776.
+
+    The IUCr Commission on Nomenclature recommends against the use
+    of B for reporting atomic displacement parameters. U, being
+    directly proportional to B, is preferred.
+;
+    _name.category_id             atom_site
+    _name.object_id               B_iso_or_equiv
+    _type.purpose                 Measurand
+    _type.source                  Derived
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.range            0.0:
+    _units.code                   angstrom_squared
+
+save_
+
+save_atom_site.b_iso_or_equiv_su
+
+    _definition.id                '_atom_site.B_iso_or_equiv_su'
+
+    loop_
+      _alias.definition_id
+         '_atom_site_B_iso_or_equiv_su'
+         '_atom_site.B_iso_or_equiv_esd'
+
+    _definition.update            2023-01-16
+    _description.text
+;
+    Standard uncertainty of _atom_site.B_iso_or_equiv.
+;
+    _name.category_id             atom_site
+    _name.object_id               B_iso_or_equiv_su
+    _name.linked_item_id          '_atom_site.B_iso_or_equiv'
+    _units.code                   angstrom_squared
+
+    _import.get                   [{'file':templ_attr.cif  'save':general_su}]
+
+save_
+
+save_atom_site.fract_x
+
+    _definition.id                '_atom_site.fract_x'
+    _alias.definition_id          '_atom_site_fract_x'
+    _name.category_id             atom_site
+    _name.object_id               fract_x
+
+    _import.get                   [{'file':templ_attr.cif  'save':fract_coord}]
+
+save_
+
+save_atom_site.fract_x_su
+
+    _definition.id                '_atom_site.fract_x_su'
+
+    loop_
+      _alias.definition_id
+         '_atom_site_fract_x_su'
+         '_atom_site.fract_x_esd'
+
+    _name.category_id             atom_site
+    _name.object_id               fract_x_su
+    _name.linked_item_id          '_atom_site.fract_x'
+
+    _import.get
+        [{'file':templ_attr.cif  'save':fract_coord_su}]
+
+save_
+
+save_atom_site.fract_y
+
+    _definition.id                '_atom_site.fract_y'
+    _alias.definition_id          '_atom_site_fract_y'
+    _name.category_id             atom_site
+    _name.object_id               fract_y
+
+    _import.get                   [{'file':templ_attr.cif  'save':fract_coord}]
+
+save_
+
+save_atom_site.fract_y_su
+
+    _definition.id                '_atom_site.fract_y_su'
+
+    loop_
+      _alias.definition_id
+         '_atom_site_fract_y_su'
+         '_atom_site.fract_y_esd'
+
+    _name.category_id             atom_site
+    _name.object_id               fract_y_su
+    _name.linked_item_id          '_atom_site.fract_y'
+
+    _import.get
+        [{'file':templ_attr.cif  'save':fract_coord_su}]
+
+save_
+
+save_atom_site.fract_z
+
+    _definition.id                '_atom_site.fract_z'
+    _alias.definition_id          '_atom_site_fract_z'
+    _name.category_id             atom_site
+    _name.object_id               fract_z
+
+    _import.get                   [{'file':templ_attr.cif  'save':fract_coord}]
+
+save_
+
+save_atom_site.fract_z_su
+
+    _definition.id                '_atom_site.fract_z_su'
+
+    loop_
+      _alias.definition_id
+         '_atom_site_fract_z_su'
+         '_atom_site.fract_z_esd'
+
+    _name.category_id             atom_site
+    _name.object_id               fract_z_su
+    _name.linked_item_id          '_atom_site.fract_z'
+
+    _import.get
+        [{'file':templ_attr.cif  'save':fract_coord_su}]
+
+save_
+
+save_atom_site.label
+
+    _definition.id                '_atom_site.label'
+
+    loop_
+      _alias.definition_id
+         '_atom_site_label'
+         '_atom_site.id'
+
+    _name.category_id             atom_site
+    _name.object_id               label
+
+    _import.get
+        [{'file':templ_attr.cif  'save':atom_site_label}]
+
+save_
+
+save_atom_site.occupancy
+
+    _definition.id                '_atom_site.occupancy'
+    _alias.definition_id          '_atom_site_occupancy'
+    _definition.update            2012-11-20
+    _description.text
+;
+    The fraction of the atom type present at this site.
+    The sum of the occupancies of all the atom types at this site
+    may not significantly exceed 1.0 unless it is a dummy site. The
+    value must lie in the 99.97% Gaussian confidence interval
+    -3u =< x =< 1 + 3u. The _enumeration.range of 0.0:1.0 is thus
+    correctly interpreted as meaning (0.0 - 3u) =< x =< (1.0 + 3u).
+;
+    _name.category_id             atom_site
+    _name.object_id               occupancy
+    _type.purpose                 Measurand
+    _type.source                  Derived
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.range            0.0:1.0
+    _units.code                   none
+
+save_
+
+save_atom_site.occupancy_su
+
+    _definition.id                '_atom_site.occupancy_su'
+
+    loop_
+      _alias.definition_id
+         '_atom_site_occupancy_su'
+         '_atom_site.occupancy_esd'
+
+    _definition.update            2021-03-03
+    _description.text
+;
+    Standard uncertainty of _atom_site.occupancy.
+;
+    _name.category_id             atom_site
+    _name.object_id               occupancy_su
+    _name.linked_item_id          '_atom_site.occupancy'
+    _units.code                   none
+
+    _import.get                   [{'file':templ_attr.cif  'save':general_su}]
+
+save_
+
+save_atom_site.type_symbol
+
+    _definition.id                '_atom_site.type_symbol'
+    _alias.definition_id          '_atom_site_type_symbol'
+    _definition.update            2021-10-27
+    _description.text
+;
+    A code to identify the atom specie(s) occupying this site.
+    This code must match a corresponding _atom_type.symbol. The
+    specification of this code is optional if component_0 of the
+    _atom_site.label is used for this purpose. See _atom_type.symbol.
+;
+    _name.category_id             atom_site
+    _name.object_id               type_symbol
+    _name.linked_item_id          '_atom_type.symbol'
+    _type.purpose                 Link
+    _type.source                  Related
+    _type.container               Single
+    _type.contents                Word
+
+    loop_
+      _description_example.case
+         Cu
+         Cu2+
+         S
+         O1-
+
+    _method.purpose               Evaluation
+    _method.expression
+;
+    _atom_site.type_symbol  =   AtomType ( _atom_site.label )
+;
+
+save_
+
+save_atom_site.wyckoff_symbol
+
+    _definition.id                '_atom_site.Wyckoff_symbol'
+    _alias.definition_id          '_atom_site_Wyckoff_symbol'
+    _definition.update            2021-09-23
+    _description.text
+;
+    The Wyckoff symbol (letter) as listed in the space-group section
+    of International Tables for Crystallography, Vol. A (1987).
+;
+    _name.category_id             atom_site
+    _name.object_id               Wyckoff_symbol
+    _type.purpose                 State
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Text
+
+    _import.get
+        [{'file':templ_enum.cif  'save':wyckoff_letter}]
+
+save_
+
+save_ATOM_TYPE
+
+    _definition.id                ATOM_TYPE
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2025-07-30
+    _description.text
+;
+    The category of data items used to describe atomic type information
+    used in crystallographic structure studies.
+;
+    _name.category_id             ATOM
+    _name.object_id               ATOM_TYPE
+    _category_key.name            '_atom_type.symbol'
+    _method.purpose               Evaluation
+    _method.expression
+;
+    typelist  = List()
+
+    Loop  a  as  atom_site  {
+       type = a.type_symbol
+       If( type not in typelist )  typelist ++= type
+     }
+     For type in typelist {
+                             atom_type(.symbol         = type)
+     }
+;
+
+save_
+
+save_atom_type.analytical_mass_percent
+
+    _definition.id                '_atom_type.analytical_mass_percent'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_analytical_mass_%'
+         '_atom_type.analytical_mass_%'
+
+    _definition.update            2013-04-11
+    _description.text
+;
+    Mass percentage of this atom type derived from chemical analysis.
+;
+    _name.category_id             atom_type
+    _name.object_id               analytical_mass_percent
+    _type.purpose                 Measurand
+    _type.source                  Derived
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.range            0.0:100.0
+    _units.code                   none
+
+save_
+
+save_atom_type.analytical_mass_percent_su
+
+    _definition.id                '_atom_type.analytical_mass_percent_su'
+    _definition.update            2023-07-01
+    _description.text
+;
+    Standard uncertainty of _atom_type.analytical_mass_percent.
+;
+    _name.category_id             atom_type
+    _name.object_id               analytical_mass_percent_su
+    _name.linked_item_id          '_atom_type.analytical_mass_percent'
+    _units.code                   none
+
+    _import.get                   [{'file':templ_attr.cif  'save':general_su}]
+
+save_
+
+save_atom_type.atomic_mass
+
+    _definition.id                '_atom_type.atomic_mass'
+    _definition.update            2026-04-20
+    _description.text
+;
+    Mass of this atom type.
+;
+    _name.category_id             atom_type
+    _name.object_id               atomic_mass
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.def_index_ids    ['_atom_type.symbol']
+
+    _import.get                   [{'file':templ_enum.cif  'save':atomic_mass}]
+
+save_
+
+save_atom_type.atomic_number
+
+    _definition.id                '_atom_type.atomic_number'
+    _definition.update            2026-04-20
+    _description.text
+;
+    Atomic number of this atom type.
+;
+    _name.category_id             atom_type
+    _name.object_id               atomic_number
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Integer
+    _enumeration.range            1:
+    _enumeration.def_index_ids    ['_atom_type.element_symbol']
+
+    _import.get
+        [{'file':templ_enum.cif  'save':atomic_number}]
+
+save_
+
+save_atom_type.description
+
+    _definition.id                '_atom_type.description'
+    _alias.definition_id          '_atom_type_description'
+    _definition.update            2023-01-13
+    _description.text
+;
+    A description of the atom(s) designated by this atom type. In
+    most cases this will be the element name and oxidation state of
+    a single atom species. For disordered or nonstoichiometric
+    structures it will describe a combination of atom species.
+;
+    _name.category_id             atom_type
+    _name.object_id               description
+    _type.purpose                 Describe
+    _type.source                  Recorded
+    _type.container               Single
+    _type.contents                Text
+
+    loop_
+      _description_example.case
+         deuterium
+         0.34Fe+0.66Ni
+
+save_
+
+save_atom_type.display_colour
+
+    _definition.id                '_atom_type.display_colour'
+    _definition.update            2026-04-20
+    _description.text
+;
+    The display colour assigned to this atom type. Note that the
+    possible colours are enumerated in the DISPLAY_COLOUR list
+    category of items.
+;
+    _name.category_id             atom_type
+    _name.object_id               display_colour
+    _type.purpose                 State
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+    _enumeration.def_index_ids    ['_atom_type.symbol']
+
+    _import.get                   [
+                                   {'file':templ_enum.cif  'save':colour_rgb}
+                                   {'file':templ_enum.cif  'save':colour_hue}
+                                  ]
+
+save_
+
+save_atom_type.electron_count
+
+    _definition.id                '_atom_type.electron_count'
+    _definition.update            2026-04-20
+    _description.text
+;
+    Number of electrons in this atom type.
+;
+    _name.category_id             atom_type
+    _name.object_id               electron_count
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Integer
+    _enumeration.range            1:
+    _enumeration.def_index_ids    ['_atom_type.symbol']
+
+    _import.get
+        [{'file':templ_enum.cif  'save':electron_count}]
+
+save_
+
+save_atom_type.element_symbol
+
+    _definition.id                '_atom_type.element_symbol'
+    _definition.update            2026-04-20
+    _description.text
+;
+    Element symbol for of this atom type. The default value is extracted
+    from the ion-to-element enumeration_default list using the index
+    value of _atom_type.symbol.
+;
+    _name.category_id             atom_type
+    _name.object_id               element_symbol
+    _type.purpose                 State
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+    _enumeration.def_index_ids    ['_atom_type.symbol']
+
+    _import.get
+        [
+         {'file':templ_enum.cif  'save':element_symbol}
+         {'file':templ_enum.cif  'save':ion_to_element}
+        ]
+
+save_
+
+save_atom_type.mass_number
+
+    _definition.id                '_atom_type.mass_number'
+    _definition.update            2023-05-22
+    _description.text
+;
+    Mass number of this atom type.
+
+    Used to denote a specific isotope. Special value '.' indicates
+    that the element is present in natural isotopic abundance.
+;
+    _name.category_id             atom_type
+    _name.object_id               mass_number
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Integer
+    _enumeration.range            1:
+    _units.code                   none
+
+save_
+
+save_atom_type.number_in_cell
+
+    _definition.id                '_atom_type.number_in_cell'
+    _alias.definition_id          '_atom_type_number_in_cell'
+    _definition.update            2013-01-28
+    _description.text
+;
+    Total number of atoms of this atom type in the unit cell.
+;
+    _name.category_id             atom_type
+    _name.object_id               number_in_cell
+    _type.purpose                 Number
+    _type.source                  Derived
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.range            0.0:
+    _units.code                   none
+    _method.purpose               Evaluation
+    _method.expression
+;
+    With t as atom_type
+
+    cnt =  0.
+
+    Loop a  as  atom_site  {
+
+       if ( a.type_symbol == t.symbol ) {
+
+          cnt +=  a.occupancy * a.site_symmetry_multiplicity
+    }  }
+    _atom_type.number_in_cell =  cnt
+;
+
+save_
+
+save_atom_type.oxidation_number
+
+    _definition.id                '_atom_type.oxidation_number'
+    _alias.definition_id          '_atom_type_oxidation_number'
+    _definition.update            2021-03-01
+    _description.text
+;
+    Formal oxidation state of this atom type in the structure.
+;
+    _name.category_id             atom_type
+    _name.object_id               oxidation_number
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Integer
+    _enumeration.range            -8:8
+    _units.code                   none
+
+save_
+
+save_atom_type.radius_bond
+
+    _definition.id                '_atom_type.radius_bond'
+    _alias.definition_id          '_atom_type_radius_bond'
+    _definition.update            2026-04-20
+    _description.text
+;
+    The effective intra-molecular bonding radius of this atom type.
+;
+    _name.category_id             atom_type
+    _name.object_id               radius_bond
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.range            0.0:5.0
+    _enumeration.def_index_ids    ['_atom_type.symbol']
+
+    _import.get                   [{'file':templ_enum.cif  'save':radius_bond}]
+
+save_
+
+save_atom_type.radius_contact
+
+    _definition.id                '_atom_type.radius_contact'
+    _alias.definition_id          '_atom_type_radius_contact'
+    _definition.update            2012-11-20
+    _description.text
+;
+    The effective inter-molecular bonding radius of this atom type.
+;
+    _name.category_id             atom_type
+    _name.object_id               radius_contact
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.range            0.0:5.0
+    _units.code                   angstroms
+    _method.purpose               Definition
+    _method.expression
+;
+    _enumeration.default = _atom_type.radius_bond + 1.25
+;
+
+save_
+
+save_atom_type.symbol
+
+    _definition.id                '_atom_type.symbol'
+    _alias.definition_id          '_atom_type_symbol'
+    _definition.update            2021-10-27
+    _description.text
+;
+    The identity of the atom specie(s) representing this atom type.
+    Normally this code is the element symbol followed by the charge
+    if there is one. The symbol may be composed of any character except
+    an underline or a blank, with the proviso that digits designate an
+    oxidation state and must be followed by a + or - character.
+;
+    _name.category_id             atom_type
+    _name.object_id               symbol
+    _type.purpose                 Encode
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+    loop_
+      _description_example.case
+         Mg
+         Cu2+
+         dummy
+         FeNi
+
+save_
+
+save_ATOM_TYPE_SCAT
+
+    _definition.id                ATOM_TYPE_SCAT
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2021-06-29
+    _description.text
+;
+    The category of data items used to describe atomic scattering
+    information used in crystallographic structure studies.
+;
+    _name.category_id             ATOM_TYPE
+    _name.object_id               ATOM_TYPE_SCAT
+    _category_key.name            '_atom_type_scat.symbol'
+
+save_
+
+save_atom_type_scat.cromer_mann_a1
+
+    _definition.id                '_atom_type_scat.Cromer_Mann_a1'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_Cromer_Mann_a1'
+         '_atom_type.scat_Cromer_Mann_a1'
+
+    _name.category_id             atom_type_scat
+    _name.object_id               Cromer_Mann_a1
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':cromer_mann_coeff}
+         {'file':templ_enum.cif  'save':cromer_mann_a1}
+        ]
+
+save_
+
+save_atom_type_scat.cromer_mann_a2
+
+    _definition.id                '_atom_type_scat.Cromer_Mann_a2'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_Cromer_Mann_a2'
+         '_atom_type.scat_Cromer_Mann_a2'
+
+    _name.category_id             atom_type_scat
+    _name.object_id               Cromer_Mann_a2
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':cromer_mann_coeff}
+         {'file':templ_enum.cif  'save':cromer_mann_a2}
+        ]
+
+save_
+
+save_atom_type_scat.cromer_mann_a3
+
+    _definition.id                '_atom_type_scat.Cromer_Mann_a3'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_Cromer_Mann_a3'
+         '_atom_type.scat_Cromer_Mann_a3'
+
+    _name.category_id             atom_type_scat
+    _name.object_id               Cromer_Mann_a3
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':cromer_mann_coeff}
+         {'file':templ_enum.cif  'save':cromer_mann_a3}
+        ]
+
+save_
+
+save_atom_type_scat.cromer_mann_a4
+
+    _definition.id                '_atom_type_scat.Cromer_Mann_a4'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_Cromer_Mann_a4'
+         '_atom_type.scat_Cromer_Mann_a4'
+
+    _name.category_id             atom_type_scat
+    _name.object_id               Cromer_Mann_a4
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':cromer_mann_coeff}
+         {'file':templ_enum.cif  'save':cromer_mann_a4}
+        ]
+
+save_
+
+save_atom_type_scat.cromer_mann_b1
+
+    _definition.id                '_atom_type_scat.Cromer_Mann_b1'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_Cromer_Mann_b1'
+         '_atom_type.scat_Cromer_Mann_b1'
+
+    _name.category_id             atom_type_scat
+    _name.object_id               Cromer_Mann_b1
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':cromer_mann_coeff}
+         {'file':templ_enum.cif  'save':cromer_mann_b1}
+        ]
+
+save_
+
+save_atom_type_scat.cromer_mann_b2
+
+    _definition.id                '_atom_type_scat.Cromer_Mann_b2'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_Cromer_Mann_b2'
+         '_atom_type.scat_Cromer_Mann_b2'
+
+    _name.category_id             atom_type_scat
+    _name.object_id               Cromer_Mann_b2
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':cromer_mann_coeff}
+         {'file':templ_enum.cif  'save':cromer_mann_b2}
+        ]
+
+save_
+
+save_atom_type_scat.cromer_mann_b3
+
+    _definition.id                '_atom_type_scat.Cromer_Mann_b3'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_Cromer_Mann_b3'
+         '_atom_type.scat_Cromer_Mann_b3'
+
+    _name.category_id             atom_type_scat
+    _name.object_id               Cromer_Mann_b3
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':cromer_mann_coeff}
+         {'file':templ_enum.cif  'save':cromer_mann_b3}
+        ]
+
+save_
+
+save_atom_type_scat.cromer_mann_b4
+
+    _definition.id                '_atom_type_scat.Cromer_Mann_b4'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_Cromer_Mann_b4'
+         '_atom_type.scat_Cromer_Mann_b4'
+
+    _name.category_id             atom_type_scat
+    _name.object_id               Cromer_Mann_b4
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':cromer_mann_coeff}
+         {'file':templ_enum.cif  'save':cromer_mann_b4}
+        ]
+
+save_
+
+save_atom_type_scat.cromer_mann_c
+
+    _definition.id                '_atom_type_scat.Cromer_Mann_c'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_Cromer_Mann_c'
+         '_atom_type.scat_Cromer_Mann_c'
+
+    _name.category_id             atom_type_scat
+    _name.object_id               Cromer_Mann_c
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':cromer_mann_coeff}
+         {'file':templ_enum.cif  'save':cromer_mann_c}
+        ]
+
+save_
+
+save_atom_type_scat.cromer_mann_coeffs
+
+    _definition.id                '_atom_type_scat.Cromer_Mann_coeffs'
+    _definition.update            2023-06-16
+    _description.text
+;
+    The set of Cromer-Mann coefficients for generating X-ray scattering
+    factors:
+    [ c, a1, b1, a2, b2, a3, b3, a4, b4 ].
+    Ref: International Tables for Crystallography (2004). Vol. C, Table 6.1.1.4.
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               Cromer_Mann_coeffs
+    _type.purpose                 Number
+    _type.source                  Derived
+    _type.container               List
+    _type.dimension               '[9]'
+    _type.contents                Real
+    _units.code                   unspecified
+    _method.purpose               Evaluation
+    _method.expression
+;
+    With t  as  atom_type_scat
+
+     _atom_type_scat.Cromer_Mann_coeffs  =          [ t.Cromer_Mann_c,
+                                    t.Cromer_Mann_a1, t.Cromer_Mann_b1,
+                                    t.Cromer_Mann_a2, t.Cromer_Mann_b2,
+                                    t.Cromer_Mann_a3, t.Cromer_Mann_b3,
+                                    t.Cromer_Mann_a4, t.Cromer_Mann_b4 ]
+;
+
+save_
+
+save_atom_type_scat.dispersion
+
+    _definition.id                '_atom_type_scat.dispersion'
+    _definition.update            2013-04-28
+    _description.text
+;
+    The anomalous dispersion scattering factor in its complex form
+    for this atom type and radiation by _diffrn_radiation_wavelength.value
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               dispersion
+    _type.purpose                 Number
+    _type.source                  Derived
+    _type.container               Single
+    _type.contents                Complex
+    _units.code                   none
+    _method.purpose               Evaluation
+    _method.expression
+;
+    With s as atom_type_scat
+
+            d = Complex( s.dispersion_real, s.dispersion_imag )
+
+       if(_reflns.apply_dispersion_to_Fcalc == 'no')   d = 0.
+
+                _atom_type_scat.dispersion = d
+;
+
+save_
+
+save_atom_type_scat.dispersion_imag
+
+    _definition.id                '_atom_type_scat.dispersion_imag'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_dispersion_imag'
+         '_atom_type.scat_dispersion_imag'
+
+    _definition.update            2021-09-24
+    _description.text
+;
+    The imaginary component of the anomalous dispersion scattering factors
+    for this atom type and radiation by _diffrn_radiation_wavelength.value
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               dispersion_imag
+    _type.purpose                 Number
+    _type.source                  Derived
+    _type.container               Single
+    _type.contents                Real
+    _units.code                   none
+    _method.purpose               Evaluation
+    _method.expression
+;
+    With q as atom_type_scat
+
+     If ( _diffrn_radiation.type[0:2] == 'Cu' ) a = q.dispersion_imag_Cu
+     If ( _diffrn_radiation.type[0:2] == 'Mo' ) a = q.dispersion_imag_Mo
+
+             _atom_type_scat.dispersion_imag = a
+;
+
+save_
+
+save_atom_type_scat.dispersion_imag_cu
+
+    _definition.id                '_atom_type_scat.dispersion_imag_Cu'
+    _definition.update            2026-04-20
+    _description.text
+;
+    The imaginary component of the anomalous dispersion scattering factors
+    for this atom type and Cu Kα radiation.
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               dispersion_imag_Cu
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.def_index_ids    ['_atom_type.element_symbol']
+
+    _import.get
+        [{'file':templ_enum.cif  'save':dispersion_imag_cu}]
+
+save_
+
+save_atom_type_scat.dispersion_imag_mo
+
+    _definition.id                '_atom_type_scat.dispersion_imag_Mo'
+    _definition.update            2026-04-20
+    _description.text
+;
+    The imaginary component of the anomalous dispersion scattering factors
+    for this atom type and Mo Kα radiation.
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               dispersion_imag_Mo
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.def_index_ids    ['_atom_type.element_symbol']
+
+    _import.get
+        [{'file':templ_enum.cif  'save':dispersion_imag_mo}]
+
+save_
+
+save_atom_type_scat.dispersion_real
+
+    _definition.id                '_atom_type_scat.dispersion_real'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_dispersion_real'
+         '_atom_type.scat_dispersion_real'
+
+    _definition.update            2012-11-20
+    _description.text
+;
+    The real component of the anomalous dispersion scattering factors
+    for this atom type and radiation by _diffrn_radiation_wavelength.value
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               dispersion_real
+    _type.purpose                 Number
+    _type.source                  Derived
+    _type.container               Single
+    _type.contents                Real
+    _units.code                   none
+    _method.purpose               Evaluation
+    _method.expression
+;
+    With q as atom_type_scat
+
+     If ( _diffrn_radiation.type[0:2] == 'Cu' ) a = q.dispersion_real_Cu
+     If ( _diffrn_radiation.type[0:2] == 'Mo' ) a = q.dispersion_real_Mo
+
+             _atom_type_scat.dispersion_real = a
+;
+
+save_
+
+save_atom_type_scat.dispersion_real_cu
+
+    _definition.id                '_atom_type_scat.dispersion_real_Cu'
+    _definition.update            2026-04-20
+    _description.text
+;
+    The real component of the anomalous dispersion scattering factors
+    for this atom type and Cu Kα radiation.
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               dispersion_real_Cu
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.def_index_ids    ['_atom_type.element_symbol']
+
+    _import.get
+        [{'file':templ_enum.cif  'save':dispersion_real_cu}]
+
+save_
+
+save_atom_type_scat.dispersion_real_mo
+
+    _definition.id                '_atom_type_scat.dispersion_real_Mo'
+    _definition.update            2026-04-20
+    _description.text
+;
+    The real component of the anomalous dispersion scattering factors
+    for this atom type and Mo Kα radiation.
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               dispersion_real_Mo
+    _type.purpose                 Number
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Real
+    _enumeration.def_index_ids    ['_atom_type.element_symbol']
+
+    _import.get
+        [{'file':templ_enum.cif  'save':dispersion_real_mo}]
+
+save_
+
+save_atom_type_scat.dispersion_source
+
+    _definition.id                '_atom_type_scat.dispersion_source'
+
+    loop_
+      _alias.definition_id
+         '_atom_type_scat_dispersion_source'
+         '_atom_type.scat_dispersion_source'
+
+    _definition.update            2012-11-20
+    _description.text
+;
+    Reference to source of real and imaginary dispersion
+    corrections for scattering factors used for this atom type.
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               dispersion_source
+    _type.purpose                 Describe
+    _type.source                  Recorded
+    _type.container               Single
+    _type.contents                Text
+    _description_example.case     'International Tables Vol. IV Table 2.3.1'
+
+save_
+
+save_atom_type_scat.hi_ang_fox_c0
+
+    _definition.id                '_atom_type_scat.hi_ang_Fox_c0'
+    _name.category_id             atom_type_scat
+    _name.object_id               hi_ang_Fox_c0
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':hi_ang_fox_coeffs}
+         {'file':templ_enum.cif  'save':hi_ang_fox_c0}
+        ]
+
+save_
+
+save_atom_type_scat.hi_ang_fox_c1
+
+    _definition.id                '_atom_type_scat.hi_ang_Fox_c1'
+    _name.category_id             atom_type_scat
+    _name.object_id               hi_ang_Fox_c1
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':hi_ang_fox_coeffs}
+         {'file':templ_enum.cif  'save':hi_ang_fox_c1}
+        ]
+
+save_
+
+save_atom_type_scat.hi_ang_fox_c2
+
+    _definition.id                '_atom_type_scat.hi_ang_Fox_c2'
+    _name.category_id             atom_type_scat
+    _name.object_id               hi_ang_Fox_c2
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':hi_ang_fox_coeffs}
+         {'file':templ_enum.cif  'save':hi_ang_fox_c2}
+        ]
+
+save_
+
+save_atom_type_scat.hi_ang_fox_c3
+
+    _definition.id                '_atom_type_scat.hi_ang_Fox_c3'
+    _name.category_id             atom_type_scat
+    _name.object_id               hi_ang_Fox_c3
+
+    _import.get
+        [
+         {'file':templ_attr.cif  'save':hi_ang_fox_coeffs}
+         {'file':templ_enum.cif  'save':hi_ang_fox_c3}
+        ]
+
+save_
+
+save_atom_type_scat.hi_ang_fox_coeffs
+
+    _definition.id                '_atom_type_scat.hi_ang_Fox_coeffs'
+    _definition.update            2023-06-16
+    _description.text
+;
+    The set of Fox et al. coefficients for generating high-angle
+    X-ray scattering factors: [ c0, c1, c2, c3 ]
+
+    Ref: International Tables for Crystallography (2004). Vol. C,
+         Table 6.1.1.5
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               hi_ang_Fox_coeffs
+    _type.purpose                 Number
+    _type.source                  Derived
+    _type.container               List
+    _type.dimension               '[4]'
+    _type.contents                Real
+    _units.code                   unspecified
+    _method.purpose               Evaluation
+    _method.expression
+;
+     With t  as  atom_type_scat
+
+    _atom_type_scat.hi_ang_Fox_coeffs  =
+    [t.hi_ang_Fox_c0,t.hi_ang_Fox_c1,t.hi_ang_Fox_c2,t.hi_ang_Fox_c3]
+;
+
+save_
+
+save_atom_type_scat.symbol
+
+    _definition.id                '_atom_type_scat.symbol'
+    _alias.definition_id          '_atom_type_scat_symbol'
+    _definition.update            2021-10-27
+    _description.text
+;
+    The identity of the atom specie(s) representing this atom type.
+    See _atom_type.symbol for further details.
+;
+    _name.category_id             atom_type_scat
+    _name.object_id               symbol
+    _name.linked_item_id          '_atom_type.symbol'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_

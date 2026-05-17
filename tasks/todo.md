@@ -72,6 +72,12 @@ Completed the full MkDocs + mkdocstrings documentation pipeline (Phases 1–5 of
 - **Scope `ddl.dic` defaults** — load `ddl.dic` at schema-generation time as authoritative
   source of DDLm attribute defaults instead of ad-hoc `or 'Single'` guards.
 
+- **Versioned DDLm handling** — DDLm itself evolves; `ddl.dic` defines deprecations and
+  semantic changes to DDLm structural tags (e.g. `_enumeration_default.index` →
+  `_enumeration_defaults.index`). Full fix requires knowing which DDLm version a domain
+  dictionary targets and applying appropriate reading rules. For now, hardcode known
+  mappings in `DictionaryLoader`.
+
 - **Known gap: extra columns in shared Set rows (ORIGINAL mode)** — `_fetch_rows_for_block` returns owned rows fully unmasked, including columns won by other blocks. Fixing requires per-column winning-block provenance in `_tag_presence`. See Lesson 124.
 
 - **Duplicate tag deduplication in `CifBlock`** — identical byte-for-byte duplicates can be
