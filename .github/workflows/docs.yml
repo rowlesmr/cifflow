@@ -1,0 +1,36 @@
+name: Docs
+
+on:
+  workflow_call:
+    inputs:
+      deploy:
+        type: boolean
+        default: false
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - run: python -m venv .venv
+
+      - run: echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: develop
+          args: --extras dev,docs
+
+      - run: ruff check src/
+      - run: pydoclint src/
+      - run: mkdocs build --strict
+
+      - if: inputs.deploy
+        run: mkdocs gh-deploy --force

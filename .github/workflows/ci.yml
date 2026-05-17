@@ -7,6 +7,7 @@ on:
 
 jobs:
   test:
+    if: github.event_name == 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -46,34 +47,8 @@ jobs:
       - run: python -m pytest
 
   docs:
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/docs.yml
+    with:
+      deploy: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     permissions:
       contents: write
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-
-      - run: python -m venv .venv
-
-      - name: Add venv to PATH
-        run: echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
-
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: develop
-          args: --extras dev,docs
-
-      - name: Lint docstrings
-        run: |
-          ruff check src/
-          pydoclint src/
-
-      - name: Build docs
-        run: mkdocs build --strict
-
-      - name: Deploy docs
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: mkdocs gh-deploy --force
