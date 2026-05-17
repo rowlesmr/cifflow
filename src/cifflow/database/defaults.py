@@ -44,6 +44,12 @@ def generate_defaults(
     -------
     int
         Total number of cells filled across all passes.
+
+    Raises
+    ------
+    duckdb.Error
+        If any SQL statement fails (e.g. a schema table is absent from
+        *connection*).  The transaction is rolled back before re-raising.
     """
     tag_to_col: dict[str, tuple[str, str]] = {
         v: k for k, v in schema.column_to_tag.items()
