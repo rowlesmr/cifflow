@@ -11,40 +11,55 @@ Parse, store, validate, and emit Crystallographic Information Files (CIF).
 
 ## What it does
 
-- Parses CIF 1.1 and CIF 2.0 files, including all string types (triple-quoted, multiline text fields, embedded quotes) and save frames
+- Focused on multi-block powder CIF files, but generally applicable
+- Constructs CIF files
+   - Parses CIF 1.1 and CIF 2.0 files, including all string types (triple-quoted, multiline text fields, embedded quotes) and save frames
+   - Constructs `CifFile` objects programmatically from Python values (`CifWriter`), and performs arbitrary edits: add/remove/rename tags, loops, blocks, and save frames
+   - Populate default values as defined in the dictionary
 - Loads DDLm dictionaries with full `_import.get` resolution, producing a typed schema
-- Focused on multi-block powder CIF files
-- Ingests parsed CIF data into DuckDB using the dictionary-derived schema: one table per category, foreign keys enforced, unknown tags routed to a fallback tier
-- Emits valid CIF from a populated database in four modes: ORIGINAL, GROUPED, ONE_BLOCK, ALL_BLOCKS
-- Trusts the user — if you pass in multiple blocks, the program assumes they all belong together and, failing key value clashes, can be interpreted as a single database/experiment
-- Constructs `CifFile` objects programmatically from Python values (`CifWriter`), and performs arbitrary edits: add/remove/rename tags, loops, blocks, and save frames
 - Removes common parse-time artefacts automatically (`clean`): orphan error tags, duplicate blocks/save frames/tags, loop padding; for anything beyond these automatic fixes, use `CifWriter`
+- Ingests parsed or constructed CIF data into DuckDB using the dictionary-derived schema: one table per category, foreign keys enforced, unknown tags routed to a fallback tier
+- Emits valid CIF from a populated database in four modes: ORIGINAL, GROUPED, ONE_BLOCK, ALL_BLOCKS
+- Trusts the user — if you pass in multiple blocks, cifflow assumes they all belong together and, failing key value clashes, can be interpreted as a single database/experiment
 - Visualises a schema as a Graphviz DOT string or a self-contained interactive HTML file
-- Returns data as Apache Arrow `RecordBatch` objects directly from the Rust parser (`build_arrow`, `build_arrow_file`)
+
+---
+
+## Documentation
+
+The full API reference is at [rowlesmr.github.io/cifflow](https://rowlesmr.github.io/cifflow/).
+
 
 ---
 
 ## Key properties
 
-**Error-tolerant.** The parser never raises on malformed input. Every structural problem produces an explicit error event; parsing continues and all recoverable data is preserved.
+**Error-tolerant.** The parser never raises on malformed input. Every structural problem produces an 
+explicit error event; parsing continues and all recoverable data is preserved.
 
-**No silent data loss.** Duplicate tag values are preserved. Tags not mapped by the dictionary go to a fallback table, not a discard pile.
+**No silent data loss.** Duplicate tag values are preserved. Tags not mapped by the dictionary go to a 
+fallback table, not a discard pile.
 
-**Round-trip fidelity.** For well-formed input, emitted CIF re-parses to the same data. All values are stored and emitted as raw strings; `ValueType` provenance (placeholder `.` and `?` vs quoted equivalents) is preserved throughout.
+**Round-trip fidelity.** For well-formed input, emitted CIF re-parses to the same data. All values are 
+stored and emitted as raw strings; `ValueType` provenance (placeholder `.` and `?` vs quoted equivalents) 
+is preserved throughout.
 
-**Canonical caseless names.** Block names, save frame names, and tag names are stored in Unicode canonical caseless form (`NFC(casefold(NFD(x)))`). Lookups are automatically casefolded: `cif["ABC"]` finds a block stored as `"abc"`.
+**Canonical caseless names.** Block names, save frame names, and tag names are stored in Unicode canonical 
+caseless form (`NFC(casefold(NFD(x)))`). Lookups are automatically casefolded: `cif["ABC"]` finds a block 
+stored as `"abc"`.
 
-**Streaming parser.** The parser is event-driven. CIF source is consumed in a single pass; the IR accumulates events incrementally. The Rust extension provides high-throughput Arrow output without any Python file objects.
+**Streaming parser.** The parser is event-driven. CIF source is consumed in a single pass; the IR accumulates 
+events incrementally. The Rust extension provides high-throughput Arrow output without any Python file objects.
 
 ---
 
 ## Installation
 
+Prebuilt wheels are available for Python 3.10 -- 3.14 with MacOS, Windows, and Linux. 
+
 ```
 pip install cifflow
 ```
-
-`duckdb` and `pyarrow` are installed automatically.
 
 To install from source (includes the Rust extension):
 
@@ -78,6 +93,8 @@ errors automatically.
 
 
 ### Full pipeline: dictionary → DuckDB → CIF
+
+To see what is going on in the lexing, parsing, ingestion, and schema generation phases, see the inspect module.
 
 ```python
 import pathlib
@@ -115,12 +132,16 @@ cif, errors = build(open('all_the_data.cif', encoding='utf-8').read())
 #    Pass a file path string to persist: ingest(cif, 'output.db', schema=schema)
 conn, warnings = ingest(cif, schema=schema)
 
+# # 4.5 Generate any default values
+# generate_defaults(conn, schema)
+
 # 5. Emit CIF
 output = emit(conn, schema, mode=EmitMode.ORIGINAL, version=CifVersion.CIF_2_0)
 open('output.cif', 'w', encoding='utf-8').write(output)
 ```
 
-See `example_workflow.py` in the repository root for a fully annotated end-to-end demonstration covering all four emission modes, type-cast export, and fidelity checking.
+See `example_workflow.py` in the repository root for a fully annotated end-to-end demonstration covering 
+all four emission modes, type-cast export, and fidelity checking.
 
 The full API reference is at [rowlesmr.github.io/cifflow](https://rowlesmr.github.io/cifflow/).
 
@@ -139,23 +160,16 @@ Parser → Event Stream → IR → Dictionary-aware Mapping → DuckDB → Outpu
 | IR (CIFModel) | Event accumulation, loop validation, multiline text transformation |
 | Dictionary    | DDLm parsing, schema derivation |
 | DuckDB        | Persistent storage: structured tables when a dictionary is present, fallback tier otherwise |
-| Output        | Valid CIF regeneration; Python/NumPy/pandas API surface |
+| Output        | Valid CIF regeneration |
 
-Layer responsibilities are strictly separated. The parser does not know about the dictionary. The dictionary does not know about the IR. The output layer only reads from DuckDB.
+Layer responsibilities are strictly separated. The parser does not know about the dictionary. The dictionary 
+does not know about the IR. The output layer only reads from DuckDB.
 
 ---
 
 ## Status
 
-All stages are complete and tested.
-
-| Stage | Feature |
-|---|---|
-| 1–2 | CIF 1.1 and 2.0 parser + IR (CIF model) |
-| 3 | DDLm dictionary loading (`_import.get`, alias resolution, deprecation) |
-| 4 | DuckDB schema generation (Set/Loop → tables, PKs, FKs, bridge columns, fallback tier) |
-| 5 | DuckDB ingestion: structured tables + fallback tier; FK propagation; error recovery; canonical caseless name matching |
-| 6 | CIF emission (ORIGINAL, GROUPED, ONE_BLOCK, ALL_BLOCKS); pretty-print; line-length enforcement; decimal alignment; schema visualisation; programmatic `CifFile` construction (`CifWriter`); cleaning parser artefacts (`clean`); type-cast export (`convert_database`); fidelity checking (`check_fidelity`); validation (`validate`) |
+Everything should work. Issues, suggestions, and requests gladly recieved.
 
 ---
 
@@ -164,19 +178,19 @@ All stages are complete and tested.
 Run the fast test suite (excludes tests that load large real-world CIF files):
 
 ```
-.venv/Scripts/python.exe -m pytest -m "not slow"
+python -m pytest -m "not slow"
 ```
 
 Run the full suite including slow tests:
 
 ```
-.venv/Scripts/python.exe -m pytest
+python -m pytest
 ```
 
 After modifying the Rust extension, recompile before running Python tests:
 
 ```
-.venv/Scripts/maturin develop
+maturin develop
 ```
 
 ---
