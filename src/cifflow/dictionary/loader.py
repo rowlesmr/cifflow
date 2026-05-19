@@ -237,7 +237,7 @@ def _extract_item(data: dict[str, list], warn: Callable[[str], None]) -> DdlmIte
             continue
         if isinstance(def_val, (list, dict)):
             val_str = json.dumps(def_val, separators=(',', ':'), ensure_ascii=False)
-        elif isinstance(def_val, str) and def_val != '?':
+        elif isinstance(def_val, str):
             val_str = def_val
         else:
             continue
