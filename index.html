@@ -1,0 +1,1193 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="CIF parsing, ingestion, and emission library">
+      
+      
+      
+      
+      
+        <link rel="next" href="api/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>cifflow</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cifflow" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="cifflow" class="md-header__button md-logo" aria-label="cifflow" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            cifflow
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Home
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/rowlesmr/cifflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="cifflow" class="md-nav__button md-logo" aria-label="cifflow" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    cifflow
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/rowlesmr/cifflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="." class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key properties
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quick start">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parse-a-cif-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parse a CIF file
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#full-pipeline-dictionary-duckdb-cif" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full pipeline: dictionary → DuckDB → CIF
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#license" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        License
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CIF Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/parser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parser
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/dictionary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dictionary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ingestion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/output/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Output
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/fidelity/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fidelity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/inspect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inspect
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="outputspec/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Output spec
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it does
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key properties
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quick start">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parse-a-cif-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parse a CIF file
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#full-pipeline-dictionary-duckdb-cif" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full pipeline: dictionary → DuckDB → CIF
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#license" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        License
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="cifflow">cifflow</h1>
+<p>Parse, store, validate, and emit Crystallographic Information Files (CIF).</p>
+<p><a href="https://pypi.org/project/cifflow/"><img alt="PyPI" src="https://img.shields.io/pypi/v/cifflow" /></a>
+<a href="https://github.com/rowlesmr/cifflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/rowlesmr/cifflow/actions/workflows/ci.yml/badge.svg" /></a>
+<a href="https://pypi.org/project/cifflow/"><img alt="PyPI - Python Version" src="https://img.shields.io/pypi/pyversions/cifflow" /></a>
+<a href="https://pypi.org/project/cifflow/"><img alt="License" src="https://img.shields.io/pypi/l/cifflow" /></a></p>
+<hr />
+<h2 id="what-it-does">What it does</h2>
+<ul>
+<li>Parses CIF 1.1 and CIF 2.0 files, including all string types (triple-quoted, multiline text fields, embedded quotes) and save frames</li>
+<li>Loads DDLm dictionaries with full <code>_import.get</code> resolution, producing a typed schema</li>
+<li>Focused on multi-block powder CIF files</li>
+<li>Ingests parsed CIF data into DuckDB using the dictionary-derived schema: one table per category, foreign keys enforced, unknown tags routed to a fallback tier</li>
+<li>Emits valid CIF from a populated database in four modes: ORIGINAL, GROUPED, ONE_BLOCK, ALL_BLOCKS</li>
+<li>Trusts the user — if you pass in multiple blocks, the program assumes they all belong together and, failing key value clashes, can be interpreted as a single database/experiment</li>
+<li>Constructs <code>CifFile</code> objects programmatically from Python values (<code>CifWriter</code>), and performs arbitrary edits: add/remove/rename tags, loops, blocks, and save frames</li>
+<li>Removes common parse-time artefacts automatically (<code>clean</code>): orphan error tags, duplicate blocks/save frames/tags, loop padding; for anything beyond these automatic fixes, use <code>CifWriter</code></li>
+<li>Visualises a schema as a Graphviz DOT string or a self-contained interactive HTML file</li>
+<li>Returns data as Apache Arrow <code>RecordBatch</code> objects directly from the Rust parser (<code>build_arrow</code>, <code>build_arrow_file</code>)</li>
+</ul>
+<hr />
+<h2 id="key-properties">Key properties</h2>
+<p><strong>Error-tolerant.</strong> The parser never raises on malformed input. Every structural problem produces an explicit error event; parsing continues and all recoverable data is preserved.</p>
+<p><strong>No silent data loss.</strong> Duplicate tag values are preserved. Tags not mapped by the dictionary go to a fallback table, not a discard pile.</p>
+<p><strong>Round-trip fidelity.</strong> For well-formed input, emitted CIF re-parses to the same data. All values are stored and emitted as raw strings; <code>ValueType</code> provenance (placeholder <code>.</code> and <code>?</code> vs quoted equivalents) is preserved throughout.</p>
+<p><strong>Canonical caseless names.</strong> Block names, save frame names, and tag names are stored in Unicode canonical caseless form (<code>NFC(casefold(NFD(x)))</code>). Lookups are automatically casefolded: <code>cif["ABC"]</code> finds a block stored as <code>"abc"</code>.</p>
+<p><strong>Streaming parser.</strong> The parser is event-driven. CIF source is consumed in a single pass; the IR accumulates events incrementally. The Rust extension provides high-throughput Arrow output without any Python file objects.</p>
+<hr />
+<h2 id="installation">Installation</h2>
+<pre><code>pip install cifflow
+</code></pre>
+<p><code>duckdb</code> and <code>pyarrow</code> are installed automatically.</p>
+<p>To install from source (includes the Rust extension):</p>
+<pre><code>git clone https://github.com/rowlesmr/cifflow.git
+cd cifflow
+pip install -e &quot;.[dev]&quot;
+maturin develop
+</code></pre>
+<hr />
+<h2 id="quick-start">Quick start</h2>
+<h3 id="parse-a-cif-file">Parse a CIF file</h3>
+<pre><code class="language-python">from cifflow import build
+
+text = open('structure.cif', encoding='utf-8').read()
+cif, errors = build(text)   # never raises; errors is a list[ParseError]
+
+for block_name in cif.blocks:          # block names are always lowercase
+    block = cif[block_name]
+    print(f'{block_name}: {len(block.tags)} tags, {len(block.loops)} loops')
+</code></pre>
+<p>The best way to resolve errors is to inspect the list of errors, edit the
+file accordingly, and try again. No assumptions are made about how to correct
+errors automatically.</p>
+<h3 id="full-pipeline-dictionary-duckdb-cif">Full pipeline: dictionary → DuckDB → CIF</h3>
+<pre><code class="language-python">import pathlib
+from cifflow import (
+    DictionaryLoader, directory_resolver,
+    save_dictionary, load_dictionary,
+    generate_schema,
+    build, ingest, emit, EmitMode,
+)
+from cifflow.types import CifVersion
+
+# 1. Load dictionary (with JSON cache to avoid re-parsing on every run)
+cache = pathlib.Path('cif_pow_cache.json')
+resolver = directory_resolver('data/dictionaries')
+if cache.exists():
+    dictionary = load_dictionary(cache)
+else:
+    dictionary = DictionaryLoader(resolver=resolver).load(
+        open('data/dictionaries/cif_pow.dic', encoding='utf-8').read())
+    save_dictionary(dictionary, cache)
+
+# 2. Derive schema
+schema = generate_schema(dictionary)
+
+# 3. Parse CIF
+cif, errors = build(open('all_the_data.cif', encoding='utf-8').read())
+
+# 4. Ingest into an in-memory DuckDB database
+#    Pass a file path string to persist: ingest(cif, 'output.db', schema=schema)
+conn, warnings = ingest(cif, schema=schema)
+
+# 5. Emit CIF
+output = emit(conn, schema, mode=EmitMode.ORIGINAL, version=CifVersion.CIF_2_0)
+open('output.cif', 'w', encoding='utf-8').write(output)
+</code></pre>
+<p>See <code>example_workflow.py</code> in the repository root for a fully annotated end-to-end demonstration covering all four emission modes, type-cast export, and fidelity checking.</p>
+<p>The full API reference is hosted at <a href="https://rowlesmr.github.io/cifflow/">rowlesmr.github.io/cifflow</a>.</p>
+<hr />
+<h2 id="architecture">Architecture</h2>
+<pre><code>Parser → Event Stream → IR → Dictionary-aware Mapping → DuckDB → Output/API
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lexer</td>
+<td>Tokenisation, <code>ValueType</code> assignment</td>
+</tr>
+<tr>
+<td>Parser</td>
+<td>Token sequence interpretation, error recovery, event emission</td>
+</tr>
+<tr>
+<td>IR (CIFModel)</td>
+<td>Event accumulation, loop validation, multiline text transformation</td>
+</tr>
+<tr>
+<td>Dictionary</td>
+<td>DDLm parsing, schema derivation</td>
+</tr>
+<tr>
+<td>DuckDB</td>
+<td>Persistent storage: structured tables when a dictionary is present, fallback tier otherwise</td>
+</tr>
+<tr>
+<td>Output</td>
+<td>Valid CIF regeneration; Python/NumPy/pandas API surface</td>
+</tr>
+</tbody>
+</table>
+<p>Layer responsibilities are strictly separated. The parser does not know about the dictionary. The dictionary does not know about the IR. The output layer only reads from DuckDB.</p>
+<hr />
+<h2 id="status">Status</h2>
+<p>All stages are complete and tested.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1–2</td>
+<td>CIF 1.1 and 2.0 parser + IR (CIF model)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>DDLm dictionary loading (<code>_import.get</code>, alias resolution, deprecation)</td>
+</tr>
+<tr>
+<td>4</td>
+<td>DuckDB schema generation (Set/Loop → tables, PKs, FKs, bridge columns, fallback tier)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>DuckDB ingestion: structured tables + fallback tier; FK propagation; error recovery; canonical caseless name matching</td>
+</tr>
+<tr>
+<td>6</td>
+<td>CIF emission (ORIGINAL, GROUPED, ONE_BLOCK, ALL_BLOCKS); pretty-print; line-length enforcement; decimal alignment; schema visualisation; programmatic <code>CifFile</code> construction (<code>CifWriter</code>); cleaning parser artefacts (<code>clean</code>); type-cast export (<code>convert_database</code>); fidelity checking (<code>check_fidelity</code>); validation (<code>validate</code>)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="development">Development</h2>
+<p>Run the fast test suite (excludes tests that load large real-world CIF files):</p>
+<pre><code>python -m pytest -m &quot;not slow&quot;
+</code></pre>
+<p>Run the full suite including slow tests:</p>
+<pre><code>python -m pytest
+</code></pre>
+<p>After modifying the Rust extension, recompile before running Python tests:</p>
+<pre><code>maturin develop
+</code></pre>
+<hr />
+<h2 id="license">License</h2>
+<p>Apache 2.0. See <code>LICENSE</code>.</p>
+<p>The bundled JavaScript files (<code>viz.js</code> 2.1.2 and <code>svg-pan-zoom</code> 3.6.1) used by
+<code>visualise_schema_html</code> are MIT-licensed. Licence notices are in
+<code>src/cifflow/dictionary/js/LICENSES.txt</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": [], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

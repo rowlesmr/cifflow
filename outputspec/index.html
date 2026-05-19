@@ -1,0 +1,3364 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="CIF parsing, ingestion, and emission library">
+      
+      
+      
+      
+        <link rel="prev" href="../api/database/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Output spec - cifflow</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cifflow-output-specification-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="cifflow" class="md-header__button md-logo" aria-label="cifflow" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            cifflow
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Output spec
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/rowlesmr/cifflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="cifflow" class="md-nav__button md-logo" aria-label="cifflow" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    cifflow
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/rowlesmr/cifflow" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CIF Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/parser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parser
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/dictionary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dictionary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ingestion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/output/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Output
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/fidelity/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fidelity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/inspect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inspect
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Output spec
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Output spec
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#emitmode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EmitMode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="EmitMode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#emitmodeoriginal-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EmitMode.ORIGINAL (default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emitmodegrouped" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EmitMode.GROUPED
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emitmodeone_block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EmitMode.ONE_BLOCK
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emitmodeall_blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EmitMode.ALL_BLOCKS
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#outputplan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OutputPlan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="OutputPlan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#specs-listblockspec-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        specs: list[BlockSpec] — default []
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#block_namer-callabledictstr-liststr-str-none-default-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        block_namer: Callable[[dict[str, list[str]]], str] | None — default None
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#blockspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BlockSpec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BlockSpec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#matches-matchpredicate-default-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        matches: MatchPredicate — default None
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#category_order-liststr-liststr-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        category_order: list[str | list[str]] — default []
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#single_block-bool-default-false" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        single_block: bool — default False
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#column_order-dictstr-liststr-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        column_order: dict[str, list[str]] — default {}
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#block_namer-callabledictstr-liststr-str-none-default-none_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        block_namer: Callable[[dict[str, list[str]]], str] | None — default None
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attach_to-matchpredicate-default-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        attach_to: MatchPredicate — default None
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#block-routing-helpers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Block routing helpers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Block routing helpers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#matchpredicate-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MatchPredicate type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#helper-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Helper functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Helper functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#onlycategories-str-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        only(*categories: str) → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#any_ofcategories-str-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        any_of(*categories: str) → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#all_ofcategories-str-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        all_of(*categories: str) → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hascategories-str-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        has(*categories: str) → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_matcher-combinators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _Matcher combinators
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_Matcher combinators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#excludingcategories-str-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        .excluding(*categories: str) → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#matcher_a-matcher_b-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        matcher_a | matcher_b → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#matcher_a-matcher_b-_matcher_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        matcher_a &amp; matcher_b → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schemaspecdescendantsroot-frozensetstr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SchemaSpec.descendants(root) → frozenset[str]
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-multiple-specs-to-control-block-type-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using multiple specs to control block-type ordering
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Using multiple specs to control block-type ordering">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#only-set-categories-appear-in-the-anchor-frozenset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Only Set categories appear in the anchor frozenset
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#discovering-what-anchors-your-data-actually-produces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Discovering what anchors your data actually produces
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-ordering-blocks-by-category-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example: ordering blocks by category type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#category_order-is-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        category_order is optional
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#matching-on-multiple-set-anchors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Matching on multiple Set anchors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#routing-loop-only-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Routing loop-only blocks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#default-block-naming" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Default block naming
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#emit-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        emit() function
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="emit() function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#required-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Required parameters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Required parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#conn-sqlite3connection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        conn: sqlite3.Connection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-schemaspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        schema: SchemaSpec
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keyword-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyword parameters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Keyword parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mode-emitmode-default-emitmodeoriginal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mode: EmitMode — default EmitMode.ORIGINAL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#version-cifversion-default-cifversioncif_2_0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        version: CifVersion — default CifVersion.CIF_2_0
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plan-outputplan-none-default-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        plan: OutputPlan | None — default None
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reconstruct_su-bool-default-false" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reconstruct_su: bool — default False
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emit_defaults-bool-default-true" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        emit_defaults: bool — default True
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#line_ending-str-default-n" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        line_ending: str — default '\n'
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pretty-bool-default-true" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pretty: bool — default True
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#line_limit-int-none-default-2048" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        line_limit: int | None — default 2048
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#return-value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Return value
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exceptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#category-ordering-in-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Category ordering in detail
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#column-ordering-in-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Column ordering in detail
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fk-pk-suppression" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FK-PK suppression
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#merge-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Merge groups
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quoting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quoting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quoting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#stored-value-encoding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stored-value encoding
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cif-20-quoting-priority" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CIF 2.0 quoting priority
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cif-11-quoting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CIF 1.1 quoting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#semicolon-folding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Semicolon folding
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#complete-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Complete example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#outputplanspecs-input-for-all_blocks-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OutputPlan.specs input for ALL_BLOCKS ordering
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interaction-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interaction summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#complete-example_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Complete example
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#emitmode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EmitMode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="EmitMode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#emitmodeoriginal-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EmitMode.ORIGINAL (default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emitmodegrouped" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EmitMode.GROUPED
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emitmodeone_block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EmitMode.ONE_BLOCK
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emitmodeall_blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EmitMode.ALL_BLOCKS
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#outputplan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OutputPlan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="OutputPlan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#specs-listblockspec-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        specs: list[BlockSpec] — default []
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#block_namer-callabledictstr-liststr-str-none-default-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        block_namer: Callable[[dict[str, list[str]]], str] | None — default None
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#blockspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BlockSpec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BlockSpec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fields_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#matches-matchpredicate-default-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        matches: MatchPredicate — default None
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#category_order-liststr-liststr-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        category_order: list[str | list[str]] — default []
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#single_block-bool-default-false" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        single_block: bool — default False
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#column_order-dictstr-liststr-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        column_order: dict[str, list[str]] — default {}
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#block_namer-callabledictstr-liststr-str-none-default-none_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        block_namer: Callable[[dict[str, list[str]]], str] | None — default None
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attach_to-matchpredicate-default-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        attach_to: MatchPredicate — default None
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#block-routing-helpers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Block routing helpers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Block routing helpers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#matchpredicate-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MatchPredicate type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#helper-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Helper functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Helper functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#onlycategories-str-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        only(*categories: str) → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#any_ofcategories-str-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        any_of(*categories: str) → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#all_ofcategories-str-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        all_of(*categories: str) → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hascategories-str-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        has(*categories: str) → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_matcher-combinators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _Matcher combinators
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="_Matcher combinators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#excludingcategories-str-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        .excluding(*categories: str) → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#matcher_a-matcher_b-_matcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        matcher_a | matcher_b → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#matcher_a-matcher_b-_matcher_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        matcher_a &amp; matcher_b → _Matcher
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schemaspecdescendantsroot-frozensetstr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SchemaSpec.descendants(root) → frozenset[str]
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-multiple-specs-to-control-block-type-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using multiple specs to control block-type ordering
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Using multiple specs to control block-type ordering">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#only-set-categories-appear-in-the-anchor-frozenset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Only Set categories appear in the anchor frozenset
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#discovering-what-anchors-your-data-actually-produces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Discovering what anchors your data actually produces
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-ordering-blocks-by-category-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example: ordering blocks by category type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#category_order-is-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        category_order is optional
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#matching-on-multiple-set-anchors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Matching on multiple Set anchors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#routing-loop-only-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Routing loop-only blocks
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#default-block-naming" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Default block naming
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#emit-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        emit() function
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="emit() function">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#required-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Required parameters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Required parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#conn-sqlite3connection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        conn: sqlite3.Connection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-schemaspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        schema: SchemaSpec
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keyword-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyword parameters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Keyword parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mode-emitmode-default-emitmodeoriginal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mode: EmitMode — default EmitMode.ORIGINAL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#version-cifversion-default-cifversioncif_2_0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        version: CifVersion — default CifVersion.CIF_2_0
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plan-outputplan-none-default-none" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        plan: OutputPlan | None — default None
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reconstruct_su-bool-default-false" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reconstruct_su: bool — default False
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emit_defaults-bool-default-true" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        emit_defaults: bool — default True
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#line_ending-str-default-n" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        line_ending: str — default '\n'
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pretty-bool-default-true" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pretty: bool — default True
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#line_limit-int-none-default-2048" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        line_limit: int | None — default 2048
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#return-value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Return value
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exceptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#category-ordering-in-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Category ordering in detail
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#column-ordering-in-detail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Column ordering in detail
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fk-pk-suppression" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FK-PK suppression
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#merge-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Merge groups
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quoting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quoting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quoting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#stored-value-encoding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stored-value encoding
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cif-20-quoting-priority" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CIF 2.0 quoting priority
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cif-11-quoting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CIF 1.1 quoting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#semicolon-folding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Semicolon folding
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#complete-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Complete example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#outputplanspecs-input-for-all_blocks-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OutputPlan.specs input for ALL_BLOCKS ordering
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interaction-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interaction summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#complete-example_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Complete example
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="cifflow-output-specification-reference">cifflow — Output Specification Reference</h1>
+<p>This document describes how CIF emission is controlled: the <code>EmitMode</code> enum, <code>OutputPlan</code>,
+<code>BlockSpec</code>, the <code>emit()</code> function, and the formatting options that govern the final text.</p>
+<p>See the <a href="../api/">API Reference</a> for the broader API reference.  See <code>example_workflow.py</code> for end-to-end
+usage.</p>
+<hr />
+<h2 id="overview">Overview</h2>
+<p>The output layer reads from a DuckDB database that was previously populated by <code>ingest()</code>.
+It does not write to the database.</p>
+<p>The central entry point is <code>emit()</code>:</p>
+<pre><code class="language-python">from cifflow import emit, EmitMode, OutputPlan, BlockSpec, CifVersion
+from cifflow import only, any_of, all_of, has   # block routing helpers
+
+cif_text = emit(conn, schema, mode=EmitMode.ORIGINAL, version=CifVersion.CIF_2_0)
+</code></pre>
+<p>Three interacting decisions control what comes out:</p>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Controlled by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>How rows are partitioned into CIF blocks</td>
+<td><code>EmitMode</code></td>
+</tr>
+<tr>
+<td>Which blocks appear together and in what order</td>
+<td><code>OutputPlan</code> + <code>BlockSpec</code></td>
+</tr>
+<tr>
+<td>How the text is formatted</td>
+<td><code>emit()</code> keyword arguments</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="emitmode">EmitMode</h2>
+<pre><code class="language-python">from cifflow import EmitMode
+</code></pre>
+<p><code>EmitMode</code> is an enum with four values.  Exactly one is chosen per <code>emit()</code> call.</p>
+<hr />
+<h3 id="emitmodeoriginal-default"><code>EmitMode.ORIGINAL</code> (default)</h3>
+<p>One output block per distinct <code>_cifflow_block_id</code> value.  Reconstructs the original CIF blocks
+(almost) exactly as they were before ingestion; the inverse of <code>ingest()</code>.</p>
+<ul>
+<li>FK-PK columns are suppressed: if a FK column is redundant because the referenced Set
+  category is co-emitted in the same block, the FK column is omitted.</li>
+<li>Loop FK-PK columns are also suppressed (<code>suppress_loop_fk_pk=True</code>).</li>
+<li>Block order follows the <code>_block_order</code> table if present (written during ingestion);
+  falls back to sorted order for databases that pre-date that table.</li>
+<li><code>_audit_dataset.id</code> is <strong>not</strong> injected.</li>
+</ul>
+<hr />
+<h3 id="emitmodegrouped"><code>EmitMode.GROUPED</code></h3>
+<p>One block per unique combination of Set-category anchor key values.  Rows from multiple
+original blocks that share the same Set-level identity are merged into one output block.</p>
+<p><strong>Anchor determination:</strong>  For each table, the emitter performs a BFS over the FK graph
+to find the nearest reachable Set-class ancestor.  Three outcomes are possible:</p>
+<ol>
+<li>A Set-class table is directly reachable → that Set is the anchor.</li>
+<li>A Loop-class intermediate is reachable and has an onward FK to a Set → one-hop chain;
+   that Set is the anchor.</li>
+<li>No Set is reachable → the table falls back to <code>_cifflow_block_id</code> grouping.</li>
+</ol>
+<p>Keyless Set tables (whose only domain PK is <code>_cifflow_id</code>) have no cross-block
+identity and also fall back to <code>_cifflow_block_id</code> grouping.</p>
+<ul>
+<li>FK-PK suppression is enabled (<code>suppress_fk_pk=True</code>).</li>
+<li><code>_audit_dataset.id</code> is <strong>not</strong> injected.</li>
+</ul>
+<hr />
+<h3 id="emitmodeone_block"><code>EmitMode.ONE_BLOCK</code></h3>
+<p>All data from the database is collapsed into a single CIF block named <code>output</code>.</p>
+<ul>
+<li>FK-PK suppression is <strong>disabled</strong> (suppress_fk_pk=False).</li>
+<li><code>_audit_dataset.id</code> is <strong>not</strong> injected.</li>
+<li>If dictionary metadata is available (<code>title</code>, <code>version</code>, or <code>uri</code> on the dictionary)
+  and the database does not already contain <code>audit_conform</code> data, conformance tags are
+  injected at the top of the block:</li>
+<li><code>_audit.schema  Custom</code></li>
+<li><code>_audit_conform.dict_name</code> ← <code>_dictionary.title</code></li>
+<li><code>_audit_conform.dict_version</code> ← <code>_dictionary.version</code></li>
+<li><code>_audit_conform.dict_location</code> ← <code>_dictionary.uri</code></li>
+<li>The block name is always <code>output</code>; <code>BlockSpec.block_namer</code> and <code>OutputPlan.block_namer</code>
+  are not consulted.</li>
+</ul>
+<hr />
+<h3 id="emitmodeall_blocks"><code>EmitMode.ALL_BLOCKS</code></h3>
+<p>One CIF block per schema table, further split by Set-key combination.  This mode is
+dictionary-driven: each block corresponds to a single schema-defined concept.</p>
+<p><strong>Block generation rules per category type:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Category type</th>
+<th>Blocks generated</th>
+<th>Block name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Set</td>
+<td>One block per row</td>
+<td><code>{table}_{pk_val…}</code></td>
+</tr>
+<tr>
+<td>Loop, no Set-key FKs</td>
+<td>One block for all rows</td>
+<td><code>{table}</code></td>
+</tr>
+<tr>
+<td>Loop, with Set-key FKs</td>
+<td>One block per unique Set-key combination</td>
+<td><code>{table}_{set_val…}</code></td>
+</tr>
+</tbody>
+</table>
+<p>For Loop categories with Set-key FKs, the Set-key values are emitted as scalar
+tag–value pairs above the loop body; the corresponding FK columns are suppressed from
+the loop header.</p>
+<p><strong>Guards — <code>ValueError</code> is raised if:</strong>
+- Any <code>_cif_fallback</code> rows are present.  Unknown tags cannot be unambiguously assigned
+  to a dictionary-split block.
+- Any keyless Set table (one whose only domain PK is <code>_cifflow_id</code>) contains rows.</p>
+<p><strong>Dataset ID injection:</strong>  Per block, the emitter resolves the originating <code>_cifflow_block_id</code>
+values from <code>_block_dataset_membership</code> and injects <code>_audit_dataset.id</code>:</p>
+<ul>
+<li>Exactly one distinct ID found → inject as a scalar value.</li>
+<li>Multiple IDs found → inject as a single-column <code>loop_</code>.</li>
+<li>None found → generate a fresh UUID (CIF 2.0 only); the same UUID is shared across
+  all blocks that have no membership data.</li>
+</ul>
+<p><strong>Table ordering</strong> follows <code>OutputPlan.category_order</code> from the first <code>BlockSpec</code> that
+declares one.  Unspecified tables follow alphabetically (Set-class before Loop-class).
+Spec matching (<code>BlockSpec.matches</code>) is <strong>not</strong> applied in ALL_BLOCKS mode.</p>
+<hr />
+<h2 id="outputplan">OutputPlan</h2>
+<pre><code class="language-python">from cifflow import OutputPlan
+</code></pre>
+<p><code>OutputPlan</code> is an optional dataclass passed to <code>emit()</code> via the <code>plan</code> parameter.
+When <code>plan=None</code> (the default), all blocks use alphabetical category ordering.</p>
+<pre><code class="language-python">plan = OutputPlan(specs=[...], block_namer=my_namer)
+cif_text = emit(conn, schema, plan=plan)
+</code></pre>
+<h3 id="fields">Fields</h3>
+<h4 id="specs-listblockspec-default"><code>specs: list[BlockSpec]</code> — default <code>[]</code></h4>
+<p>Ordered list of <code>BlockSpec</code> objects.  For each output block the emitter evaluates specs
+in index order and assigns the <strong>first matching spec</strong> (first-match-wins).  Blocks with
+no matching spec use default alphabetical ordering.</p>
+<p>Emission order:
+1. All blocks assigned to <code>specs[0]</code>, sorted alphabetically by block name.
+2. All blocks assigned to <code>specs[1]</code>, sorted alphabetically by block name.
+3. … (subsequent specs in order)
+4. All unmatched blocks, sorted alphabetically.</p>
+<p>In <code>ALL_BLOCKS</code> mode, spec matching is skipped.  Only <code>category_order</code> from the first
+spec that declares one is used; the rest of the spec machinery is bypassed.</p>
+<h4 id="block_namer-callabledictstr-liststr-str-none-default-none"><code>block_namer: Callable[[dict[str, list[str]]], str] | None</code> — default <code>None</code></h4>
+<p>Global fallback block name override.  Called when the matched <code>BlockSpec</code> has no
+<code>block_namer</code> of its own.</p>
+<p>Signature: <code>(anchor_key_dict: dict[str, list[str]]) -&gt; str</code></p>
+<p>The argument maps <code>'{table_name}.{pk_col}'</code> to a list of key values.  In GROUPED mode
+each list has one element; when <code>single_block=True</code> on the matched spec, it may have
+multiple.</p>
+<p>Fallback chain (first non-None result wins):
+1. <code>BlockSpec.block_namer</code> on the matched spec.
+2. <code>OutputPlan.block_namer</code>.
+3. Default construction rule (see <a href="#default-block-naming">Default block naming</a> below).</p>
+<hr />
+<h2 id="blockspec">BlockSpec</h2>
+<pre><code class="language-python">from cifflow import BlockSpec
+</code></pre>
+<p><code>BlockSpec</code> is a dataclass that pairs a predicate (which blocks match) with emission
+behaviour (how those blocks are rendered).</p>
+<pre><code class="language-python">spec = BlockSpec(
+    matches=any_of('cell'),
+    category_order=['symmetry', 'cell', 'atom_site'],
+    column_order={'atom_site': ['label', 'type_symbol', 'fract_x', 'fract_y', 'fract_z']},
+    single_block=False,
+    block_namer=None,
+)
+</code></pre>
+<h3 id="fields_1">Fields</h3>
+<h4 id="matches-matchpredicate-default-none"><code>matches: MatchPredicate</code> — default <code>None</code></h4>
+<p>Determines which output blocks this spec applies to.  Accepts several forms — see the
+<a href="#block-routing-helpers">Block routing helpers</a> section for the full <code>MatchPredicate</code>
+type and helper functions.</p>
+<table>
+<thead>
+<tr>
+<th>Form</th>
+<th>Semantics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>None</code></td>
+<td>Catch-all — matches every block</td>
+</tr>
+<tr>
+<td><code>str</code></td>
+<td>Equivalent to <code>any_of(name)</code> — matches if the name is in the anchor frozenset</td>
+</tr>
+<tr>
+<td><code>set[str]</code> / <code>frozenset[str]</code></td>
+<td>Equivalent to <code>all_of(*names)</code> — matches if every listed name is in the anchor frozenset</td>
+</tr>
+<tr>
+<td><code>_Matcher</code></td>
+<td>Returned by <code>only()</code>, <code>any_of()</code>, <code>all_of()</code>, <code>has()</code>; supports <code>.excluding()</code>, <code>\|</code>, <code>&amp;</code></td>
+</tr>
+<tr>
+<td><code>Callable[[frozenset[str], frozenset[str]], bool]</code></td>
+<td>Two-arg callable: first arg is the Set-anchor frozenset, second is the full tables frozenset</td>
+</tr>
+</tbody>
+</table>
+<p>The first arg of a callable predicate is the frozenset of <strong>Set-class</strong> category table names
+that have rows in the block.  The second arg is the frozenset of <strong>all</strong> table names present
+(Set + Loop).  Both frozensets use SQL table names (lowercased, underscored).</p>
+<pre><code class="language-python"># Using helper functions (preferred)
+matches=any_of('diffrn')
+matches=all_of('pd_phase', 'pd_diffractogram')
+matches=only('cell')
+
+# String shorthand (equivalent to any_of('diffrn'))
+matches='diffrn'
+
+# Set shorthand (equivalent to all_of('pd_phase', 'pd_diffractogram'))
+matches={'pd_phase', 'pd_diffractogram'}
+
+# Two-arg callable
+matches=lambda anchors, tables: 'cell' in anchors and 'atom_site' in tables
+
+# Catch-all (matches every block)
+matches=None
+</code></pre>
+<h4 id="category_order-liststr-liststr-default"><code>category_order: list[str | list[str]]</code> — default <code>[]</code></h4>
+<p>Emission order of categories (tables) within a block.  Unlisted categories are appended
+after listed items, alphabetically (Set-class before Loop-class).</p>
+<p>Each element may be:</p>
+<p><strong>Plain string</strong> — names a single category:</p>
+<pre><code class="language-python">category_order=['symmetry', 'cell', 'atom_site']
+</code></pre>
+<p><strong>String ending with <code>*</code></strong> — wildcard, expands to that category plus all schema
+descendants (via <code>category_parent</code> BFS), sorted alphabetically.  Unknown base names
+emit a warning and expand to nothing:</p>
+<pre><code class="language-python">category_order=['symmetry', 'atom*']
+# 'atom*' might expand to: 'atom', 'atom_site', 'atom_site_aniso', ...
+</code></pre>
+<p><strong><code>list[str]</code></strong> — a merge group.  The listed categories are checked for key
+compatibility (identical non-synthetic PK columns).  If compatible they are emitted as
+a single <code>loop_</code> via FULL OUTER JOIN.  If not compatible, they fall back to plain loops
+in listed order with no warning.  Elements within a merge group may include wildcards:</p>
+<pre><code class="language-python">category_order=[
+    'symmetry',
+    ['atom_site', 'atom_site_aniso'],   # merge group — single loop_ if PKs match
+    'cell*',                             # wildcard
+]
+</code></pre>
+<h4 id="single_block-bool-default-false"><code>single_block: bool</code> — default <code>False</code></h4>
+<p>When <code>True</code>, all blocks matching this spec are collapsed into one output block via an
+internal merge step.</p>
+<p>Effects when <code>True</code>:
+- <code>table_rows</code> from all source blocks are combined.
+- <code>fallback_rows</code> from all source blocks are combined.
+- <code>anchor_key_dict</code> entries are merged (no duplicates).
+- FK-PK suppression is disabled in the merged block.
+- The resulting block name is resolved from the merged <code>anchor_key_dict</code>.</p>
+<p>When <code>False</code> (default), one output block is produced per unique combination of anchor
+key values matching this spec.</p>
+<h4 id="column_order-dictstr-liststr-default"><code>column_order: dict[str, list[str]]</code> — default <code>{}</code></h4>
+<p>Emission order of columns within specific categories.  Maps category (table) name to an
+ordered list of column names.</p>
+<p>Listed columns appear in declared order.  Remaining columns follow alphabetically.
+Synthetic columns (<code>_cifflow_block_id</code>, <code>_cifflow_row_id</code>, <code>_cifflow_id</code>) and null-only columns are
+never emitted regardless of this setting.</p>
+<pre><code class="language-python">column_order={
+    'atom_site': ['label', 'type_symbol', 'fract_x', 'fract_y', 'fract_z'],
+    'cell': ['length_a', 'length_b', 'length_c', 'angle_alpha', 'angle_beta', 'angle_gamma'],
+}
+</code></pre>
+<p>In ALL_BLOCKS mode, <code>column_order</code> is inherited even when <code>preferred_category_order</code>
+overrides the category ordering.</p>
+<h4 id="block_namer-callabledictstr-liststr-str-none-default-none_1"><code>block_namer: Callable[[dict[str, list[str]]], str] | None</code> — default <code>None</code></h4>
+<p>Per-spec block name override.  Same signature and semantics as <code>OutputPlan.block_namer</code>
+but takes priority over it.</p>
+<h4 id="attach_to-matchpredicate-default-none"><code>attach_to: MatchPredicate</code> — default <code>None</code></h4>
+<p>When set, this block is not emitted as a standalone <code>data_</code> block.  Instead its table
+rows are merged into the first already-resolved output block whose anchor and tables
+frozensets satisfy the predicate (same forms as <code>matches</code>).</p>
+<p>Use this to pull loop-only data (categories with no Set ancestor and therefore an empty
+anchor frozenset) into a co-located Set-anchored block:</p>
+<pre><code class="language-python"># pd_instr_detector has no Set parent FK; by default it becomes its own block.
+# attach_to='pd_instr' merges it into whatever block holds the pd_instr anchor.
+BlockSpec(
+    matches=has('pd_instr_detector'),
+    attach_to='pd_instr',
+)
+
+# audit_author absorbed into the block that contains publication-family data
+BlockSpec(
+    matches=has('audit_author'),
+    attach_to=has(*schema.descendants('publication')),
+)
+</code></pre>
+<p><strong>Merge semantics:</strong>
+- <code>table_rows</code> from the attached block are appended to the target's <code>table_rows</code>.
+- <code>fallback_rows</code> are likewise appended.
+- The target block's name, anchor frozenset, and key dict are unchanged.
+- Category ordering within the merged block follows the <strong>target</strong> spec's <code>category_order</code>.
+  If the target spec lists the attached categories explicitly they appear at that position;
+  otherwise they are appended alphabetically after the listed categories.
+- When multiple <code>attach_to</code> specs match the same target, they are merged in spec-index order.</p>
+<p><strong>If no target is found</strong> the block is emitted standalone and a <code>UserWarning</code> is raised.</p>
+<p><code>attach_to</code> and <code>single_block</code> are mutually exclusive; specifying both raises <code>ValueError</code>.</p>
+<hr />
+<h2 id="block-routing-helpers">Block routing helpers</h2>
+<pre><code class="language-python">from cifflow import only, any_of, all_of, has
+# also available as: from cifflow.output import only, any_of, all_of, has
+</code></pre>
+<p>These functions return <code>_Matcher</code> objects that implement the <code>MatchPredicate</code> protocol.
+They are the preferred way to express routing predicates — clearer and more composable
+than raw lambdas.</p>
+<h3 id="matchpredicate-type"><code>MatchPredicate</code> type</h3>
+<pre><code class="language-python">MatchPredicate = (
+    str                                                    # 'diffrn' → any_of('diffrn')
+    | set[str] | frozenset[str]                            # {'a','b'} → all_of('a','b')
+    | Callable[[frozenset[str], frozenset[str]], bool]     # two-arg callable
+    | _Matcher                                             # helper return value
+    | None                                                 # catch-all
+)
+</code></pre>
+<p>The two-arg callable form receives:
+- <strong>arg 1</strong> — <code>frozenset[str]</code> of Set-class category table names <strong>with rows</strong> in the block.
+- <strong>arg 2</strong> — <code>frozenset[str]</code> of <strong>all</strong> table names present (Set + Loop).</p>
+<h3 id="helper-functions">Helper functions</h3>
+<h4 id="onlycategories-str-_matcher"><code>only(*categories: str) → _Matcher</code></h4>
+<p>Matches blocks whose anchor frozenset is <strong>exactly</strong> the given set — no more, no less.</p>
+<pre><code class="language-python">only('pd_instr')                     # blocks anchored only on pd_instr
+only('pd_phase', 'pd_diffractogram') # blocks anchored on exactly these two
+</code></pre>
+<h4 id="any_ofcategories-str-_matcher"><code>any_of(*categories: str) → _Matcher</code></h4>
+<p>Matches blocks containing <strong>at least one</strong> of the given names in the <strong>anchor</strong> frozenset
+(Set-class only).</p>
+<pre><code class="language-python">any_of('diffrn')              # blocks that have a diffrn anchor
+any_of('cell', 'pd_phase')   # blocks that have cell or pd_phase (or both) as anchor
+</code></pre>
+<h4 id="all_ofcategories-str-_matcher"><code>all_of(*categories: str) → _Matcher</code></h4>
+<p>Matches blocks containing <strong>all</strong> of the given names in the <strong>anchor</strong> frozenset.</p>
+<pre><code class="language-python">all_of('pd_phase', 'pd_diffractogram')   # blocks anchored on BOTH
+</code></pre>
+<h4 id="hascategories-str-_matcher"><code>has(*categories: str) → _Matcher</code></h4>
+<p>Matches blocks containing <strong>at least one</strong> of the given names in the <strong>full tables</strong>
+frozenset (Set <strong>or</strong> Loop).  The key difference from <code>any_of</code> is that <code>has()</code> sees Loop
+categories — use it to route blocks that have no Set anchor (loop-only blocks).</p>
+<pre><code class="language-python">has('audit_author')          # block contains audit_author (even if anchor is empty)
+has('pd_instr_detector')     # loop-only category; invisible to any_of/all_of
+has('atom_site', 'geom')    # block contains atom_site or geom (or both)
+</code></pre>
+<h3 id="_matcher-combinators"><code>_Matcher</code> combinators</h3>
+<p>All four helpers return <code>_Matcher</code> objects that support composition:</p>
+<h4 id="excludingcategories-str-_matcher"><code>.excluding(*categories: str) → _Matcher</code></h4>
+<p>Returns a new matcher that additionally requires none of the given names appear in
+<strong>either</strong> the anchor frozenset or the tables frozenset.  Chainable.</p>
+<pre><code class="language-python">any_of('diffrn').excluding('pd_diffractogram')
+# blocks that have diffrn anchor AND do not contain pd_diffractogram anywhere
+
+has('pd_instr_detector').excluding('pd_instr')
+# loop-only pd_instr_detector blocks that don't also have the pd_instr Set anchor
+</code></pre>
+<h4 id="matcher_a-matcher_b-_matcher"><code>matcher_a | matcher_b → _Matcher</code></h4>
+<p>Logical OR — matches if either matcher matches.</p>
+<pre><code class="language-python">any_of('pd_instr') | has('pd_instr_detector')
+</code></pre>
+<h4 id="matcher_a-matcher_b-_matcher_1"><code>matcher_a &amp; matcher_b → _Matcher</code></h4>
+<p>Logical AND — matches if both matchers match.</p>
+<pre><code class="language-python">any_of('diffrn') &amp; has('diffrn_radiation')
+</code></pre>
+<h3 id="schemaspecdescendantsroot-frozensetstr"><code>SchemaSpec.descendants(root) → frozenset[str]</code></h3>
+<p>Returns the frozenset of <code>root</code> plus all table names whose <code>category_parent</code> chain
+passes through <code>root</code>.  Returns <code>frozenset()</code> if <code>root</code> is not in the schema.</p>
+<pre><code class="language-python">schema.descendants('cell')
+# → frozenset({'cell', 'cell_measurement', 'cell_measurement_refln', ...})
+
+schema.descendants('publication')
+# → frozenset({'publication', 'citation', 'citation_author', ...})
+</code></pre>
+<p>Useful with <code>has()</code> and <code>any_of()</code> to match entire category families:</p>
+<pre><code class="language-python">any_of(*schema.descendants('cell')).excluding('cell_measurement')
+has(*schema.descendants('publication'))
+</code></pre>
+<hr />
+<h2 id="using-multiple-specs-to-control-block-type-ordering">Using multiple specs to control block-type ordering</h2>
+<p>When you want different types of blocks to appear in a specific order in the output file,
+and/or to receive different category ordering within each type, use multiple <code>BlockSpec</code>
+entries.  Emission order follows spec order: all blocks matched by <code>specs[0]</code> are written
+first, then <code>specs[1]</code>, and so on.</p>
+<h3 id="only-set-categories-appear-in-the-anchor-frozenset">Only Set categories appear in the anchor frozenset</h3>
+<p>The <code>matches</code> predicate receives a <code>frozenset</code> of <strong>Set-class</strong> category table names only.
+Loop categories (e.g. <code>diffrn_radiation</code>, <code>atom_site</code>) are never anchors — they appear in
+a block because their FK chains lead back to a Set ancestor, but they are not represented
+in the frozenset.</p>
+<p>To see which categories are Set-class in your schema:</p>
+<pre><code class="language-python">set_cats = sorted(name for name, tbl in schema.tables.items() if tbl.category_class == 'Set')
+print(set_cats)
+</code></pre>
+<h3 id="discovering-what-anchors-your-data-actually-produces">Discovering what anchors your data actually produces</h3>
+<p>To see the exact anchor frozenset for each output block, temporarily use a catch-all spec
+that prints and matches everything:</p>
+<pre><code class="language-python">plan = OutputPlan(specs=[
+    BlockSpec(matches=lambda anchors, tables: print(anchors, tables) or True)
+])
+emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+</code></pre>
+<p>Each line printed shows <code>(anchor_frozenset, all_tables_frozenset)</code> for one block.  If a
+block's anchor frozenset is empty (<code>frozenset()</code>) it is a loop-only block with no Set
+ancestor; use <code>has()</code> to route it.</p>
+<h3 id="example-ordering-blocks-by-category-type">Example: ordering blocks by category type</h3>
+<pre><code class="language-python">from cifflow import OutputPlan, BlockSpec, any_of, has
+
+GROUPED_PLAN = OutputPlan(
+    specs=[
+        BlockSpec(
+            matches=any_of('publication'),
+            category_order=['publication'],   # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=any_of('diffrn').excluding('pd_diffractogram'),
+            category_order=['diffrn', 'diffrn_radiation', 'diffrn_radiation_wavelength'],
+        ),
+        BlockSpec(
+            matches=any_of('pd_instr'),
+            category_order=['pd_instr'],
+        ),
+        BlockSpec(
+            matches=any_of('pd_diffractogram'),
+            category_order=[
+                'pd_diffractogram',
+                ['pd_data', 'pd_meas', 'pd_proc', 'pd_calc'],  # merge group
+            ],
+        ),
+        # Loop-only blocks (e.g. pd_instr_detector) — attach to the pd_instr block
+        BlockSpec(
+            matches=has('pd_instr_detector'),
+            attach_to=any_of('pd_instr'),
+        ),
+        BlockSpec(
+            matches=None,   # catch-all: anything not matched above, alphabetical order
+        ),
+    ],
+)
+</code></pre>
+<p>Each block is assigned to exactly one spec (first-match wins).  Blocks are emitted in
+spec-index order; <code>attach_to</code> blocks are merged into their target instead of standing
+alone.</p>
+<p>The <code>.excluding()</code> on the <code>diffrn</code> spec is needed here because a block anchored on
+<strong>both</strong> <code>diffrn</code> and <code>pd_diffractogram</code> would otherwise match <code>any_of('diffrn')</code> before
+reaching the <code>pd_diffractogram</code> spec.</p>
+<h3 id="category_order-is-optional"><code>category_order</code> is optional</h3>
+<p><code>category_order</code> defaults to <code>[]</code>.  An empty list means: emit all categories in the
+matched block alphabetically (Set-class before Loop-class).  You can use <code>matches</code> alone
+to control <em>which section of the file</em> a block appears in without specifying any internal
+ordering:</p>
+<pre><code class="language-python">BlockSpec(
+    matches=any_of('pd_phase'),
+    # no category_order — alphabetical output, but this block type is grouped
+    # together in the file and appears after all 'diffrn' blocks
+)
+</code></pre>
+<h3 id="matching-on-multiple-set-anchors">Matching on multiple Set anchors</h3>
+<p>If a block contains more than one Set anchor (two Set categories with rows in the same
+GROUPED block), use <code>all_of</code> or <code>any_of</code>:</p>
+<pre><code class="language-python"># Block must contain BOTH pd_phase and pd_diffractogram
+matches=all_of('pd_phase', 'pd_diffractogram')
+
+# Block must contain EITHER
+matches=any_of('pd_phase', 'pd_diffractogram')
+
+# Set shorthand for all_of
+matches={'pd_phase', 'pd_diffractogram'}
+</code></pre>
+<h3 id="routing-loop-only-blocks">Routing loop-only blocks</h3>
+<p>Loop-class categories that have no Set ancestor produce blocks with an empty anchor
+frozenset.  They are invisible to <code>any_of</code>, <code>all_of</code>, and <code>only</code> (which operate on the
+anchor frozenset).  Use <code>has()</code> which checks the full tables frozenset:</p>
+<pre><code class="language-python"># Standalone block for audit_author (loop-only)
+BlockSpec(
+    matches=has('audit_author', 'audit_author_role'),
+    category_order=['audit_author', 'audit_author_role'],
+)
+
+# Collapse all remaining loop-only blocks into one
+BlockSpec(
+    matches=lambda anchors, tables: not anchors,
+    single_block=True,
+)
+</code></pre>
+<p>Or merge them into a co-located Set-anchored block with <code>attach_to</code>:</p>
+<pre><code class="language-python">BlockSpec(
+    matches=has('audit_author'),
+    attach_to=any_of('publication'),  # or has(*schema.descendants('publication'))
+)
+</code></pre>
+<hr />
+<h2 id="default-block-naming">Default block naming</h2>
+<p>When no <code>block_namer</code> is supplied (or one returns <code>None</code>/empty string), block names are
+constructed from anchor key values:</p>
+<ol>
+<li>For each <code>(key, values)</code> pair in the sorted <code>anchor_key_dict</code>:</li>
+<li>Extract the column name from the key: <code>'cell.length_a'</code> → <code>'length_a'</code></li>
+<li>For each value, append <code>'{col}_{value}'</code> to a parts list.</li>
+<li>Join all parts with underscores.</li>
+<li>Sanitize:</li>
+<li>Replace any non-alphanumeric character (except <code>_</code>) with <code>_</code>.</li>
+<li>Collapse consecutive underscores to one.</li>
+<li>Strip leading/trailing underscores.</li>
+<li>If the result is empty, fall back to <code>'block'</code>.</li>
+<li>Deduplicate: when multiple blocks produce the same sanitized name, append <code>_2</code>, <code>_3</code>,
+   etc. to later occurrences.</li>
+</ol>
+<hr />
+<h2 id="emit-function"><code>emit()</code> function</h2>
+<pre><code class="language-python">from cifflow import emit
+
+cif_text: str = emit(
+    conn,
+    schema,
+    *,
+    mode=EmitMode.ORIGINAL,
+    version=CifVersion.CIF_2_0,
+    plan=None,
+    reconstruct_su=False,
+    emit_defaults=True,
+    line_ending='\n',
+    pretty=True,
+    line_limit=2048,
+)
+</code></pre>
+<h3 id="required-parameters">Required parameters</h3>
+<h4 id="conn-sqlite3connection"><code>conn: sqlite3.Connection</code></h4>
+<p>Open SQLite connection populated by <code>ingest()</code>.  The emitter reads from it but does
+not write.  Lifecycle management (open/close) is the caller's responsibility.</p>
+<h4 id="schema-schemaspec"><code>schema: SchemaSpec</code></h4>
+<p>The <code>SchemaSpec</code> that was used when the database was ingested.  Provides table
+definitions, column metadata, and tag-to-column mappings.  Emission from a fallback-only
+database (no dictionary) works as long as <code>_cif_fallback</code> is populated.</p>
+<h3 id="keyword-parameters">Keyword parameters</h3>
+<h4 id="mode-emitmode-default-emitmodeoriginal"><code>mode: EmitMode</code> — default <code>EmitMode.ORIGINAL</code></h4>
+<p>Block partitioning strategy.  See <a href="#emitmode">EmitMode</a> above.</p>
+<h4 id="version-cifversion-default-cifversioncif_2_0"><code>version: CifVersion</code> — default <code>CifVersion.CIF_2_0</code></h4>
+<p>Output CIF version.  Controls:
+- Magic line: <code>##CIF_2.0</code> vs <code>##CIF_1.1</code>.
+- Quoting: triple-quoted strings and text-prefix protocol are CIF 2.0 only.
+- Container values (lists, tables): CIF 2.0 only.
+- CIF 1.1 identifier length cap: block names, data names, and frame codes must not
+  exceed 75 characters; <code>emit()</code> raises <code>ValueError</code> if any would exceed this.</p>
+<h4 id="plan-outputplan-none-default-none"><code>plan: OutputPlan | None</code> — default <code>None</code></h4>
+<p>Custom ordering and grouping specification.  <code>None</code> uses alphabetical defaults.</p>
+<p>In ALL_BLOCKS mode only <code>category_order</code> from the first spec is consulted; spec matching
+is bypassed.</p>
+<h4 id="reconstruct_su-bool-default-false"><code>reconstruct_su: bool</code> — default <code>False</code></h4>
+<p>When <code>True</code>, paired <code>(measurand_col, su_col)</code> columns are merged during emission into
+<code>value(su)</code> tokens (e.g. <code>1.234(5)</code>).  The pairing is determined by <code>ColumnDef.linked_item_id</code>.
+The stored data is not modified; this is a presentation-only transformation.</p>
+<h4 id="emit_defaults-bool-default-true"><code>emit_defaults: bool</code> — default <code>True</code></h4>
+<p>Accepted but currently has no effect.  Future: when <code>False</code>, columns filled entirely
+from <code>enumeration_default</code> would be suppressed.</p>
+<h4 id="line_ending-str-default-n"><code>line_ending: str</code> — default <code>'\n'</code></h4>
+<p>Line separator written between every line and at the end of output.  Common values:
+<code>'\n'</code> (Unix), <code>'\r\n'</code> (Windows), <code>'\r'</code> (legacy CR).  Line length enforcement
+(<code>line_limit</code>) is measured before <code>line_ending</code> is applied.</p>
+<h4 id="pretty-bool-default-true"><code>pretty: bool</code> — default <code>True</code></h4>
+<p>When <code>True</code>:
+- Set-category tag names are padded to the width of the longest tag in that category.
+- Loop columns are aligned: each column as wide as its widest token.
+- Real/Float columns are decimal-aligned (integer parts right-justified, fractional
+  parts left-justified).
+- Columns containing multiline tokens are excluded from alignment.</p>
+<p>When <code>False</code>, compact output: tokens separated by two spaces with no padding.
+Recommended for very large loop tables where the alignment pass is expensive.</p>
+<h4 id="line_limit-int-none-default-2048"><code>line_limit: int | None</code> — default <code>2048</code></h4>
+<p>Maximum physical line length in characters (before <code>line_ending</code>).  <code>None</code> disables
+all line-length enforcement.  Values less than 40 cause a <code>UserWarning</code>.</p>
+<p>Enforcement rules:
+- <strong>Multiline text fields:</strong> Content lines exceeding <code>line_limit</code> are folded using the
+  CIF 2.0 line-folding protocol.  If the content also contains <code>\n;</code>, the text-prefix
+  protocol is combined.
+- <strong>Inline scalar tokens:</strong> If <code>tag + separator + token</code> exceeds <code>line_limit</code>, the
+  token is re-quoted as a semicolon-delimited text field.
+- <strong>Loop data rows:</strong> Tokens are greedy-packed across multiple physical lines when a
+  formatted row would exceed <code>line_limit</code>.  Individual tokens are never split.</p>
+<p>CIF 1.1 identifier length (75 characters) is a hard limit independent of <code>line_limit</code>.</p>
+<h3 id="return-value">Return value</h3>
+<p>A complete CIF string.  Structure:
+- Magic line as the first line.
+- One or more <code>data_</code> blocks, separated by two blank lines.
+- Categories emitted as Set (scalar tag–value) or Loop constructs.
+- Fallback rows grouped by tag.
+- No trailing whitespace on any line.
+- Always ends with <code>line_ending</code>.</p>
+<h3 id="exceptions">Exceptions</h3>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Exception</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ALL_BLOCKS + <code>_cif_fallback</code> rows present</td>
+<td><code>ValueError</code></td>
+</tr>
+<tr>
+<td>ALL_BLOCKS + keyless Set table has rows</td>
+<td><code>ValueError</code></td>
+</tr>
+<tr>
+<td>CIF 1.1 + block/data-name/frame-code &gt; 75 chars</td>
+<td><code>ValueError</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="category-ordering-in-detail">Category ordering in detail</h2>
+<p>The order in which categories are emitted within a block is determined as follows:</p>
+<ol>
+<li>If the matched <code>BlockSpec</code> has a non-empty <code>category_order</code>, apply it (see
+   <code>BlockSpec.category_order</code> above for wildcard and merge-group expansion).</li>
+<li>Otherwise, if <code>_BlockData.preferred_category_order</code> is set (ALL_BLOCKS mode: parent
+   tables before child), apply that.</li>
+<li>Otherwise, alphabetical order (Set-class before Loop-class within the block).</li>
+</ol>
+<p>In all cases, categories not mentioned in the ordering are appended alphabetically after
+the explicitly ordered ones.</p>
+<hr />
+<h2 id="column-ordering-in-detail">Column ordering in detail</h2>
+<p>Within a single category, column order is:</p>
+<ol>
+<li>Columns listed in <code>BlockSpec.column_order[table_name]</code>, in declared order.</li>
+<li>Remaining non-synthetic, non-null columns, alphabetically (PK columns first among
+   the remainder).</li>
+</ol>
+<p>Synthetic columns (<code>_cifflow_block_id</code>, <code>_cifflow_row_id</code>, <code>_cifflow_id</code>) and null-only columns are
+never emitted.</p>
+<hr />
+<h2 id="fk-pk-suppression">FK-PK suppression</h2>
+<p>In ORIGINAL and GROUPED modes, columns that are redundant because the referenced Set
+category is co-emitted in the same block are suppressed.</p>
+<p>Suppression applies when:
+- All FK source columns on a table are part of the primary key.
+- The referenced Set category has exactly one row in the same block.
+- All rows' FK values match that row's PK values.</p>
+<p>The effect is that the FK column disappears from the output, because the tag–value pair
+at the Set level already carries that information.</p>
+<p>In ORIGINAL mode, this suppression is also applied to Loop categories
+(<code>suppress_loop_fk_pk=True</code>).  In GROUPED and ONE_BLOCK modes it is not.</p>
+<hr />
+<h2 id="merge-groups">Merge groups</h2>
+<p>A merge group (<code>list[str]</code> inside <code>category_order</code>) emits two or more categories as a
+single <code>loop_</code>.</p>
+<p><strong>Compatibility check:</strong> The categories must share identical non-synthetic PK column
+sets.  If they do not, they are emitted as separate plain loops in listed order (no
+warning is raised).</p>
+<p><strong>FULL OUTER JOIN algorithm:</strong>
+1. Each category is indexed by PK tuple.
+2. The full set of unique PK tuples is collected in encounter order.
+3. The merged loop header is: shared PK columns (from the first category), then each
+   category's non-PK columns in listed order.
+4. For each unique PK tuple, values from all categories are combined; <code>NULL</code> fills in
+   for missing rows.</p>
+<hr />
+<h2 id="quoting">Quoting</h2>
+<p>The <code>quote()</code> function selects the shortest valid CIF token for a stored value.
+It is also exported for use outside <code>emit()</code>:</p>
+<pre><code class="language-python">from cifflow import quote
+token = quote('hello world', CifVersion.CIF_2_0)  # → &quot;'hello world'&quot;
+</code></pre>
+<h3 id="stored-value-encoding">Stored-value encoding</h3>
+<p>Values in the database use a presence-state encoding (Lesson 19):
+- <code>'.'</code> or <code>'?'</code> (length 1) → PLACEHOLDER; emitted unquoted.
+- <code>'"."'</code> or <code>'"?"'</code> (length 3) → quoted dot/question-mark; the inner character is
+  re-quoted as a normal string value.
+- Container values (CIF 2.0) → start with an internal prefix; decoded and rendered as
+  <code>[…]</code> (list) or <code>{…}</code> (table).
+- Everything else → treated as a plain string.</p>
+<h3 id="cif-20-quoting-priority">CIF 2.0 quoting priority</h3>
+<ol>
+<li><strong>Bare word</strong> — if the value contains no whitespace, no quote characters, does not
+   start with <code>_</code>, <code>#</code>, <code>$</code>, <code>[</code>, <code>{</code>, <code>'</code>, or <code>"</code>, is not <code>.</code> or <code>?</code>, and is not a
+   CIF keyword (<code>loop_</code>, <code>stop_</code>, <code>global_</code>) or reserved prefix (<code>data_</code>, <code>save_</code>).</li>
+<li><strong>Single-quoted</strong> — <code>'value'</code> — if the value has no newline and no single-quote.</li>
+<li><strong>Double-quoted</strong> — <code>"value"</code> — if the value has no newline and no double-quote.</li>
+<li><strong>Triple-single-quoted</strong> — <code>'''value'''</code> — CIF 2.0 only; if the value contains no
+   triple-single and value does not end with <code>'</code>.</li>
+<li><strong>Triple-double-quoted</strong> — <code>"""value"""</code> — CIF 2.0 only; analogous.</li>
+<li><strong>Semicolon-delimited</strong> — <code>\n;value\n;</code> — when all inline options are exhausted.</li>
+<li><strong>Prefixed semicolon</strong> — <code>\n;&gt;\\\n&gt;lines…\n;</code> — when the value itself contains
+   <code>\n;</code> (which would prematurely terminate a plain semicolon field).</li>
+</ol>
+<h3 id="cif-11-quoting">CIF 1.1 quoting</h3>
+<p>Same as CIF 2.0 but without triple-quoted string support.  Any value containing both
+quote types, or any value containing a newline, falls directly to semicolon-delimited.</p>
+<h3 id="semicolon-folding">Semicolon folding</h3>
+<p>When <code>line_limit</code> is set and a content line in a semicolon field exceeds the limit, the
+CIF 2.0 line-folding protocol is applied: continuation lines get a <code>\\</code> fold marker
+appended, and each logical line is broken at a space boundary within the budget.</p>
+<p>Prefix and fold may be combined when both conditions apply simultaneously.</p>
+<hr />
+<h2 id="complete-example">Complete example</h2>
+<pre><code class="language-python">import sqlite3
+import cifflow as cif
+from cifflow import any_of, all_of, has
+
+# Load dictionary and generate schema
+loader = cif.DictionaryLoader()
+dictionary = loader.load('cif_core.dic')
+schema = cif.generate_schema(dictionary)
+
+# Parse and ingest
+conn = sqlite3.connect(':memory:')
+cif.apply_schema(conn, schema)
+cif.apply_fallback_schema(conn)
+
+cif_file = cif.build(open('structure.cif').read())
+cif.ingest(conn, cif_file, schema)
+
+# Emit with default settings (ORIGINAL mode)
+print(cif.emit(conn, schema))
+
+# Emit in ONE_BLOCK mode with column ordering
+plan = cif.OutputPlan(specs=[
+    cif.BlockSpec(
+        category_order=['symmetry', 'cell', ['atom_site', 'atom_site_aniso'], 'audit'],
+        column_order={
+            'atom_site': ['label', 'type_symbol', 'fract_x', 'fract_y', 'fract_z', 'u_iso_or_equiv'],
+        },
+    )
+])
+print(cif.emit(conn, schema, mode=cif.EmitMode.ONE_BLOCK, plan=plan))
+
+# Emit in GROUPED mode with routing helpers and a custom block namer
+def my_namer(anchor_dict):
+    for key, vals in anchor_dict.items():
+        if key.endswith('.id'):
+            return vals[0]
+    return 'block'
+
+plan2 = cif.OutputPlan(
+    specs=[
+        cif.BlockSpec(matches=any_of('cell'), category_order=['cell', 'symmetry', 'atom*']),
+        cif.BlockSpec(matches=has('audit_author'), attach_to=any_of('cell')),
+        cif.BlockSpec(matches=None),
+    ],
+    block_namer=my_namer,
+)
+print(cif.emit(conn, schema, mode=cif.EmitMode.GROUPED, plan=plan2))
+
+# Emit in ALL_BLOCKS mode with category ordering
+plan3 = cif.OutputPlan(specs=[
+    cif.BlockSpec(
+        category_order=['cell', 'symmetry', 'atom_site'],
+    )
+])
+print(cif.emit(conn, schema, mode=cif.EmitMode.ALL_BLOCKS, plan=plan3))
+</code></pre>
+<hr />
+<h2 id="outputplanspecs-input-for-all_blocks-ordering"><code>OutputPlan.specs</code> input for ALL_BLOCKS ordering</h2>
+<p>In ALL_BLOCKS mode only the first spec that declares a non-empty <code>category_order</code> is
+consulted.  The <code>matches</code>, <code>single_block</code>, and <code>block_namer</code> fields of every spec are
+ignored.  A minimal plan for ordering only:</p>
+<pre><code class="language-python">plan = OutputPlan(specs=[
+    BlockSpec(category_order=['cell', 'symmetry', 'atom_site'])
+])
+</code></pre>
+<p>All categories not listed appear after the listed ones, alphabetically.</p>
+<hr />
+<h2 id="interaction-summary">Interaction summary</h2>
+<table>
+<thead>
+<tr>
+<th>Parameter / field</th>
+<th>ONE_BLOCK</th>
+<th>ORIGINAL</th>
+<th>GROUPED</th>
+<th>ALL_BLOCKS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BlockSpec.matches</code></td>
+<td>consulted</td>
+<td>ignored¹</td>
+<td>consulted</td>
+<td>ignored</td>
+</tr>
+<tr>
+<td><code>BlockSpec.category_order</code></td>
+<td>applied</td>
+<td>ignored¹</td>
+<td>applied</td>
+<td>first spec only</td>
+</tr>
+<tr>
+<td><code>BlockSpec.column_order</code></td>
+<td>applied</td>
+<td>ignored¹</td>
+<td>applied</td>
+<td>applied</td>
+</tr>
+<tr>
+<td><code>BlockSpec.single_block</code></td>
+<td>applied</td>
+<td>ignored¹</td>
+<td>applied</td>
+<td>ignored</td>
+</tr>
+<tr>
+<td><code>BlockSpec.attach_to</code></td>
+<td>applied</td>
+<td>ignored¹</td>
+<td>applied</td>
+<td>ignored</td>
+</tr>
+<tr>
+<td><code>BlockSpec.block_namer</code></td>
+<td>ignored (name is always 'output')</td>
+<td>ignored¹</td>
+<td>applied</td>
+<td>ignored</td>
+</tr>
+<tr>
+<td><code>OutputPlan.block_namer</code></td>
+<td>ignored</td>
+<td>ignored¹</td>
+<td>applied</td>
+<td>ignored</td>
+</tr>
+<tr>
+<td>FK-PK suppression</td>
+<td>off</td>
+<td>on (Set + Loop)</td>
+<td>on (Set only)</td>
+<td>on (Set-key columns)</td>
+</tr>
+<tr>
+<td><code>_audit_dataset.id</code> injection</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+<td>yes (per block)</td>
+</tr>
+<tr>
+<td>Conformance tag injection</td>
+<td>yes (if dict metadata present)</td>
+<td>no</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>_cif_fallback</code> rows</td>
+<td>allowed</td>
+<td>allowed</td>
+<td>allowed</td>
+<td>raises ValueError</td>
+</tr>
+</tbody>
+</table>
+<p>¹ <code>OutputPlan</code> is entirely ignored in <code>ORIGINAL</code> mode; passing one emits a <code>UserWarning</code>.
+Use <code>GROUPED</code> mode for custom ordering.</p>
+<hr />
+<h2 id="complete-example_1">Complete example</h2>
+<p>A realistic <code>OutputPlan</code> for a powder-diffraction dataset, showing most features together:
+<code>has</code>/<code>only</code>/<code>all_of</code> routing, custom <code>block_namer</code> callables, <code>namer()</code>, <code>category_order</code>,
+merge groups, <code>column_order</code>, and a catch-all final spec.</p>
+<pre><code class="language-python">from cifflow import (
+    OutputPlan, BlockSpec,
+    only, any_of, all_of, has, namer,
+)
+
+output_plan = OutputPlan(
+    specs=[
+        BlockSpec(
+            matches=has(*schema.descendants('publication')),
+            category_order=[],  # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=only(&quot;diffrn_radiation&quot;),
+            category_order=[],  # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=only(&quot;pd_instr&quot;),
+            block_namer=lambda kd: f&quot;MPD_{kd.get('pd_instr.id', ['?'])[0]}&quot;,
+            category_order=[],  # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=has(&quot;pd_instr_detector&quot;),
+            category_order=[],  # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=only(&quot;diffrn&quot;),
+            block_namer=namer('diffrn.id', prefix=&quot;diffrn_&quot;),
+            category_order=[],  # other categories follow alphabetically
+        ),
+        BlockSpec(
+            matches=all_of('pd_diffractogram', &quot;pd_phase&quot;),
+            block_namer=namer(&quot;pd_phase.id&quot;, 'pd_diffractogram.id', prefix=&quot;pd_&quot;),
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=only(&quot;structure&quot;),
+            category_order=[
+                &quot;structure&quot;,
+                &quot;cell&quot;,
+                &quot;atom_site&quot;,
+            ],  # other categories follow alphabetically
+            column_order={
+                'cell': [
+                    'length_a', 'length_b', 'length_c',
+                    'angle_alpha', 'angle_beta', 'angle_gamma',
+                    'volume',
+                ],
+                'atom_site': [
+                    'label', 'type_symbol',
+                    'fract_x', 'fract_y', 'fract_z',
+                    'occupancy', 'site_symmetry_multiplicity',
+                ],
+            },
+        ),
+        BlockSpec(
+            matches=only(&quot;pd_phase&quot;),
+            block_namer=lambda kd: f&quot;phase_{kd.get('pd_phase.id', ['?'])[0]}_suffix&quot;,
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=only(&quot;model&quot;),
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=only(&quot;space_group&quot;),
+            category_order=[],
+        ),
+        BlockSpec(
+            matches=only(&quot;pd_diffractogram&quot;),
+            category_order=[
+                &quot;pd_diffractogram&quot;,
+                &quot;pd_calc_overall&quot;,
+                &quot;pd_meas_overall&quot;,
+                &quot;pd_proc_ls&quot;,
+                ['pd_data', 'pd_meas', 'pd_proc', 'pd_calc'],  # merge group
+            ],
+        ),
+        BlockSpec(
+            matches=None,  # catch-all: anything not matched above, alphabetical order
+        ),
+    ],
+)
+</code></pre>
+<p>Key points illustrated:</p>
+<ul>
+<li><code>has(*schema.descendants('publication'))</code> — route any block that contains any category
+  in the <code>publication</code> subtree of the schema hierarchy</li>
+<li><code>only("pd_instr")</code> — route blocks whose Set anchor is exactly <code>pd_instr</code></li>
+<li><code>all_of('pd_diffractogram', 'pd_phase')</code> — route blocks anchored to both categories</li>
+<li><code>namer('diffrn.id', prefix="diffrn_")</code> — build the block name from the <code>diffrn.id</code> key
+  value with a fixed prefix; falls back to the next key argument if the first is absent</li>
+<li><code>['pd_data', 'pd_meas', 'pd_proc', 'pd_calc']</code> inside <code>category_order</code> — emit these four
+  loop categories as a single merged loop (columns interleaved, one row per row-id)</li>
+<li><code>matches=None</code> as the last spec — catch-all that captures everything not claimed above</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": [], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
