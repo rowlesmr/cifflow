@@ -70,7 +70,7 @@ commit = true
 tag = true
 tag_name = "v{new_version}"
 tag_message = "Version {new_version}"
-commit_message = "Bump version: {current_version} → {new_version} [skip ci]"
+commit_message = "Bump version: {current_version} → {new_version}"
 
 [[tool.bumpversion.files]]
 filename = "pyproject.toml"
