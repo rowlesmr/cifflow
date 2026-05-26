@@ -38,7 +38,7 @@ Three interacting decisions control what comes out:
 from cifflow import EmitMode
 ```
 
-`EmitMode` is an enum with four values.  Exactly one is chosen per `emit()` call.
+`EmitMode` is an enum with five values.  Exactly one is chosen per `emit()` call.
 
 ---
 
@@ -73,7 +73,44 @@ Keyless Set tables (whose only domain PK is `_cifflow_id`) have no cross-block
 identity and also fall back to `_cifflow_block_id` grouping.
 
 - FK-PK suppression is enabled (`suppress_fk_pk=True`).
-- `_audit_dataset.id` is **not** injected.
+- `_audit_dataset.id` is propagated from source data when present; no fresh UUID is generated.
+
+---
+
+### `EmitMode.STRUCTURE`
+
+A specialisation of `GROUPED`.  All grouping behaviour is identical to GROUPED except
+for output blocks whose primary Set anchor is `structure`.  Those blocks absorb related
+satellite data before emission:
+
+| Satellite | Absorption rule |
+|---|---|
+| `pd_phase` block matching `structure.phase_id` | Always absorbed |
+| `space_group` block matching `structure.space_group_id` | Always absorbed; data is repeated in full for every structure that references the same space group |
+| `model` block where `model.structure_id == structure.id` | Absorbed only if exactly **one** model references this structure; if more than one exist, all model blocks remain as standalone output blocks |
+
+**Unreferenced satellites** — a `pd_phase`, `space_group`, or `model` block that is not
+referenced by any `structure` row is emitted as its own block, unchanged from GROUPED.
+
+**`anchor_frozenset` after merging** — the structure block's `anchor_frozenset` is extended
+to include the absorbed Set names (`pd_phase`, `space_group`, `model` where present).
+Use `any_of('structure')` or the string shorthand `'structure'` in `BlockSpec.matches`
+to route structure blocks regardless of which satellites were absorbed:
+
+```python
+BlockSpec(
+    matches='structure',   # equivalent to any_of('structure')
+    category_order=['structure', 'cell', 'space_group', 'space_group_symop', 'atom_site'],
+    block_namer=namer('structure.id', prefix='str_'),
+)
+```
+
+`only('structure')` will **not** match merged blocks because their `anchor_frozenset`
+contains `pd_phase`, `space_group`, and/or `model` in addition to `structure`.
+
+- FK-PK suppression is enabled (`suppress_fk_pk=True`, `suppress_all_fk_to_set=True`),
+  identical to GROUPED.
+- `_audit_dataset.id` is propagated from source data when present; no fresh UUID is generated.
 
 ---
 
@@ -502,6 +539,14 @@ plan = OutputPlan(specs=[
     BlockSpec(matches=lambda anchors, tables: print(anchors, tables) or True)
 ])
 emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+```
+
+In `STRUCTURE` mode the same technique works, but note that merged structure blocks will
+show an expanded anchor frozenset (e.g. `frozenset({'structure', 'pd_phase', 'space_group',
+'model'})`) rather than the bare `frozenset({'structure'})` you would see in GROUPED:
+
+```python
+emit(conn, schema, mode=EmitMode.STRUCTURE, plan=plan)
 ```
 
 Each line printed shows `(anchor_frozenset, all_tables_frozenset)` for one block.  If a
@@ -949,22 +994,22 @@ All categories not listed appear after the listed ones, alphabetically.
 
 ## Interaction summary
 
-| Parameter / field | ONE_BLOCK | ORIGINAL | GROUPED | ALL_BLOCKS |
-|---|---|---|---|---|
-| `BlockSpec.matches` | consulted | ignored¹ | consulted | ignored |
-| `BlockSpec.category_order` | applied | ignored¹ | applied | first spec only |
-| `BlockSpec.column_order` | applied | ignored¹ | applied | applied |
-| `BlockSpec.single_block` | applied | ignored¹ | applied | ignored |
-| `BlockSpec.attach_to` | applied | ignored¹ | applied | ignored |
-| `BlockSpec.block_namer` | ignored (name is always 'output') | ignored¹ | applied | ignored |
-| `OutputPlan.block_namer` | ignored | ignored¹ | applied | ignored |
-| FK-PK suppression | off | on (Set + Loop) | on (Set only) | on (Set-key columns) |
-| `_audit_dataset.id` injection | no | no | no | yes (per block) |
-| Conformance tag injection | yes (if dict metadata present) | no | no | no |
-| `_cif_fallback` rows | allowed | allowed | allowed | raises ValueError |
+| Parameter / field | ONE_BLOCK | ORIGINAL | GROUPED | STRUCTURE | ALL_BLOCKS |
+|---|---|---|---|---|---|
+| `BlockSpec.matches` | consulted | ignored¹ | consulted | consulted | ignored |
+| `BlockSpec.category_order` | applied | ignored¹ | applied | applied | first spec only |
+| `BlockSpec.column_order` | applied | ignored¹ | applied | applied | applied |
+| `BlockSpec.single_block` | applied | ignored¹ | applied | applied | ignored |
+| `BlockSpec.attach_to` | applied | ignored¹ | applied | applied | ignored |
+| `BlockSpec.block_namer` | ignored (name is always 'output') | ignored¹ | applied | applied | ignored |
+| `OutputPlan.block_namer` | ignored | ignored¹ | applied | applied | ignored |
+| FK-PK suppression | off | on (Set + Loop) | on (Set only) | on (Set only) | on (Set-key columns) |
+| `_audit_dataset.id` injection | no | no | propagated from source | propagated from source | yes — UUID generated if absent |
+| Conformance tag injection | yes (if dict metadata present) | no | no | no | no |
+| `_cif_fallback` rows | allowed | allowed | allowed | allowed | raises ValueError |
 
 ¹ `OutputPlan` is entirely ignored in `ORIGINAL` mode; passing one emits a `UserWarning`.
-Use `GROUPED` mode for custom ordering.
+Use `GROUPED` or `STRUCTURE` mode for custom ordering.
 
 ---
 
@@ -1009,10 +1054,15 @@ output_plan = OutputPlan(
             block_namer=namer("pd_phase.id", 'pd_diffractogram.id', prefix="pd_"),
             category_order=[],
         ),
+        # In GROUPED mode use only("structure"); in STRUCTURE mode use any_of("structure")
+        # because merged blocks carry pd_phase/space_group/model in their anchor frozenset.
         BlockSpec(
-            matches=only("structure"),
+            matches=any_of("structure"),
             category_order=[
                 "structure",
+                "pd_phase",
+                "space_group",
+                "space_group_symop",
                 "cell",
                 "atom_site",
             ],  # other categories follow alphabetically
@@ -1069,4 +1119,7 @@ Key points illustrated:
   value with a fixed prefix; falls back to the next key argument if the first is absent
 - `['pd_data', 'pd_meas', 'pd_proc', 'pd_calc']` inside `category_order` — emit these four
   loop categories as a single merged loop (columns interleaved, one row per row-id)
+- `any_of("structure")` rather than `only("structure")` — in STRUCTURE mode the merged
+  block's `anchor_frozenset` contains `pd_phase`, `space_group`, and/or `model` in
+  addition to `structure`, so `only` would not match
 - `matches=None` as the last spec — catch-all that captures everything not claimed above

@@ -186,6 +186,8 @@ def emit(
         raw_blocks = _collect_all_blocks(conn, schema, version, plan)
     elif mode == EmitMode.GROUPED:
         raw_blocks = _collect_grouped(conn, schema, version)
+    elif mode == EmitMode.STRUCTURE:
+        raw_blocks = _collect_structure(conn, schema, version)
     else:  # ORIGINAL
         raw_blocks = _collect_original(conn, schema)
 
@@ -785,6 +787,155 @@ def _collect_grouped(
                 dataset_id=_resolve_dataset_id(conn, orphan_block_ids, fallback_id),
             ))
 
+    return result
+
+
+def _merge_blocks_into(
+    base: _BlockData,
+    sources: list['_BlockData'],
+    schema: SchemaSpec,
+) -> '_BlockData':
+    """Return a new _BlockData with each source's table_rows/anchors merged into base."""
+    table_rows: dict[str, list[dict]] = {t: list(rows) for t, rows in base.table_rows.items()}
+    anchor_fs = base.anchor_frozenset
+    anchor_kd: dict[str, list[str]] = {k: list(v) for k, v in base.anchor_key_dict.items()}
+    fallback_rows = list(base.fallback_rows)
+
+    for src in sources:
+        for tbl_name, rows in src.table_rows.items():
+            if tbl_name not in table_rows:
+                table_rows[tbl_name] = list(rows)
+            else:
+                tdef = schema.tables.get(tbl_name)
+                if tdef and tdef.category_class == 'Set':
+                    existing_pks = {
+                        tuple(r.get(pk) for pk in tdef.primary_keys)
+                        for r in table_rows[tbl_name]
+                    }
+                    for r in rows:
+                        pk_key = tuple(r.get(pk) for pk in tdef.primary_keys)
+                        if pk_key not in existing_pks:
+                            table_rows[tbl_name].append(r)
+                            existing_pks.add(pk_key)
+                else:
+                    table_rows[tbl_name].extend(rows)
+        anchor_fs = anchor_fs | src.anchor_frozenset
+        for key, vals in src.anchor_key_dict.items():
+            existing_vals = anchor_kd.setdefault(key, [])
+            for v in vals:
+                if v not in existing_vals:
+                    existing_vals.append(v)
+        fallback_rows.extend(src.fallback_rows)
+
+    new_name = _sanitize_block_name(_default_block_name(anchor_kd)) if anchor_kd else base.name
+    return _BlockData(
+        name=new_name or base.name,
+        table_rows=table_rows,
+        fallback_rows=fallback_rows,
+        anchor_frozenset=anchor_fs,
+        anchor_key_dict=anchor_kd,
+        suppress_fk_pk=base.suppress_fk_pk,
+        suppress_all_fk_to_set=base.suppress_all_fk_to_set,
+        dataset_id=base.dataset_id,
+    )
+
+
+def _collect_structure(
+    conn: duckdb.DuckDBPyConnection,
+    schema: SchemaSpec,
+    version: CifVersion,
+) -> list[_BlockData]:
+    """STRUCTURE mode: GROUPED plus absorption of pd_phase/space_group/model into structure blocks.
+
+    Satellite blocks (pd_phase, space_group, model with a single structure referent) whose
+    data is absorbed are removed from the top-level output.  Unreferenced satellites and
+    models with multiple structure referents are emitted unchanged.
+    """
+    grouped = _collect_grouped(conn, schema, version)
+
+    # --- Segregate ---
+    structure_blocks: list[_BlockData] = []
+    pd_phase_blocks: dict[str, _BlockData] = {}     # phase_id  → block
+    space_group_blocks: dict[str, _BlockData] = {}  # sg_id     → block
+    # structure_id → list of model blocks whose model.structure_id matches
+    model_blocks_by_struct: dict[str, list[_BlockData]] = {}
+    other_blocks: list[_BlockData] = []
+
+    for block in grouped:
+        afs = block.anchor_frozenset
+        if 'structure' in afs:
+            structure_blocks.append(block)
+        elif afs == frozenset({'pd_phase'}):
+            for phase_id in block.anchor_key_dict.get('pd_phase.id', []):
+                pd_phase_blocks[phase_id] = block
+        elif afs == frozenset({'space_group'}):
+            for sg_id in block.anchor_key_dict.get('space_group.id', []):
+                space_group_blocks[sg_id] = block
+        elif afs == frozenset({'model'}):
+            struct_id: str | None = None
+            for row in block.table_rows.get('model', []):
+                v = row.get('structure_id')
+                if v is not None:
+                    struct_id = str(v)
+                    break
+            if struct_id is not None:
+                model_blocks_by_struct.setdefault(struct_id, []).append(block)
+            else:
+                other_blocks.append(block)
+        else:
+            other_blocks.append(block)
+
+    # --- Merge satellites into structure blocks ---
+    consumed_block_ids: set[int] = set()   # id() of absorbed _BlockData objects
+    result: list[_BlockData] = []
+
+    for block in structure_blocks:
+        struct_rows = block.table_rows.get('structure', [])
+        to_merge: list[_BlockData] = []
+        seen_src_ids: set[int] = set()
+
+        for row in struct_rows:
+            phase_id = row.get('phase_id')
+            if phase_id and phase_id not in ('.', '?'):
+                src = pd_phase_blocks.get(str(phase_id))
+                if src is not None and id(src) not in seen_src_ids:
+                    to_merge.append(src)
+                    seen_src_ids.add(id(src))
+                    consumed_block_ids.add(id(src))
+
+            sg_id = row.get('space_group_id')
+            if sg_id and sg_id not in ('.', '?'):
+                src = space_group_blocks.get(str(sg_id))
+                if src is not None and id(src) not in seen_src_ids:
+                    to_merge.append(src)
+                    seen_src_ids.add(id(src))
+                    consumed_block_ids.add(id(src))
+
+            struct_id = row.get('id')
+            if struct_id is not None:
+                models = model_blocks_by_struct.get(str(struct_id), [])
+                if len(models) == 1 and id(models[0]) not in seen_src_ids:
+                    to_merge.append(models[0])
+                    seen_src_ids.add(id(models[0]))
+                    consumed_block_ids.add(id(models[0]))
+
+        if to_merge:
+            block = _merge_blocks_into(block, to_merge, schema)
+        result.append(block)
+
+    # --- Emit unconsumed satellite blocks ---
+    seen_output_ids: set[int] = set()
+    all_satellites = (
+        list(pd_phase_blocks.values())
+        + list(space_group_blocks.values())
+        + [b for bs in model_blocks_by_struct.values() for b in bs]
+    )
+    for block in all_satellites:
+        if id(block) not in consumed_block_ids and id(block) not in seen_output_ids:
+            result.append(block)
+            seen_output_ids.add(id(block))
+
+    result.extend(other_blocks)
     return result
 
 
