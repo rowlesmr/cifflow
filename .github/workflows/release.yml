@@ -2,10 +2,39 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths:
+      - pyproject.toml
 
 jobs:
+  check-and-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      do_release: ${{ steps.check.outputs.do_release }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: check
+        shell: bash
+        run: |
+          VERSION=$(python3 -c "import re; print(re.search(r'(?m)^version = \"([\d.]+)\"', open('pyproject.toml').read()).group(1))")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "do_release=false" >> $GITHUB_OUTPUT
+          else
+            git tag "v$VERSION"
+            git push origin "v$VERSION"
+            echo "do_release=true" >> $GITHUB_OUTPUT
+          fi
+
   build-linux:
+    needs: check-and-tag
+    if: needs.check-and-tag.outputs.do_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -27,6 +56,8 @@ jobs:
           path: dist/
 
   build-non-linux:
+    needs: check-and-tag
+    if: needs.check-and-tag.outputs.do_release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
