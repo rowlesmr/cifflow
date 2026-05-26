@@ -40,12 +40,27 @@ class EmitMode(Enum):
         All tables that share the same Set anchor and the same anchor key
         values are emitted in a single output block, merging rows from
         multiple original data blocks that carry the same Set-level identity.
+
+    STRUCTURE
+        Identical to GROUPED except that blocks whose primary Set anchor is
+        ``structure`` absorb related satellite blocks:
+
+        - The ``pd_phase`` block matching ``structure.phase_id`` is merged in.
+        - The ``space_group`` block matching ``structure.space_group_id`` is
+          merged in (repeated in full for every structure that references it).
+        - If exactly one ``model`` block has ``model.structure_id`` equal to
+          this ``structure.id``, it is merged in; if more than one, each model
+          block is emitted as its own separate block (unchanged from GROUPED).
+
+        Satellite blocks that are not referenced by any ``structure`` row are
+        emitted as their own blocks (unchanged from GROUPED).
     """
 
     ONE_BLOCK = "one_block"
     ALL_BLOCKS = "all_blocks"
     ORIGINAL = "original"
     GROUPED = "grouped"
+    STRUCTURE = "structure"
 
 
 # ---------------------------------------------------------------------------

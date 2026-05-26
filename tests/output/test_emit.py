@@ -3565,3 +3565,379 @@ class TestSsdGroupedInput:
             assert audit == "3eb54f2e-5c48-4748-89f2-6d417efd205c", f"Incorrect _audit_dataset.id value: {audit}"
 
 
+# ---------------------------------------------------------------------------
+# EmitMode.STRUCTURE
+# ---------------------------------------------------------------------------
+
+# Minimal dictionary: structure (Set) + pd_phase (Set) + space_group (Set) + model (Set).
+# structure.phase_id → pd_phase.id
+# structure.space_group_id → space_group.id
+# model.structure_id → structure.id
+_STRUCTURE_DIC = """\
+#\\#CIF_2.0
+data_structure_dic
+
+save_PD_PHASE
+  _definition.id     PD_PHASE
+  _definition.scope  Category
+  _definition.class  Set
+  _name.category_id  pd_phase
+  _category_key.name '_pd_phase.id'
+save_
+
+save_pd_phase.id
+  _definition.id    '_pd_phase.id'
+  _definition.class  Attribute
+  _name.category_id  pd_phase
+  _name.object_id    id
+  _type.purpose      Key
+  _type.source       Assigned
+  _type.container    Single
+  _type.contents     Code
+save_
+
+save_pd_phase.name
+  _definition.id    '_pd_phase.name'
+  _definition.class  Attribute
+  _name.category_id  pd_phase
+  _name.object_id    name
+  _type.purpose      Describe
+  _type.source       Assigned
+  _type.container    Single
+  _type.contents     Text
+save_
+
+save_SPACE_GROUP
+  _definition.id     SPACE_GROUP
+  _definition.scope  Category
+  _definition.class  Set
+  _name.category_id  space_group
+  _category_key.name '_space_group.id'
+save_
+
+save_space_group.id
+  _definition.id    '_space_group.id'
+  _definition.class  Attribute
+  _name.category_id  space_group
+  _name.object_id    id
+  _type.purpose      Key
+  _type.source       Assigned
+  _type.container    Single
+  _type.contents     Code
+save_
+
+save_space_group.name
+  _definition.id    '_space_group.name'
+  _definition.class  Attribute
+  _name.category_id  space_group
+  _name.object_id    name
+  _type.purpose      Describe
+  _type.source       Assigned
+  _type.container    Single
+  _type.contents     Text
+save_
+
+save_STRUCTURE
+  _definition.id     STRUCTURE
+  _definition.scope  Category
+  _definition.class  Set
+  _name.category_id  structure
+  _category_key.name '_structure.id'
+save_
+
+save_structure.id
+  _definition.id    '_structure.id'
+  _definition.class  Attribute
+  _name.category_id  structure
+  _name.object_id    id
+  _type.purpose      Key
+  _type.source       Assigned
+  _type.container    Single
+  _type.contents     Code
+save_
+
+save_structure.title
+  _definition.id    '_structure.title'
+  _definition.class  Attribute
+  _name.category_id  structure
+  _name.object_id    title
+  _type.purpose      Describe
+  _type.source       Assigned
+  _type.container    Single
+  _type.contents     Text
+save_
+
+save_structure.phase_id
+  _definition.id        '_structure.phase_id'
+  _definition.class      Attribute
+  _name.category_id      structure
+  _name.object_id        phase_id
+  _type.purpose          Link
+  _type.source           Related
+  _type.container        Single
+  _type.contents         Code
+  _name.linked_item_id   '_pd_phase.id'
+save_
+
+save_structure.space_group_id
+  _definition.id        '_structure.space_group_id'
+  _definition.class      Attribute
+  _name.category_id      structure
+  _name.object_id        space_group_id
+  _type.purpose          Link
+  _type.source           Related
+  _type.container        Single
+  _type.contents         Code
+  _name.linked_item_id   '_space_group.id'
+save_
+
+save_MODEL
+  _definition.id     MODEL
+  _definition.scope  Category
+  _definition.class  Set
+  _name.category_id  model
+  _category_key.name '_model.id'
+save_
+
+save_model.id
+  _definition.id    '_model.id'
+  _definition.class  Attribute
+  _name.category_id  model
+  _name.object_id    id
+  _type.purpose      Key
+  _type.source       Assigned
+  _type.container    Single
+  _type.contents     Code
+save_
+
+save_model.label
+  _definition.id    '_model.label'
+  _definition.class  Attribute
+  _name.category_id  model
+  _name.object_id    label
+  _type.purpose      Describe
+  _type.source       Assigned
+  _type.container    Single
+  _type.contents     Text
+save_
+
+save_model.structure_id
+  _definition.id        '_model.structure_id'
+  _definition.class      Attribute
+  _name.category_id      model
+  _name.object_id        structure_id
+  _type.purpose          Link
+  _type.source           Related
+  _type.container        Single
+  _type.contents         Code
+  _name.linked_item_id   '_structure.id'
+save_
+"""
+
+# Four separate source blocks, one per anchor category.
+_STRUCT_MERGE_CIF = (
+    '#\\#CIF_2.0\n'
+    'data_phase_A\n'
+    '_pd_phase.id    A\n'
+    '_pd_phase.name  AlphaPhase\n'
+    '\n\n'
+    'data_sg_P1\n'
+    '_space_group.id    P1\n'
+    '_space_group.name  Triclinic\n'
+    '\n\n'
+    'data_str_S1\n'
+    '_structure.id             S1\n'
+    '_structure.title          MyStruct\n'
+    '_structure.phase_id       A\n'
+    '_structure.space_group_id P1\n'
+    '\n\n'
+    'data_model_M1\n'
+    '_model.id           M1\n'
+    '_model.label        ModelOne\n'
+    '_model.structure_id S1\n'
+)
+
+# Merge CIF plus two unreferenced satellite blocks (one pd_phase, one space_group).
+_STRUCT_ORPHAN_CIF = (
+    _STRUCT_MERGE_CIF
+    + '\n\ndata_phase_B\n_pd_phase.id    B\n_pd_phase.name  BetaPhase\n'
+    + '\n\ndata_sg_I4\n_space_group.id    I4/mmm\n_space_group.name  Tetragonal\n'
+)
+
+# One structure, two models pointing to it.
+_STRUCT_MULTI_MODEL_CIF = (
+    '#\\#CIF_2.0\n'
+    'data_phase_A\n'
+    '_pd_phase.id    A\n'
+    '_pd_phase.name  AlphaPhase\n'
+    '\n\n'
+    'data_sg_P1\n'
+    '_space_group.id    P1\n'
+    '_space_group.name  Triclinic\n'
+    '\n\n'
+    'data_str_S1\n'
+    '_structure.id             S1\n'
+    '_structure.title          MultiModelStruct\n'
+    '_structure.phase_id       A\n'
+    '_structure.space_group_id P1\n'
+    '\n\n'
+    'data_model_M1\n'
+    '_model.id           M1\n'
+    '_model.label        ModelOne\n'
+    '_model.structure_id S1\n'
+    '\n\n'
+    'data_model_M2\n'
+    '_model.id           M2\n'
+    '_model.label        ModelTwo\n'
+    '_model.structure_id S1\n'
+)
+
+
+class TestStructureMode:
+    """EmitMode.STRUCTURE: pd_phase/space_group/model absorbed into structure blocks."""
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_STRUCTURE_DIC)
+
+    # --- merge case ---
+
+    def test_merge_produces_single_block(self, schema):
+        conn = _ingest_src(_STRUCT_MERGE_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        assert len(headers) == 1
+
+    def test_merge_block_contains_structure_data(self, schema):
+        conn = _ingest_src(_STRUCT_MERGE_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_structure.id'][0]) == 'S1'
+        assert str(block['_structure.title'][0]) == 'MyStruct'
+
+    def test_merge_block_contains_pd_phase_data(self, schema):
+        conn = _ingest_src(_STRUCT_MERGE_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_pd_phase.id'][0]) == 'A'
+        assert str(block['_pd_phase.name'][0]) == 'AlphaPhase'
+
+    def test_merge_block_contains_space_group_data(self, schema):
+        conn = _ingest_src(_STRUCT_MERGE_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_space_group.id'][0]) == 'P1'
+        assert str(block['_space_group.name'][0]) == 'Triclinic'
+
+    def test_merge_block_contains_model_data(self, schema):
+        conn = _ingest_src(_STRUCT_MERGE_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_model.id'][0]) == 'M1'
+        assert str(block['_model.label'][0]) == 'ModelOne'
+
+    def test_grouped_still_produces_four_blocks(self, schema):
+        """Verify GROUPED is unchanged — same data yields 4 separate blocks."""
+        conn = _ingest_src(_STRUCT_MERGE_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.GROUPED)
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        assert len(headers) == 4
+
+    # --- orphan case ---
+
+    def test_orphan_satellites_become_own_blocks(self, schema):
+        """Unreferenced pd_phase and space_group blocks are emitted standalone."""
+        conn = _ingest_src(_STRUCT_ORPHAN_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        # 1 merged structure block + 1 orphan pd_phase + 1 orphan space_group
+        assert len(headers) == 3
+
+    def test_orphan_pd_phase_data_present(self, schema):
+        conn = _ingest_src(_STRUCT_ORPHAN_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        cif2, errors = build(result)
+        assert not errors
+        all_phase_ids = []
+        for bn in cif2.blocks:
+            block = cif2[bn]
+            if '_pd_phase.id' in block.tags:
+                all_phase_ids.extend(str(v) for v in block['_pd_phase.id'])
+        assert 'B' in all_phase_ids
+
+    def test_orphan_space_group_data_present(self, schema):
+        conn = _ingest_src(_STRUCT_ORPHAN_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        cif2, errors = build(result)
+        assert not errors
+        all_sg_ids = []
+        for bn in cif2.blocks:
+            block = cif2[bn]
+            if '_space_group.id' in block.tags:
+                all_sg_ids.extend(str(v) for v in block['_space_group.id'])
+        assert 'I4/mmm' in all_sg_ids
+
+    def test_merged_block_does_not_contain_orphan_phase(self, schema):
+        """The structure block must only contain the referenced pd_phase (A), not the orphan (B)."""
+        conn = _ingest_src(_STRUCT_ORPHAN_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        cif2, errors = build(result)
+        assert not errors
+        # Find the block that has _structure.id
+        struct_block = next(
+            cif2[bn] for bn in cif2.blocks if '_structure.id' in cif2[bn].tags
+        )
+        phase_ids = [str(v) for v in struct_block['_pd_phase.id']]
+        assert phase_ids == ['A']
+        assert 'B' not in phase_ids
+
+    # --- multi-model case ---
+
+    def test_multi_model_yields_three_blocks(self, schema):
+        """Two models for one structure → structure block + 2 standalone model blocks."""
+        conn = _ingest_src(_STRUCT_MULTI_MODEL_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        headers = [l for l in result.splitlines() if l.startswith('data_')]
+        assert len(headers) == 3
+
+    def test_multi_model_structure_block_has_no_model_data(self, schema):
+        conn = _ingest_src(_STRUCT_MULTI_MODEL_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        cif2, errors = build(result)
+        assert not errors
+        struct_block = next(
+            cif2[bn] for bn in cif2.blocks if '_structure.id' in cif2[bn].tags
+        )
+        assert '_model.id' not in struct_block.tags
+
+    def test_multi_model_both_models_emitted(self, schema):
+        conn = _ingest_src(_STRUCT_MULTI_MODEL_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        cif2, errors = build(result)
+        assert not errors
+        all_model_ids = []
+        for bn in cif2.blocks:
+            block = cif2[bn]
+            if '_model.id' in block.tags:
+                all_model_ids.extend(str(v) for v in block['_model.id'])
+        assert sorted(all_model_ids) == ['M1', 'M2']
+
+    def test_multi_model_structure_still_has_phase_and_sg(self, schema):
+        """Even with multi-model, pd_phase and space_group are still absorbed."""
+        conn = _ingest_src(_STRUCT_MULTI_MODEL_CIF, schema)
+        result = emit(conn, schema, mode=EmitMode.STRUCTURE)
+        cif2, errors = build(result)
+        assert not errors
+        struct_block = next(
+            cif2[bn] for bn in cif2.blocks if '_structure.id' in cif2[bn].tags
+        )
+        assert '_pd_phase.id' in struct_block.tags
+        assert '_space_group.id' in struct_block.tags
