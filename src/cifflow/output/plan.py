@@ -71,10 +71,27 @@ class _Matcher:
     """Callable predicate wrapper returned by the routing helper functions.
 
     Supports ``.excluding()``, ``|``, and ``&`` for composition.
+
+    The ``specificity`` attribute is used by :meth:`OutputPlan.match` to pick
+    the best match when multiple specs match the same block.  Higher specificity
+    wins regardless of spec order in the plan.  Within equal specificity, plan
+    order (first-match) is preserved.
+
+    Specificity values assigned by the factory functions:
+
+    - ``only``: 10000 + len(cats)  — exact match always beats subset match
+    - ``all_of``: len(cats)        — more required anchors = more specific
+    - ``any_of``, ``has``: 1       — at-least-one match
+    - composed (``|``, ``&``, ``.excluding()``): derived from operands
     """
 
-    def __init__(self, fn: Callable[[frozenset[str], frozenset[str]], bool]) -> None:
+    def __init__(
+        self,
+        fn: Callable[[frozenset[str], frozenset[str]], bool],
+        specificity: int = 0,
+    ) -> None:
         self._fn = fn
+        self.specificity = specificity
 
     def __call__(self, anchors: frozenset[str], tables: frozenset[str]) -> bool:
         return self._fn(anchors, tables)
@@ -92,35 +109,53 @@ class _Matcher:
             if excluded & (anchors | tables):
                 return False
             return original(anchors, tables)
-        return _Matcher(_fn)
+        return _Matcher(_fn, specificity=self.specificity)
 
     def __or__(self, other: _Matcher) -> _Matcher:
-        """Match if either *self* or *other* matches."""
+        """Match if either *self* or *other* matches.
+
+        Specificity is the minimum of the two operands — an OR is only as
+        specific as its least specific branch.
+        """
         a, b = self._fn, other._fn
-        return _Matcher(lambda anchors, tables: a(anchors, tables) or b(anchors, tables))
+        return _Matcher(
+            lambda anchors, tables: a(anchors, tables) or b(anchors, tables),
+            specificity=min(self.specificity, other.specificity),
+        )
 
     def __and__(self, other: _Matcher) -> _Matcher:
-        """Match if both *self* and *other* match."""
+        """Match if both *self* and *other* match.
+
+        Specificity is the sum of the two operands — an AND is more specific
+        than either operand alone.
+        """
         a, b = self._fn, other._fn
-        return _Matcher(lambda anchors, tables: a(anchors, tables) and b(anchors, tables))
+        return _Matcher(
+            lambda anchors, tables: a(anchors, tables) and b(anchors, tables),
+            specificity=self.specificity + other.specificity,
+        )
 
 
 def only(*categories: str) -> _Matcher:
     """Match blocks whose anchor set is exactly the given set — no more, no less."""
     cats = frozenset(categories)
-    return _Matcher(lambda anchors, tables: anchors == cats)
+    return _Matcher(lambda anchors, tables: anchors == cats, specificity=10000 + len(cats))
 
 
 def any_of(*categories: str) -> _Matcher:
     """Match blocks containing at least one of *categories* in the anchor frozenset."""
     cats = frozenset(categories)
-    return _Matcher(lambda anchors, tables: bool(cats & anchors))
+    return _Matcher(lambda anchors, tables: bool(cats & anchors), specificity=1)
 
 
 def all_of(*categories: str) -> _Matcher:
-    """Match blocks containing all of *categories* in the anchor frozenset."""
+    """Match blocks containing all of *categories* in the anchor frozenset.
+
+    More anchors required = higher specificity, so ``all_of('a', 'b', 'c')``
+    automatically beats ``all_of('a', 'b')`` without needing to order the specs.
+    """
     cats = frozenset(categories)
-    return _Matcher(lambda anchors, tables: cats <= anchors)
+    return _Matcher(lambda anchors, tables: cats <= anchors, specificity=len(cats))
 
 
 def has(*categories: str) -> _Matcher:
@@ -130,7 +165,7 @@ def has(*categories: str) -> _Matcher:
     blocks that have no Set anchor without writing a lambda.
     """
     cats = frozenset(categories)
-    return _Matcher(lambda anchors, tables: bool(cats & tables))
+    return _Matcher(lambda anchors, tables: bool(cats & tables), specificity=1)
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +369,17 @@ class OutputPlan:
             ``(index, spec)`` of the first matching spec, or ``(None, None)``
             if no spec matches.
         """
+        best_idx: int | None = None
+        best_spec: BlockSpec | None = None
+        best_specificity: int = -1
         for i, spec in enumerate(self.specs):
-            if spec.matches is None or spec.matches(anchors, tables):
-                return i, spec
-        return None, None
+            if spec.matches is None:
+                if best_idx is None:
+                    best_idx, best_spec = i, spec
+            elif spec.matches(anchors, tables):
+                sp = getattr(spec.matches, 'specificity', 0)
+                if sp > best_specificity:
+                    best_specificity = sp
+                    best_idx = i
+                    best_spec = spec
+        return best_idx, best_spec
