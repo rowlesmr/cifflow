@@ -14,7 +14,7 @@
 - **Performance:** 102, 109, 111, 112, 113, 114, 115, 116
 - **SQLite:** 18, 19, 20, 75, 76
 - **Testing:** 32, 33, 34, 43, 60, 66L, 67L, 68L, 87, 88, 89, 91, 92, 93, 94, 95, 96
-- **CI / tooling:** 133, 134, 135
+- **CI / tooling:** 133, 134, 135, 136, 137, 138
 - **Working practices:** 9, 13, 87
 
 ---
@@ -1329,6 +1329,44 @@
 **Fix:** Added `python -m venv .venv` and `echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH` steps before the `maturin-action` step — mirroring the pattern already used in the `test` job.
 
 **Rule:** Any CI job that calls `maturin develop` must first create a virtualenv and add it to `PATH`. `maturin develop` installs into a virtualenv; it will not run without one.
+
+---
+
+## Lesson 136 — `[skip ci]` in bump-my-version commit_message suppresses ALL GitHub Actions, including release (2026-05-30)
+
+**Context:** `pyproject.toml` `[tool.bumpversion]`; `commit_message` field.
+
+**Mistake:** `commit_message = "Bump version: {current_version} → {new_version} [skip ci]"` was intended to skip redundant CI on direct pushes to `main`. When the workflow moved to a PR model, the bump commit still carried `[skip ci]`. GitHub treats this as a request to skip ALL workflows triggered by that push — including the release workflow — so no release ever fired after a PR merge.
+
+**Fix:** Remove `[skip ci]` from `commit_message`. CI tests already run on the PR event, not on push to `main`, so the skip tag is unnecessary and harmful.
+
+**Rule:** `[skip ci]` suppresses every workflow triggered by that commit's push, not only workflows named "CI". Never put it in a commit message that must trigger a downstream workflow (release, deploy, docs).
+
+---
+
+## Lesson 137 — Windows cp1252 + `→` in bump-my-version 1.3.0 causes post-commit UnicodeEncodeError (2026-05-30)
+
+**Context:** `release_patch.bat`; `bump-my-version` 1.3.0 on Windows.
+
+**Symptom:** `UnicodeEncodeError: 'charmap' codec can't encode character '→'` in `bumpversion/bump.py` after the commit and tag are already created. Non-zero exit code breaks the batch file even though all git operations succeeded.
+
+**Root cause:** bump-my-version 1.3.0's rich logging handler writes a "Done." summary to the console including the version transition string (e.g. "0.1.9 → 0.1.10"). The Windows console defaults to cp1252, which cannot encode `→` (U+2192).
+
+**Fix:** Add `set PYTHONUTF8=1` as the second line of any `.bat` file that calls `bump-my-version`. This forces Python to use UTF-8 for all I/O on Windows.
+
+**Rule:** Any batch file calling a Python tool that emits non-ASCII characters to stdout/stderr must set `PYTHONUTF8=1` before the call. Do not rely on the Windows console code page.
+
+---
+
+## Lesson 138 — Release workflow must gate on branch push + path filter, not on tag push (2026-05-30)
+
+**Context:** `.github/workflows/release.yml`; release pipeline design.
+
+**Old pattern:** Triggered on `push: tags: ["v*"]`. The batch file created and pushed the tag immediately, before CI ran on the PR. Result: PyPI publish fired before tests passed.
+
+**Fix:** Trigger on `push: branches: [main]` + `paths: [pyproject.toml]`. The `check-and-tag` job reads the version from `pyproject.toml`, checks whether that tag already exists, creates and pushes it if not, then gates all build/publish jobs on `do_release == 'true'`. The tag is only created after the PR (with its CI checks) has merged.
+
+**Rule:** Release should fire after CI clears, not in parallel. Triggering on branch push + path filter achieves this: CI runs on the PR, merge happens only if CI passes, release fires on the resulting push to `main`. Using `paths: [pyproject.toml]` ensures the workflow is a no-op for normal feature commits.
 
 ---
 
