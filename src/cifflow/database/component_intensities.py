@@ -74,6 +74,13 @@ def consolidate_component_intensities(
     -------
     int
         Number of ``pd_calc`` rows updated with ``component_intensities_net``.
+
+    Raises
+    ------
+    Exception
+        If the transaction cannot be started, or if any SQL statement fails
+        (e.g. a schema table is absent from *connection*).  The transaction
+        is rolled back before re-raising.
     """
     try:
         diff_ids = [
