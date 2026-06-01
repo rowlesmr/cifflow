@@ -34,6 +34,20 @@ Fixed two bugs in GROUPED emit with `reconstruct_su=True`, discovered while test
 - **Bug 1 — FK-PK columns suppressed when `reconstruct_su=True`**: `_active_cols` used `col.linked_item_id is not None` to identify SU columns, but FK-PK Link columns (e.g. `pd_meas.point_id`) also carry `linked_item_id` and were incorrectly suppressed. Fixed by replacing the check with `set(_su_col_map(table_def).values())`, which only returns genuine within-table SU columns. Added 3 new tests in `TestReconstructSU`.
 - **Bug 2 — Merge group `['pd_data', 'pd_meas', 'pd_proc', 'pd_calc']` not combining**: `_render_merge_group` PK-compatibility check used raw schema PKs (`{point_id, diffractogram_id}`), leaving FK-PK columns in the join key even though they are suppressed in GROUPED output. Fixed by pre-computing `effective_suppressed` per table before the compatibility check, so effective PKs (`{point_id}`) are used for both compatibility and join-key selection.
 - Lessons added: 136 (`_active_cols` must use `_su_col_map`), 137 (`_render_merge_group` PK-compatibility must account for FK-PK suppression).
+## What was done (2026-05-30, main branch) — STRUCTURE mode + release pipeline
+
+Implemented `EmitMode.STRUCTURE` (absorbs `pd_phase`, `space_group`, single-model `model` blocks into their parent `structure` block), wrote 14 tests covering merge / orphan / multi-model cases (1847 tests pass), and updated `docs/outputspec.md` with full STRUCTURE documentation including the `any_of('structure')` anchor-frozenset caveat. Also overhauled the release pipeline: `release_patch.bat` now creates a `release/vX.Y.Z` branch and opens a PR instead of pushing directly to `main`; `release.yml` now triggers on `push: branches:[main] + paths:[pyproject.toml]` instead of on tag push (so PyPI publish only fires after CI passes); `[skip ci]` removed from `pyproject.toml` commit_message (was silently suppressing the release workflow).
+
+**Immediate actions needed on restart:**
+1. `git tag -d v0.1.8 v0.1.9 v0.1.10` — delete dangling local tags that point to orphaned amended commits
+2. Commit the `pyproject.toml` `[skip ci]` removal (currently an unstaged working-tree change)
+3. Create `release/v0.1.10` branch from current local `main` (already has the bump commit), push and open PR manually (`gh` not installed yet — do it on GitHub or install with `winget install GitHub.cli`)
+4. After PR merges, verify `release.yml` fires and publishes v0.1.10 to PyPI
+
+**Current local state:**
+- `pyproject.toml` version = 0.1.10 (bump commit 8afb598 already on local main, not yet pushed to origin)
+- `pyproject.toml` commit_message `[skip ci]` removed in working tree (unstaged)
+- `release.yml`, `release_patch.bat`, `release_patch_dry.bat` all updated and already on origin/main via PRs #58/#59
 
 ---
 

@@ -14,7 +14,7 @@
 - **Performance:** 102, 109, 111, 112, 113, 114, 115, 116
 - **SQLite:** 18, 19, 20, 75, 76
 - **Testing:** 32, 33, 34, 43, 60, 66L, 67L, 68L, 87, 88, 89, 91, 92, 93, 94, 95, 96
-- **CI / tooling:** 133, 134, 135
+- **CI / tooling:** 133, 134, 135, 136, 137, 138
 - **Working practices:** 9, 13, 87
 
 ---
@@ -1296,7 +1296,7 @@
 
   ---
 
-## Lesson 133 — `pydoclint` is a console script, not a Python module (2026-05-13)
+## Lesson 132 — `pydoclint` is a console script, not a Python module (2026-05-13)
 
 **Context:** CI `docs` job in `.github/workflows/ci.yml`.
 
@@ -1308,7 +1308,7 @@
 
 ---
 
-## Lesson 134 — Transitive raises from `_`-prefixed helpers: document in parameter description, not `Raises` section (2026-05-13)
+## Lesson 133 — Transitive raises from `_`-prefixed helpers: document in parameter description, not `Raises` section (2026-05-13)
 
 **Context:** `writer.py` — `add_loop_column`, `reorder_loop_tags`, `add_loop_row`, `get_loop_tags`; all call `_find_loop_index` which raises `KeyError`.
 
@@ -1320,7 +1320,7 @@
 
 ---
 
-## Lesson 135 — CI `maturin develop` requires a virtualenv; create and activate one first (2026-05-13)
+## Lesson 134 — CI `maturin develop` requires a virtualenv; create and activate one first (2026-05-13)
 
 **Context:** CI `docs` job.
 
@@ -1332,7 +1332,7 @@
 
 ---
 
-## Lesson 136 — `_active_cols` must use `_su_col_map`, not `linked_item_id`, to identify SU columns (2026-06-01)
+## Lesson 135 — `_active_cols` must use `_su_col_map`, not `linked_item_id`, to identify SU columns (2026-06-01)
 
 **Context:** `_active_cols` in `emit.py`; `reconstruct_su=True` path.
 
@@ -1344,7 +1344,7 @@
 
 ---
 
-## Lesson 137 — `_render_merge_group` PK-compatibility must account for GROUPED FK-PK suppression (2026-06-01)
+## Lesson 136 — `_render_merge_group` PK-compatibility must account for GROUPED FK-PK suppression (2026-06-01)
 
 **Context:** `_render_merge_group` in `emit.py`; GROUPED mode merge-group emission.
 
@@ -1356,7 +1356,7 @@
 
 ---
 
-## Lesson 138 — GROUPED fingerprints must be per-distinct-pkreach-group, not unioned across all loop tables (2026-06-01)
+## Lesson 137 — GROUPED fingerprints must be per-distinct-pkreach-group, not unioned across all loop tables (2026-06-01)
 
 **Context:** `_block_fingerprint` in `emit.py`; GROUPED mode block assembly.
 
@@ -1365,10 +1365,45 @@
 **Fix:** `_block_fingerprint` now returns `(list[frozenset], frozenset)` — one main fingerprint per *distinct* non-empty pkreach frozenset among the loop tables present, plus an incidental frozenset for keyed Set tables not in any pkreach group. The fingerprint collection loop then creates one `fingerprint_to_block_ids` entry per distinct group. Each independently-anchored set of loop tables produces its own output block.
 
 **Rule:** Bridge blocks (a single loop table whose PK spans multiple Sets simultaneously, e.g. `refln` with `diffractogram_id + phase_id` in PK) remain multi-anchor because they have one pkreach containing both Sets. Co-located independent tables (different loop tables each reaching different Sets) produce separate single-anchor blocks. The distinguishing question is whether one loop table's PK references multiple Sets simultaneously (bridge) or whether different loop tables each reference different Sets (independent).
+## Lesson 138 — `[skip ci]` in bump-my-version commit_message suppresses ALL GitHub Actions, including release (2026-05-30)
+
+**Context:** `pyproject.toml` `[tool.bumpversion]`; `commit_message` field.
+
+**Mistake:** `commit_message = "Bump version: {current_version} → {new_version} [skip ci]"` was intended to skip redundant CI on direct pushes to `main`. When the workflow moved to a PR model, the bump commit still carried `[skip ci]`. GitHub treats this as a request to skip ALL workflows triggered by that push — including the release workflow — so no release ever fired after a PR merge.
+
+**Fix:** Remove `[skip ci]` from `commit_message`. CI tests already run on the PR event, not on push to `main`, so the skip tag is unnecessary and harmful.
+
+**Rule:** `[skip ci]` suppresses every workflow triggered by that commit's push, not only workflows named "CI". Never put it in a commit message that must trigger a downstream workflow (release, deploy, docs).
 
 ---
 
-  ## Lesson 132 — Bridge-block PK-stripping must only apply to Sets that have their own single-anchor block (2026-05-12)
+## Lesson 139 — Windows cp1252 + `→` in bump-my-version 1.3.0 causes post-commit UnicodeEncodeError (2026-05-30)
+
+**Context:** `release_patch.bat`; `bump-my-version` 1.3.0 on Windows.
+
+**Symptom:** `UnicodeEncodeError: 'charmap' codec can't encode character '→'` in `bumpversion/bump.py` after the commit and tag are already created. Non-zero exit code breaks the batch file even though all git operations succeeded.
+
+**Root cause:** bump-my-version 1.3.0's rich logging handler writes a "Done." summary to the console including the version transition string (e.g. "0.1.9 → 0.1.10"). The Windows console defaults to cp1252, which cannot encode `→` (U+2192).
+
+**Fix:** Add `set PYTHONUTF8=1` as the second line of any `.bat` file that calls `bump-my-version`. This forces Python to use UTF-8 for all I/O on Windows.
+
+**Rule:** Any batch file calling a Python tool that emits non-ASCII characters to stdout/stderr must set `PYTHONUTF8=1` before the call. Do not rely on the Windows console code page.
+
+---
+
+## Lesson 140 — Release workflow must gate on branch push + path filter, not on tag push (2026-05-30)
+
+**Context:** `.github/workflows/release.yml`; release pipeline design.
+
+**Old pattern:** Triggered on `push: tags: ["v*"]`. The batch file created and pushed the tag immediately, before CI ran on the PR. Result: PyPI publish fired before tests passed.
+
+**Fix:** Trigger on `push: branches: [main]` + `paths: [pyproject.toml]`. The `check-and-tag` job reads the version from `pyproject.toml`, checks whether that tag already exists, creates and pushes it if not, then gates all build/publish jobs on `do_release == 'true'`. The tag is only created after the PR (with its CI checks) has merged.
+
+**Rule:** Release should fire after CI clears, not in parallel. Triggering on branch push + path filter achieves this: CI runs on the PR, merge happens only if CI passes, release fires on the resulting push to `main`. Using `paths: [pyproject.toml]` ensures the workflow is a no-op for normal feature commits.
+
+---
+
+  ## Lesson 141 — Bridge-block PK-stripping must only apply to Sets that have their own single-anchor block (2026-05-12)
 
   **Context:** `_collect_grouped` in `emit.py`; multi-anchor (bridge) block rendering.
 
@@ -1380,7 +1415,7 @@
 
 ---
 
-## Lesson 139 — `all_of` specificity controls ROUTING; plan ORDER controls OUTPUT order (2026-06-01)
+## Lesson 142 — `all_of` specificity controls ROUTING; plan ORDER controls OUTPUT order (2026-06-01)
 
 **Context:** `OutputPlan` / `BlockSpec` spec ordering with specificity-ranked matching.
 
@@ -1392,7 +1427,7 @@
 
 ---
 
-## Lesson 140 — `_collect_structure` segregation must use exact-anchor check, not membership test (2026-06-01)
+## Lesson 143 — `_collect_structure` segregation must use exact-anchor check, not membership test (2026-06-01)
 
 **Context:** `_collect_structure` in `emit.py` — segregating structure blocks from GROUPED output.
 
@@ -1404,7 +1439,7 @@
 
 ---
 
-## Lesson 141 — Satellite accumulation in `_collect_structure` must merge, not overwrite (2026-06-01)
+## Lesson 144 — Satellite accumulation in `_collect_structure` must merge, not overwrite (2026-06-01)
 
 **Context:** `_collect_structure` building `space_group_blocks` and `pd_phase_blocks` dicts from GROUPED output.
 
