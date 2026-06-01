@@ -20,7 +20,7 @@ def _sl(val: str) -> str:
 
 
 def _prefix_sql(json_str: str) -> str:
-    """SQL expression that prepends _CONTAINER_PREFIX to *json_str* at DuckDB runtime.
+    """Prepends _CONTAINER_PREFIX to *json_str* at DuckDB runtime.
 
     Avoids embedding the null-byte prefix in the SQL text itself, which would
     truncate the statement at the SQL parser level.
@@ -44,9 +44,7 @@ def consolidate_component_intensities(
     *,
     clear_source: bool = False,
 ) -> int:
-    """Populate ``pd_calc_overall.component_presentation_order`` and
-    ``pd_calc.component_intensities_net`` / ``component_intensities_total``
-    from ``pd_calc_component`` rows.
+    """Populate ``pd_calc_overall.component_presentation_order`` and ``pd_calc.component_intensities_net`` / ``component_intensities_total`` from ``pd_calc_component`` rows.
 
     For each ``diffractogram_id``, the distinct ``phase_id`` values are sorted
     alphabetically to define presentation order.  Per-point intensity values
