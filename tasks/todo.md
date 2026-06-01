@@ -4,6 +4,36 @@
 
 ## ▶ RESUME FROM HERE
 
+## What was done (2026-06-01, debug-output-using-topas-source branch) — STRUCTURE mode fixes
+
+Fixed three bugs in `EmitMode.STRUCTURE`, plus the specificity-ranked routing system in `OutputPlan`. All 1850 tests pass.
+
+- **Bug 1 — Bridge blocks absorbed as structure targets**: `_collect_structure` used `if 'structure' in afs` to identify pure structure blocks, which also caught refln bridge blocks with anchor = {pd_diffractogram, pd_phase, structure}. Fixed to `if afs == frozenset({'structure'})`.
+- **Bug 2 — `space_group_symop` (and child tables) silently dropped**: `space_group_blocks[sg_id] = block` overwrote the first (richest) block with later blocks that lacked symop rows. GROUPED emits one block per source-block-id per fingerprint; only the original source block has the loop rows. Fixed by merging (`_merge_blocks_into`) instead of overwriting for both `space_group_blocks` and `pd_phase_blocks`.
+- **Bug 3 — `_replace_anchor` preserves structure block identity after satellite absorption**: `_merge_blocks_into` unions anchor_frozenset; structure blocks would gain anchor = {structure, pd_phase, space_group, model} after absorption, breaking `only('structure')`. `_replace_anchor` helper (added last session) restores the original anchor.
+- **Specificity system**: `_Matcher.specificity` attribute added; `only` = 10000+len, `all_of` = len, `any_of`/`has` = 1. `plan.match` now picks highest-specificity match regardless of plan order. Plan ORDER controls output emission order; specificity controls routing.
+- Lessons updated/added: 139 (updated rule), 140 (exact-anchor check), 141 (merge not overwrite in satellite accumulation).
+
+---
+
+## What was done (2026-06-01, debug-output-using-topas-source branch) — per-pkreach-group fingerprinting
+
+Fixed fundamental GROUPED emit correctness bug where co-located but independently-anchored Set tables (e.g. `atom_site`→structure, `geom_angle`→model, `space_group_symop`→space_group in a single source block) were merged into one output block with union anchor `{structure,model,space_group}`, causing `only("structure")` to match nothing. All 1850 tests pass.
+
+- **Root cause**: `_block_fingerprint` unioned all PK-FK-reachable Set tables across all loop tables into a single fingerprint. Fixed by computing one fingerprint per *distinct* non-empty pkreach frozenset among loop tables — co-located independent Sets become separate output blocks; bridge blocks (one loop table's PK spans multiple Sets simultaneously) remain correctly multi-anchor.
+- **Supporting fixes**: Updated `table_to_needed_by` to filter reverse-FK children by pkreach subset (atom_type correctly assigned to structure group only); updated `sets_with_own_block` to include incidental tables (pd_phase stripped to PK-only in bridge blocks); fixed edge case where loop tables with pkreach=∅ (core_schema) now route to pure_loop_block_ids preserving all data.
+- **Test updated**: `test_all_of_structure_and_model_routes_structure_blocks` → `test_only_structure_routes_structure_blocks` (verifies structure blocks exist and do NOT contain model data).
+- Lessons added: 138 (GROUPED fingerprints must be per-distinct-pkreach-group, not unioned).
+
+---
+
+## What was done (2026-06-01, debug-output-using-topas-source branch) — reconstruct_su + merge-group fixes
+
+Fixed two bugs in GROUPED emit with `reconstruct_su=True`, discovered while testing against a real TOPAS powder diffraction CIF via `scripts/topas/pdcif2.py`. All 1850 tests pass.
+
+- **Bug 1 — FK-PK columns suppressed when `reconstruct_su=True`**: `_active_cols` used `col.linked_item_id is not None` to identify SU columns, but FK-PK Link columns (e.g. `pd_meas.point_id`) also carry `linked_item_id` and were incorrectly suppressed. Fixed by replacing the check with `set(_su_col_map(table_def).values())`, which only returns genuine within-table SU columns. Added 3 new tests in `TestReconstructSU`.
+- **Bug 2 — Merge group `['pd_data', 'pd_meas', 'pd_proc', 'pd_calc']` not combining**: `_render_merge_group` PK-compatibility check used raw schema PKs (`{point_id, diffractogram_id}`), leaving FK-PK columns in the join key even though they are suppressed in GROUPED output. Fixed by pre-computing `effective_suppressed` per table before the compatibility check, so effective PKs (`{point_id}`) are used for both compatibility and join-key selection.
+- Lessons added: 136 (`_active_cols` must use `_su_col_map`), 137 (`_render_merge_group` PK-compatibility must account for FK-PK suppression).
 ## What was done (2026-05-30, main branch) — STRUCTURE mode + release pipeline
 
 Implemented `EmitMode.STRUCTURE` (absorbs `pd_phase`, `space_group`, single-model `model` blocks into their parent `structure` block), wrote 14 tests covering merge / orphan / multi-model cases (1847 tests pass), and updated `docs/outputspec.md` with full STRUCTURE documentation including the `any_of('structure')` anchor-frozenset caveat. Also overhauled the release pipeline: `release_patch.bat` now creates a `release/vX.Y.Z` branch and opens a PR instead of pushing directly to `main`; `release.yml` now triggers on `push: branches:[main] + paths:[pyproject.toml]` instead of on tag push (so PyPI publish only fires after CI passes); `[skip ci]` removed from `pyproject.toml` commit_message (was silently suppressing the release workflow).

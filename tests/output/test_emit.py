@@ -3290,28 +3290,34 @@ class TestGroupedStructureSecondShortDecimated:
 
     # ── plan spec matching ────────────────────────────────────────────────────
 
-    def test_all_of_pd_phase_and_model_routes_structure_blocks(
+    def test_only_structure_routes_structure_blocks(
         self, second_short_decimated_conn, pow_schema
     ):
-        """all_of('pd_phase', 'model') routes exactly the 2 crystal-structure blocks.
+        """only('structure') routes exactly the 2 crystal-structure blocks.
 
-        Structure blocks have both pd_phase and model in their anchor_frozenset;
-        bridge blocks (pd_phase + pd_diffractogram, no model) are not matched.
+        In GROUPED mode each distinct non-empty pkreach frozenset among the loop
+        tables in a source block produces a separate output block.  atom_site has
+        structure_id in its PK → anchor {structure}.  geom_angle/geom_bond have
+        model_id in their PK → anchor {model}.  space_group_symop has
+        space_group_id in its PK → anchor {space_group}.  These are separate
+        anchors (no single loop table reaches all three simultaneously), so they
+        are emitted as separate blocks.
+
+        only('structure') therefore matches the 2 structure-anchored blocks
+        (one per unique structure.id), each carrying cell and atom-site data.
         """
         plan = OutputPlan(specs=[
-            BlockSpec(matches=all_of('pd_phase', 'model')),
+            BlockSpec(matches=only('structure')),
             BlockSpec(matches=None),
         ])
         result = emit(second_short_decimated_conn, pow_schema, mode=EmitMode.GROUPED, plan=plan)
         cif2, errors = build(result)
         assert not errors
 
-        struct_blocks = [
-            b for b in cif2.blocks
-            if '_pd_phase.id' in cif2[b] and '_model.id' in cif2[b]
-        ]
+        struct_blocks = [b for b in cif2.blocks if '_structure.id' in cif2[b]]
         assert len(struct_blocks) == 2
         for b in struct_blocks:
+            assert '_model.id' not in cif2[b], f"model data should be in a separate block"
             assert '_pd_diffractogram.id' not in cif2[b]
 
     def test_all_of_diffractogram_and_diffrn_routes_pure_diffractogram_block(
@@ -3941,3 +3947,123 @@ class TestStructureMode:
         )
         assert '_pd_phase.id' in struct_block.tags
         assert '_space_group.id' in struct_block.tags
+
+
+# ---------------------------------------------------------------------------
+# reconstruct_su — FK PK columns must not be treated as SU columns
+# ---------------------------------------------------------------------------
+
+# Schema: PD_DATA (Loop, key=point_id) + MEAS (Loop, FK PK point_id→pd_data,
+# measurand intensity, SU intensity_su).  meas.point_id is a Link-purpose PK;
+# it must NOT be filtered out by _active_cols when reconstruct_su=True.
+_SU_FK_PK_DIC = """\
+#\\#CIF_2.0
+data_su_fk_pk_dic
+
+save_PD_DATA
+  _definition.id        PD_DATA
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     pd_data
+  _category_key.name    '_pd_data.point_id'
+save_
+
+save_pd_data.point_id
+  _definition.id        '_pd_data.point_id'
+  _definition.class     Attribute
+  _name.category_id     pd_data
+  _name.object_id       point_id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Integer
+save_
+
+save_MEAS
+  _definition.id        MEAS
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     meas
+  _category_key.name    '_meas.point_id'
+save_
+
+save_meas.point_id
+  _definition.id        '_meas.point_id'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       point_id
+  _type.purpose         Link
+  _type.source          Related
+  _type.container       Single
+  _type.contents        Integer
+  _name.linked_item_id  '_pd_data.point_id'
+save_
+
+save_meas.intensity
+  _definition.id        '_meas.intensity'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       intensity
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+
+save_meas.intensity_su
+  _definition.id        '_meas.intensity_su'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       intensity_su
+  _type.purpose         SU
+  _type.source          Derived
+  _type.container       Single
+  _type.contents        Real
+  _name.linked_item_id  '_meas.intensity'
+save_
+"""
+
+_SU_FK_PK_CIF = """\
+#\\#CIF_2.0
+data_test
+loop_
+  _pd_data.point_id
+  1
+  2
+  3
+loop_
+  _meas.point_id
+  _meas.intensity
+  _meas.intensity_su
+  1  10.0  0.1
+  2  20.0  0.2
+  3  30.0  0.3
+"""
+
+
+class TestReconstructSU:
+    """reconstruct_su=True must suppress only genuine SU columns, not FK PK columns."""
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_SU_FK_PK_DIC)
+
+    def test_fk_pk_col_present_when_reconstruct_su(self, schema):
+        """FK PK column (meas.point_id) must appear when reconstruct_su=True."""
+        conn = _ingest_src(_SU_FK_PK_CIF, schema)
+        result = emit(conn, schema, reconstruct_su=True)
+        assert '_meas.point_id' in result
+
+    def test_su_col_absent_when_reconstruct_su(self, schema):
+        """SU column (meas.intensity_su) must be merged away when reconstruct_su=True."""
+        conn = _ingest_src(_SU_FK_PK_CIF, schema)
+        result = emit(conn, schema, reconstruct_su=True)
+        assert '_meas.intensity_su' not in result
+
+    def test_all_cols_present_without_reconstruct_su(self, schema):
+        """All three meas columns appear when reconstruct_su=False (default)."""
+        conn = _ingest_src(_SU_FK_PK_CIF, schema)
+        result = emit(conn, schema)
+        assert '_meas.point_id' in result
+        assert '_meas.intensity' in result
+        assert '_meas.intensity_su' in result

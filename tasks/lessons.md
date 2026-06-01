@@ -6,7 +6,7 @@
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64
-- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132
+- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
@@ -1296,7 +1296,7 @@
 
   ---
 
-## Lesson 133 — `pydoclint` is a console script, not a Python module (2026-05-13)
+## Lesson 132 — `pydoclint` is a console script, not a Python module (2026-05-13)
 
 **Context:** CI `docs` job in `.github/workflows/ci.yml`.
 
@@ -1308,7 +1308,7 @@
 
 ---
 
-## Lesson 134 — Transitive raises from `_`-prefixed helpers: document in parameter description, not `Raises` section (2026-05-13)
+## Lesson 133 — Transitive raises from `_`-prefixed helpers: document in parameter description, not `Raises` section (2026-05-13)
 
 **Context:** `writer.py` — `add_loop_column`, `reorder_loop_tags`, `add_loop_row`, `get_loop_tags`; all call `_find_loop_index` which raises `KeyError`.
 
@@ -1320,7 +1320,7 @@
 
 ---
 
-## Lesson 135 — CI `maturin develop` requires a virtualenv; create and activate one first (2026-05-13)
+## Lesson 134 — CI `maturin develop` requires a virtualenv; create and activate one first (2026-05-13)
 
 **Context:** CI `docs` job.
 
@@ -1332,7 +1332,40 @@
 
 ---
 
-## Lesson 136 — `[skip ci]` in bump-my-version commit_message suppresses ALL GitHub Actions, including release (2026-05-30)
+## Lesson 135 — `_active_cols` must use `_su_col_map`, not `linked_item_id`, to identify SU columns (2026-06-01)
+
+**Context:** `_active_cols` in `emit.py`; `reconstruct_su=True` path.
+
+**Mistake:** Identified SU columns by checking `col.linked_item_id is not None`. FK-PK Link columns (e.g. `pd_meas.point_id` with `linked_item_id='_pd_data.point_id'`) also have `linked_item_id` set in `ColDef`, so they were incorrectly treated as SU columns and suppressed from loop output.
+
+**Fix:** Replace the naive check with `set(_su_col_map(table_def).values())`. `_su_col_map` returns only genuine SU columns — those whose `linked_item_id` matches another column's `definition_id` within the SAME table. FK-PK Link columns point cross-table and are never returned.
+
+**Rule:** Never use `col.linked_item_id is not None` as a proxy for "this column is an SU column". Always use `_su_col_map(table_def)` which applies the within-table cross-reference check. `linked_item_id` is set for both Link-purpose (FK) and SU-purpose columns; only the within-table variant is a genuine SU.
+
+---
+
+## Lesson 136 — `_render_merge_group` PK-compatibility must account for GROUPED FK-PK suppression (2026-06-01)
+
+**Context:** `_render_merge_group` in `emit.py`; GROUPED mode merge-group emission.
+
+**Mistake:** The PK-compatibility check compared raw schema PKs across tables. In GROUPED mode, FK-PK columns pointing to the anchor Set (e.g. `diffractogram_id` in `pd_meas`, `pd_proc`, `pd_calc`) are suppressed during output but were still included in the `pk_sets` frozensets. Two tables with identical raw PKs `{point_id, diffractogram_id}` looked compatible, but the join used `(diffractogram_id, point_id)` as the join key — fragile if `diffractogram_id` was not propagated identically across all tables.
+
+**Fix:** Pre-compute `effective_suppressed` per table via `_suppressed_fk_pk_cols` before the compatibility check. Exclude suppressed columns from each table's `domain_pks` frozenset. The effective PKs (`{point_id}`) are then used for both the compatibility check and the FULL OUTER JOIN key.
+
+**Rule:** In GROUPED mode, any merge-group PK-compatibility check must operate on *effective* PKs (schema PKs minus suppressed FK-PK columns), not raw schema PKs. Pre-compute suppression once before the compatibility check and reuse it in both the join-key selection and the `cat_active` column filtering.
+
+---
+
+## Lesson 137 — GROUPED fingerprints must be per-distinct-pkreach-group, not unioned across all loop tables (2026-06-01)
+
+**Context:** `_block_fingerprint` in `emit.py`; GROUPED mode block assembly.
+
+**Mistake:** The original `_block_fingerprint` took the union of all PK-FK-reachable Set tables across all loop tables in a source block, producing a single fingerprint. A source block containing `atom_site` (pkreach={structure}), `geom_angle` (pkreach={model}), and `space_group_symop` (pkreach={space_group}) was assigned fingerprint anchor `{structure, model, space_group}`. This caused `only("structure")` to match nothing (no block with exactly `{structure}` anchor existed) and incorrectly merged independently-anchored Sets into one output block.
+
+**Fix:** `_block_fingerprint` now returns `(list[frozenset], frozenset)` — one main fingerprint per *distinct* non-empty pkreach frozenset among the loop tables present, plus an incidental frozenset for keyed Set tables not in any pkreach group. The fingerprint collection loop then creates one `fingerprint_to_block_ids` entry per distinct group. Each independently-anchored set of loop tables produces its own output block.
+
+**Rule:** Bridge blocks (a single loop table whose PK spans multiple Sets simultaneously, e.g. `refln` with `diffractogram_id + phase_id` in PK) remain multi-anchor because they have one pkreach containing both Sets. Co-located independent tables (different loop tables each reaching different Sets) produce separate single-anchor blocks. The distinguishing question is whether one loop table's PK references multiple Sets simultaneously (bridge) or whether different loop tables each reference different Sets (independent).
+## Lesson 138 — `[skip ci]` in bump-my-version commit_message suppresses ALL GitHub Actions, including release (2026-05-30)
 
 **Context:** `pyproject.toml` `[tool.bumpversion]`; `commit_message` field.
 
@@ -1344,7 +1377,7 @@
 
 ---
 
-## Lesson 137 — Windows cp1252 + `→` in bump-my-version 1.3.0 causes post-commit UnicodeEncodeError (2026-05-30)
+## Lesson 139 — Windows cp1252 + `→` in bump-my-version 1.3.0 causes post-commit UnicodeEncodeError (2026-05-30)
 
 **Context:** `release_patch.bat`; `bump-my-version` 1.3.0 on Windows.
 
@@ -1358,7 +1391,7 @@
 
 ---
 
-## Lesson 138 — Release workflow must gate on branch push + path filter, not on tag push (2026-05-30)
+## Lesson 140 — Release workflow must gate on branch push + path filter, not on tag push (2026-05-30)
 
 **Context:** `.github/workflows/release.yml`; release pipeline design.
 
@@ -1370,7 +1403,7 @@
 
 ---
 
-  ## Lesson 132 — Bridge-block PK-stripping must only apply to Sets that have their own single-anchor block (2026-05-12)
+  ## Lesson 141 — Bridge-block PK-stripping must only apply to Sets that have their own single-anchor block (2026-05-12)
 
   **Context:** `_collect_grouped` in `emit.py`; multi-anchor (bridge) block rendering.
 
@@ -1379,3 +1412,39 @@
   **Fix:** Two-pass approach using `sets_with_own_block`. First pass: for each fingerprint, compute `anchor_fs` and record any Set that appears as a sole anchor (`len(anchor_fs) == 1`) into `sets_with_own_block`. Second pass: in bridge block assembly, only strip to PK-only for Sets in `sets_with_own_block` — Sets that appear exclusively in bridge blocks keep their full data.
 
   **Rule:** PK-stripping in bridge blocks is only safe for Sets that have a dedicated single-anchor block where their full data is emitted. A Set appearing only in bridge blocks must carry its full data there — it has no other home.
+
+---
+
+## Lesson 142 — `all_of` specificity controls ROUTING; plan ORDER controls OUTPUT order (2026-06-01)
+
+**Context:** `OutputPlan` / `BlockSpec` spec ordering with specificity-ranked matching.
+
+**Mistake:** `all_of('pd_diffractogram', 'pd_phase')` was placed before `all_of('pd_diffractogram', 'pd_phase', 'structure')`. Because `all_of` checks `cats <= anchors` (subset), the less-specific spec also matched refln blocks (anchor ⊇ {pd_diffractogram, pd_phase, structure}). Both block types ended up in the same spec group, alternating in output.
+
+**Fix:** Implemented specificity-ranked matching in `plan.match`: `all_of` specificity = `len(cats)`. The highest-specificity matching spec always wins for ROUTING, regardless of plan position. Plan ORDER (spec_idx) now controls only OUTPUT EMISSION ORDER — blocks are emitted in spec_idx order.
+
+**Rule:** Put LESS-specific specs first in the plan for natural output ordering (lower spec_idx = emitted earlier). Routing is always correct regardless of plan order, because `plan.match` picks the highest-specificity spec. The old "more-specific first" advice is now obsolete for routing, but less-specific-first is the natural way to read a plan ("broad groups first, exceptions after").
+
+---
+
+## Lesson 143 — `_collect_structure` segregation must use exact-anchor check, not membership test (2026-06-01)
+
+**Context:** `_collect_structure` in `emit.py` — segregating structure blocks from GROUPED output.
+
+**Mistake:** Used `if 'structure' in afs` to identify pure structure blocks. This also matched bridge blocks whose anchor_frozenset happened to include `structure` (e.g. refln blocks with anchor = {pd_diffractogram, pd_phase, structure}), causing those bridge blocks to absorb model satellites incorrectly.
+
+**Fix:** Changed to `if afs == frozenset({'structure'})` — only exact single-anchor structure blocks are treated as satellites targets.
+
+**Rule:** In `_collect_structure`, always use exact frozenset equality (`afs == frozenset({...})`) to identify satellite targets. A membership test (`'x' in afs`) is too broad and will catch bridge blocks that happen to contain that anchor.
+
+---
+
+## Lesson 144 — Satellite accumulation in `_collect_structure` must merge, not overwrite (2026-06-01)
+
+**Context:** `_collect_structure` building `space_group_blocks` and `pd_phase_blocks` dicts from GROUPED output.
+
+**Mistake:** Used `space_group_blocks[sg_id] = block` (plain dict assignment). GROUPED emits multiple {space_group}-anchored blocks for the same `sg_id` (one per distinct source block_id that had space_group rows). Only the first block (from the original source CIF) has `space_group_symop` rows; subsequent blocks (from FK-propagated source blocks) have only bare `space_group` Set rows. The last assignment overwrote the block with symop data, so `space_group_symop` was silently dropped after merging into structure blocks.
+
+**Fix:** When a `sg_id` is already in `space_group_blocks`, call `_merge_blocks_into` to merge the new block into the existing entry rather than overwriting. Same fix applied to `pd_phase_blocks`.
+
+**Rule:** When accumulating satellite blocks keyed by Set identity (e.g. `space_group.id`), always merge duplicate-keyed blocks rather than overwriting. GROUPED produces one block per source block_id per fingerprint, so multiple GROUPED blocks can share the same Set identity key; the richest (most complete) data may be in any of them.

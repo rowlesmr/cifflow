@@ -478,6 +478,65 @@ def _reachable_set_tables(table: str, schema: SchemaSpec) -> frozenset[str]:
     return frozenset(result)
 
 
+def _pk_reachable_set_tables(table: str, schema: SchemaSpec) -> frozenset[str]:
+    """Frozenset of Set-class tables reachable from *table* via FK-PK columns only.
+
+    Only follows FK edges where every source column is part of the table's own
+    primary key.  Non-PK FK columns (e.g. pd_meas.detector_id) are ignored so
+    that incidentally co-located Set categories (instrument, diffractometer) do
+    not widen the anchor frozenset beyond what the Loop data's identity requires.
+    """
+    visited: set[str] = set()
+    queue: list[str] = [table]
+    result: set[str] = set()
+    while queue:
+        t = queue.pop()
+        if t in visited:
+            continue
+        visited.add(t)
+        td = schema.tables.get(t)
+        if td is None:
+            continue
+        pk_set = frozenset(td.primary_keys) - _SYNTHETIC
+        for fk in td.foreign_keys:
+            if not all(c in pk_set for c in fk.source_columns):
+                continue
+            target = fk.target_table
+            target_td = schema.tables.get(target)
+            if target_td and target_td.category_class == 'Set':
+                result.add(target)
+            if target not in visited:
+                queue.append(target)
+    return frozenset(result)
+
+
+def _expand_with_child_sets(base: frozenset[str], schema: SchemaSpec) -> frozenset[str]:
+    """Expand a set of Set-class table names to include child-Set descendants.
+
+    A child-Set table is one whose all non-synthetic PK columns are FK source
+    columns pointing to tables already in the expanded set.  Iterates to fixed
+    point so transitive chains are fully covered.
+    """
+    expanded = set(base)
+    changed = True
+    while changed:
+        changed = False
+        for t, td in schema.tables.items():
+            if t in expanded or td.category_class != 'Set':
+                continue
+            domain_pks = [pk for pk in td.primary_keys if pk not in _SYNTHETIC]
+            if not domain_pks:
+                continue
+            fk_cols_to_expanded: set[str] = set()
+            for fk in td.foreign_keys:
+                if fk.target_table in expanded:
+                    fk_cols_to_expanded.update(fk.source_columns)
+            if all(pk in fk_cols_to_expanded for pk in domain_pks):
+                expanded.add(t)
+                changed = True
+    return frozenset(expanded)
+
+
 def _collect_grouped(
     conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
@@ -496,6 +555,11 @@ def _collect_grouped(
     traversal is required.  ``anchor_frozenset`` reflects all keyed Set tables
     in the fingerprint, enabling multi-anchor predicates such as
     ``all_of('pd_diffractogram', 'pd_phase')`` to match bridge blocks.
+
+    Set-class tables that are present in a source block but NOT reachable from
+    any Loop table via PK-only FK chains are treated as *incidental* — they do
+    not widen the main fingerprint and are instead emitted as their own
+    dedicated output blocks with a single-table anchor frozenset.
     """
     # GROUPED mode propagates existing dataset IDs but does not generate new UUIDs.
     # Blocks without a source _audit_dataset.id will not have one injected.
@@ -518,20 +582,101 @@ def _collect_grouped(
         and any(pk not in _SYNTHETIC for pk in td.primary_keys)
     }
 
-    def _block_fingerprint(bid: str) -> frozenset:
-        # Collect all keyed Set rows this block is associated with:
-        # (a) rows it directly owns (_cifflow_block_id = bid), and
-        # (b) rows it contributed a column to but lost the merge race (_tag_presence).
-        fp = []
+    def _block_fingerprint(bid: str) -> tuple[list[frozenset], frozenset]:
+        # Each distinct non-empty pkreach frozenset among loop tables produces one
+        # fingerprint entry (anchor group).  This ensures that co-located but
+        # independently-anchored Sets (e.g. structure, model, space_group from
+        # atom_site / geom_angle / space_group_symop respectively) produce separate
+        # output blocks, while Sets jointly anchored by a single Loop table
+        # (e.g. pd_diffractogram + pd_phase via refln) stay together.
+        #
+        # When no loop tables are present, all keyed Sets go into one main fp.
+        loop_tables_present = [
+            t for t in schema.tables
+            if schema.tables[t].category_class != 'Set'
+            and cache.rows_for_block(t, bid)
+        ]
+
+        def _fp_entries_for_expanded(expanded: frozenset) -> frozenset:
+            entries: list[tuple] = []
+            for t, td in keyed_set_tables.items():
+                if t not in expanded:
+                    continue
+                domain_pks = [pk for pk in td.primary_keys if pk not in _SYNTHETIC]
+                pk_vals_set: set[tuple] = set()
+                for r in cache.rows_for_block(t, bid):
+                    tup = tuple(str(r.get(pk)) if r.get(pk) is not None else '' for pk in domain_pks)
+                    if any(tup):
+                        pk_vals_set.add(tup)
+                for _col, pk_json in cache.tag_presence(bid, t):
+                    try:
+                        vals = json.loads(pk_json)
+                        tup = tuple(str(v) if v is not None else '' for v in vals)
+                        if any(tup):
+                            pk_vals_set.add(tup)
+                    except Exception:
+                        pass
+                if pk_vals_set:
+                    entries.append((t, tuple(sorted(pk_vals_set))))
+            return frozenset(entries)
+
+        # Group loop tables by their pk_reachable frozenset (distinct non-empty values).
+        pkreach_to_expanded: dict[frozenset, frozenset] = {}
+        for lt in loop_tables_present:
+            pr = pk_reachable_sets.get(lt, frozenset())
+            if pr and pr not in pkreach_to_expanded:
+                pkreach_to_expanded[pr] = _expand_with_child_sets(pr, schema)
+
+        # No loop tables at all: one main fp with all keyed Sets (Set-only source block).
+        if not loop_tables_present:
+            fp = _fp_entries_for_expanded(frozenset(keyed_set_tables.keys()))
+            return ([fp] if fp else []), frozenset()
+
+        # Loop tables present but none have PK-FK chains to any Set: treat like
+        # original pure-loop case — return empty main fps so the block routes to
+        # pure_loop_block_ids, with incidental entries for any keyed Sets present.
+        if not pkreach_to_expanded:
+            # All keyed Sets become incidental (same as when pk_reach_expanded=∅).
+            incidental: list[tuple] = []
+            for t, td in keyed_set_tables.items():
+                domain_pks = [pk for pk in td.primary_keys if pk not in _SYNTHETIC]
+                pk_vals_set: set[tuple] = set()
+                for r in cache.rows_for_block(t, bid):
+                    tup = tuple(str(r.get(pk)) if r.get(pk) is not None else '' for pk in domain_pks)
+                    if any(tup):
+                        pk_vals_set.add(tup)
+                for _col, pk_json in cache.tag_presence(bid, t):
+                    try:
+                        vals = json.loads(pk_json)
+                        tup = tuple(str(v) if v is not None else '' for v in vals)
+                        if any(tup):
+                            pk_vals_set.add(tup)
+                    except Exception:
+                        pass
+                if pk_vals_set:
+                    incidental.append((t, tuple(sorted(pk_vals_set))))
+            return [], frozenset(incidental)
+
+        # One fp per distinct pkreach group.
+        main_fps: list[frozenset] = []
+        accounted_sets: set[str] = set()
+        for pr, expanded in pkreach_to_expanded.items():
+            fp = _fp_entries_for_expanded(expanded)
+            if fp:
+                main_fps.append(fp)
+            accounted_sets.update(expanded)
+
+        # Incidental Sets: keyed Sets present but not in any pkreach group's expanded set.
+        fp_incidental_entries: list[tuple] = []
         for t, td in keyed_set_tables.items():
+            if t in accounted_sets:
+                continue
             domain_pks = [pk for pk in td.primary_keys if pk not in _SYNTHETIC]
             pk_vals_set: set[tuple] = set()
-
             for r in cache.rows_for_block(t, bid):
                 tup = tuple(str(r.get(pk)) if r.get(pk) is not None else '' for pk in domain_pks)
                 if any(tup):
                     pk_vals_set.add(tup)
-
             for _col, pk_json in cache.tag_presence(bid, t):
                 try:
                     vals = json.loads(pk_json)
@@ -540,10 +685,30 @@ def _collect_grouped(
                         pk_vals_set.add(tup)
                 except Exception:
                     pass
-
             if pk_vals_set:
-                fp.append((t, tuple(sorted(pk_vals_set))))
-        return frozenset(fp)
+                fp_incidental_entries.append((t, tuple(sorted(pk_vals_set))))
+
+        # Drop child-Set tables from incidental entries: they will be collected
+        # inside the parent's incidental block by the child-Set BFS below.
+        # A child is an incidental table whose ALL domain PKs are FK columns
+        # pointing to other tables in the incidental set.
+        incidental_set = frozenset(t for t, _ in fp_incidental_entries)
+        to_drop: set[str] = set()
+        for inc_t, _ in fp_incidental_entries:
+            inc_td = keyed_set_tables[inc_t]
+            domain_pks_t = [pk for pk in inc_td.primary_keys if pk not in _SYNTHETIC]
+            fk_to_incidental: set[str] = set()
+            for fk in inc_td.foreign_keys:
+                if fk.target_table in incidental_set and fk.target_table != inc_t:
+                    fk_to_incidental.update(fk.source_columns)
+            if domain_pks_t and all(pk in fk_to_incidental for pk in domain_pks_t):
+                to_drop.add(inc_t)
+        fp_incidental_entries = [
+            (t, vals) for t, vals in fp_incidental_entries
+            if t not in to_drop
+        ]
+
+        return main_fps, frozenset(fp_incidental_entries)
 
     # Precompute Set-class tables reachable from each non-Set table via FK chain.
     # Used to route Loop rows that have no FK path to a fingerprint anchor into a
@@ -554,15 +719,31 @@ def _collect_grouped(
         if td.category_class != 'Set'
     }
 
+    # Precompute Set-class tables reachable via PK FK columns only.  Used to
+    # strip incidental Set anchors (e.g. instrument/diffractometer tables that
+    # are co-located in source blocks but whose identity is independent of the
+    # Loop tables' primary keys) from the anchor frozenset used for spec matching.
+    pk_reachable_sets: dict[str, frozenset[str]] = {
+        t: _pk_reachable_set_tables(t, schema)
+        for t, td in schema.tables.items()
+        if td.category_class != 'Set'
+    }
+
     fingerprint_to_block_ids: dict[frozenset, list[str]] = {}
     pure_loop_block_ids: list[str] = []
+    # incidental_groups: (table_name, pk_val_tuple) → set of source block_ids
+    incidental_groups: dict[tuple, set[str]] = {}
 
     for bid in all_block_ids:
-        fp = _block_fingerprint(bid)
-        if not fp:
+        main_fps, incidental_fp = _block_fingerprint(bid)
+        if not main_fps:
             pure_loop_block_ids.append(bid)
         else:
-            fingerprint_to_block_ids.setdefault(fp, []).append(bid)
+            for fp in main_fps:
+                fingerprint_to_block_ids.setdefault(fp, []).append(bid)
+        for t, pk_vals_tuple in incidental_fp:
+            for pk_val in pk_vals_tuple:
+                incidental_groups.setdefault((t, pk_val), set()).add(bid)
 
     # For non-Set tables with no FK path to any Set: decide whether to include
     # in a fingerprint block or emit as a shared orphan block.
@@ -586,11 +767,18 @@ def _collect_grouped(
     # For each T, which fingerprint groups "need" it?
     table_to_needed_by: dict[str, set[frozenset]] = {t: set() for t in no_set_fk_tables}
     for fp, block_ids in fingerprint_to_block_ids.items():
+        fp_ts = frozenset(t for t, _ in fp)
+        fp_ts_exp = _expand_with_child_sets(fp_ts, schema)
         for t in no_set_fk_tables:
             refs = reverse_fk.get(t, set())
             if refs:
-                # Reverse-FK strategy: check if any child table has rows in this group.
+                # Reverse-FK strategy: only count child r as belonging to fp if
+                # r's pkreach is a subset of fp's expanded set (pkreach=∅ children
+                # pass through unchecked since they have no Set anchor constraint).
                 for r in refs:
+                    pr_r = pk_reachable_sets.get(r, frozenset())
+                    if pr_r and not pr_r.issubset(fp_ts_exp):
+                        continue  # r belongs to a different anchor group
                     found = False
                     for bid in block_ids:
                         if cache.rows_for_block(r, bid):
@@ -614,14 +802,17 @@ def _collect_grouped(
         elif len(fps) > 1:
             orphan_tables.add(t)
 
-    # Sets that have at least one dedicated single-anchor fingerprint group (anchor_fs == {t}).
-    # Only these Sets are stripped to PK-only in multi-anchor bridge blocks; Sets that
-    # appear exclusively in bridge blocks keep their full data.
+    # Sets that have at least one dedicated single-anchor fingerprint group (anchor_fs == {t})
+    # OR appear as their own incidental block.  Only these Sets are stripped to PK-only in
+    # multi-anchor bridge blocks; Sets that appear exclusively in bridge blocks keep their
+    # full data.
     sets_with_own_block: set[str] = set()
     for fp in fingerprint_to_block_ids:
         afs = _fingerprint_anchor_fs(fp, schema)
         if len(afs) == 1:
             sets_with_own_block.add(next(iter(afs)))
+    for (t, _pk_val) in incidental_groups:
+        sets_with_own_block.add(t)
 
     result: list[_BlockData] = []
 
@@ -631,14 +822,23 @@ def _collect_grouped(
     orphan_by_table: dict[str, dict[tuple, dict]] = {}
     orphan_block_ids: set[str] = set()
 
+    # Union of all Set-class tables present in any main fingerprint.  Used in
+    # incidental block processing to exclude Loop tables that are PK-reachable
+    # to a main-fingerprint Set (those belong in the main block, not incidental).
+    main_fp_set_tables = frozenset(t for fp in fingerprint_to_block_ids for t, _ in fp)
+
     for fp, block_ids in sorted(fingerprint_to_block_ids.items(), key=lambda x: sorted(x[1])):
         table_rows: dict[str, list[dict]] = {}
-        # All keyed Set tables in this fingerprint (pre child-Set strip), used for
-        # FK connectivity checks so that Loop tables connected via child-Sets are
-        # correctly included in the block.
+        # PK-reachable Set tables in this fingerprint, expanded to include their
+        # child-Set descendants.  Used to restrict Set-row collection so that
+        # incidental Sets (present in source blocks but not linked to Loop data's PKs)
+        # are excluded and emitted as their own dedicated blocks.
         fp_tables = frozenset(t for t, _ in fp)
+        fp_tables_expanded = _expand_with_child_sets(fp_tables, schema)
         for t, td in schema.tables.items():
             if td.category_class == 'Set':
+                if t not in fp_tables_expanded:
+                    continue  # incidental Set — handled separately
                 # Set tables: collect via _fetch_rows_for_block so that non-winner
                 # contributions (tag_presence) are included.  Deduplicate by PK,
                 # preferring the first occurrence (which is the winner row when
@@ -655,30 +855,39 @@ def _collect_grouped(
                         key=lambda r: r.get('_cifflow_row_id', 0),
                     )
             else:
-                if reachable_sets.get(t, frozenset()) & fp_tables:
-                    # FK path exists to at least one keyed anchor: include in this block.
+                pr = pk_reachable_sets.get(t, frozenset())
+                if pr and pr.issubset(fp_tables_expanded):
+                    # PK-FK chain resolves entirely to this anchor group.
                     rows = []
                     for bid in sorted(block_ids):
                         rows.extend(cache.rows_for_block(t, bid))
                     if rows:
                         table_rows[t] = rows
-                elif t in orphan_tables:
-                    # Rows span multiple fingerprint groups: deduplicate and orphan.
-                    domain_pks = [pk for pk in td.primary_keys if pk not in _SYNTHETIC]
-                    tbl_orphan = orphan_by_table.setdefault(t, {})
-                    for bid in sorted(block_ids):
-                        for r in cache.rows_for_block(t, bid):
-                            pk_key = tuple(str(r.get(pk, '')) for pk in domain_pks)
-                            if pk_key not in tbl_orphan:
-                                tbl_orphan[pk_key] = r
-                            orphan_block_ids.add(bid)
-                elif single_fp_tables.get(t) == fp:
-                    # Rows appear only in this fingerprint group: include directly.
-                    rows = []
-                    for bid in sorted(block_ids):
-                        rows.extend(cache.rows_for_block(t, bid))
-                    if rows:
-                        table_rows[t] = rows
+                elif not pr:
+                    # No PK-FK to any Set: use orphan/single_fp routing or
+                    # fall back to non-PK FK reachability.
+                    if t in orphan_tables:
+                        domain_pks = [pk for pk in td.primary_keys if pk not in _SYNTHETIC]
+                        tbl_orphan = orphan_by_table.setdefault(t, {})
+                        for bid in sorted(block_ids):
+                            for r in cache.rows_for_block(t, bid):
+                                pk_key = tuple(str(r.get(pk, '')) for pk in domain_pks)
+                                if pk_key not in tbl_orphan:
+                                    tbl_orphan[pk_key] = r
+                                orphan_block_ids.add(bid)
+                    elif single_fp_tables.get(t) == fp:
+                        rows = []
+                        for bid in sorted(block_ids):
+                            rows.extend(cache.rows_for_block(t, bid))
+                        if rows:
+                            table_rows[t] = rows
+                    elif reachable_sets.get(t, frozenset()) & fp_tables_expanded:
+                        # Non-PK FK to a Set in this anchor: include directly.
+                        rows = []
+                        for bid in sorted(block_ids):
+                            rows.extend(cache.rows_for_block(t, bid))
+                        if rows:
+                            table_rows[t] = rows
 
         fallback: list[dict] = []
         for bid in sorted(block_ids):
@@ -727,7 +936,7 @@ def _collect_grouped(
             td = schema.tables[t]
             domain_pks = [pk for pk in td.primary_keys if pk not in _SYNTHETIC]
             if domain_pks and all(pk in anchor_fk_cols for pk in domain_pks):
-                continue  # child-Set table: all PKs are FKs to other anchors
+                continue  # child-Set table: skip, its identity is derived from parent
             for pk_val_row in pk_vals_tuple:
                 for pk_col, val in zip(domain_pks, pk_val_row):
                     if val:
@@ -787,6 +996,121 @@ def _collect_grouped(
                 dataset_id=_resolve_dataset_id(conn, orphan_block_ids, fallback_id),
             ))
 
+    # Incidental Set blocks — one block per unique (table, pk_val) combination.
+    # These are Set tables that were present in source blocks but are not
+    # PK-reachable from any Loop table, so they are emitted separately rather
+    # than being absorbed into the main fingerprint blocks.
+    # Loop tables included here are those that FK-reach the incidental Set but
+    # have no PK-reachable path to any main-fingerprint Set.
+    for (t, pk_val), block_ids_set in sorted(
+        incidental_groups.items(),
+        key=lambda x: (x[0][0], x[0][1]),
+    ):
+        td = schema.tables[t]
+        domain_pks = [pk for pk in td.primary_keys if pk not in _SYNTHETIC]
+        pk_val_str = tuple(str(v) if v is not None else '' for v in pk_val)
+
+        # Collect Set rows for this exact pk_val.
+        by_pk: dict[tuple, dict] = {}
+        for bid in sorted(block_ids_set):
+            for r in _fetch_rows_for_block(conn, bid, t, td, cache=cache):
+                this_pk = tuple(str(r.get(pk, '')) if r.get(pk) is not None else '' for pk in domain_pks)
+                if this_pk == pk_val_str and this_pk not in by_pk:
+                    by_pk[this_pk] = r
+        if not by_pk:
+            continue
+
+        inc_table_rows: dict[str, list[dict]] = {
+            t: sorted(by_pk.values(), key=lambda r: r.get('_cifflow_row_id', 0))
+        }
+
+        # Include Loop tables that FK-reach this incidental Set but have no
+        # PK-reachable path to any main-fingerprint Set table.
+        inc_tables_expanded = _expand_with_child_sets(frozenset({t}), schema)
+        for loop_t, loop_td in schema.tables.items():
+            if loop_td.category_class == 'Set':
+                continue
+            if not (reachable_sets.get(loop_t, frozenset()) & inc_tables_expanded):
+                continue
+            if pk_reachable_sets.get(loop_t, frozenset()) & main_fp_set_tables:
+                continue  # belongs in a main fingerprint block
+            rows = []
+            for bid in sorted(block_ids_set):
+                rows.extend(cache.rows_for_block(loop_t, bid))
+            if rows:
+                inc_table_rows[loop_t] = rows
+
+        # Include child-Set tables (e.g. chemical_formula keyed on pd_phase).
+        # Process BFS so parents are always collected before their children.
+        # collected_set_rows: table → {pk_key: row} for FK-value filtering.
+        collected_set_rows: dict[str, dict[tuple, dict]] = {t: by_pk}
+        pending_child_sets = [ct for ct in sorted(inc_tables_expanded) if ct != t]
+        prev_pending_count = -1
+        while pending_child_sets and len(pending_child_sets) != prev_pending_count:
+            prev_pending_count = len(pending_child_sets)
+            still_pending: list[str] = []
+            for child_t in pending_child_sets:
+                child_td = schema.tables.get(child_t)
+                if child_td is None:
+                    continue
+                child_domain_pks = [pk for pk in child_td.primary_keys if pk not in _SYNTHETIC]
+                # Build allowed-value sets per FK src column from already-collected parents.
+                fk_filter: dict[str, set[str]] = {}
+                all_parents_ready = True
+                for fk in child_td.foreign_keys:
+                    if fk.target_table not in inc_tables_expanded:
+                        continue
+                    if fk.target_table not in collected_set_rows:
+                        all_parents_ready = False
+                        break
+                    parent_rows = collected_set_rows[fk.target_table]
+                    for src_col, tgt_col in zip(fk.source_columns, fk.target_columns):
+                        if src_col in child_domain_pks:
+                            fk_filter[src_col] = {
+                                str(r.get(tgt_col, '')) for r in parent_rows.values()
+                            }
+                if not all_parents_ready:
+                    still_pending.append(child_t)
+                    continue
+                by_child_pk: dict[tuple, dict] = {}
+                for bid in sorted(block_ids_set):
+                    for r in _fetch_rows_for_block(conn, bid, child_t, child_td, cache=cache):
+                        if fk_filter and not all(
+                            str(r.get(sc, '')) in allowed_vals
+                            for sc, allowed_vals in fk_filter.items()
+                        ):
+                            continue
+                        child_pk_key = tuple(r.get(pk) for pk in child_td.primary_keys)
+                        if child_pk_key not in by_child_pk:
+                            by_child_pk[child_pk_key] = r
+                if by_child_pk:
+                    inc_table_rows[child_t] = sorted(
+                        by_child_pk.values(), key=lambda r: r.get('_cifflow_row_id', 0)
+                    )
+                collected_set_rows[child_t] = by_child_pk
+            pending_child_sets = still_pending
+
+        inc_anchor_fs = frozenset({t})
+        inc_anchor_kd: dict[str, list[str]] = {}
+        for pk_col, val in zip(domain_pks, pk_val):
+            v = str(val) if val is not None else ''
+            if v:
+                inc_anchor_kd[f'{t}.{pk_col}'] = [v]
+
+        default_name = _default_block_name(inc_anchor_kd) if inc_anchor_kd else t
+        fallback_name = _sanitize_block_name(default_name) or t
+
+        result.append(_BlockData(
+            name=fallback_name,
+            table_rows=inc_table_rows,
+            fallback_rows=[],
+            anchor_frozenset=inc_anchor_fs,
+            anchor_key_dict=inc_anchor_kd,
+            suppress_fk_pk=True,
+            suppress_all_fk_to_set=True,
+            dataset_id=_resolve_dataset_id(conn, block_ids_set, fallback_id),
+        ))
+
     return result
 
 
@@ -840,6 +1164,24 @@ def _merge_blocks_into(
     )
 
 
+def _replace_anchor(
+    block: _BlockData,
+    anchor_frozenset: frozenset[str],
+    anchor_key_dict: dict[str, list[str]],
+) -> _BlockData:
+    """Return *block* with its anchor_frozenset and anchor_key_dict replaced."""
+    return _BlockData(
+        name=block.name,
+        table_rows=block.table_rows,
+        fallback_rows=block.fallback_rows,
+        anchor_frozenset=anchor_frozenset,
+        anchor_key_dict=anchor_key_dict,
+        suppress_fk_pk=block.suppress_fk_pk,
+        suppress_all_fk_to_set=block.suppress_all_fk_to_set,
+        dataset_id=block.dataset_id,
+    )
+
+
 def _collect_structure(
     conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
@@ -863,14 +1205,20 @@ def _collect_structure(
 
     for block in grouped:
         afs = block.anchor_frozenset
-        if 'structure' in afs:
+        if afs == frozenset({'structure'}):
             structure_blocks.append(block)
         elif afs == frozenset({'pd_phase'}):
             for phase_id in block.anchor_key_dict.get('pd_phase.id', []):
-                pd_phase_blocks[phase_id] = block
+                if phase_id in pd_phase_blocks:
+                    pd_phase_blocks[phase_id] = _merge_blocks_into(pd_phase_blocks[phase_id], [block], schema)
+                else:
+                    pd_phase_blocks[phase_id] = block
         elif afs == frozenset({'space_group'}):
             for sg_id in block.anchor_key_dict.get('space_group.id', []):
-                space_group_blocks[sg_id] = block
+                if sg_id in space_group_blocks:
+                    space_group_blocks[sg_id] = _merge_blocks_into(space_group_blocks[sg_id], [block], schema)
+                else:
+                    space_group_blocks[sg_id] = block
         elif afs == frozenset({'model'}):
             struct_id: str | None = None
             for row in block.table_rows.get('model', []):
@@ -920,7 +1268,13 @@ def _collect_structure(
                     consumed_block_ids.add(id(models[0]))
 
         if to_merge:
+            original_anchor_fs = block.anchor_frozenset
+            original_anchor_kd = block.anchor_key_dict
             block = _merge_blocks_into(block, to_merge, schema)
+            # Satellites are absorbed data passengers, not co-equal anchors.
+            # Keep the structure block's anchor identity so plan predicates
+            # such as only('structure') still match in STRUCTURE mode.
+            block = _replace_anchor(block, original_anchor_fs, original_anchor_kd)
         result.append(block)
 
     # --- Emit unconsumed satellite blocks ---
@@ -1696,17 +2050,31 @@ def _render_merge_group(
     if not present:
         return []
 
+    # In GROUPED mode, FK-PK columns pointing to the anchor Set are constant within
+    # the block and must be excluded before checking PK compatibility.  Two tables
+    # with PKs {diffractogram_id, point_id} and {point_id} are compatible once
+    # diffractogram_id is recognised as suppressed in both.
+    effective_suppressed: dict[str, set[str]] = {}
+    if suppress_all_fk_to_set:
+        for cat in present:
+            tdef = schema.tables[cat]
+            s = _suppressed_fk_pk_cols(tdef, table_rows[cat], table_rows, schema)
+            if s:
+                effective_suppressed[cat] = s
+
     # Determine PK sets for key-compatibility check.
     pk_sets: list[frozenset[str]] = []
     for cat in present:
         tdef = schema.tables[cat]
-        domain_pks = frozenset(pk for pk in tdef.primary_keys if pk not in _SYNTHETIC)
+        supp = effective_suppressed.get(cat, set())
+        domain_pks = frozenset(pk for pk in tdef.primary_keys if pk not in _SYNTHETIC and pk not in supp)
         pk_sets.append(domain_pks)
 
     # All present categories must share the same non-synthetic PK column set.
     compatible = len(set(pk_sets)) <= 1 and pk_sets
 
     if not compatible:
+        print(f"MERGE FAIL: {group}, present={present}, pk_sets={dict(zip(present, pk_sets))}")
         # Fall back to plain loops in listed order.
         lines: list[str] = []
         first = True
@@ -1747,7 +2115,7 @@ def _render_merge_group(
         # Exclude shared PKs; they appear once at the start.
         non_pk_cols = [c for c in cols if c not in pk_sets[0]]
         if suppress_all_fk_to_set:
-            suppressed = _suppressed_fk_pk_cols(tdef, all_rows, table_rows, schema, suppress_all_to_set=True)
+            suppressed = effective_suppressed.get(cat, set())
             non_pk_cols = [c for c in non_pk_cols if c not in suppressed]
             non_pk_cols = [c for c in non_pk_cols if not all(row.get(c) == '.' for row in all_rows)]
         if non_pk_cols or cols:
@@ -2473,11 +2841,7 @@ def _active_cols(
     reconstruct_su: bool,
 ) -> list[str]:
     """Return columns with at least one non-NULL value, in emission order."""
-    su_col_names: set[str] = set()
-    if reconstruct_su:
-        for col in table_def.columns:
-            if col.linked_item_id is not None:
-                su_col_names.add(col.name)
+    su_col_names: set[str] = set(_su_col_map(table_def).values()) if reconstruct_su else set()
 
     active_set = {
         col.name for col in table_def.columns
