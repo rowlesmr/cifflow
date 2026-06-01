@@ -1696,11 +1696,24 @@ def _render_merge_group(
     if not present:
         return []
 
+    # In GROUPED mode, FK-PK columns pointing to the anchor Set are constant within
+    # the block and must be excluded before checking PK compatibility.  Two tables
+    # with PKs {diffractogram_id, point_id} and {point_id} are compatible once
+    # diffractogram_id is recognised as suppressed in both.
+    effective_suppressed: dict[str, set[str]] = {}
+    if suppress_all_fk_to_set:
+        for cat in present:
+            tdef = schema.tables[cat]
+            s = _suppressed_fk_pk_cols(tdef, table_rows[cat], table_rows, schema)
+            if s:
+                effective_suppressed[cat] = s
+
     # Determine PK sets for key-compatibility check.
     pk_sets: list[frozenset[str]] = []
     for cat in present:
         tdef = schema.tables[cat]
-        domain_pks = frozenset(pk for pk in tdef.primary_keys if pk not in _SYNTHETIC)
+        supp = effective_suppressed.get(cat, set())
+        domain_pks = frozenset(pk for pk in tdef.primary_keys if pk not in _SYNTHETIC and pk not in supp)
         pk_sets.append(domain_pks)
 
     # All present categories must share the same non-synthetic PK column set.
@@ -1747,7 +1760,7 @@ def _render_merge_group(
         # Exclude shared PKs; they appear once at the start.
         non_pk_cols = [c for c in cols if c not in pk_sets[0]]
         if suppress_all_fk_to_set:
-            suppressed = _suppressed_fk_pk_cols(tdef, all_rows, table_rows, schema, suppress_all_to_set=True)
+            suppressed = effective_suppressed.get(cat, set())
             non_pk_cols = [c for c in non_pk_cols if c not in suppressed]
             non_pk_cols = [c for c in non_pk_cols if not all(row.get(c) == '.' for row in all_rows)]
         if non_pk_cols or cols:
@@ -2473,11 +2486,7 @@ def _active_cols(
     reconstruct_su: bool,
 ) -> list[str]:
     """Return columns with at least one non-NULL value, in emission order."""
-    su_col_names: set[str] = set()
-    if reconstruct_su:
-        for col in table_def.columns:
-            if col.linked_item_id is not None:
-                su_col_names.add(col.name)
+    su_col_names: set[str] = set(_su_col_map(table_def).values()) if reconstruct_su else set()
 
     active_set = {
         col.name for col in table_def.columns
