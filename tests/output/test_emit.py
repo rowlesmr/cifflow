@@ -3290,28 +3290,34 @@ class TestGroupedStructureSecondShortDecimated:
 
     # ── plan spec matching ────────────────────────────────────────────────────
 
-    def test_all_of_pd_phase_and_model_routes_structure_blocks(
+    def test_only_structure_routes_structure_blocks(
         self, second_short_decimated_conn, pow_schema
     ):
-        """all_of('pd_phase', 'model') routes exactly the 2 crystal-structure blocks.
+        """only('structure') routes exactly the 2 crystal-structure blocks.
 
-        Structure blocks have both pd_phase and model in their anchor_frozenset;
-        bridge blocks (pd_phase + pd_diffractogram, no model) are not matched.
+        In GROUPED mode each distinct non-empty pkreach frozenset among the loop
+        tables in a source block produces a separate output block.  atom_site has
+        structure_id in its PK → anchor {structure}.  geom_angle/geom_bond have
+        model_id in their PK → anchor {model}.  space_group_symop has
+        space_group_id in its PK → anchor {space_group}.  These are separate
+        anchors (no single loop table reaches all three simultaneously), so they
+        are emitted as separate blocks.
+
+        only('structure') therefore matches the 2 structure-anchored blocks
+        (one per unique structure.id), each carrying cell and atom-site data.
         """
         plan = OutputPlan(specs=[
-            BlockSpec(matches=all_of('pd_phase', 'model')),
+            BlockSpec(matches=only('structure')),
             BlockSpec(matches=None),
         ])
         result = emit(second_short_decimated_conn, pow_schema, mode=EmitMode.GROUPED, plan=plan)
         cif2, errors = build(result)
         assert not errors
 
-        struct_blocks = [
-            b for b in cif2.blocks
-            if '_pd_phase.id' in cif2[b] and '_model.id' in cif2[b]
-        ]
+        struct_blocks = [b for b in cif2.blocks if '_structure.id' in cif2[b]]
         assert len(struct_blocks) == 2
         for b in struct_blocks:
+            assert '_model.id' not in cif2[b], f"model data should be in a separate block"
             assert '_pd_diffractogram.id' not in cif2[b]
 
     def test_all_of_diffractogram_and_diffrn_routes_pure_diffractogram_block(

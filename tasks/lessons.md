@@ -6,7 +6,7 @@
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64
-- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137
+- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
@@ -1353,6 +1353,18 @@
 **Fix:** Pre-compute `effective_suppressed` per table via `_suppressed_fk_pk_cols` before the compatibility check. Exclude suppressed columns from each table's `domain_pks` frozenset. The effective PKs (`{point_id}`) are then used for both the compatibility check and the FULL OUTER JOIN key.
 
 **Rule:** In GROUPED mode, any merge-group PK-compatibility check must operate on *effective* PKs (schema PKs minus suppressed FK-PK columns), not raw schema PKs. Pre-compute suppression once before the compatibility check and reuse it in both the join-key selection and the `cat_active` column filtering.
+
+---
+
+## Lesson 138 — GROUPED fingerprints must be per-distinct-pkreach-group, not unioned across all loop tables (2026-06-01)
+
+**Context:** `_block_fingerprint` in `emit.py`; GROUPED mode block assembly.
+
+**Mistake:** The original `_block_fingerprint` took the union of all PK-FK-reachable Set tables across all loop tables in a source block, producing a single fingerprint. A source block containing `atom_site` (pkreach={structure}), `geom_angle` (pkreach={model}), and `space_group_symop` (pkreach={space_group}) was assigned fingerprint anchor `{structure, model, space_group}`. This caused `only("structure")` to match nothing (no block with exactly `{structure}` anchor existed) and incorrectly merged independently-anchored Sets into one output block.
+
+**Fix:** `_block_fingerprint` now returns `(list[frozenset], frozenset)` — one main fingerprint per *distinct* non-empty pkreach frozenset among the loop tables present, plus an incidental frozenset for keyed Set tables not in any pkreach group. The fingerprint collection loop then creates one `fingerprint_to_block_ids` entry per distinct group. Each independently-anchored set of loop tables produces its own output block.
+
+**Rule:** Bridge blocks (a single loop table whose PK spans multiple Sets simultaneously, e.g. `refln` with `diffractogram_id + phase_id` in PK) remain multi-anchor because they have one pkreach containing both Sets. Co-located independent tables (different loop tables each reaching different Sets) produce separate single-anchor blocks. The distinguishing question is whether one loop table's PK references multiple Sets simultaneously (bridge) or whether different loop tables each reference different Sets (independent).
 
 ---
 
