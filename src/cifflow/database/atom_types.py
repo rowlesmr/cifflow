@@ -70,7 +70,7 @@ def standardise_atom_type_symbols(
         If the transaction cannot be started, or if any SQL statement fails
         (e.g. a schema table is absent from *connection*).  The transaction
         is rolled back before re-raising.
-   """
+    """
     # Collect all FK columns pointing to atom_type.symbol.
     fk_cols: list[tuple[str, str]] = []
     for tname, td in schema.tables.items():
