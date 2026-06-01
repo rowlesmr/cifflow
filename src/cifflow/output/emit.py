@@ -688,6 +688,26 @@ def _collect_grouped(
             if pk_vals_set:
                 fp_incidental_entries.append((t, tuple(sorted(pk_vals_set))))
 
+        # Drop child-Set tables from incidental entries: they will be collected
+        # inside the parent's incidental block by the child-Set BFS below.
+        # A child is an incidental table whose ALL domain PKs are FK columns
+        # pointing to other tables in the incidental set.
+        incidental_set = frozenset(t for t, _ in fp_incidental_entries)
+        to_drop: set[str] = set()
+        for inc_t, _ in fp_incidental_entries:
+            inc_td = keyed_set_tables[inc_t]
+            domain_pks_t = [pk for pk in inc_td.primary_keys if pk not in _SYNTHETIC]
+            fk_to_incidental: set[str] = set()
+            for fk in inc_td.foreign_keys:
+                if fk.target_table in incidental_set and fk.target_table != inc_t:
+                    fk_to_incidental.update(fk.source_columns)
+            if domain_pks_t and all(pk in fk_to_incidental for pk in domain_pks_t):
+                to_drop.add(inc_t)
+        fp_incidental_entries = [
+            (t, vals) for t, vals in fp_incidental_entries
+            if t not in to_drop
+        ]
+
         return main_fps, frozenset(fp_incidental_entries)
 
     # Precompute Set-class tables reachable from each non-Set table via FK chain.
@@ -1019,6 +1039,56 @@ def _collect_grouped(
                 rows.extend(cache.rows_for_block(loop_t, bid))
             if rows:
                 inc_table_rows[loop_t] = rows
+
+        # Include child-Set tables (e.g. chemical_formula keyed on pd_phase).
+        # Process BFS so parents are always collected before their children.
+        # collected_set_rows: table → {pk_key: row} for FK-value filtering.
+        collected_set_rows: dict[str, dict[tuple, dict]] = {t: by_pk}
+        pending_child_sets = [ct for ct in sorted(inc_tables_expanded) if ct != t]
+        prev_pending_count = -1
+        while pending_child_sets and len(pending_child_sets) != prev_pending_count:
+            prev_pending_count = len(pending_child_sets)
+            still_pending: list[str] = []
+            for child_t in pending_child_sets:
+                child_td = schema.tables.get(child_t)
+                if child_td is None:
+                    continue
+                child_domain_pks = [pk for pk in child_td.primary_keys if pk not in _SYNTHETIC]
+                # Build allowed-value sets per FK src column from already-collected parents.
+                fk_filter: dict[str, set[str]] = {}
+                all_parents_ready = True
+                for fk in child_td.foreign_keys:
+                    if fk.target_table not in inc_tables_expanded:
+                        continue
+                    if fk.target_table not in collected_set_rows:
+                        all_parents_ready = False
+                        break
+                    parent_rows = collected_set_rows[fk.target_table]
+                    for src_col, tgt_col in zip(fk.source_columns, fk.target_columns):
+                        if src_col in child_domain_pks:
+                            fk_filter[src_col] = {
+                                str(r.get(tgt_col, '')) for r in parent_rows.values()
+                            }
+                if not all_parents_ready:
+                    still_pending.append(child_t)
+                    continue
+                by_child_pk: dict[tuple, dict] = {}
+                for bid in sorted(block_ids_set):
+                    for r in _fetch_rows_for_block(conn, bid, child_t, child_td, cache=cache):
+                        if fk_filter and not all(
+                            str(r.get(sc, '')) in allowed_vals
+                            for sc, allowed_vals in fk_filter.items()
+                        ):
+                            continue
+                        child_pk_key = tuple(r.get(pk) for pk in child_td.primary_keys)
+                        if child_pk_key not in by_child_pk:
+                            by_child_pk[child_pk_key] = r
+                if by_child_pk:
+                    inc_table_rows[child_t] = sorted(
+                        by_child_pk.values(), key=lambda r: r.get('_cifflow_row_id', 0)
+                    )
+                collected_set_rows[child_t] = by_child_pk
+            pending_child_sets = still_pending
 
         inc_anchor_fs = frozenset({t})
         inc_anchor_kd: dict[str, list[str]] = {}

@@ -6,7 +6,7 @@
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64
-- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138
+- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
@@ -1377,3 +1377,15 @@
   **Fix:** Two-pass approach using `sets_with_own_block`. First pass: for each fingerprint, compute `anchor_fs` and record any Set that appears as a sole anchor (`len(anchor_fs) == 1`) into `sets_with_own_block`. Second pass: in bridge block assembly, only strip to PK-only for Sets in `sets_with_own_block` — Sets that appear exclusively in bridge blocks keep their full data.
 
   **Rule:** PK-stripping in bridge blocks is only safe for Sets that have a dedicated single-anchor block where their full data is emitted. A Set appearing only in bridge blocks must carry its full data there — it has no other home.
+
+---
+
+## Lesson 139 — `all_of` is a subset matcher; more-specific specs must come first (2026-06-01)
+
+**Context:** `OutputPlan` / `BlockSpec` spec ordering in `_sort_and_merge`.
+
+**Mistake:** `all_of('pd_diffractogram', 'pd_phase')` was placed before `all_of('pd_diffractogram', 'pd_phase', 'structure')` in the plan. Because `all_of` checks `cats <= anchors` (subset), the first spec also matched blocks with anchor = {pd_diffractogram, pd_phase, structure} (refln blocks), consuming them before the second spec could fire. Both block types ended up in the same spec group, sorted by name and appearing to alternate.
+
+**Fix:** Put the more specific spec first: `all_of('pd_diffractogram', 'pd_phase', 'structure')` before `all_of('pd_diffractogram', 'pd_phase')`. The first spec now exclusively catches refln blocks; the second catches pd_calc_component and pd_phase_mass blocks.
+
+**Rule:** `all_of` does not rank by specificity — it is a plain subset check, so first-match-wins applies strictly. Any time two `all_of` specs share a common prefix, the one with MORE required anchors must appear first in the plan.
