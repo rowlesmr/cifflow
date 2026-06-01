@@ -6,7 +6,7 @@
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64
-- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139
+- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
@@ -1380,12 +1380,36 @@
 
 ---
 
-## Lesson 139 — `all_of` is a subset matcher; more-specific specs must come first (2026-06-01)
+## Lesson 139 — `all_of` specificity controls ROUTING; plan ORDER controls OUTPUT order (2026-06-01)
 
-**Context:** `OutputPlan` / `BlockSpec` spec ordering in `_sort_and_merge`.
+**Context:** `OutputPlan` / `BlockSpec` spec ordering with specificity-ranked matching.
 
-**Mistake:** `all_of('pd_diffractogram', 'pd_phase')` was placed before `all_of('pd_diffractogram', 'pd_phase', 'structure')` in the plan. Because `all_of` checks `cats <= anchors` (subset), the first spec also matched blocks with anchor = {pd_diffractogram, pd_phase, structure} (refln blocks), consuming them before the second spec could fire. Both block types ended up in the same spec group, sorted by name and appearing to alternate.
+**Mistake:** `all_of('pd_diffractogram', 'pd_phase')` was placed before `all_of('pd_diffractogram', 'pd_phase', 'structure')`. Because `all_of` checks `cats <= anchors` (subset), the less-specific spec also matched refln blocks (anchor ⊇ {pd_diffractogram, pd_phase, structure}). Both block types ended up in the same spec group, alternating in output.
 
-**Fix:** Put the more specific spec first: `all_of('pd_diffractogram', 'pd_phase', 'structure')` before `all_of('pd_diffractogram', 'pd_phase')`. The first spec now exclusively catches refln blocks; the second catches pd_calc_component and pd_phase_mass blocks.
+**Fix:** Implemented specificity-ranked matching in `plan.match`: `all_of` specificity = `len(cats)`. The highest-specificity matching spec always wins for ROUTING, regardless of plan position. Plan ORDER (spec_idx) now controls only OUTPUT EMISSION ORDER — blocks are emitted in spec_idx order.
 
-**Rule:** `all_of` does not rank by specificity — it is a plain subset check, so first-match-wins applies strictly. Any time two `all_of` specs share a common prefix, the one with MORE required anchors must appear first in the plan.
+**Rule:** Put LESS-specific specs first in the plan for natural output ordering (lower spec_idx = emitted earlier). Routing is always correct regardless of plan order, because `plan.match` picks the highest-specificity spec. The old "more-specific first" advice is now obsolete for routing, but less-specific-first is the natural way to read a plan ("broad groups first, exceptions after").
+
+---
+
+## Lesson 140 — `_collect_structure` segregation must use exact-anchor check, not membership test (2026-06-01)
+
+**Context:** `_collect_structure` in `emit.py` — segregating structure blocks from GROUPED output.
+
+**Mistake:** Used `if 'structure' in afs` to identify pure structure blocks. This also matched bridge blocks whose anchor_frozenset happened to include `structure` (e.g. refln blocks with anchor = {pd_diffractogram, pd_phase, structure}), causing those bridge blocks to absorb model satellites incorrectly.
+
+**Fix:** Changed to `if afs == frozenset({'structure'})` — only exact single-anchor structure blocks are treated as satellites targets.
+
+**Rule:** In `_collect_structure`, always use exact frozenset equality (`afs == frozenset({...})`) to identify satellite targets. A membership test (`'x' in afs`) is too broad and will catch bridge blocks that happen to contain that anchor.
+
+---
+
+## Lesson 141 — Satellite accumulation in `_collect_structure` must merge, not overwrite (2026-06-01)
+
+**Context:** `_collect_structure` building `space_group_blocks` and `pd_phase_blocks` dicts from GROUPED output.
+
+**Mistake:** Used `space_group_blocks[sg_id] = block` (plain dict assignment). GROUPED emits multiple {space_group}-anchored blocks for the same `sg_id` (one per distinct source block_id that had space_group rows). Only the first block (from the original source CIF) has `space_group_symop` rows; subsequent blocks (from FK-propagated source blocks) have only bare `space_group` Set rows. The last assignment overwrote the block with symop data, so `space_group_symop` was silently dropped after merging into structure blocks.
+
+**Fix:** When a `sg_id` is already in `space_group_blocks`, call `_merge_blocks_into` to merge the new block into the existing entry rather than overwriting. Same fix applied to `pd_phase_blocks`.
+
+**Rule:** When accumulating satellite blocks keyed by Set identity (e.g. `space_group.id`), always merge duplicate-keyed blocks rather than overwriting. GROUPED produces one block per source block_id per fingerprint, so multiple GROUPED blocks can share the same Set identity key; the richest (most complete) data may be in any of them.

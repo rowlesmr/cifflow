@@ -1164,6 +1164,24 @@ def _merge_blocks_into(
     )
 
 
+def _replace_anchor(
+    block: _BlockData,
+    anchor_frozenset: frozenset[str],
+    anchor_key_dict: dict[str, list[str]],
+) -> _BlockData:
+    """Return *block* with its anchor_frozenset and anchor_key_dict replaced."""
+    return _BlockData(
+        name=block.name,
+        table_rows=block.table_rows,
+        fallback_rows=block.fallback_rows,
+        anchor_frozenset=anchor_frozenset,
+        anchor_key_dict=anchor_key_dict,
+        suppress_fk_pk=block.suppress_fk_pk,
+        suppress_all_fk_to_set=block.suppress_all_fk_to_set,
+        dataset_id=block.dataset_id,
+    )
+
+
 def _collect_structure(
     conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
@@ -1187,14 +1205,20 @@ def _collect_structure(
 
     for block in grouped:
         afs = block.anchor_frozenset
-        if 'structure' in afs:
+        if afs == frozenset({'structure'}):
             structure_blocks.append(block)
         elif afs == frozenset({'pd_phase'}):
             for phase_id in block.anchor_key_dict.get('pd_phase.id', []):
-                pd_phase_blocks[phase_id] = block
+                if phase_id in pd_phase_blocks:
+                    pd_phase_blocks[phase_id] = _merge_blocks_into(pd_phase_blocks[phase_id], [block], schema)
+                else:
+                    pd_phase_blocks[phase_id] = block
         elif afs == frozenset({'space_group'}):
             for sg_id in block.anchor_key_dict.get('space_group.id', []):
-                space_group_blocks[sg_id] = block
+                if sg_id in space_group_blocks:
+                    space_group_blocks[sg_id] = _merge_blocks_into(space_group_blocks[sg_id], [block], schema)
+                else:
+                    space_group_blocks[sg_id] = block
         elif afs == frozenset({'model'}):
             struct_id: str | None = None
             for row in block.table_rows.get('model', []):
@@ -1244,7 +1268,13 @@ def _collect_structure(
                     consumed_block_ids.add(id(models[0]))
 
         if to_merge:
+            original_anchor_fs = block.anchor_frozenset
+            original_anchor_kd = block.anchor_key_dict
             block = _merge_blocks_into(block, to_merge, schema)
+            # Satellites are absorbed data passengers, not co-equal anchors.
+            # Keep the structure block's anchor identity so plan predicates
+            # such as only('structure') still match in STRUCTURE mode.
+            block = _replace_anchor(block, original_anchor_fs, original_anchor_kd)
         result.append(block)
 
     # --- Emit unconsumed satellite blocks ---

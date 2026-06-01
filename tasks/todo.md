@@ -4,6 +4,18 @@
 
 ## ▶ RESUME FROM HERE
 
+## What was done (2026-06-01, debug-output-using-topas-source branch) — STRUCTURE mode fixes
+
+Fixed three bugs in `EmitMode.STRUCTURE`, plus the specificity-ranked routing system in `OutputPlan`. All 1850 tests pass.
+
+- **Bug 1 — Bridge blocks absorbed as structure targets**: `_collect_structure` used `if 'structure' in afs` to identify pure structure blocks, which also caught refln bridge blocks with anchor = {pd_diffractogram, pd_phase, structure}. Fixed to `if afs == frozenset({'structure'})`.
+- **Bug 2 — `space_group_symop` (and child tables) silently dropped**: `space_group_blocks[sg_id] = block` overwrote the first (richest) block with later blocks that lacked symop rows. GROUPED emits one block per source-block-id per fingerprint; only the original source block has the loop rows. Fixed by merging (`_merge_blocks_into`) instead of overwriting for both `space_group_blocks` and `pd_phase_blocks`.
+- **Bug 3 — `_replace_anchor` preserves structure block identity after satellite absorption**: `_merge_blocks_into` unions anchor_frozenset; structure blocks would gain anchor = {structure, pd_phase, space_group, model} after absorption, breaking `only('structure')`. `_replace_anchor` helper (added last session) restores the original anchor.
+- **Specificity system**: `_Matcher.specificity` attribute added; `only` = 10000+len, `all_of` = len, `any_of`/`has` = 1. `plan.match` now picks highest-specificity match regardless of plan order. Plan ORDER controls output emission order; specificity controls routing.
+- Lessons updated/added: 139 (updated rule), 140 (exact-anchor check), 141 (merge not overwrite in satellite accumulation).
+
+---
+
 ## What was done (2026-06-01, debug-output-using-topas-source branch) — per-pkreach-group fingerprinting
 
 Fixed fundamental GROUPED emit correctness bug where co-located but independently-anchored Set tables (e.g. `atom_site`→structure, `geom_angle`→model, `space_group_symop`→space_group in a single source block) were merged into one output block with union anchor `{structure,model,space_group}`, causing `only("structure")` to match nothing. All 1850 tests pass.
