@@ -478,6 +478,38 @@ def _reachable_set_tables(table: str, schema: SchemaSpec) -> frozenset[str]:
     return frozenset(result)
 
 
+def _pk_reachable_set_tables(table: str, schema: SchemaSpec) -> frozenset[str]:
+    """Frozenset of Set-class tables reachable from *table* via FK-PK columns only.
+
+    Only follows FK edges where every source column is part of the table's own
+    primary key.  Non-PK FK columns (e.g. pd_meas.detector_id) are ignored so
+    that incidentally co-located Set categories (instrument, diffractometer) do
+    not widen the anchor frozenset beyond what the Loop data's identity requires.
+    """
+    visited: set[str] = set()
+    queue: list[str] = [table]
+    result: set[str] = set()
+    while queue:
+        t = queue.pop()
+        if t in visited:
+            continue
+        visited.add(t)
+        td = schema.tables.get(t)
+        if td is None:
+            continue
+        pk_set = frozenset(td.primary_keys) - _SYNTHETIC
+        for fk in td.foreign_keys:
+            if not all(c in pk_set for c in fk.source_columns):
+                continue
+            target = fk.target_table
+            target_td = schema.tables.get(target)
+            if target_td and target_td.category_class == 'Set':
+                result.add(target)
+            if target not in visited:
+                queue.append(target)
+    return frozenset(result)
+
+
 def _collect_grouped(
     conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
@@ -550,6 +582,16 @@ def _collect_grouped(
     # separate orphan block rather than absorbing them into an unrelated anchor block.
     reachable_sets: dict[str, frozenset[str]] = {
         t: _reachable_set_tables(t, schema)
+        for t, td in schema.tables.items()
+        if td.category_class != 'Set'
+    }
+
+    # Precompute Set-class tables reachable via PK FK columns only.  Used to
+    # strip incidental Set anchors (e.g. instrument/diffractometer tables that
+    # are co-located in source blocks but whose identity is independent of the
+    # Loop tables' primary keys) from the anchor frozenset used for spec matching.
+    pk_reachable_sets: dict[str, frozenset[str]] = {
+        t: _pk_reachable_set_tables(t, schema)
         for t, td in schema.tables.items()
         if td.category_class != 'Set'
     }
@@ -709,6 +751,22 @@ def _collect_grouped(
             )
         )
 
+        # Strip Set tables not reachable via PK FK chains from any Loop table
+        # present in this block.  Incidental Set categories (e.g. a shared
+        # instrument or diffractometer table co-located in the source block but
+        # unlinked to the Loop data's primary key) must not widen the anchor
+        # frozenset used for OutputPlan spec matching.
+        loop_tables_in_block = frozenset(
+            t for t in table_rows
+            if schema.tables.get(t) and schema.tables[t].category_class != 'Set'
+        )
+        if loop_tables_in_block:
+            pk_reach = frozenset().union(
+                *(pk_reachable_sets.get(t, frozenset()) for t in loop_tables_in_block)
+            )
+            if pk_reach:
+                anchor_fs = anchor_fs & pk_reach
+
         # In multi-anchor (bridge) blocks, reduce anchor Set rows to PK columns only —
         # but ONLY for Sets that also have a dedicated single-anchor block elsewhere.
         # Sets that appear exclusively in bridge blocks keep their full data here.
@@ -724,10 +782,10 @@ def _collect_grouped(
 
         anchor_kd: dict[str, list[str]] = {}
         for t, pk_vals_tuple in sorted(fp, key=lambda x: x[0]):
+            if t not in anchor_fs:
+                continue
             td = schema.tables[t]
             domain_pks = [pk for pk in td.primary_keys if pk not in _SYNTHETIC]
-            if domain_pks and all(pk in anchor_fk_cols for pk in domain_pks):
-                continue  # child-Set table: all PKs are FKs to other anchors
             for pk_val_row in pk_vals_tuple:
                 for pk_col, val in zip(domain_pks, pk_val_row):
                     if val:
@@ -1720,6 +1778,7 @@ def _render_merge_group(
     compatible = len(set(pk_sets)) <= 1 and pk_sets
 
     if not compatible:
+        print(f"MERGE FAIL: {group}, present={present}, pk_sets={dict(zip(present, pk_sets))}")
         # Fall back to plain loops in listed order.
         lines: list[str] = []
         first = True

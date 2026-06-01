@@ -4,6 +4,16 @@
 
 ## ▶ RESUME FROM HERE
 
+## What was done (2026-06-01, debug-output-using-topas-source branch) — reconstruct_su + merge-group fixes
+
+Fixed two bugs in GROUPED emit with `reconstruct_su=True`, discovered while testing against a real TOPAS powder diffraction CIF via `scripts/topas/pdcif2.py`. All 1850 tests pass.
+
+- **Bug 1 — FK-PK columns suppressed when `reconstruct_su=True`**: `_active_cols` used `col.linked_item_id is not None` to identify SU columns, but FK-PK Link columns (e.g. `pd_meas.point_id`) also carry `linked_item_id` and were incorrectly suppressed. Fixed by replacing the check with `set(_su_col_map(table_def).values())`, which only returns genuine within-table SU columns. Added 3 new tests in `TestReconstructSU`.
+- **Bug 2 — Merge group `['pd_data', 'pd_meas', 'pd_proc', 'pd_calc']` not combining**: `_render_merge_group` PK-compatibility check used raw schema PKs (`{point_id, diffractogram_id}`), leaving FK-PK columns in the join key even though they are suppressed in GROUPED output. Fixed by pre-computing `effective_suppressed` per table before the compatibility check, so effective PKs (`{point_id}`) are used for both compatibility and join-key selection.
+- Lessons added: 136 (`_active_cols` must use `_su_col_map`), 137 (`_render_merge_group` PK-compatibility must account for FK-PK suppression).
+
+---
+
 ## What was done (2026-05-13, main branch) — auto-generated docs
 
 Completed the full MkDocs + mkdocstrings documentation pipeline (Phases 1–5 of `prompts/autogenerate docs.md`). All docstrings across `src/cifflow/` converted to NumPy style, `ruff check src/` and `pydoclint src/` pass clean, and `mkdocs build --strict` succeeds. All 1835 tests pass.
