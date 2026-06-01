@@ -4,6 +4,23 @@
 
 ## ▶ RESUME FROM HERE
 
+## What was done (2026-05-30, main branch) — STRUCTURE mode + release pipeline
+
+Implemented `EmitMode.STRUCTURE` (absorbs `pd_phase`, `space_group`, single-model `model` blocks into their parent `structure` block), wrote 14 tests covering merge / orphan / multi-model cases (1847 tests pass), and updated `docs/outputspec.md` with full STRUCTURE documentation including the `any_of('structure')` anchor-frozenset caveat. Also overhauled the release pipeline: `release_patch.bat` now creates a `release/vX.Y.Z` branch and opens a PR instead of pushing directly to `main`; `release.yml` now triggers on `push: branches:[main] + paths:[pyproject.toml]` instead of on tag push (so PyPI publish only fires after CI passes); `[skip ci]` removed from `pyproject.toml` commit_message (was silently suppressing the release workflow).
+
+**Immediate actions needed on restart:**
+1. `git tag -d v0.1.8 v0.1.9 v0.1.10` — delete dangling local tags that point to orphaned amended commits
+2. Commit the `pyproject.toml` `[skip ci]` removal (currently an unstaged working-tree change)
+3. Create `release/v0.1.10` branch from current local `main` (already has the bump commit), push and open PR manually (`gh` not installed yet — do it on GitHub or install with `winget install GitHub.cli`)
+4. After PR merges, verify `release.yml` fires and publishes v0.1.10 to PyPI
+
+**Current local state:**
+- `pyproject.toml` version = 0.1.10 (bump commit 8afb598 already on local main, not yet pushed to origin)
+- `pyproject.toml` commit_message `[skip ci]` removed in working tree (unstaged)
+- `release.yml`, `release_patch.bat`, `release_patch_dry.bat` all updated and already on origin/main via PRs #58/#59
+
+---
+
 ## What was done (2026-05-13, main branch) — auto-generated docs
 
 Completed the full MkDocs + mkdocstrings documentation pipeline (Phases 1–5 of `prompts/autogenerate docs.md`). All docstrings across `src/cifflow/` converted to NumPy style, `ruff check src/` and `pydoclint src/` pass clean, and `mkdocs build --strict` succeeds. All 1835 tests pass.
