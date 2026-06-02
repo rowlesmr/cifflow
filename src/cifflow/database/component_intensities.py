@@ -141,9 +141,10 @@ def consolidate_component_intensities(
             """)
 
         # Step 2 — Ensure pd_calc rows exist for every (point_id, diffractogram_id) in component.
+        # MIN(_cifflow_block_id) carries a valid block ID so the emit layer can locate the rows.
         connection.execute("""
-            INSERT INTO pd_calc ("point_id", "diffractogram_id")
-            SELECT DISTINCT c."point_id", c."diffractogram_id"
+            INSERT INTO pd_calc ("point_id", "diffractogram_id", "_cifflow_block_id")
+            SELECT c."point_id", c."diffractogram_id", MIN(c."_cifflow_block_id")
             FROM pd_calc_component c
             WHERE c."point_id" IS NOT NULL
               AND c."diffractogram_id" IS NOT NULL
@@ -152,6 +153,7 @@ def consolidate_component_intensities(
                   WHERE p."point_id" = c."point_id"
                     AND p."diffractogram_id" = c."diffractogram_id"
               )
+            GROUP BY c."point_id", c."diffractogram_id"
         """)
 
         # Step 3 — Assemble and write intensity lists, per diffractogram.
