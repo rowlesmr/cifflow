@@ -996,6 +996,27 @@ def _collect_grouped(
                 dataset_id=_resolve_dataset_id(conn, orphan_block_ids, fallback_id),
             ))
 
+    # Sets that are PRIMARY anchors of main fingerprint blocks — these have already
+    # been fully emitted there.  An incidental block for such a Set is redundant
+    # unless it is needed to carry child-Set data (e.g. chemical_formula keyed on
+    # pd_phase).  A table is "primary" if its domain PKs are NOT all FK source
+    # columns pointing to other tables within the same fingerprint.
+    primary_fp_anchors: set[tuple] = set()
+    for fp in fingerprint_to_block_ids:
+        fp_tables_set = frozenset(t for t, _ in fp)
+        fp_anchor_fk_cols: set[str] = set()
+        for fp_t in fp_tables_set:
+            for fk in schema.tables[fp_t].foreign_keys:
+                if fk.target_table in fp_tables_set:
+                    fp_anchor_fk_cols.update(fk.source_columns)
+        for fp_t, pk_vals_tuple in fp:
+            fp_td = schema.tables[fp_t]
+            domain_pks = [pk for pk in fp_td.primary_keys if pk not in _SYNTHETIC]
+            if domain_pks and all(pk in fp_anchor_fk_cols for pk in domain_pks):
+                continue  # child Set — not a primary anchor
+            for pv in pk_vals_tuple:
+                primary_fp_anchors.add((fp_t, pv))
+
     # Incidental Set blocks — one block per unique (table, pk_val) combination.
     # These are Set tables that were present in source blocks but are not
     # PK-reachable from any Loop table, so they are emitted separately rather
@@ -1006,6 +1027,11 @@ def _collect_grouped(
         incidental_groups.items(),
         key=lambda x: (x[0][0], x[0][1]),
     ):
+        # Skip if already emitted as a primary anchor AND it has no child Sets
+        # whose data is only reachable via this incidental block.
+        if (t, pk_val) in primary_fp_anchors:
+            if _expand_with_child_sets(frozenset({t}), schema) == frozenset({t}):
+                continue
         td = schema.tables[t]
         domain_pks = [pk for pk in td.primary_keys if pk not in _SYNTHETIC]
         pk_val_str = tuple(str(v) if v is not None else '' for v in pk_val)
@@ -3255,7 +3281,7 @@ def _all_cifflow_block_ids_for_tables(conn: duckdb.DuckDBPyConnection, table_nam
         try:
             cursor = conn.execute(f'SELECT DISTINCT "_cifflow_block_id" FROM "{table_name}"')
             for (bid,) in cursor.fetchall():
-                if bid not in seen:
+                if bid is not None and bid not in seen:
                     seen.add(bid)
                     ids.append(bid)
         except Exception:
@@ -3281,7 +3307,7 @@ def _all_cifflow_block_ids(conn: duckdb.DuckDBPyConnection, schema: SchemaSpec) 
         try:
             cursor = conn.execute(f'SELECT DISTINCT "_cifflow_block_id" FROM "{table_name}"')
             for (bid,) in cursor.fetchall():
-                if bid not in seen:
+                if bid is not None and bid not in seen:
                     seen.add(bid)
                     ids.append(bid)
         except Exception:

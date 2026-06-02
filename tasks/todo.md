@@ -4,6 +4,18 @@
 
 ## ▶ RESUME FROM HERE
 
+## What was done (2026-06-02, consolidate-calc-component + duplicate-spacegroup-block-bug branches)
+
+Completed `consolidate_component_intensities` (post-processing: assembles `pd_calc_component` rows into `pd_calc.component_intensities_net/total` and `pd_calc_overall.component_presentation_order`). Fixed four bugs found during integration testing:
+- Step 2 INSERT missing `_cifflow_block_id` → `sorted()` crash in `_all_cifflow_block_ids_for_tables` (Lesson 145)
+- `_all_cifflow_block_ids_for_tables` / `_all_cifflow_block_ids` now skip NULL `_cifflow_block_id` values defensively
+- `clear_source=True` simplified to `DELETE FROM pd_calc_component` (was NULL-column approach with NOT NULL / synthetic-column pitfalls)
+- GROUPED duplicate space_group block: FK propagation deposits Set rows into sibling blocks → incidental blocks emit empty PK-only duplicates; fixed by skipping incidental blocks for leaf-Set primary anchors (Lesson 146)
+
+Also fixed `release_patch.bat` quoting bug (Lesson 147) and released v0.1.12. All 1850 tests pass.
+
+---
+
 ## What was done (2026-06-01, debug-output-using-topas-source branch) — STRUCTURE mode fixes
 
 Fixed three bugs in `EmitMode.STRUCTURE`, plus the specificity-ranked routing system in `OutputPlan`. All 1850 tests pass.
