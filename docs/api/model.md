@@ -10,7 +10,7 @@
 
 ::: cifflow.cifmodel.builder
     options:
-      members: [CifBuilder, build, build_arrow, build_arrow_file]
+      members: [CifBuilder, build, build_arrow, build_arrow_file, cif_to_arrow]
 
 ## Writer
 
