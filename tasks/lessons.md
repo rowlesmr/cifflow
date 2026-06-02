@@ -1448,3 +1448,47 @@
 **Fix:** When a `sg_id` is already in `space_group_blocks`, call `_merge_blocks_into` to merge the new block into the existing entry rather than overwriting. Same fix applied to `pd_phase_blocks`.
 
 **Rule:** When accumulating satellite blocks keyed by Set identity (e.g. `space_group.id`), always merge duplicate-keyed blocks rather than overwriting. GROUPED produces one block per source block_id per fingerprint, so multiple GROUPED blocks can share the same Set identity key; the richest (most complete) data may be in any of them.
+
+---
+
+## Lesson 145 — INSERTs into schema tables must populate `_cifflow_block_id` (2026-06-02)
+
+**Context:** `consolidate_component_intensities` step 2 inserts new `pd_calc` rows for `(point_id, diffractogram_id)` pairs that exist in `pd_calc_component` but not yet in `pd_calc`.
+
+**Mistake:** The INSERT specified only `("point_id", "diffractogram_id")`, leaving `_cifflow_block_id` NULL. `_all_cifflow_block_ids_for_tables` then picked up the NULL and crashed on `sorted(ids)` with `TypeError: '<' not supported between NoneType and str`.
+
+**Fix:** Added `"_cifflow_block_id"` to the INSERT column list, using `MIN(c."_cifflow_block_id") GROUP BY point_id, diffractogram_id` to carry a valid block ID from the source component rows.
+
+**Rule:** Any code path that inserts rows into a schema table outside of `ingest()` must also populate `_cifflow_block_id` (and where possible `_cifflow_row_id`). NULL synthetic columns break the emit layer.
+
+---
+
+## Lesson 146 — GROUPED incidental blocks for leaf Sets duplicate already-emitted data (2026-06-02)
+
+**Context:** FK propagation during ingest deposits Set rows (e.g. `space_group`) into sibling source blocks (e.g. structure blocks that reference space_group). When GROUPED fingerprints those sibling blocks, `space_group` is not in their pkreach, so it is marked incidental. An incidental block is then emitted with only the space_group PK scalars — `space_group_symop` is excluded because its pkreach intersects `main_fp_set_tables`. The result is an empty-looking duplicate block containing only `_space_group.id` and `_space_group.name_h-m_alt`.
+
+**Fix:** Before emitting an incidental block for `(t, pk_val)`, check two conditions: (1) `(t, pk_val)` is already a primary anchor of a main fingerprint block, AND (2) `_expand_with_child_sets({t}) == {t}` (t has no child Set descendants whose data would be lost). If both hold, skip the incidental block. Condition (2) prevents dropping child-Set data like `chemical_formula` from `pd_phase` incidental blocks.
+
+**Rule:** A "primary anchor" is a fingerprint table whose domain PKs are NOT all FK source columns pointing to other tables in the same fingerprint (i.e. it is not a child Set dragged in by `_expand_with_child_sets`). Only skip incidental blocks for leaf primary anchors.
+
+---
+
+## Lesson 147 — Windows batch `for /f` breaks on single quotes inside the command string (2026-06-02)
+
+**Context:** `release_patch.bat` used `for /f "delims=" %%v in ('python -c "...open('pyproject.toml')..."') do` to capture the version string.
+
+**Mistake:** CMD's `for /f` uses single quotes as the delimiter for the command string `'...'`. The first `'` inside `open('pyproject.toml')` was interpreted as the closing delimiter, breaking parsing and producing "version was unexpected at this time."
+
+**Fix:** Write the version to a temp file first: `python -c "...open('.ver.tmp','w').write(version)"` then `set /p RELEASE_VER= < .ver.tmp` and `del .ver.tmp`.
+
+**Rule:** Never embed Python single-quoted string literals inside a `for /f '...'` command string in a Windows batch file. Extract the value to a temp file and read it with `set /p` instead.
+
+---
+
+## Lesson 148 — Loop-class `audit_dataset` suppresses scalar `_audit_dataset.id` injection (2026-06-02)
+
+**Context:** GROUPED emit injects `_audit_dataset.id` as a scalar first-line item unless `audit_dataset` is already in `table_rows` (`audit_in_table=True`). In the pow schema, `audit_dataset` is a **Loop** category. When FK propagation deposits its rows into a fingerprint block's source blocks, it ends up in `table_rows`, which suppresses the injection. `_render_loop_category` then emits it as a `loop_` (even with 1 row), buried after structured Set scalars instead of as the first scalar item.
+
+**Fix:** Before the injection check, pop `audit_dataset` from `table_rows` if its `category_class != 'Set'`. This prevents the loop rendering and allows the scalar injection to always control the output format.
+
+**Rule:** The `audit_in_table` guard for injection must account for category class. A Loop-class `audit_dataset` in `table_rows` will never render as a scalar; suppress it and let injection handle it uniformly.
