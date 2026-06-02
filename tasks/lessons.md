@@ -4,9 +4,9 @@
 
 - **Arrow / PyO3 / Rust:** 103, 104, 105, 106, 107
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
-- **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123
+- **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123, 145
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64
-- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141
+- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141, 146
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
@@ -14,7 +14,7 @@
 - **Performance:** 102, 109, 111, 112, 113, 114, 115, 116
 - **SQLite:** 18, 19, 20, 75, 76
 - **Testing:** 32, 33, 34, 43, 60, 66L, 67L, 68L, 87, 88, 89, 91, 92, 93, 94, 95, 96
-- **CI / tooling:** 133, 134, 135, 136, 137, 138
+- **CI / tooling:** 133, 134, 135, 136, 137, 138, 147
 - **Working practices:** 9, 13, 87
 
 ---
@@ -1448,3 +1448,37 @@
 **Fix:** When a `sg_id` is already in `space_group_blocks`, call `_merge_blocks_into` to merge the new block into the existing entry rather than overwriting. Same fix applied to `pd_phase_blocks`.
 
 **Rule:** When accumulating satellite blocks keyed by Set identity (e.g. `space_group.id`), always merge duplicate-keyed blocks rather than overwriting. GROUPED produces one block per source block_id per fingerprint, so multiple GROUPED blocks can share the same Set identity key; the richest (most complete) data may be in any of them.
+
+---
+
+## Lesson 145 — INSERTs into schema tables must populate `_cifflow_block_id` (2026-06-02)
+
+**Context:** `consolidate_component_intensities` step 2 inserts new `pd_calc` rows for `(point_id, diffractogram_id)` pairs that exist in `pd_calc_component` but not yet in `pd_calc`.
+
+**Mistake:** The INSERT specified only `("point_id", "diffractogram_id")`, leaving `_cifflow_block_id` NULL. `_all_cifflow_block_ids_for_tables` then picked up the NULL and crashed on `sorted(ids)` with `TypeError: '<' not supported between NoneType and str`.
+
+**Fix:** Added `"_cifflow_block_id"` to the INSERT column list, using `MIN(c."_cifflow_block_id") GROUP BY point_id, diffractogram_id` to carry a valid block ID from the source component rows.
+
+**Rule:** Any code path that inserts rows into a schema table outside of `ingest()` must also populate `_cifflow_block_id` (and where possible `_cifflow_row_id`). NULL synthetic columns break the emit layer.
+
+---
+
+## Lesson 146 — GROUPED incidental blocks for leaf Sets duplicate already-emitted data (2026-06-02)
+
+**Context:** FK propagation during ingest deposits Set rows (e.g. `space_group`) into sibling source blocks (e.g. structure blocks that reference space_group). When GROUPED fingerprints those sibling blocks, `space_group` is not in their pkreach, so it is marked incidental. An incidental block is then emitted with only the space_group PK scalars — `space_group_symop` is excluded because its pkreach intersects `main_fp_set_tables`. The result is an empty-looking duplicate block containing only `_space_group.id` and `_space_group.name_h-m_alt`.
+
+**Fix:** Before emitting an incidental block for `(t, pk_val)`, check two conditions: (1) `(t, pk_val)` is already a primary anchor of a main fingerprint block, AND (2) `_expand_with_child_sets({t}) == {t}` (t has no child Set descendants whose data would be lost). If both hold, skip the incidental block. Condition (2) prevents dropping child-Set data like `chemical_formula` from `pd_phase` incidental blocks.
+
+**Rule:** A "primary anchor" is a fingerprint table whose domain PKs are NOT all FK source columns pointing to other tables in the same fingerprint (i.e. it is not a child Set dragged in by `_expand_with_child_sets`). Only skip incidental blocks for leaf primary anchors.
+
+---
+
+## Lesson 147 — Windows batch `for /f` breaks on single quotes inside the command string (2026-06-02)
+
+**Context:** `release_patch.bat` used `for /f "delims=" %%v in ('python -c "...open('pyproject.toml')..."') do` to capture the version string.
+
+**Mistake:** CMD's `for /f` uses single quotes as the delimiter for the command string `'...'`. The first `'` inside `open('pyproject.toml')` was interpreted as the closing delimiter, breaking parsing and producing "version was unexpected at this time."
+
+**Fix:** Write the version to a temp file first: `python -c "...open('.ver.tmp','w').write(version)"` then `set /p RELEASE_VER= < .ver.tmp` and `del .ver.tmp`.
+
+**Rule:** Never embed Python single-quoted string literals inside a `for /f '...'` command string in a Windows batch file. Extract the value to a temp file and read it with `set /p` instead.
