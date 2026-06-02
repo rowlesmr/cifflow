@@ -6,7 +6,7 @@
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123, 145
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64
-- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141, 146
+- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141, 146, 147, 148
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
@@ -1482,3 +1482,13 @@
 **Fix:** Write the version to a temp file first: `python -c "...open('.ver.tmp','w').write(version)"` then `set /p RELEASE_VER= < .ver.tmp` and `del .ver.tmp`.
 
 **Rule:** Never embed Python single-quoted string literals inside a `for /f '...'` command string in a Windows batch file. Extract the value to a temp file and read it with `set /p` instead.
+
+---
+
+## Lesson 148 — Loop-class `audit_dataset` suppresses scalar `_audit_dataset.id` injection (2026-06-02)
+
+**Context:** GROUPED emit injects `_audit_dataset.id` as a scalar first-line item unless `audit_dataset` is already in `table_rows` (`audit_in_table=True`). In the pow schema, `audit_dataset` is a **Loop** category. When FK propagation deposits its rows into a fingerprint block's source blocks, it ends up in `table_rows`, which suppresses the injection. `_render_loop_category` then emits it as a `loop_` (even with 1 row), buried after structured Set scalars instead of as the first scalar item.
+
+**Fix:** Before the injection check, pop `audit_dataset` from `table_rows` if its `category_class != 'Set'`. This prevents the loop rendering and allows the scalar injection to always control the output format.
+
+**Rule:** The `audit_in_table` guard for injection must account for category class. A Loop-class `audit_dataset` in `table_rows` will never render as a scalar; suppress it and let injection handle it uniformly.

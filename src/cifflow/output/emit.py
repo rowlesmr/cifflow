@@ -1714,6 +1714,17 @@ def _render_block(
         else:
             pure_loop_rows.setdefault(lid, []).append(r)
 
+    # _audit_dataset.id must always be emitted as a scalar first-line item.
+    # Strip it from pure_loop_rows so the scalar injection below takes over.
+    # (FK propagation can carry a loop-form _audit_dataset.id from a publication
+    # block into sibling blocks, producing a spurious single-value loop_.)
+    _audit_id_tag = schema.column_to_tag.get(('audit_dataset', 'id'), '_audit_dataset.id').lower()
+    pure_loop_rows = {
+        lid: [r for r in rows if (r.get('tag') or '').lower() != _audit_id_tag]
+        for lid, rows in pure_loop_rows.items()
+    }
+    pure_loop_rows = {lid: rows for lid, rows in pure_loop_rows.items() if rows}
+
     # Build per-table extra-column list:
     # ref_table -> list of (tag, col_index, {row_id: (value, vtype)})
     # ordered by (loop_id, col_index) to preserve original column ordering.
@@ -1739,10 +1750,19 @@ def _render_block(
 
     # Inject _audit_dataset.id when requested.
     if data.dataset_id is not None:
+        # If audit_dataset is a Loop category in table_rows it would render as loop_.
+        # Remove it so the scalar injection below always controls the output format.
+        audit_td = schema.tables.get('audit_dataset')
+        if (audit_td is not None
+                and audit_td.category_class != 'Set'
+                and 'audit_dataset' in data.table_rows):
+            data.table_rows.pop('audit_dataset')
+
         audit_in_table = 'audit_dataset' in data.table_rows
+        # Check only remnant (scalar) fallback rows — loop-form rows were stripped above.
         audit_in_fallback = any(
-            (r.get('tag') or '').lower() == '_audit_dataset.id'
-            for r in data.fallback_rows
+            (r.get('tag') or '').lower() == _audit_id_tag
+            for r in remnant_rows
         )
         if not audit_in_table and not audit_in_fallback:
             audit_tag = schema.column_to_tag.get(('audit_dataset', 'id'), '_audit_dataset.id')
@@ -1823,6 +1843,7 @@ def _render_block(
             if not first_category:
                 lines.append('')
             first_category = False
+
 
             extra = extra_cols_for.get(table_name)
             if table_def.category_class == 'Set' and len(rows) == 1:
