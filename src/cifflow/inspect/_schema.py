@@ -238,6 +238,164 @@ def inspect_schema(
 
 
 
+def inspect_fk_path(
+    schema: 'SchemaSpec',
+    source: str,
+    target: str,
+    *,
+    file: TextIO = sys.stdout,
+) -> bool:
+    """Print all FK and bridge-column chains that connect *source* to *target*.
+
+    Shows two kinds of paths:
+
+    - **Direct FK edges** (``ForeignKeyDef``) stored on each table — the
+      declared ``FOREIGN KEY`` constraints in the schema.
+    - **Bridge column chains** (``BridgeColumnDef``) computed during schema
+      generation — the transitive multi-hop lookups that ingest uses to
+      propagate FK values through intermediate tables.
+
+    Parameters
+    ----------
+    schema:
+        The ``SchemaSpec`` to search.
+    source:
+        Table name to start from.
+    target:
+        Table name to reach.
+    file:
+        Output stream.  Default ``sys.stdout``.
+
+    Returns
+    -------
+    bool
+        ``True`` if at least one path was found, ``False`` otherwise.
+    """
+    if source not in schema.tables:
+        print(c(f'unknown table: {source!r}', RED, file=file), file=file)
+        return False
+    if target not in schema.tables:
+        print(c(f'unknown table: {target!r}', RED, file=file), file=file)
+        return False
+
+    found = False
+
+    # --- 1. Direct FK chains (BFS over ForeignKeyDef edges) ---
+    # Find ALL simple paths (DFS with depth limit to avoid explosions).
+    def _all_fk_paths(src: str, tgt: str) -> list[list[tuple]]:
+        """Return all simple FK-edge paths from src to tgt."""
+        results: list[list[tuple]] = []
+        stack = [(src, [], {src})]
+        while stack:
+            cur, path, visited = stack.pop()
+            for fk in schema.tables[cur].foreign_keys:
+                nxt = fk.target_table
+                step = (cur, fk.source_columns, nxt, fk.target_columns)
+                if nxt == tgt:
+                    results.append(path + [step])
+                elif nxt not in visited and nxt in schema.tables:
+                    stack.append((nxt, path + [step], visited | {nxt}))
+        return results
+
+    # Build a lookup: (table, column) → BridgeColumnDef for synthetic columns.
+    bridge_by_col: dict[tuple[str, str], 'BridgeColumnDef'] = {
+        (bc.table_name, bc.column_name): bc
+        for bc in schema.bridge_columns
+    }
+    # Build a set of synthetic column names per table for quick lookup.
+    synthetic_cols: dict[str, set[str]] = {
+        tbl: {col.name for col in td.columns if col.is_synthetic}
+        for tbl, td in schema.tables.items()
+    }
+
+    def _print_fk_step(from_t: str, src_cols: list[str], tgt_t: str, tgt_cols: list[str], indent: str = '  ') -> None:
+        """Print one FK hop, annotating synthetic source columns with their bridge derivation."""
+        for src_col, tgt_col in zip(src_cols, tgt_cols):
+            bc = bridge_by_col.get((from_t, src_col))
+            if bc is not None:
+                # Synthetic: show all bridge chains (primary + fallbacks) that derive this column.
+                all_chains = [(bc.hops, bc.bridge_value_column)] + list(bc.fallback_chains)
+                n = len(all_chains)
+                for i, (chain_hops, chain_val) in enumerate(all_chains):
+                    label_str = 'primary' if i == 0 else f'fallback {i}'
+                    suffix = f' [{label_str}]' if n > 1 else ''
+                    print(
+                        f'{indent}{c(src_col, YELLOW, file=file)}'
+                        f' {c(f"(synthetic, derived via bridge{suffix}):", DIM, file=file)}',
+                        file=file,
+                    )
+                    prev = from_t
+                    for via_col, bridge_tbl, bridge_pk in chain_hops:
+                        print(
+                            f'{indent}  {c(prev, CYAN, file=file)}.{c(via_col, YELLOW, file=file)}'
+                            f'  ->  {c(bridge_tbl, CYAN, file=file)}.{c(bridge_pk, GREEN, file=file)}',
+                            file=file,
+                        )
+                        prev = bridge_tbl
+                    print(
+                        f'{indent}  {c("value:", DIM, file=file)} {c(prev, CYAN, file=file)}.{c(chain_val, GREEN, file=file)}'
+                        f'  =>  {c(from_t, CYAN, file=file)}.{c(src_col, YELLOW, file=file)}',
+                        file=file,
+                    )
+            print(
+                f'{indent}{c(from_t, CYAN, file=file)}.{c(src_col, YELLOW, file=file)}'
+                f'  ->  {c(tgt_t, CYAN, file=file)}.{c(tgt_col, GREEN, file=file)}',
+                file=file,
+            )
+
+    fk_paths = _all_fk_paths(source, target)
+    if fk_paths:
+        found = True
+        label = 'FK edge' + ('s' if len(fk_paths) > 1 else '')
+        print(c(f'-- {label}: {source}  →  {target} --', BOLD, file=file), file=file)
+        for path in fk_paths:
+            for from_t, src_cols, tgt_t, tgt_cols in path:
+                _print_fk_step(from_t, src_cols, tgt_t, tgt_cols)
+            if len(fk_paths) > 1:
+                print(file=file)
+
+    # --- 2. Bridge column chains (BridgeColumnDef) ---
+    # A bridge chain on 'source' that passes through 'target' at some hop.
+    def _render_chain(hops: list[tuple], val_col: str, from_table: str) -> None:
+        prev = from_table
+        for via_col, bridge_tbl, bridge_pk in hops:
+            print(
+                f'    {c(prev, CYAN, file=file)}.{c(via_col, YELLOW, file=file)}'
+                f'  ->  {c(bridge_tbl, CYAN, file=file)}.{c(bridge_pk, GREEN, file=file)}',
+                file=file,
+            )
+            prev = bridge_tbl
+        print(
+            f'    {c("value:", DIM, file=file)} {c(prev, CYAN, file=file)}.{c(val_col, GREEN, file=file)}',
+            file=file,
+        )
+
+    bridge_hits = [
+        bc for bc in schema.bridge_columns
+        if bc.table_name == source and any(bt == target for _, bt, _ in bc.hops)
+    ]
+    if bridge_hits:
+        found = True
+        print(c(f'-- bridge columns: {source}  →  {target} --', BOLD, file=file), file=file)
+        for bc in bridge_hits:
+            print(
+                f'  {c(bc.table_name, CYAN, file=file)}.{c(bc.column_name, YELLOW, file=file)}'
+                f'  (primary chain):',
+                file=file,
+            )
+            _render_chain(bc.hops, bc.bridge_value_column, bc.table_name)
+            for i, (fb_hops, fb_val) in enumerate(bc.fallback_chains, 1):
+                print(f'  {c(f"fallback {i}:", DIM, file=file)}', file=file)
+                _render_chain(fb_hops, fb_val, bc.table_name)
+
+    if not found:
+        print(
+            c(f'no FK or bridge path from {source!r} to {target!r}', RED, file=file),
+            file=file,
+        )
+    return found
+
+
 if __name__ == '__main__':
     from pathlib import Path
     p = Path(r"C:\Users\User\Documents\github\pycifparse\data\dictionaries\testing\cif_core.dic")

@@ -80,6 +80,9 @@ class DdlmItem:
         Keyed default table from a ``_enumeration_defaults`` loop: each entry is
         ``(key_components, default_value)`` where ``key_components`` aligns
         positionally with ``enumeration_def_index_ids``.  Empty when absent.
+    source_file:
+        File path or URI of the dictionary file that defined this item.
+        ``None`` when loaded from a JSON cache that predates this field.
     """
 
     definition_id: str
@@ -104,3 +107,4 @@ class DdlmItem:
     type_dimension: str | None = None
     enumeration_def_index_ids: list[str] = field(default_factory=list)
     enumeration_defaults: list[tuple[list[str], str]] = field(default_factory=list)
+    source_file: str | None = None

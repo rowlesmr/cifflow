@@ -170,7 +170,25 @@ def _str_list(data: dict[str, list], tag: str) -> list[str]:
     return [v for v in data.get(tag, []) if isinstance(v, str) and v != '?']
 
 
-def _extract_item(data: dict[str, list], warn: Callable[[str], None]) -> DdlmItem | None:
+def _current_source(
+    base_uri: str | None,
+    path_resolver: 'Callable[[str], str | None] | None',
+) -> str | None:
+    """Return the resolved path (or URI) for the file currently being parsed."""
+    if base_uri is None:
+        return None
+    if path_resolver:
+        resolved = path_resolver(base_uri)
+        if resolved:
+            return resolved
+    return base_uri
+
+
+def _extract_item(
+    data: dict[str, list],
+    warn: Callable[[str], None],
+    source_file: str | None = None,
+) -> DdlmItem | None:
     """Extract a DdlmItem from a working dict, or return None if the frame should be skipped."""
     raw_id = _scalar(data, '_definition.id')
     if raw_id is None:
@@ -266,6 +284,7 @@ def _extract_item(data: dict[str, list], warn: Callable[[str], None]) -> DdlmIte
         type_dimension=type_dimension,
         enumeration_def_index_ids=enumeration_def_index_ids,
         enumeration_defaults=enumeration_defaults,
+        source_file=source_file,
     )
 
 
@@ -495,7 +514,7 @@ class DictionaryLoader:
                         frame_data, directives, base_uri, loading, pool, warn, collected
                     )
 
-            item = _extract_item(frame_data, warn)
+            item = _extract_item(frame_data, warn, source_file=_current_source(base_uri, self._path_resolver))
             if item is not None:
                 primary_items.append(item)
 
