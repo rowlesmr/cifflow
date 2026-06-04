@@ -10,16 +10,44 @@ Conventions:
 import pathlib
 import pytest
 
-from cifflow.lexer.lexer import Lexer
-from cifflow.lexer.tokens import Token
+from cifflow import cifflow_core
 from cifflow.types import CifVersion, TokenType, ValueType
 
 CIF2 = CifVersion.CIF_2_0
 CIF1 = CifVersion.CIF_1_1
 
 
+class _Error:
+    """Thin wrapper so tests can use attribute access (err.message etc.)."""
+    __slots__ = ('message', 'line', 'column', 'context')
+
+    def __init__(self, d: dict):
+        self.message = d['message']
+        self.line    = d['line']
+        self.column  = d['column']
+        self.context = d.get('context', '')
+
+
+class _Token:
+    """Thin wrapper so tests can use attribute access (tok.value etc.)."""
+    __slots__ = ('token_type', 'value', 'value_type', 'line', 'column', 'errors')
+
+    def __init__(self, d: dict):
+        self.token_type = d['token_type']
+        self.value      = d['value']
+        self.value_type = d['value_type']
+        self.line       = d['line']
+        self.column     = d['column']
+        self.errors     = [_Error(e) for e in d['errors']]
+
+
 def lex(src: str, version: CifVersion = CIF2, line_offset: int = 0):
-    return list(Lexer(src, version, line_offset).tokens())
+    mode = 'cif2' if version is CIF2 else 'cif1'
+    # Prepend the magic comment so detect_version picks the right path,
+    # then strip any version-header tokens that aren't part of the test input.
+    # Simpler: pass mode directly and use the raw source as-is.
+    tokens, _ = cifflow_core.lex_cif(src, mode)
+    return [_Token(d) for d in tokens]
 
 
 def vals(tokens):
@@ -149,6 +177,46 @@ def test_unquoted_string():
     tokens = lex('hello')
     assert tokens[0].value_type == ValueType.STRING
     assert tokens[0].value == 'hello'
+
+def test_trailing_quote_unquoted_string():
+    tokens = lex('hello"')
+    assert tokens[0].value_type == ValueType.STRING
+    assert tokens[0].value == 'hello"'
+
+def test_multitrailing_quote_unquoted_string():
+    tokens = lex('hello"""""""')
+    assert tokens[0].value_type == ValueType.STRING
+    assert tokens[0].value == 'hello"""""""'
+
+def test_embedded_quote_unquoted_string():
+    tokens = lex('hel"lo')
+    assert tokens[0].value_type == ValueType.STRING
+    assert tokens[0].value == 'hel"lo'
+
+def test_embedded_and_trailing_quote_unquoted_string():
+    tokens = lex('hel"lo"')
+    assert tokens[0].value_type == ValueType.STRING
+    assert tokens[0].value == 'hel"lo"'
+
+def test_trailing_apostrophe_unquoted_string():
+    tokens = lex('hello\'')
+    assert tokens[0].value_type == ValueType.STRING
+    assert tokens[0].value == 'hello\''
+
+def test_multitrailing_apostrophe_unquoted_string():
+    tokens = lex('hello\'\'\'\'\'\'')
+    assert tokens[0].value_type == ValueType.STRING
+    assert tokens[0].value == 'hello\'\'\'\'\'\''
+
+def test_embedded_apostrophe_unquoted_string():
+    tokens = lex('hel\'lo')
+    assert tokens[0].value_type == ValueType.STRING
+    assert tokens[0].value == 'hel\'lo'
+
+def test_embedded_and_trailing_apostrophe_unquoted_string():
+    tokens = lex('hel\'lo\'')
+    assert tokens[0].value_type == ValueType.STRING
+    assert tokens[0].value == 'hel\'lo\''
 
 def test_numeric_integer():
     tokens = lex('42')
@@ -477,10 +545,11 @@ def test_column_numbers():
     assert tokens[0].column == 1
     assert tokens[1].column == 10
 
-def test_line_offset():
-    # With line_offset=1, tokens start at line 2
-    tokens = lex('_tag value', line_offset=1)
-    assert tokens[0].line == 2
+def test_line_numbers_after_version_header():
+    # The version header occupies line 1; data starts on line 2.
+    tokens = lex('#\\#CIF_2.0\n_tag value')
+    assert tokens[0].line == 2  # _tag is on line 2
+    assert tokens[1].line == 2  # value is on the same line
 
 def test_crlf_normalised():
     tokens = lex('data_foo\r\n_tag\r\nvalue')

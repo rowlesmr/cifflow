@@ -259,7 +259,7 @@ impl Lexer {
             let ch = self.peek(0);
             if ch == ' ' || ch == '\t' || ch == '\n' { break; }
             if ch == '#' { break; }
-            if ch == '\'' || ch == '"' { break; }
+            if (ch == '\'' || ch == '"') && buf.is_empty() { break; }
             if self.is_cif2 && CIF2_DELIMITERS.contains(&ch) {
                 if buf.is_empty() { break; }
                 let lower = buf.to_ascii_lowercase();
