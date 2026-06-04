@@ -14,7 +14,7 @@
 
 ::: cifflow.inspect._schema
     options:
-      members: [inspect_schema]
+      members: [inspect_schema, inspect_fk_path]
 
 ::: cifflow.inspect._ingest
     options:
