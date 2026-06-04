@@ -2,7 +2,7 @@
 
 ## Index (by topic)
 
-- **Arrow / PyO3 / Rust:** 103, 104, 105, 106, 107
+- **Arrow / PyO3 / Rust:** 103, 104, 105, 106, 107, 150
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123, 145
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64
@@ -10,7 +10,7 @@
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
-- **Lexer / parser:** 1, 2, 3, 4, 10, 11, 37, 49b, 65, 68L
+- **Lexer / parser:** 1, 2, 3, 4, 10, 11, 37, 49b, 65, 68L, 149
 - **Performance:** 102, 109, 111, 112, 113, 114, 115, 116
 - **SQLite:** 18, 19, 20, 75, 76
 - **Testing:** 32, 33, 34, 43, 60, 66L, 67L, 68L, 87, 88, 89, 91, 92, 93, 94, 95, 96
@@ -1492,3 +1492,25 @@
 **Fix:** Before the injection check, pop `audit_dataset` from `table_rows` if its `category_class != 'Set'`. This prevents the loop rendering and allows the scalar injection to always control the output format.
 
 **Rule:** The `audit_in_table` guard for injection must account for category class. A Loop-class `audit_dataset` in `table_rows` will never render as a scalar; suppress it and let injection handle it uniformly.
+
+---
+
+## Lesson 149 — Mid-word quote characters must not terminate bare words (2026-06-04)
+
+**Context:** CIF lexer `_read_bare_word` (both Python and Rust).
+
+**Mistake:** Both lexers broke the bare word accumulator on any `'` or `"` character, regardless of buffer state. This meant `hello"` was tokenised as `hello` + an orphaned `"`, and `here"` opened an unterminated string rather than being a single bare word value.
+
+**Fix:** Only break on a quote character when the buffer is empty (i.e. the quote is the first character of the token, starting a quoted string). Mid-word quotes are accumulated as part of the bare word. Change: `if ch in ("'", '"')` → `if ch in ("'", '"') and not buf`.
+
+**Rule:** Quote characters are token-starting delimiters, not terminators. They only begin a quoted string when they appear as the very first character of a new token. Apply the fix identically in both the Python and Rust lexer implementations.
+
+---
+
+## Lesson 150 — Tests and inspect tools must use the same code path as production (2026-06-04)
+
+**Context:** `test_lexer.py`, `test_parser.py`, `inspect_lexer`, `inspect_parse`, `inspect_model` all used the Python `Lexer`/`CifParser` classes. Production `build()` uses `cifflow_core.parse` (Rust). The two code paths diverged silently — the Python path had the mid-word quote bug even after the Rust path was fixed, and error message wording differed.
+
+**Fix:** Added `lex_cif` to `cifflow_core` (Rust) to expose the token stream. Updated all tests and inspect tools to use `cifflow_core.lex_cif` / `cifflow_core.parse`. Deleted `lexer/lexer.py`, `lexer/tokens.py`, `parser/parser.py` (dead code). Kept `parser/version.py` (`detect_version`) — still needed by `inspect_lexer` for version-error display and by `test_version.py`.
+
+**Rule:** Tests and inspect tooling must call the same entry points as production code. Maintaining a parallel Python implementation of the lexer/parser creates a permanent divergence risk. When Rust is the production path, it must also be the test and inspect path.
