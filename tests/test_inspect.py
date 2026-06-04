@@ -19,7 +19,7 @@ from cifflow.inspect import (
     inspect_schema,
     TraceEvent,
 )
-from cifflow.parser.parser import CifParser
+from cifflow import cifflow_core
 from cifflow.types import ValueType
 
 # ---------------------------------------------------------------------------
@@ -117,33 +117,33 @@ class TestInspectLexer:
 class TestParseHandler:
     def test_runs_without_error(self):
         buf = io.StringIO()
-        CifParser(ParseHandler(file=buf)).parse(_SIMPLE)
+        cifflow_core.parse(_SIMPLE, ParseHandler(file=buf))
 
     def test_contains_data_block_event(self):
         buf = io.StringIO()
-        CifParser(ParseHandler(file=buf)).parse(_SIMPLE)
+        cifflow_core.parse(_SIMPLE, ParseHandler(file=buf))
         assert 'on_data_block' in buf.getvalue()
 
     def test_contains_add_tag(self):
         buf = io.StringIO()
-        CifParser(ParseHandler(file=buf)).parse(_SIMPLE)
+        cifflow_core.parse(_SIMPLE, ParseHandler(file=buf))
         assert 'add_tag' in buf.getvalue()
 
     def test_contains_add_value(self):
         buf = io.StringIO()
-        CifParser(ParseHandler(file=buf)).parse(_SIMPLE)
+        cifflow_core.parse(_SIMPLE, ParseHandler(file=buf))
         assert 'add_value' in buf.getvalue()
 
     def test_loop_events_present(self):
         buf = io.StringIO()
-        CifParser(ParseHandler(file=buf)).parse(_WITH_LOOP)
+        cifflow_core.parse(_WITH_LOOP, ParseHandler(file=buf))
         out = buf.getvalue()
         assert 'on_loop_start' in out
         assert 'on_loop_end'   in out
 
     def test_table_events_present(self):
         buf = io.StringIO()
-        CifParser(ParseHandler(file=buf)).parse(_WITH_TABLE)
+        cifflow_core.parse(_WITH_TABLE, ParseHandler(file=buf))
         out = buf.getvalue()
         assert 'on_table_start' in out
         assert 'on_table_key'   in out
@@ -151,17 +151,17 @@ class TestParseHandler:
 
     def test_error_reported(self):
         buf = io.StringIO()
-        CifParser(ParseHandler(file=buf)).parse(_WITH_ERROR)
+        cifflow_core.parse(_WITH_ERROR, ParseHandler(file=buf))
         assert 'SYNTACTIC' in buf.getvalue() or 'syntactic' in buf.getvalue().lower()
 
     def test_adjacency_error_reported(self):
         buf = io.StringIO()
-        CifParser(ParseHandler(file=buf)).parse(_WITH_TABLE_SPACED)
+        cifflow_core.parse(_WITH_TABLE_SPACED, ParseHandler(file=buf))
         assert 'not followed by : separator' in buf.getvalue()
 
     def test_show_values_false_suppresses_add_value(self):
         buf = io.StringIO()
-        CifParser(ParseHandler(file=buf, show_values=False)).parse(_SIMPLE)
+        cifflow_core.parse(_SIMPLE, ParseHandler(file=buf, show_values=False))
         assert 'add_value' not in buf.getvalue()
 
     def test_forwarding_to_inner_handler(self):
@@ -169,7 +169,7 @@ class TestParseHandler:
         from tests.parser.test_parser import RecordingHandler
         inner = RecordingHandler()
         buf   = io.StringIO()
-        CifParser(ParseHandler(inner, file=buf)).parse(_WITH_LOOP)
+        cifflow_core.parse(_WITH_LOOP, ParseHandler(inner, file=buf))
         names = inner.event_names()
         assert 'on_data_block'  in names
         assert 'on_loop_start'  in names
@@ -179,7 +179,7 @@ class TestParseHandler:
     def test_nesting_indentation(self):
         """Loop values should be indented more than the loop_start line."""
         buf = io.StringIO()
-        CifParser(ParseHandler(file=buf)).parse(_WITH_LOOP)
+        cifflow_core.parse(_WITH_LOOP, ParseHandler(file=buf))
         lines = buf.getvalue().splitlines()
         loop_start = next(l for l in lines if 'on_loop_start' in l)
         value_line = next(l for l in lines if 'add_value' in l)

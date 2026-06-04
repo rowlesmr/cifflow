@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 
 import pytest
 
-from cifflow.parser.parser import CifParser
+from cifflow import cifflow_core
 from cifflow.types import CifParserEvents, ParseError, ValueType
 
 
@@ -94,7 +94,7 @@ class RecordingHandler:
 
 def parse(source: str) -> RecordingHandler:
     h = RecordingHandler()
-    CifParser(h).parse(source)
+    cifflow_core.parse(source, h)
     return h
 
 

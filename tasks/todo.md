@@ -4,6 +4,29 @@
 
 ## ▶ RESUME FROM HERE
 
+## What was done (2026-06-03/04, multiple branches)
+
+**Dictionary / schema additions:**
+- `DdlmItem.source_file` — each item now records the file path it came from; serialises into JSON cache automatically (old caches load fine with `None` default)
+- `merge_dictionaries(*dicts, dupl='Ignore'|'Replace'|'Exit')` — public API to combine multiple loaded dictionaries; `Exit` raises `ValueError` listing all duplicate definition IDs
+- `DictionaryLoader(block_constituent_imports=True)` — skips `mode="Full"` Head-target imports (whole-dictionary constituent pulls) while allowing frame-level imports to proceed
+
+**Inspect additions:**
+- `inspect_fk_path(schema, source, target)` — prints all direct FK edge chains and bridge-column chains between two tables; annotates synthetic source columns with their bridge derivation and fallback chains
+
+**Lexer bug fix (both Python and Rust):**
+- Mid-word quote characters no longer terminate bare words (Lesson 149). `hello"world` and `here"` are now single tokens. Updated 8 parser tests whose old assertions relied on the broken behaviour.
+
+**Code cleanup — Python lexer/parser removed:**
+- `inspect_lexer`, `inspect_parse`, `inspect_model`, `test_lexer.py`, `test_parser.py` all migrated to `cifflow_core.lex_cif` / `cifflow_core.parse` (Rust)
+- Deleted `lexer/lexer.py`, `lexer/tokens.py`, `parser/parser.py`, their `__init__.py` files
+- Kept `parser/version.py` (`detect_version`) for `inspect_lexer` version-error display and `test_version.py`
+- Added `lex_cif(source, mode)` to `cifflow_core` Rust extension (Lesson 150)
+
+Test count: 1858 (all passing). Suite time dropped from ~5 min to ~2.5 min.
+
+---
+
 ## What was done (2026-06-02, consolidate-calc-component + duplicate-spacegroup-block-bug branches)
 
 Completed `consolidate_component_intensities` (post-processing: assembles `pd_calc_component` rows into `pd_calc.component_intensities_net/total` and `pd_calc_overall.component_presentation_order`). Fixed four bugs found during integration testing:

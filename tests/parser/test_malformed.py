@@ -226,11 +226,16 @@ class TestMalformedStrings20:
             'this should not', ValueType.DOUBLE_QUOTED
         )
 
-    def test_unmatched_dq_swallows_tag(self):
-        assert '_tag_might_get_swallowed_2' not in tag_names(self.h)
+    def test_unmatched_dq_no_longer_swallows_tag(self):
+        # "here" ends the bare word; the trailing " is part of it, not an
+        # opening delimiter — so _tag_might_get_swallowed_2 is now visible.
+        assert '_tag_might_get_swallowed_2' in tag_names(self.h)
+        assert value_after_tag(self.h, '_tag_might_get_swallowed_2') == (
+            'generalkenobi', ValueType.STRING
+        )
 
     def test_unmatched_dq_emits_lexer_error(self):
-        assert self.h.has_error_containing('unterminated double_quoted string')
+        assert self.h.has_error_containing('unterminated double quoted string')
 
     # ── matched single-quote: same as matched double-quote ───────────────────
 
@@ -252,11 +257,14 @@ class TestMalformedStrings20:
             'this should not', ValueType.SINGLE_QUOTED
         )
 
-    def test_unmatched_sq_swallows_tag(self):
-        assert '_tag_might_get_swallowed_4' not in tag_names(self.h)
+    def test_unmatched_sq_no_longer_swallows_tag(self):
+        assert '_tag_might_get_swallowed_4' in tag_names(self.h)
+        assert value_after_tag(self.h, '_tag_might_get_swallowed_4') == (
+            'generalkenobiobiwan', ValueType.STRING
+        )
 
     def test_unmatched_sq_emits_lexer_error(self):
-        assert self.h.has_error_containing('unterminated single_quoted string')
+        assert self.h.has_error_containing('unterminated single quoted string')
 
     # ── mismatched delimiters: wrong closing char → runs to EOL ─────────────
 
@@ -337,7 +345,7 @@ class TestMalformedStrings20:
         assert '_tag_will_get_swallowed_5' not in tag_names(self.h)
 
     def test_triple_mismatched_sq_emits_lexer_error(self):
-        assert self.h.has_error_containing('unterminated triple_single_quoted string')
+        assert self.h.has_error_containing('unterminated triple single quoted string')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -368,10 +376,12 @@ class TestMalformedStrings11:
             'this "should not', ValueType.DOUBLE_QUOTED
         )
 
-    def test_embedded_dq_swallows_tag(self):
-        # The trailing " on the line opens an unterminated string that swallows
-        # _tag_might_get_swallowed_1 — unlike CIF 2.0 where it survives.
-        assert '_tag_might_get_swallowed_1' not in tag_names(self.h)
+    def test_embedded_dq_no_longer_swallows_tag(self):
+        # Trailing " is now part of the bare word "here"", not an opener.
+        assert '_tag_might_get_swallowed_1' in tag_names(self.h)
+        assert value_after_tag(self.h, '_tag_might_get_swallowed_1') == (
+            'hithere', ValueType.STRING
+        )
 
     def test_ws_dq_value(self):
         # "this should not" — the " before ' ' is followed by whitespace,
@@ -380,8 +390,12 @@ class TestMalformedStrings11:
             'this should not', ValueType.DOUBLE_QUOTED
         )
 
-    def test_ws_dq_swallows_tag(self):
-        assert '_tag_might_get_swallowed_2' not in tag_names(self.h)
+    def test_ws_dq_no_longer_swallows_tag(self):
+        # Trailing " in "here"" is part of the bare word, not an opener.
+        assert '_tag_might_get_swallowed_2' in tag_names(self.h)
+        assert value_after_tag(self.h, '_tag_might_get_swallowed_2') == (
+            'generalkenobi', ValueType.STRING
+        )
 
     # ── CIF 1.1 embedded single-quote rule ──────────────────────────────────
 
@@ -391,16 +405,24 @@ class TestMalformedStrings11:
             "this 'should not", ValueType.SINGLE_QUOTED
         )
 
-    def test_embedded_sq_swallows_tag(self):
-        assert '_tag_might_get_swallowed_3' not in tag_names(self.h)
+    def test_embedded_sq_no_longer_swallows_tag(self):
+        # Trailing ' in "here'" is part of the bare word, not an opener.
+        assert '_tag_might_get_swallowed_3' in tag_names(self.h)
+        assert value_after_tag(self.h, '_tag_might_get_swallowed_3') == (
+            'hitheresomemore', ValueType.STRING
+        )
 
     def test_unmatched_sq_value(self):
         assert value_after_tag(self.h, '_tag_unmatched_sq_inside') == (
             'this should not', ValueType.SINGLE_QUOTED
         )
 
-    def test_unmatched_sq_swallows_tag(self):
-        assert '_tag_might_get_swallowed_4' not in tag_names(self.h)
+    def test_unmatched_sq_no_longer_swallows_tag(self):
+        # Trailing ' in "here'" is part of the bare word, not an opener.
+        assert '_tag_might_get_swallowed_4' in tag_names(self.h)
+        assert value_after_tag(self.h, '_tag_might_get_swallowed_4') == (
+            'generalkenobiobiwan', ValueType.STRING
+        )
 
     # ── mismatched and missing delimiters ────────────────────────────────────
 

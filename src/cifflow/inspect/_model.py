@@ -9,7 +9,6 @@ from cifflow.inspect._common import (
 )
 from cifflow.inspect._parser import ParseHandler
 from cifflow.inspect._lexer import inspect_lexer
-from cifflow.parser.parser import CifParser
 from cifflow.types import ParseError
 
 
@@ -148,9 +147,10 @@ def inspect_model(
         inspect_lexer(source, file=file)
 
     errors: list[ParseError] = []
+    from cifflow import cifflow_core
     builder = CifBuilder(on_error=errors.append, mode=mode)
     handler = ParseHandler(builder, file=file, show_values=show_values)
-    CifParser(handler).parse(source)
+    cifflow_core.parse(source, handler)
     print(file=file)
 
     _print_model(builder.result, file=file)

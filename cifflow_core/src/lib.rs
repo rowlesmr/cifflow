@@ -291,6 +291,91 @@ fn parse_arrow_file<'py>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// lex_cif — expose the Rust lexer token stream to Python
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Lex *source* and return a list of token dicts.
+///
+/// Each dict has the keys:
+///   ``token_type``  – ``"tag"``, ``"keyword"``, or ``"value"``
+///   ``value``       – the raw string value of the token
+///   ``value_type``  – a ``ValueType`` enum member (or ``None`` for tag/keyword)
+///   ``line``        – 1-based line number
+///   ``column``      – 1-based column number
+///   ``errors``      – list of ``LexerError``-like dicts (may be empty)
+///
+/// The detected CIF version is returned as the second element of the tuple.
+#[pyfunction]
+#[pyo3(signature = (source, mode=None))]
+fn lex_cif<'py>(
+    py: Python<'py>,
+    source: &str,
+    mode: Option<&str>,
+) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyAny>)> {
+    use lexer::TokenType;
+    use pyo3::types::PyDict;
+
+    let vr = detect_version(source);
+
+    // Override version when mode is specified explicitly.
+    let version = match mode {
+        Some("cif1" | "cif1.1") => CifVersion::Cif1_1,
+        Some("cif2" | "cif2.0") => CifVersion::Cif2_0,
+        _ => vr.version,
+    };
+
+    let types_mod  = py.import("cifflow.types")?;
+    let vt_cls     = types_mod.getattr("ValueType")?;
+    let tt_cls     = types_mod.getattr("TokenType")?;
+    let cv_cls     = types_mod.getattr("CifVersion")?;
+
+    let lexer  = Lexer::new(&vr.remaining, version, vr.line_offset);
+    let tokens = lexer.tokenise();
+    let out    = PyList::empty(py);
+
+    for tok in &tokens {
+        let d = PyDict::new(py);
+
+        let tt_attr = match tok.token_type {
+            TokenType::Tag     => "TAG",
+            TokenType::Keyword => "KEYWORD",
+            TokenType::Value   => "VALUE",
+        };
+        d.set_item("token_type", tt_cls.getattr(tt_attr)?)?;
+        d.set_item("value", &tok.value)?;
+
+        let vt_obj = match tok.value_type {
+            Some(ref vt) => vt_cls.getattr(vt.python_attr())?.into_any().into_pyobject(py)?,
+            None         => py.None().into_pyobject(py)?,
+        };
+        d.set_item("value_type", vt_obj)?;
+        d.set_item("line",   tok.line)?;
+        d.set_item("column", tok.column)?;
+
+        let errs = PyList::empty(py);
+        for e in &tok.errors {
+            let ed = PyDict::new(py);
+            ed.set_item("message", &e.message)?;
+            ed.set_item("line",    e.line)?;
+            ed.set_item("column",  e.column)?;
+            ed.set_item("context", &e.context)?;
+            errs.append(ed)?;
+        }
+        d.set_item("errors", errs)?;
+
+        out.append(d)?;
+    }
+
+    let cv_attr = match version {
+        CifVersion::Cif2_0 => "CIF_2_0",
+        CifVersion::Cif1_1 => "CIF_1_1",
+    };
+    let cv_obj = cv_cls.getattr(cv_attr)?;
+
+    Ok((out, cv_obj.into_any()))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Module
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -304,5 +389,6 @@ fn cifflow_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_cif, m)?)?;
     m.add_function(wrap_pyfunction!(parse_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(parse_arrow_file, m)?)?;
+    m.add_function(wrap_pyfunction!(lex_cif, m)?)?;
     Ok(())
 }
