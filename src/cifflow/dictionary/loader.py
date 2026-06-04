@@ -363,6 +363,93 @@ def _merge_constituent(
     return False
 
 
+def merge_dictionaries(
+    *dictionaries: DdlmDictionary,
+    dupl: str = 'Ignore',
+    on_warning: Callable[[str], None] = lambda _: None,
+) -> DdlmDictionary:
+    """Merge two or more loaded ``DdlmDictionary`` objects into one.
+
+    Dictionaries are processed left-to-right.  The *dupl* policy controls what
+    happens when the same ``definition_id`` appears in more than one input:
+
+    - ``'Ignore'`` *(default)*: the first definition seen is kept.
+    - ``'Replace'``: the later dictionary's definition wins.
+    - ``'Exit'``: raise ``ValueError`` if any duplicate definition is found.
+
+    The merged dictionary's ``name``, ``title``, ``version``, and ``uri`` are
+    taken from the first input.  ``source_files`` and ``warnings`` are the
+    concatenation of all inputs.
+
+    Parameters
+    ----------
+    *dictionaries:
+        Two or more ``DdlmDictionary`` instances to merge.
+    dupl:
+        Conflict resolution policy: ``'Ignore'``, ``'Replace'``, or ``'Exit'``.
+    on_warning:
+        Called with each warning message (e.g. ``print``).
+
+    Returns
+    -------
+    DdlmDictionary
+        A new merged dictionary.
+
+    Raises
+    ------
+    ValueError
+        If fewer than two dictionaries are supplied, *dupl* is invalid, or
+        *dupl* is ``'Exit'`` and a duplicate definition is encountered.
+    """
+    if len(dictionaries) < 2:
+        raise ValueError('merge_dictionaries requires at least two dictionaries')
+    if dupl not in ('Replace', 'Ignore', 'Exit'):
+        raise ValueError(f"dupl must be 'Replace', 'Ignore', or 'Exit', got {dupl!r}")
+
+    warnings: list[str] = []
+
+    def warn(msg: str) -> None:
+        warnings.append(msg)
+        on_warning(msg)
+
+    pool: dict[str, DdlmItem] = {}
+    source_files: list[str] = []
+
+    for d in dictionaries:
+        warnings.extend(d.warnings)
+        source_files.extend(d.source_files)
+        if dupl == 'Exit':
+            conflicts = [
+                def_id for def_id in {**d.categories, **d.items}
+                if def_id in pool
+            ]
+            if conflicts:
+                raise ValueError(
+                    f'duplicate definition(s) found while merging dictionaries: '
+                    + ', '.join(sorted(conflicts))
+                )
+        _merge_constituent(pool, d, dupl, warn)
+
+    categories, items, tag_to_item, alias_to_def_id, deprecated_ids = (
+        _build_lookup_tables(list(pool.values()), warn)
+    )
+
+    first = dictionaries[0]
+    return DdlmDictionary(
+        name=first.name,
+        title=first.title,
+        version=first.version,
+        uri=first.uri,
+        categories=categories,
+        items=items,
+        tag_to_item=tag_to_item,
+        alias_to_definition_id=alias_to_def_id,
+        deprecated_ids=deprecated_ids,
+        warnings=warnings,
+        source_files=source_files,
+    )
+
+
 class DictionaryLoader:
     """
     Loads a DDLm dictionary from a CIF 2.0 source string.

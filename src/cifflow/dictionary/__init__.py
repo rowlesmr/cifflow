@@ -20,6 +20,7 @@ from cifflow.dictionary.loader import (
     SourceResolver,
     directory_resolver,
     directory_path_resolver,
+    merge_dictionaries,
 )
 from cifflow.dictionary.schema import (
     ColumnDef,
@@ -41,6 +42,7 @@ __all__ = [
     'SourceResolver',
     'directory_resolver',
     'directory_path_resolver',
+    'merge_dictionaries',
     'ForeignKeyDef',
     'ColumnDef',
     'TableDef',
