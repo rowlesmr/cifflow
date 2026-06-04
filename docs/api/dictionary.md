@@ -10,7 +10,7 @@
 
 ::: cifflow.dictionary.loader
     options:
-      members: [DictionaryLoader, SourceResolver, directory_resolver, directory_path_resolver]
+      members: [DictionaryLoader, SourceResolver, directory_resolver, directory_path_resolver, merge_dictionaries]
 
 ::: cifflow.dictionary.schema
     options:
