@@ -172,11 +172,12 @@ class TestCIF11InvalidBrackets:
         src = load(COMCIFS / 'cif1_invalid.cif')
         h = parse(src)
         ev = h.events
-        # _name should receive [ as its value (bare word, STRING)
+        # _name ['k'] in CIF 1.1: quotes inside a bare word don't terminate it,
+        # so the whole ['k'] is a single bare-word STRING value.
         tag_idx = next(i for i, e in enumerate(ev) if e == Event('add_tag', ('_name',)))
         # find the next add_value event
         val_ev = next(e for e in ev[tag_idx:] if e.name == 'add_value')
-        assert val_ev == Event('add_value', ('[', ValueType.STRING))
+        assert val_ev == Event('add_value', ("['k']", ValueType.STRING))
 
     def test_produces_errors(self):
         src = load(COMCIFS / 'cif1_invalid.cif')

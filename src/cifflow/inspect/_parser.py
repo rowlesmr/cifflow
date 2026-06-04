@@ -8,7 +8,6 @@ from cifflow.inspect._common import (
     BOLD, DIM, RED, CYAN, GREEN, BLUE, YELLOW, MAGENTA,
 )
 from cifflow.inspect._lexer import inspect_lexer
-from cifflow.parser.parser import CifParser
 from cifflow.types import CifParserEvents, ParseError, ValueType
 
 
@@ -166,6 +165,7 @@ def inspect_parse(
     if show_tokens:
         inspect_lexer(source, file=file)
 
+    from cifflow import cifflow_core
     handler = ParseHandler(inner, file=file, show_values=show_values)
-    CifParser(handler).parse(source)
+    cifflow_core.parse(source, handler)
     print(file=file)
