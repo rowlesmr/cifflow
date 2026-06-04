@@ -482,6 +482,12 @@ class DictionaryLoader:
         frames physically present in the file being loaded are parsed.
         Applies to all files loaded by this instance, including constituents
         loaded via ``mode="Full"`` recursion.  Defaults to ``False``.
+    block_constituent_imports
+        When ``True``, ``mode="Full"`` imports whose target save frame has
+        ``_definition.class = Head`` (whole-dictionary constituent imports) are
+        skipped with a warning.  Frame-level attribute imports (``mode="Contents"``
+        or ``mode="Full"`` targeting a non-Head frame) are unaffected.
+        Defaults to ``False``.
     """
 
     def __init__(
@@ -491,11 +497,13 @@ class DictionaryLoader:
         path_resolver: 'Callable[[str], str | None] | None' = None,
         on_warning: Callable[[str], None] | None = None,
         ignore_head_imports: bool = False,
+        block_constituent_imports: bool = False,
     ) -> None:
         self._resolver = resolver
         self._path_resolver = path_resolver
         self._on_warning = on_warning if on_warning is not None else lambda msg: None
         self._ignore_head_imports = ignore_head_imports
+        self._block_constituent_imports = block_constituent_imports
         self._source_cache: dict[str, str] = {}
         self._parse_cache: dict[str, CifFile] = {}
 
@@ -746,6 +754,12 @@ class DictionaryLoader:
                 ).lower()
 
                 if target_class == 'head':
+                    if self._block_constituent_imports:
+                        warn(
+                            f"_import.get constituent dictionary import blocked "
+                            f"(file={resolved_uri!r}, save={save_id!r})"
+                        )
+                        continue
                     # Dictionary-level import: load the entire constituent
                     # dictionary and merge all its definitions into pool.
                     constituent = self._load_constituent(resolved_uri, loading, warn, collected)
