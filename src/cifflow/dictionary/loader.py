@@ -614,7 +614,12 @@ class DictionaryLoader:
                 primary_items.append(item)
 
         # Merge: constituents first (pool), then primary overwrites.
-        all_items = list(pool.values()) + primary_items
+        # Deduplicate by definition_id so _build_lookup_tables only sees one
+        # item per id and doesn't generate spurious alias collision warnings.
+        _merged: dict[str, DdlmItem] = {item.definition_id: item for item in pool.values()}
+        for item in primary_items:
+            _merged[item.definition_id] = item
+        all_items = list(_merged.values())
 
         categories, items, tag_to_item, alias_to_def_id, deprecated_ids = (
             _build_lookup_tables(all_items, warn)
