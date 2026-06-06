@@ -347,7 +347,7 @@ def inspect_fk_path(
     if fk_paths:
         found = True
         label = 'FK edge' + ('s' if len(fk_paths) > 1 else '')
-        print(c(f'-- {label}: {source}  →  {target} --', BOLD, file=file), file=file)
+        print(c(f'-- {label}: {source}  ->  {target} --', BOLD, file=file), file=file)
         for path in fk_paths:
             for from_t, src_cols, tgt_t, tgt_cols in path:
                 _print_fk_step(from_t, src_cols, tgt_t, tgt_cols)
@@ -376,7 +376,7 @@ def inspect_fk_path(
     ]
     if bridge_hits:
         found = True
-        print(c(f'-- bridge columns: {source}  →  {target} --', BOLD, file=file), file=file)
+        print(c(f'-- bridge columns: {source}  ->  {target} --', BOLD, file=file), file=file)
         for bc in bridge_hits:
             print(
                 f'  {c(bc.table_name, CYAN, file=file)}.{c(bc.column_name, YELLOW, file=file)}'
@@ -393,6 +393,31 @@ def inspect_fk_path(
             c(f'no FK or bridge path from {source!r} to {target!r}', RED, file=file),
             file=file,
         )
+        # Show partial links (unresolved DDLm Link items) as a hint.
+        partials = [
+            pl for pl in schema.partial_links
+            if pl.source_table == source and pl.target_table == target
+        ]
+        if partials:
+            print(
+                c(f'-- partial links: {source}  ~>  {target} (incomplete FK) --', BOLD, file=file),
+                file=file,
+            )
+            for pl in partials:
+                print(
+                    f'  {c(pl.source_table, CYAN, file=file)}.{c(pl.source_column, YELLOW, file=file)}'
+                    f'  ~>  {c(pl.target_table, CYAN, file=file)}.{c(pl.target_column, GREEN, file=file)}',
+                    file=file,
+                )
+                covered = ', '.join(pl.covered_pk_cols) or '(none)'
+                missing = ', '.join(pl.missing_pk_cols)
+                print(
+                    f'    {c("covered PKs:", DIM, file=file)} {covered}'
+                    f'  {c("missing PKs:", DIM, file=file)} {c(missing, RED, file=file)}',
+                    file=file,
+                )
+                print(f'    {c("reason:", DIM, file=file)} {pl.reason}', file=file)
+
     return found
 
 

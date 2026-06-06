@@ -106,6 +106,41 @@ class ForeignKeyDef:
 
 
 @dataclass
+class PartialLinkDef:
+    """
+    A DDLm ``Link`` item that could not be resolved into a full FK constraint.
+
+    Recorded by :func:`generate_schema` so that inspection tools can surface
+    these near-connections.
+
+    Attributes
+    ----------
+    source_table:
+        Table containing the link column.
+    source_column:
+        Column in *source_table* whose ``type_purpose`` is ``"Link"``.
+    target_table:
+        Table that *source_column* points towards.
+    target_column:
+        Column in *target_table* that *source_column* references.
+    covered_pk_cols:
+        PK columns of *target_table* that ARE covered by the link group.
+    missing_pk_cols:
+        PK columns of *target_table* that are NOT covered (prevents full FK).
+    reason:
+        Short human-readable reason why the FK was not formed.
+    """
+
+    source_table: str
+    source_column: str
+    target_table: str
+    target_column: str
+    covered_pk_cols: list[str]
+    missing_pk_cols: list[str]
+    reason: str
+
+
+@dataclass
 class ColumnDef:
     """
     Definition of a single column in a generated SQLite table.
@@ -295,6 +330,7 @@ class SchemaSpec:
     category_parent: dict[str, str | None] = field(default_factory=dict)
     tag_to_category_class: dict[str, str] = field(default_factory=dict)
     deprecated_replacements: dict[str, list[str]] = field(default_factory=dict)
+    partial_links: list['PartialLinkDef'] = field(default_factory=list)
 
     def descendants(self, root: str) -> frozenset[str]:
         """Return all table names that are *root* or a descendant of *root* in the ``category_parent`` hierarchy.
@@ -478,6 +514,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
     warnings: list[str] = []
     tables: dict[str, TableDef] = {}
     column_to_tag: dict[tuple[str, str], str] = {}
+    partial_links: list[PartialLinkDef] = []
 
     for cat_id, cat_item in dictionary.categories.items():
         cat_class = cat_item.definition_class
@@ -724,6 +761,15 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                     f"target column '{tgt_col}' is not a PK of "
                     f"'{tgt_tbl}' (PKs={tgt_pks}) -- skipping FK constraint"
                 )
+                partial_links.append(PartialLinkDef(
+                    source_table=src_tbl,
+                    source_column=src_col,
+                    target_table=tgt_tbl,
+                    target_column=tgt_col,
+                    covered_pk_cols=[],
+                    missing_pk_cols=list(tgt_pks),
+                    reason=f"target column '{tgt_col}' is not a PK of '{tgt_tbl}'",
+                ))
             else:
                 pk_pairs.append((src_col, tgt_col, item))
 
@@ -838,6 +884,15 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                         f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}, "
                         f"no transitive bridge found -- skipping FK constraint"
                     )
+                    partial_links.append(PartialLinkDef(
+                        source_table=src_tbl,
+                        source_column=src_col,
+                        target_table=tgt_tbl,
+                        target_column=tgt_col,
+                        covered_pk_cols=sorted(tgt_cols_covered),
+                        missing_pk_cols=sorted(missing_pk_cols),
+                        reason=f"covers {sorted(tgt_cols_covered)} of PKs={tgt_pks}, no bridge found",
+                    ))
         elif missing_pk_cols or has_conflicts:
             # Cannot form a complete, unambiguous (composite) FK.
             # Emit one warning per failing pair so each source item is named.
@@ -847,21 +902,33 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
                         f"ambiguous composite FK -- multiple source columns "
                         f"link to '{tgt_tbl}'.'{tgt_col}'"
                     )
+                    reason = f"ambiguous: multiple source columns link to '{tgt_tbl}'.'{tgt_col}'"
                 elif len(missing_pk_cols) > 1:
                     msg = (
                         f"partial FK to '{tgt_tbl}' -- covers "
                         f"['{tgt_col}'] of PKs={tgt_pks} "
                         f"({len(missing_pk_cols)} missing PKs, bridge search skipped)"
                     )
+                    reason = f"covers ['{tgt_col}'] of PKs={tgt_pks}, {len(missing_pk_cols)} missing (bridge search skipped)"
                 else:
                     msg = (
                         f"partial FK to '{tgt_tbl}' -- covers "
                         f"['{tgt_col}'] of PKs={tgt_pks}"
                     )
+                    reason = f"covers ['{tgt_col}'] of PKs={tgt_pks}"
                 warnings.append(
                     f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
                     f"{msg} -- skipping FK constraint"
                 )
+                partial_links.append(PartialLinkDef(
+                    source_table=src_tbl,
+                    source_column=src_col,
+                    target_table=tgt_tbl,
+                    target_column=tgt_col,
+                    covered_pk_cols=sorted(tgt_cols_covered),
+                    missing_pk_cols=sorted(missing_pk_cols),
+                    reason=reason,
+                ))
         else:
             # All PKs covered, no non-PK targets, no duplicate targets.
             # Order source columns to match the target PK column order.
@@ -959,6 +1026,7 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         category_parent=category_parent,
         tag_to_category_class=tag_to_category_class,
         deprecated_replacements=deprecated_replacements,
+        partial_links=partial_links,
     )
 
 
