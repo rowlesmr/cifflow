@@ -1501,6 +1501,162 @@ def _resolve_dataset_id(
     return fallback
 
 
+def _validate_all_blocks_preconditions(
+    conn: duckdb.DuckDBPyConnection,
+    schema: SchemaSpec,
+) -> None:
+    """Raise ValueError if the database cannot support ALL_BLOCKS emission."""
+    fallback_count = conn.execute('SELECT COUNT(*) FROM "_cif_fallback"').fetchone()[0]
+    if fallback_count:
+        raise ValueError(
+            f"ALL_BLOCKS requires all tags to be known to the dictionary, but "
+            f"{fallback_count} fallback row(s) are present in _cif_fallback. "
+            f"Unknown tags cannot be reliably assigned to a dictionary-split block."
+        )
+
+    keyless_problems: list[str] = []
+    for table_name, tdef in schema.tables.items():
+        if tdef.category_class != 'Set':
+            continue
+        domain_pks = [pk for pk in tdef.primary_keys if pk not in _SYNTHETIC]
+        if domain_pks:
+            continue
+        count = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()[0]
+        if count:
+            keyless_problems.append(f"{table_name} ({count} row(s))")
+    if keyless_problems:
+        raise ValueError(
+            f"ALL_BLOCKS requires every Set category to have a domain primary key, "
+            f"but the following keyless Set table(s) contain data: "
+            f"{', '.join(keyless_problems)}. "
+            f"Rows in keyless Sets cannot be unambiguously associated with a "
+            f"dictionary-split block."
+        )
+
+
+def _inject_set_parents(
+    block_table_rows: 'dict[str, list[dict]]',
+    parent_tables: 'list[str]',
+    set_key_cols: 'list[tuple]',
+    vals: list,
+) -> None:
+    """Inject synthetic single-row Set parent entries into *block_table_rows*.
+
+    For each (set_table, set_col, val) triple, inserts a minimal row so that
+    the rendering layer can suppress the FK column and emit the parent tag as
+    a scalar above the data.  Populates *parent_tables* as a side-effect.
+    """
+    for (_col, _parent_tag, set_table, set_col), val in zip(set_key_cols, vals):
+        if set_table and val is not None:
+            block_table_rows[set_table] = [
+                {'_cifflow_block_id': '', '_cifflow_row_id': 0, set_col: val}
+            ]
+            parent_tables.append(set_table)
+
+
+def _collect_set_table_blocks(
+    table_name: str,
+    rows: 'list[dict]',
+    tdef: 'TableDef',
+    domain_pks: 'list[str]',
+    schema: SchemaSpec,
+    conn: duckdb.DuckDBPyConnection,
+    fallback_id: 'str | None',
+) -> 'list[_BlockData]':
+    """Build one _BlockData per Set-category row."""
+    col_info = _classify_pk_cols(tdef, schema)
+    set_key_cols = [(col, tag, st, sc) for col, is_set, tag, st, sc in col_info if is_set]
+    result: list[_BlockData] = []
+
+    for row in sorted(rows, key=lambda r: tuple(r.get(pk) or '' for pk in domain_pks)):
+        pk_vals = [str(row.get(pk) or '') for pk in domain_pks]
+        block_name = _sanitize_block_name('_'.join([table_name] + pk_vals)) or table_name
+
+        block_table_rows: dict[str, list[dict]] = {table_name: [row]}
+        parent_tables: list[str] = []
+        if set_key_cols:
+            _inject_set_parents(
+                block_table_rows, parent_tables, set_key_cols,
+                [row.get(col) for col, _, _, _ in set_key_cols],
+            )
+
+        cat_order = sorted(parent_tables) + [table_name] if parent_tables else None
+        did = _resolve_dataset_id(conn, {row.get('_cifflow_block_id')}, fallback_id)
+        result.append(_BlockData(
+            name=block_name,
+            table_rows=block_table_rows,
+            fallback_rows=[],
+            anchor_frozenset=frozenset(),
+            anchor_key_dict={},
+            suppress_fk_pk=bool(set_key_cols),
+            dataset_id=did,
+            preferred_category_order=cat_order,
+        ))
+    return result
+
+
+def _collect_loop_table_blocks(
+    table_name: str,
+    rows: 'list[dict]',
+    tdef: 'TableDef',
+    schema: SchemaSpec,
+    conn: duckdb.DuckDBPyConnection,
+    fallback_id: 'str | None',
+) -> 'list[_BlockData]':
+    """Build _BlockData entries for a Loop-category table.
+
+    Pure Loop (no Set FK in PK) → one block for all rows.
+    Loop with Set FK(s) in PK → one block per unique Set-key combination.
+    """
+    col_info = _classify_pk_cols(tdef, schema)
+    set_key_cols = [(col, tag, st, sc) for col, is_set, tag, st, sc in col_info if is_set]
+    result: list[_BlockData] = []
+
+    if not set_key_cols:
+        block_name = _sanitize_block_name(table_name) or table_name
+        did = _resolve_dataset_id(conn, {row.get('_cifflow_block_id') for row in rows}, fallback_id)
+        result.append(_BlockData(
+            name=block_name,
+            table_rows={table_name: rows},
+            fallback_rows=[],
+            anchor_frozenset=frozenset(),
+            anchor_key_dict={},
+            suppress_fk_pk=False,
+            dataset_id=did,
+        ))
+    else:
+        groups: dict[tuple, list[dict]] = {}
+        for row in rows:
+            key = tuple(row.get(col) for col, _, _, _ in set_key_cols)
+            groups.setdefault(key, []).append(row)
+
+        for set_vals in sorted(groups, key=lambda t: tuple(v or '' for v in t)):
+            group_rows = groups[set_vals]
+            val_strs = [str(v or '') for v in set_vals]
+            block_name = _sanitize_block_name('_'.join([table_name] + val_strs)) or table_name
+
+            block_table_rows: dict[str, list[dict]] = {table_name: group_rows}
+            parent_tables: list[str] = []
+            _inject_set_parents(
+                block_table_rows, parent_tables, set_key_cols, list(set_vals),
+            )
+
+            cat_order = sorted(parent_tables) + [table_name]
+            did = _resolve_dataset_id(conn, {row.get('_cifflow_block_id') for row in group_rows}, fallback_id)
+            result.append(_BlockData(
+                name=block_name,
+                table_rows=block_table_rows,
+                fallback_rows=[],
+                anchor_frozenset=frozenset(),
+                anchor_key_dict={},
+                suppress_fk_pk=True,
+                suppress_loop_fk_pk=True,
+                dataset_id=did,
+                preferred_category_order=cat_order,
+            ))
+    return result
+
+
 def _collect_all_blocks(
     conn: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
@@ -1529,34 +1685,7 @@ def _collect_all_blocks(
     keyless Set tables — neither can be unambiguously assigned to a
     dictionary-split block.
     """
-    # Guard: fallback rows
-    fallback_count = conn.execute('SELECT COUNT(*) FROM "_cif_fallback"').fetchone()[0]
-    if fallback_count:
-        raise ValueError(
-            f"ALL_BLOCKS requires all tags to be known to the dictionary, but "
-            f"{fallback_count} fallback row(s) are present in _cif_fallback. "
-            f"Unknown tags cannot be reliably assigned to a dictionary-split block."
-        )
-
-    # Guard: keyless Set tables (Set tables with no domain primary key)
-    keyless_problems: list[str] = []
-    for table_name, tdef in schema.tables.items():
-        if tdef.category_class != 'Set':
-            continue
-        domain_pks = [pk for pk in tdef.primary_keys if pk not in _SYNTHETIC]
-        if domain_pks:
-            continue
-        count = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()[0]
-        if count:
-            keyless_problems.append(f"{table_name} ({count} row(s))")
-    if keyless_problems:
-        raise ValueError(
-            f"ALL_BLOCKS requires every Set category to have a domain primary key, "
-            f"but the following keyless Set table(s) contain data: "
-            f"{', '.join(keyless_problems)}. "
-            f"Rows in keyless Sets cannot be unambiguously associated with a "
-            f"dictionary-split block."
-        )
+    _validate_all_blocks_preconditions(conn, schema)
 
     fallback_id: str | None = str(uuid.uuid4()) if version == CifVersion.CIF_2_0 else None
     result: list[_BlockData] = []
@@ -1570,96 +1699,13 @@ def _collect_all_blocks(
         domain_pks = [pk for pk in tdef.primary_keys if pk not in _SYNTHETIC]
 
         if tdef.category_class == 'Set':
-            # One block per row.
-            # Classify PK columns: some may FK to a parent Set category.
-            col_info = _classify_pk_cols(tdef, schema)
-            set_key_cols = [(col, tag, st, sc) for col, is_set, tag, st, sc in col_info if is_set]
-
-            for row in sorted(rows, key=lambda r: tuple(r.get(pk) or '' for pk in domain_pks)):
-                pk_vals = [str(row.get(pk) or '') for pk in domain_pks]
-                block_name = _sanitize_block_name('_'.join([table_name] + pk_vals)) or table_name
-
-                block_table_rows: dict[str, list[dict]] = {table_name: [row]}
-                parent_tables: list[str] = []
-                if set_key_cols:
-                    # Inject synthetic parent rows so _suppressed_fk_pk_cols
-                    # suppresses the FK column and the parent tag is emitted as a scalar.
-                    for (col, _parent_tag, set_table, set_col) in set_key_cols:
-                        val = row.get(col)
-                        if set_table and val is not None:
-                            block_table_rows[set_table] = [
-                                {'_cifflow_block_id': '', '_cifflow_row_id': 0, set_col: val}
-                            ]
-                            parent_tables.append(set_table)
-
-                cat_order = sorted(parent_tables) + [table_name] if parent_tables else None
-                did = _resolve_dataset_id(conn, {row.get('_cifflow_block_id')}, fallback_id)
-                result.append(_BlockData(
-                    name=block_name,
-                    table_rows=block_table_rows,
-                    fallback_rows=[],
-                    anchor_frozenset=frozenset(),
-                    anchor_key_dict={},
-                    suppress_fk_pk=bool(set_key_cols),
-                    dataset_id=did,
-                    preferred_category_order=cat_order,
-                ))
+            result.extend(_collect_set_table_blocks(
+                table_name, rows, tdef, domain_pks, schema, conn, fallback_id,
+            ))
         else:
-            # Loop category: classify PK columns.
-            col_info = _classify_pk_cols(tdef, schema)
-            set_key_cols = [(col, tag, st, sc) for col, is_set, tag, st, sc in col_info if is_set]
-
-            if not set_key_cols:
-                # Pure Loop — one block for all rows.
-                block_name = _sanitize_block_name(table_name) or table_name
-                did = _resolve_dataset_id(conn, {row.get('_cifflow_block_id') for row in rows}, fallback_id)
-                result.append(_BlockData(
-                    name=block_name,
-                    table_rows={table_name: rows},
-                    fallback_rows=[],
-                    anchor_frozenset=frozenset(),
-                    anchor_key_dict={},
-                    suppress_fk_pk=False,
-                    dataset_id=did,
-                ))
-            else:
-                # Group rows by Set-key tuple.
-                groups: dict[tuple, list[dict]] = {}
-                for row in rows:
-                    key = tuple(row.get(col) for col, _, _, _ in set_key_cols)
-                    groups.setdefault(key, []).append(row)
-
-                for set_vals in sorted(groups, key=lambda t: tuple(v or '' for v in t)):
-                    group_rows = groups[set_vals]
-                    val_strs = [str(v or '') for v in set_vals]
-                    block_name = _sanitize_block_name('_'.join([table_name] + val_strs)) or table_name
-
-                    # Inject synthetic single-row Set parent entries so that
-                    # _suppressed_fk_pk_cols can find them (suppressing the FK
-                    # columns from the loop) and _render_set_category emits them
-                    # as scalar tag-value pairs above the loop.
-                    block_table_rows = {table_name: group_rows}
-                    parent_tables = []
-                    for (col, _parent_tag, set_table, set_col), val in zip(set_key_cols, set_vals):
-                        if set_table and val is not None:
-                            block_table_rows[set_table] = [
-                                {'_cifflow_block_id': '', '_cifflow_row_id': 0, set_col: val}
-                            ]
-                            parent_tables.append(set_table)
-
-                    cat_order = sorted(parent_tables) + [table_name]
-                    did = _resolve_dataset_id(conn, {row.get('_cifflow_block_id') for row in group_rows}, fallback_id)
-                    result.append(_BlockData(
-                        name=block_name,
-                        table_rows=block_table_rows,
-                        fallback_rows=[],
-                        anchor_frozenset=frozenset(),
-                        anchor_key_dict={},
-                        suppress_fk_pk=True,
-                        suppress_loop_fk_pk=True,
-                        dataset_id=did,
-                        preferred_category_order=cat_order,
-                    ))
+            result.extend(_collect_loop_table_blocks(
+                table_name, rows, tdef, schema, conn, fallback_id,
+            ))
 
     return result
 

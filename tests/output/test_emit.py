@@ -749,6 +749,12 @@ class TestAllBlocks:
         assert len(dataset_ids) == len(cif2.blocks)
         assert len(set(dataset_ids)) == 1
 
+    def test_keyless_set_zero_rows_no_raise(self, mini_schema):
+        """Keyless Set table with 0 rows should not raise — guard only fires on non-empty tables."""
+        conn = _ingest_src('#\\#CIF_2.0\ndata_empty\n', mini_schema)
+        result = emit(conn, schema=mini_schema, mode=EmitMode.ALL_BLOCKS)
+        assert result is not None
+
 
 # Schema with Loop table whose PK includes a Set FK — exercises header scalars.
 _SET_KEY_IN_PK_DIC = """\
@@ -902,6 +908,221 @@ class TestAllBlocksSetKeyInPK:
                 assert values == [1.0, 2.0]
             elif meas_id == 'M2':
                 assert values == [3.0, 4.0]
+
+    def test_output_is_valid_cif(self, conn, schema):
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        _, errors = build(result)
+        assert not errors, errors
+
+
+# ---------------------------------------------------------------------------
+# ALL_BLOCKS — pure Loop (no Set FK in PK)
+# ---------------------------------------------------------------------------
+
+class TestAllBlocksPureLoop:
+    """ALL_BLOCKS: Loop table whose PK contains only Loop-category keys.
+
+    _collect_all_blocks must produce exactly one block for all rows
+    (``set_key_cols`` is empty → the pure-Loop branch).
+    """
+
+    # _COMPOSITE_DIC contains SCAN (Loop, key=scan.id, no FK to any Set)
+    # alongside EXPT (Set) and RESULT (Loop with Set FK in PK).
+    # Ingesting only scan data exercises the pure-Loop path.
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_COMPOSITE_DIC)
+
+    _SCAN_ONLY_CIF = (
+        '#\\#CIF_2.0\n'
+        'data_scans\n'
+        'loop_\n  _scan.id\n'
+        '  sc1\n  sc2\n  sc3\n'
+    )
+
+    def test_pure_loop_one_block_for_all_rows(self, schema):
+        """Pure Loop emits exactly one block containing all rows."""
+        conn = _ingest_src(self._SCAN_ONLY_CIF, schema)
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        scan_blocks = [n for n in cif2.blocks if '_scan.id' in cif2[n]]
+        assert len(scan_blocks) == 1
+
+    def test_pure_loop_block_contains_all_rows(self, schema):
+        """The single scan block contains all 3 scan rows."""
+        conn = _ingest_src(self._SCAN_ONLY_CIF, schema)
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        scan_block = next(n for n in cif2.blocks if '_scan.id' in cif2[n])
+        ids = sorted(str(v) for v in cif2[scan_block]['_scan.id'])
+        assert ids == ['sc1', 'sc2', 'sc3']
+
+    def test_pure_loop_block_named_after_table(self, schema):
+        """Block name for a pure Loop is derived from the table name."""
+        conn = _ingest_src(self._SCAN_ONLY_CIF, schema)
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        headers = [l[len('data_'):] for l in result.splitlines() if l.startswith('data_')]
+        assert any(h.startswith('scan') for h in headers)
+
+    def test_pure_loop_has_loop_header(self, schema):
+        """The single scan block uses a loop_ structure (not scalar tags)."""
+        conn = _ingest_src(self._SCAN_ONLY_CIF, schema)
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        assert 'loop_' in result
+
+    def test_pure_loop_output_is_valid_cif(self, schema):
+        conn = _ingest_src(self._SCAN_ONLY_CIF, schema)
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        _, errors = build(result)
+        assert not errors, errors
+
+
+# Schema with a nested Set (child Set whose PK FK-links to a parent Set).
+# EXPT (Set, key=expt.id) + SAMPLE (Set, composite key: expt_id→expt + id).
+# Exercises the Set path in _collect_all_blocks where set_key_cols is non-empty.
+_NESTED_SET_DIC = """\
+#\\#CIF_2.0
+data_nested_set_dic
+
+save_EXPT
+  _definition.id        EXPT
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     expt
+  _category_key.name    '_expt.id'
+save_
+
+save_expt.id
+  _definition.id        '_expt.id'
+  _definition.class     Attribute
+  _name.category_id     expt
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_SAMPLE
+  _definition.id        SAMPLE
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     sample
+  loop_
+    _category_key.name
+    '_sample.expt_id'
+    '_sample.id'
+save_
+
+save_sample.expt_id
+  _definition.id        '_sample.expt_id'
+  _definition.class     Attribute
+  _name.category_id     sample
+  _name.object_id       expt_id
+  _type.purpose         Link
+  _type.source          Related
+  _type.container       Single
+  _type.contents        Code
+  _name.linked_item_id  '_expt.id'
+save_
+
+save_sample.id
+  _definition.id        '_sample.id'
+  _definition.class     Attribute
+  _name.category_id     sample
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_sample.name
+  _definition.id        '_sample.name'
+  _definition.class     Attribute
+  _name.category_id     sample
+  _name.object_id       name
+  _type.purpose         Describe
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Text
+save_
+"""
+
+# Two sample entities in the same experiment, across two CIF blocks.
+_NESTED_SET_CIF = (
+    '#\\#CIF_2.0\n'
+    'data_e1s1\n'
+    '_expt.id  E1\n'
+    '_sample.expt_id  E1\n'
+    '_sample.id  S1\n'
+    '_sample.name  Alpha\n'
+    '\n\n'
+    'data_e1s2\n'
+    '_expt.id  E1\n'
+    '_sample.expt_id  E1\n'
+    '_sample.id  S2\n'
+    '_sample.name  Beta\n'
+)
+
+
+# ---------------------------------------------------------------------------
+# ALL_BLOCKS — Set category with FK in its own PK (nested Set)
+# ---------------------------------------------------------------------------
+
+class TestAllBlocksNestedSet:
+    """ALL_BLOCKS: child Set whose composite PK includes a FK to a parent Set.
+
+    _collect_all_blocks must inject a synthetic parent row (expt) so that
+    _suppressed_fk_pk_cols suppresses the FK column and emits _expt.id as a
+    scalar above the sample tags.
+    """
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_NESTED_SET_DIC)
+
+    @pytest.fixture
+    def conn(self, schema):
+        return _ingest_src(_NESTED_SET_CIF, schema)
+
+    def test_sample_blocks_one_per_row(self, conn, schema):
+        """Each sample entity gets its own block."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        sample_blocks = [n for n in cif2.blocks if '_sample.id' in cif2[n]]
+        assert len(sample_blocks) == 2
+
+    def test_parent_set_scalar_injected(self, conn, schema):
+        """_expt.id appears as a scalar tag-value pair in each sample block."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        sample_blocks = [n for n in cif2.blocks if '_sample.id' in cif2[n]]
+        for bname in sample_blocks:
+            assert '_expt.id' in cif2[bname], f"_expt.id missing in block {bname}"
+            assert str(cif2[bname]['_expt.id'][0]) == 'E1'
+
+    def test_fk_column_suppressed(self, conn, schema):
+        """_sample.expt_id is suppressed (the scalar _expt.id takes its place)."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        assert '_sample.expt_id' not in result
+
+    def test_sample_values_correct(self, conn, schema):
+        """Each sample block contains the correct name for its id."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        sample_blocks = [n for n in cif2.blocks if '_sample.id' in cif2[n]]
+        id_to_name = {
+            str(cif2[b]['_sample.id'][0]): str(cif2[b]['_sample.name'][0])
+            for b in sample_blocks
+        }
+        assert id_to_name == {'S1': 'Alpha', 'S2': 'Beta'}
 
     def test_output_is_valid_cif(self, conn, schema):
         result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)

@@ -1537,6 +1537,16 @@
 
 ---
 
+## Lesson 154 — Refactoring a function with shared injection logic: extract vals as a list (2026-06-12)
+
+**Context:** `_collect_all_blocks` had two nearly-identical Set-parent-injection blocks. The Set path iterated `set_key_cols` and called `row.get(col)` per entry; the Loop path iterated `zip(set_key_cols, set_vals)` with pre-computed vals. Extracting a `_inject_set_parents(block_table_rows, parent_tables, set_key_cols, vals)` helper required a unified interface.
+
+**Observation:** The asymmetry — one path builds `vals` lazily per iteration, the other has them pre-built — disappears when you materialise `vals` before the call in both cases. The extra list comprehension is negligible overhead and makes both call sites identical in structure.
+
+**Rule:** When extracting shared iteration logic where one caller builds values lazily (per-iteration `row.get`) and another has them pre-built, materialise the lazy side into a list at the call site. The helper receives a plain list and uses `zip(set_key_cols, vals)`.
+
+---
+
 ## Lesson 153 — `all_items` in `_load_recursive` can contain duplicate `definition_id`s (2026-06-06)
 
 **Context:** `_load_recursive` builds `all_items = list(pool.values()) + primary_items`. `pool` holds items from constituent imports; `primary_items` holds items from the current file's own frames. When a constituent and the current file both define the same item (e.g., `_exptl_crystal.id` in both `multi_block_core.dic` and `cif_core.dic` which it imports), both `DdlmItem` objects end up in `all_items` with the same `definition_id`. `_build_lookup_tables` handles the duplicate definition_id by overwriting in its first loop (primary wins), but then processes both items' alias lists — causing spurious "alias X collides with existing entry Y" warnings for the second item.
