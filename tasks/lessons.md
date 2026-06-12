@@ -5,7 +5,7 @@
 - **Arrow / PyO3 / Rust:** 103, 104, 105, 106, 107, 150
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123, 145
-- **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64
+- **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64, 151, 152, 153
 - **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141, 146, 147, 148
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
@@ -1514,3 +1514,39 @@
 **Fix:** Added `lex_cif` to `cifflow_core` (Rust) to expose the token stream. Updated all tests and inspect tools to use `cifflow_core.lex_cif` / `cifflow_core.parse`. Deleted `lexer/lexer.py`, `lexer/tokens.py`, `parser/parser.py` (dead code). Kept `parser/version.py` (`detect_version`) — still needed by `inspect_lexer` for version-error display and by `test_version.py`.
 
 **Rule:** Tests and inspect tooling must call the same entry points as production code. Maintaining a parallel Python implementation of the lexer/parser creates a permanent divergence risk. When Rust is the production path, it must also be the test and inspect path.
+
+---
+
+## Lesson 151 — `inspect_fk_path` should surface partial DDLm Link connections (2026-06-05)
+
+**Context:** `inspect_fk_path(schema, "refln", "diffrn_radiation_wavelength")` reported "no path found" even though `_refln.wavelength_id` links to a key column of `diffrn_radiation_wavelength`. The connection was real but incomplete (only covers one of the target's PK columns), so no `ForeignKeyDef` was generated.
+
+**Fix:** Added `PartialLinkDef` dataclass to the schema. `generate_schema` now records every DDLm `Link` item that was skipped (non-PK target, missing PKs, ambiguous) as a `PartialLinkDef` in `schema.partial_links`. `inspect_fk_path` displays these when no complete path exists, showing which PKs are covered and which are missing.
+
+**Rule:** When a DDLm link fails to produce a FK constraint, record it — don't just warn and discard. Partial connections are diagnostic gold when debugging missing join paths.
+
+---
+
+## Lesson 152 — `parser/__init__.py` must be kept even when `CifParser` is removed (2026-06-05)
+
+**Context:** Deleting `parser/__init__.py` along with `parser/parser.py` broke the `cifflow.parser` package: `cifflow.parser.version` could no longer be imported by mkdocstrings, causing a CI docs build failure.
+
+**Fix:** Restored a minimal `parser/__init__.py` (`"""CIF parser utilities."""`).
+
+**Rule:** Deleting `__init__.py` deletes the Python package itself, not just its exports. Any module still inside the directory (`version.py`) becomes unreachable as `cifflow.parser.version`. Keep a stub `__init__.py` whenever any submodule in the package is still in use.
+
+---
+
+## Lesson 153 — `all_items` in `_load_recursive` can contain duplicate `definition_id`s (2026-06-06)
+
+**Context:** `_load_recursive` builds `all_items = list(pool.values()) + primary_items`. `pool` holds items from constituent imports; `primary_items` holds items from the current file's own frames. When a constituent and the current file both define the same item (e.g., `_exptl_crystal.id` in both `multi_block_core.dic` and `cif_core.dic` which it imports), both `DdlmItem` objects end up in `all_items` with the same `definition_id`. `_build_lookup_tables` handles the duplicate definition_id by overwriting in its first loop (primary wins), but then processes both items' alias lists — causing spurious "alias X collides with existing entry Y" warnings for the second item.
+
+**Fix:** Deduplicate `all_items` by `definition_id` before calling `_build_lookup_tables`, preserving "primary overwrites constituent" semantics:
+```python
+_merged = {item.definition_id: item for item in pool.values()}
+for item in primary_items:
+    _merged[item.definition_id] = item
+all_items = list(_merged.values())
+```
+
+**Rule:** Never pass a list with duplicate `definition_id`s to `_build_lookup_tables`. The deduplication that should happen before building lookup tables was accidentally deferred into the lookup builder, causing false alias collision warnings whenever a dictionary redefines an item already present in a constituent.
