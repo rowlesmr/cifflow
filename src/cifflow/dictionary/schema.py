@@ -313,6 +313,9 @@ class SchemaSpec:
         list represents a ``PLACEHOLDER`` (``"."``), meaning deprecated with
         no named replacement.  Covers both deprecated items and deprecated
         categories.
+    partial_links : list[PartialLinkDef]
+        DDLm ``Link`` items that could not be resolved into full FK constraints
+        during schema generation.  Recorded for use by inspection tools.
     """
 
     tables: dict[str, TableDef]

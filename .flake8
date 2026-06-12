@@ -1,0 +1,3 @@
+[flake8]
+style = numpy
+arg-type-hints-in-docstring = False
