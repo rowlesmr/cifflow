@@ -180,7 +180,7 @@ Enforce: `.venv/Scripts/xenon src/ --max-average B --max-modules C --max-absolut
 | 170 | `output/emit.py:540 _collect_grouped` | Largest function in codebase |
 | 98 | `dictionary/schema.py:485 generate_schema` | FK/bridge/propagation all tangled together |
 | 69 | `output/emit.py:1671 _render_block` | Large dispatch over emit modes |
-| 61 | `inspect/_schema.py:12 inspect_schema` | Long sequential display logic |
+| ~~61~~ → **1** | ~~`inspect/_schema.py:12 inspect_schema`~~ ✅ | Decomposed into 7 private helpers; 16 branch-coverage tests added (suite: 1858 → 1874) |
 | 55 | `dictionary/visualise.py:449 visualise_schema` | Long sequential display logic |
 | 54 | `output/emit.py:2076 _render_merge_group` | |
 | 45 | `output/emit.py:1504 _collect_all_blocks` | |
