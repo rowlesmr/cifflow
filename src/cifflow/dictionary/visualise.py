@@ -442,6 +442,180 @@ def _component_label(component: frozenset[str]) -> str:
     return min(component)
 
 
+def _emit_clustered_nodes(
+    lines: 'list[str]',
+    schema: SchemaSpec,
+    real_tables: 'set[str]',
+    ghost_tables: 'set[str]',
+    bridge_only: 'set[str]',
+    orphans: 'set[str]',
+    pass1_components: 'list[frozenset[str]]',
+    highlight_orphans: bool,
+    show_columns: 'Literal["all", "sparse", "none"]',
+    deprecated_ids: 'frozenset[str]',
+) -> None:
+    """Emit subgraph cluster blocks for all connected components (highlight_components=True)."""
+    def _connectivity(name: str) -> str:
+        if name in bridge_only:
+            return 'bridge_only'
+        if name in orphans:
+            return 'orphan'
+        return 'connected'
+
+    sorted_components = sorted(pass1_components, key=_component_label)
+    real_structural_components = [
+        c for c in sorted_components if len(c) >= 2 and c.issubset(real_tables)
+    ]
+    partial_structural_components = [
+        c for c in sorted_components
+        if len(c) >= 2 and not c.issubset(real_tables) and any(t in real_tables for t in c)
+    ]
+    all_structural = real_structural_components + partial_structural_components
+
+    for i, component in enumerate(all_structural):
+        visible_members = sorted(t for t in component if t in real_tables)
+        if not visible_members:
+            continue
+        rep = _component_label(component)
+        lines.append(f'    subgraph cluster_{i} {{')
+        lines.append(f'        label="{_escape(rep)}" style=filled fillcolor="#f5f5f5"')
+        for tbl_name in visible_members:
+            tbl = schema.tables[tbl_name]
+            for node_line in _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema, deprecated_ids):
+                lines.append('    ' + node_line)
+        lines.append('    }')
+        lines.append('')
+
+    visible_orphans = sorted(orphans & real_tables)
+    visible_bridge_only = sorted(bridge_only & real_tables)
+    if visible_orphans or visible_bridge_only:
+        lines.append('    subgraph cluster_orphans {')
+        lines.append('        label="Isolated tables" style=filled fillcolor="#fff8f8"')
+        for tbl_name in visible_orphans + visible_bridge_only:
+            if tbl_name not in real_tables:
+                continue
+            tbl = schema.tables[tbl_name]
+            for node_line in _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema, deprecated_ids):
+                lines.append('    ' + node_line)
+        lines.append('    }')
+        lines.append('')
+
+    if ghost_tables:
+        lines.append('    subgraph cluster_missing {')
+        lines.append('        label="Missing tables" style=filled fillcolor="#ffe8e8"')
+        for ghost in sorted(ghost_tables):
+            for node_line in _ghost_node_dot(ghost):
+                lines.append('    ' + node_line)
+        lines.append('    }')
+        lines.append('')
+
+    placed = set()
+    for c in all_structural:
+        placed.update(c)
+    placed.update(orphans)
+    placed.update(bridge_only)
+    for tbl_name in sorted(real_tables - placed):
+        tbl = schema.tables[tbl_name]
+        lines += _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema, deprecated_ids)
+        lines.append('')
+
+
+def _emit_fk_edges(
+    lines: 'list[str]',
+    schema: SchemaSpec,
+    real_tables: 'set[str]',
+    ghost_tables: 'set[str]',
+    show_columns: str,
+    deprecated_ids: 'frozenset[str]',
+) -> None:
+    for tbl_name in sorted(real_tables):
+        tbl = schema.tables[tbl_name]
+        vis_cols = _visible_columns(tbl, schema, show_columns, deprecated_ids)
+        for fk in tbl.foreign_keys:
+            target = fk.target_table
+            if target not in ghost_tables and target not in real_tables:
+                continue
+            label = _fk_label(fk, vis_cols, show_columns)
+            attr = f' [label="{label}"]' if label else ''
+            lines.append(f'    {_dot_id(fk.source_table)} -> {_dot_id(target)}{attr}')
+
+
+def _emit_bridge_edges(
+    lines: 'list[str]',
+    schema: SchemaSpec,
+    real_tables: 'set[str]',
+    ghost_tables: 'set[str]',
+    bridge_only: 'set[str]',
+    show_bridge: bool,
+) -> None:
+    bridge_col_by_table: dict[str, list[BridgeColumnDef]] = {}
+    for bc in schema.bridge_columns:
+        bridge_col_by_table.setdefault(bc.table_name, []).append(bc)
+    for tbl_name in sorted(real_tables):
+        if tbl_name not in bridge_col_by_table:
+            continue
+        is_bridge_only_node = tbl_name in bridge_only
+        for bc in bridge_col_by_table[tbl_name]:
+            bridge_target = bc.bridge_table
+            target_is_ghost = bridge_target in ghost_tables
+            target_in_real = bridge_target in real_tables
+            if not target_is_ghost and not target_in_real:
+                continue
+            if show_bridge or is_bridge_only_node or target_is_ghost:
+                label = _escape(f'{bc.column_name} via {bc.via_column}')
+                lines.append(
+                    f'    {_dot_id(tbl_name)} -> {_dot_id(bridge_target)}'
+                    f' [label="{label}" style=dashed color="#888888"]'
+                )
+
+
+def _emit_parent_edges(
+    lines: 'list[str]',
+    schema: SchemaSpec,
+    real_tables: 'set[str]',
+    ghost_tables: 'set[str]',
+    show_parent_edges: bool,
+) -> None:
+    for child, parent in sorted(schema.category_parent.items()):
+        if not parent:
+            continue
+        child_in_real = child in real_tables
+        parent_is_ghost = parent in ghost_tables
+        parent_in_real = parent in real_tables
+        if not child_in_real:
+            continue
+        if not parent_is_ghost and not parent_in_real:
+            continue
+        if show_parent_edges or parent_is_ghost:
+            lines.append(
+                f'    {_dot_id(child)} -> {_dot_id(parent)}'
+                f' [style=dotted arrowhead=open color="#aaaaaa"]'
+            )
+
+
+def _build_vis_context(
+    schema: SchemaSpec,
+    hide_deprecated: bool,
+    show_orphans: bool,
+    bridge_only: set[str],
+    orphans: set[str],
+    ghost_tables: set[str],
+) -> 'tuple[frozenset[str], set[str], set[str]]':
+    """Return (deprecated_ids, real_tables, ghost_tables) after filtering."""
+    deprecated_ids: frozenset[str] = (
+        frozenset(schema.deprecated_ids) if hide_deprecated else frozenset()
+    )
+    hidden_deprecated: set[str] = (
+        _deprecated_table_names(schema) if hide_deprecated else set()
+    )
+    if show_orphans:
+        real_tables = set(schema.tables) - hidden_deprecated
+    else:
+        real_tables = set(schema.tables) - bridge_only - orphans - hidden_deprecated
+    filtered_ghosts = ghost_tables - hidden_deprecated
+    return deprecated_ids, real_tables, filtered_ghosts
+
+
 # ---------------------------------------------------------------------------
 # Public: visualise_schema
 # ---------------------------------------------------------------------------
@@ -524,23 +698,9 @@ def visualise_schema(
     """
     ghost_tables = _collect_ghost_tables(schema)
     bridge_only, orphans, pass1_components = _classify_tables(schema)
-
-    # Deprecated filtering
-    deprecated_ids: frozenset[str] = (
-        frozenset(schema.deprecated_ids) if hide_deprecated else frozenset()
+    deprecated_ids, real_tables, ghost_tables = _build_vis_context(
+        schema, hide_deprecated, show_orphans, bridge_only, orphans, ghost_tables
     )
-    hidden_deprecated: set[str] = (
-        _deprecated_table_names(schema) if hide_deprecated else set()
-    )
-
-    # Determine which real tables to emit
-    if show_orphans:
-        real_tables = set(schema.tables) - hidden_deprecated
-    else:
-        real_tables = set(schema.tables) - bridge_only - orphans - hidden_deprecated
-
-    # Ghost tables must not include tables we deliberately hid as deprecated
-    ghost_tables -= hidden_deprecated
 
     concentrate_attr = ' concentrate=true' if concentrate else ''
     lines: list[str] = [
@@ -553,7 +713,7 @@ def visualise_schema(
         '',
     ]
 
-    # --- Connectivity lookup ---
+    # --- Connectivity lookup (used by flat path) ---
     def _connectivity(name: str) -> str:
         if name in bridge_only:
             return 'bridge_only'
@@ -569,70 +729,10 @@ def visualise_schema(
 
     # --- Real table nodes (possibly clustered) ---
     if highlight_components:
-        # Sort components by their representative name for stability
-        sorted_components = sorted(pass1_components, key=_component_label)
-
-        # Collect component nodes (only real, non-orphan/bridge tables)
-        real_structural_components = [
-            c for c in sorted_components if len(c) >= 2 and c.issubset(real_tables)
-        ]
-        # Partial components (some members hidden by show_orphans=False)
-        partial_structural_components = [
-            c for c in sorted_components
-            if len(c) >= 2 and not c.issubset(real_tables) and any(t in real_tables for t in c)
-        ]
-        # Include partially-visible components too
-        all_structural = real_structural_components + partial_structural_components
-
-        for i, component in enumerate(all_structural):
-            visible_members = sorted(t for t in component if t in real_tables)
-            if not visible_members:
-                continue
-            rep = _component_label(component)
-            lines.append(f'    subgraph cluster_{i} {{')
-            lines.append(f'        label="{_escape(rep)}" style=filled fillcolor="#f5f5f5"')
-            for tbl_name in visible_members:
-                tbl = schema.tables[tbl_name]
-                for node_line in _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema, deprecated_ids):
-                    lines.append('    ' + node_line)
-            lines.append('    }')
-            lines.append('')
-
-        # Orphans cluster
-        visible_orphans = sorted(orphans & real_tables)
-        visible_bridge_only = sorted(bridge_only & real_tables)
-        if visible_orphans or visible_bridge_only:
-            lines.append('    subgraph cluster_orphans {')
-            lines.append('        label="Isolated tables" style=filled fillcolor="#fff8f8"')
-            for tbl_name in visible_orphans + visible_bridge_only:
-                if tbl_name not in real_tables:
-                    continue
-                tbl = schema.tables[tbl_name]
-                for node_line in _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema, deprecated_ids):
-                    lines.append('    ' + node_line)
-            lines.append('    }')
-            lines.append('')
-
-        # Ghost node cluster
-        if ghost_tables:
-            lines.append('    subgraph cluster_missing {')
-            lines.append('        label="Missing tables" style=filled fillcolor="#ffe8e8"')
-            for ghost in sorted(ghost_tables):
-                for node_line in _ghost_node_dot(ghost):
-                    lines.append('    ' + node_line)
-            lines.append('    }')
-            lines.append('')
-
-        # Singleton real-table nodes not yet placed
-        placed = set()
-        for c in all_structural:
-            placed.update(c)
-        placed.update(orphans)
-        placed.update(bridge_only)
-        for tbl_name in sorted(real_tables - placed):
-            tbl = schema.tables[tbl_name]
-            lines += _table_node_dot(tbl, _connectivity(tbl_name), highlight_orphans, show_columns, schema, deprecated_ids)
-            lines.append('')
+        _emit_clustered_nodes(
+            lines, schema, real_tables, ghost_tables, bridge_only, orphans,
+            pass1_components, highlight_orphans, show_columns, deprecated_ids,
+        )
     else:
         for tbl_name in sorted(real_tables):
             tbl = schema.tables[tbl_name]
@@ -646,60 +746,9 @@ def visualise_schema(
 
     # --- Edges ---
     lines.append('')
-
-    # FK edges
-    for tbl_name in sorted(real_tables):
-        tbl = schema.tables[tbl_name]
-        vis_cols = _visible_columns(tbl, schema, show_columns, deprecated_ids)
-        for fk in tbl.foreign_keys:
-            target = fk.target_table
-            # Skip if target is a real table that's been hidden
-            if target not in ghost_tables and target not in real_tables:
-                continue
-            label = _fk_label(fk, vis_cols, show_columns)
-            attr = f' [label="{label}"]' if label else ''
-            lines.append(f'    {_dot_id(fk.source_table)} -> {_dot_id(target)}{attr}')
-
-    # Bridge edges
-    bridge_col_by_table: dict[str, list[BridgeColumnDef]] = {}
-    for bc in schema.bridge_columns:
-        bridge_col_by_table.setdefault(bc.table_name, []).append(bc)
-
-    for tbl_name in sorted(real_tables):
-        if tbl_name not in bridge_col_by_table:
-            continue
-        is_bridge_only_node = tbl_name in bridge_only
-        for bc in bridge_col_by_table[tbl_name]:
-            bridge_target = bc.bridge_table
-            target_is_ghost = bridge_target in ghost_tables
-            target_in_real = bridge_target in real_tables
-            if not target_is_ghost and not target_in_real:
-                continue
-            # Show bridge edge if: show_bridge is True, OR the node is bridge_only, OR target is ghost
-            if show_bridge or is_bridge_only_node or target_is_ghost:
-                label = _escape(f'{bc.column_name} via {bc.via_column}')
-                lines.append(
-                    f'    {_dot_id(tbl_name)} -> {_dot_id(bridge_target)}'
-                    f' [label="{label}" style=dashed color="#888888"]'
-                )
-
-    # Parent-hierarchy edges
-    for child, parent in sorted(schema.category_parent.items()):
-        if not parent:
-            continue
-        child_in_real = child in real_tables
-        parent_is_ghost = parent in ghost_tables
-        parent_in_real = parent in real_tables
-        if not child_in_real:
-            continue
-        if not parent_is_ghost and not parent_in_real:
-            continue
-        # Show parent edge if: show_parent_edges is True, OR target is ghost
-        if show_parent_edges or parent_is_ghost:
-            lines.append(
-                f'    {_dot_id(child)} -> {_dot_id(parent)}'
-                f' [style=dotted arrowhead=open color="#aaaaaa"]'
-            )
+    _emit_fk_edges(lines, schema, real_tables, ghost_tables, show_columns, deprecated_ids)
+    _emit_bridge_edges(lines, schema, real_tables, ghost_tables, bridge_only, show_bridge)
+    _emit_parent_edges(lines, schema, real_tables, ghost_tables, show_parent_edges)
 
     lines.append('}')
     return '\n'.join(lines)

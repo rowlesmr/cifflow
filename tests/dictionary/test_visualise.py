@@ -788,3 +788,137 @@ class TestHtml:
         assert 'cdn.jsdelivr.net' not in html
         assert 'unpkg.com' not in html
         assert 'cdnjs' not in html
+
+
+# ---------------------------------------------------------------------------
+# visualise_schema — branch coverage for Stage 1 extraction targets
+# ---------------------------------------------------------------------------
+
+class TestVisualiseSchemaContextSetup:
+    """_build_vis_context branches: deprecated + real_tables + ghost filtering."""
+
+    def test_hide_deprecated_table_removed_from_ghost_candidates(self):
+        # A deprecated table that is also referenced by another table's FK must not
+        # become a [MISSING] ghost node when hide_deprecated=True removes it from
+        # real_tables AND from ghost_tables.
+        fk = ForeignKeyDef('child', ['dep_id'], 'dep', ['id'])
+        child_cols = [_col('id', definition_id='_child.id', is_primary_key=True),
+                      _col('dep_id', definition_id='_child.dep_id')]
+        dep_cols  = [_col('id', definition_id='_dep.id', is_primary_key=True)]
+        child = _table('child', columns=child_cols, primary_keys=['id'], foreign_keys=[fk])
+        dep   = _table('dep',   columns=dep_cols,   primary_keys=['id'])
+        s = SchemaSpec(
+            tables={'child': child, 'dep': dep}, column_to_tag={},
+            bridge_columns=[], category_parent={},
+            deprecated_ids={'_dep.id'},
+        )
+        dot = visualise_schema(s, hide_deprecated=True)
+        assert '[MISSING]' not in dot
+        assert '"child" -> "dep"' not in dot
+
+
+class TestVisualiseSchemaClusteredNodes:
+    """_emit_clustered_nodes branches."""
+
+    def test_partial_component_visible_members_rendered_in_subgraph(self):
+        # Component {active, dep} where dep is hidden by hide_deprecated=True.
+        # partial_structural_components picks up {active, dep} because
+        # not c.issubset(real_tables) but any(t in real_tables for t in c).
+        # 'active' should still appear in a cluster subgraph.
+        fk = ForeignKeyDef('active', ['dep_id'], 'dep', ['id'])
+        active_cols = [_col('id', definition_id='_active.id', is_primary_key=True),
+                       _col('dep_id', definition_id='_active.dep_id')]
+        dep_cols    = [_col('id', definition_id='_dep.id', is_primary_key=True)]
+        active = _table('active', columns=active_cols, primary_keys=['id'], foreign_keys=[fk])
+        dep    = _table('dep',    columns=dep_cols,    primary_keys=['id'])
+        s = SchemaSpec(
+            tables={'active': active, 'dep': dep}, column_to_tag={},
+            bridge_columns=[], category_parent={},
+            deprecated_ids={'_dep.id'},
+        )
+        dot = visualise_schema(s, highlight_components=True, hide_deprecated=True)
+        assert 'subgraph cluster_' in dot
+        assert 'active' in dot
+        assert '"dep"' not in dot  # deprecated table must not appear as a DOT node
+
+
+class TestVisualiseSchemaFkEdges:
+    """_emit_fk_edges branches."""
+
+    def test_fk_edge_skipped_when_target_not_in_real_or_ghost(self):
+        # FK target is in real_tables normally, but with show_orphans=False the
+        # target (an orphan-connected table) disappears.  Actually the easiest
+        # path: target is deprecated + hide_deprecated=True → not in real_tables,
+        # not a ghost → edge must be suppressed.
+        fk = ForeignKeyDef('child', ['dep_id'], 'dep', ['id'])
+        child_cols = [_col('id', definition_id='_child.id', is_primary_key=True),
+                      _col('dep_id', definition_id='_child.dep_id')]
+        dep_cols   = [_col('id', definition_id='_dep.id', is_primary_key=True)]
+        child = _table('child', columns=child_cols, primary_keys=['id'], foreign_keys=[fk])
+        dep   = _table('dep',   columns=dep_cols,   primary_keys=['id'])
+        s = SchemaSpec(
+            tables={'child': child, 'dep': dep}, column_to_tag={},
+            bridge_columns=[], category_parent={},
+            deprecated_ids={'_dep.id'},
+        )
+        dot = visualise_schema(s, hide_deprecated=True)
+        assert '"child" -> "dep"' not in dot
+
+
+class TestVisualiseSchemaEdgeGuards:
+    """_emit_bridge_edges and _emit_parent_edges guard branches."""
+
+    def test_bridge_edge_skipped_when_target_hidden_by_deprecated(self):
+        # Bridge target table is fully deprecated → removed from real_tables, not a ghost
+        # → neither target_in_real nor target_is_ghost → edge must be suppressed.
+        bc = BridgeColumnDef('src', 'dep_id', [('via_col', 'dep', 'id')], 'dep_id')
+        dep_cols = [_col('id', definition_id='_dep.id', is_primary_key=True)]
+        src = _table('src')
+        dep = _table('dep', columns=dep_cols, primary_keys=['id'])
+        s = SchemaSpec(
+            tables={'src': src, 'dep': dep}, column_to_tag={},
+            bridge_columns=[bc], category_parent={},
+            deprecated_ids={'_dep.id'},
+        )
+        dot = visualise_schema(s, show_bridge=True, hide_deprecated=True)
+        assert '"src" -> "dep"' not in dot
+
+    def test_parent_none_value_produces_no_edge(self):
+        # category_parent entry with None value → `if not parent: continue` fires.
+        s = _schema([_table('t')], category_parent={'t': None})
+        dot = visualise_schema(s, show_parent_edges=True)
+        # No parent edge for 't' since parent is None
+        assert '"t" ->' not in dot
+
+    def test_parent_edge_skipped_when_child_not_in_real_tables(self):
+        # hide_deprecated=True removes the child table from real_tables.
+        # child_in_real → False → `if not child_in_real: continue` fires, no edge.
+        child_cols = [_col('id', definition_id='_child.id', is_primary_key=True)]
+        par_cols   = [_col('id', definition_id='_par.id',   is_primary_key=True)]
+        child = _table('child', columns=child_cols, primary_keys=['id'])
+        par   = _table('par',   columns=par_cols,   primary_keys=['id'])
+        s = SchemaSpec(
+            tables={'child': child, 'par': par}, column_to_tag={},
+            bridge_columns=[], category_parent={'child': 'par'},
+            deprecated_ids={'_child.id'},
+        )
+        dot = visualise_schema(s, show_parent_edges=True, hide_deprecated=True)
+        assert '"child" -> "par"' not in dot
+
+    def test_parent_edge_skipped_when_parent_not_ghost_and_not_in_real(self):
+        # Parent table is fully deprecated → not in real_tables, not a ghost
+        # (it's still in schema.tables) → `not parent_is_ghost and not parent_in_real`
+        # fires → edge must be suppressed even with show_parent_edges=True.
+        par_cols = [_col('id', definition_id='_par.id', is_primary_key=True)]
+        par = _table('par', columns=par_cols, primary_keys=['id'])
+        fk  = ForeignKeyDef('child', ['par_id'], 'par', ['id'])
+        child_cols = [_col('id', definition_id='_child.id', is_primary_key=True),
+                      _col('par_id', definition_id='_child.par_id')]
+        child = _table('child', columns=child_cols, primary_keys=['id'], foreign_keys=[fk])
+        s = SchemaSpec(
+            tables={'child': child, 'par': par}, column_to_tag={},
+            bridge_columns=[], category_parent={'child': 'par'},
+            deprecated_ids={'_par.id'},
+        )
+        dot = visualise_schema(s, show_parent_edges=True, hide_deprecated=True)
+        assert '"child" -> "par"' not in dot
