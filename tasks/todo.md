@@ -182,7 +182,7 @@ Enforce: `.venv/Scripts/xenon src/ --max-average B --max-modules C --max-absolut
 | 69 | `output/emit.py:1671 _render_block` | Large dispatch over emit modes |
 | ~~61~~ → **1** | ~~`inspect/_schema.py:12 inspect_schema`~~ ✅ | Decomposed into 7 private helpers; 16 branch-coverage tests added (suite: 1858 → 1874) |
 | 55 | `dictionary/visualise.py:449 visualise_schema` | Long sequential display logic |
-| 54 | `output/emit.py:2076 _render_merge_group` | |
+| ~~54~~ → **D/21** | ~~`output/emit.py:2076 _render_merge_group`~~ ✅ | Decomposed into 5 private helpers; 11 branch-coverage tests added (suite: 1885 → 1896) |
 | ~~45~~ → **B/7** | ~~`output/emit.py:1504 _collect_all_blocks`~~ ✅ | Decomposed into 4 private helpers (`_validate_all_blocks_preconditions`, `_inject_set_parents`, `_collect_set_table_blocks`, `_collect_loop_table_blocks`); 11 branch-coverage tests added (suite: 1874 → 1885) |
 
 ### E-grade (should fix)

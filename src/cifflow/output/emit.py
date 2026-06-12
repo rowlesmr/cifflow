@@ -2119,6 +2119,136 @@ def _expand_wildcard(pattern: str, schema: SchemaSpec) -> list[str]:
 # Merge group renderer
 # ---------------------------------------------------------------------------
 
+def _build_merge_token_matrix(
+    merged_cols: 'list[tuple[str, str]]',
+    all_pk_vals: 'list[tuple]',
+    table_index: 'dict[str, dict[tuple, dict]]',
+    su_maps: 'dict[str, dict[str, str]]',
+    reconstruct_su: bool,
+    version: CifVersion,
+    line_limit: 'int | None',
+) -> 'list[list[str]]':
+    """Build a token matrix (rows × columns) from the indexed table data."""
+    matrix: list[list[str]] = []
+    for pk_vals in all_pk_vals:
+        tokens = []
+        for cat, col in merged_cols:
+            row = table_index[cat].get(pk_vals, {})
+            value = row.get(col)
+            if value is None:
+                token = '.'
+            else:
+                su_map = su_maps[cat]
+                if reconstruct_su and col in su_map:
+                    su_val = row.get(su_map[col])
+                    if su_val is not None:
+                        value = _merge_su(value, su_val)
+                token = quote(value, version)
+                if line_limit is not None:
+                    token = _apply_line_limit(value, token, line_limit)
+            tokens.append(token)
+        matrix.append(tokens)
+    return matrix
+
+
+def _build_merge_merged_cols(
+    present: list[str],
+    cat_active: 'dict[str, list[str]]',
+    first_cat: str,
+    table_index: 'dict[str, dict[tuple, dict]]',
+    shared_pks: list[str],
+    schema: SchemaSpec,
+    spec: 'BlockSpec | None',
+    reconstruct_su: bool,
+    suppress_pk_cols: 'set[str] | None',
+) -> 'list[tuple[str, str]]':
+    """Build the merged column list: shared PKs from first category, then per-table non-PK cols."""
+    first_tdef = schema.tables[first_cat]
+    first_active = _active_cols(first_tdef, list(table_index[first_cat].values()), spec, reconstruct_su)
+    _suppress = suppress_pk_cols or set()
+    pk_in_first = [pk for pk in shared_pks if pk in set(first_active) and pk not in _suppress]
+
+    merged_cols: list[tuple[str, str]] = [(first_cat, pk) for pk in pk_in_first]
+    pk_set = set(shared_pks)
+    for cat in present:
+        for col in cat_active.get(cat, []):
+            if col not in pk_set:
+                merged_cols.append((cat, col))
+    return merged_cols
+
+
+def _compute_merge_cat_active(
+    present: list[str],
+    table_index: 'dict[str, dict[tuple, dict]]',
+    pk_set: 'frozenset[str]',
+    schema: SchemaSpec,
+    spec: 'BlockSpec | None',
+    reconstruct_su: bool,
+    effective_suppressed: 'dict[str, set[str]]',
+    suppress_all_fk_to_set: bool,
+) -> 'dict[str, list[str]]':
+    """Compute non-PK active columns per category for a merge group."""
+    cat_active: dict[str, list[str]] = {}
+    for cat in present:
+        tdef = schema.tables[cat]
+        all_rows = list(table_index[cat].values())
+        cols = _active_cols(tdef, all_rows, spec, reconstruct_su)
+        non_pk_cols = [c for c in cols if c not in pk_set]
+        if suppress_all_fk_to_set:
+            suppressed = effective_suppressed.get(cat, set())
+            non_pk_cols = [c for c in non_pk_cols if c not in suppressed]
+            non_pk_cols = [c for c in non_pk_cols if not all(row.get(c) == '.' for row in all_rows)]
+        if non_pk_cols or cols:
+            cat_active[cat] = non_pk_cols
+    return cat_active
+
+
+def _build_merge_table_index(
+    present: list[str],
+    table_rows: 'dict[str, list[dict]]',
+    shared_pks: list[str],
+) -> 'tuple[list[tuple], dict[str, dict[tuple, dict]]]':
+    """Index each table by its PK tuple; collect unique PK tuples in encounter order."""
+    all_pk_vals: list[tuple] = []
+    seen_pk: set[tuple] = set()
+    table_index: dict[str, dict[tuple, dict]] = {}
+    for cat in present:
+        table_index[cat] = {}
+        for row in table_rows[cat]:
+            pk_tuple = tuple(row.get(pk) for pk in shared_pks)
+            if pk_tuple not in seen_pk:
+                seen_pk.add(pk_tuple)
+                all_pk_vals.append(pk_tuple)
+            table_index[cat][pk_tuple] = row
+    return all_pk_vals, table_index
+
+
+def _render_merge_group_incompatible(
+    present: list[str],
+    table_rows: 'dict[str, list[dict]]',
+    schema: SchemaSpec,
+    version: CifVersion,
+    spec: 'BlockSpec | None',
+    reconstruct_su: bool,
+    pretty: bool,
+    line_limit: 'int | None',
+) -> list[str]:
+    """Render PK-incompatible categories as plain separate loops."""
+    lines: list[str] = []
+    first = True
+    for cat in present:
+        rows = table_rows[cat]
+        tdef = schema.tables[cat]
+        cols = _active_cols(tdef, rows, spec, reconstruct_su)
+        if not cols:
+            continue
+        if not first:
+            lines.append('')
+        first = False
+        lines.extend(_render_loop_category(rows, cols, cat, schema, version, tdef, reconstruct_su, pretty, line_limit))
+    return lines
+
+
 def _render_merge_group(
     group: list[str],
     table_rows: dict[str, list[dict]],
@@ -2168,65 +2298,24 @@ def _render_merge_group(
 
     if not compatible:
         print(f"MERGE FAIL: {group}, present={present}, pk_sets={dict(zip(present, pk_sets))}")
-        # Fall back to plain loops in listed order.
-        lines: list[str] = []
-        first = True
-        for cat in present:
-            rows = table_rows[cat]
-            tdef = schema.tables[cat]
-            cols = _active_cols(tdef, rows, spec, reconstruct_su)
-            if not cols:
-                continue
-            if not first:
-                lines.append('')
-            first = False
-            lines.extend(_render_loop_category(rows, cols, cat, schema, version, tdef, reconstruct_su, pretty, line_limit))
-        return lines
+        return _render_merge_group_incompatible(
+            present, table_rows, schema, version, spec, reconstruct_su, pretty, line_limit,
+        )
 
     # Key-compatible: FULL OUTER JOIN in Python.
     shared_pks = sorted(pk_sets[0])
+    all_pk_vals, table_index = _build_merge_table_index(present, table_rows, shared_pks)
 
-    # Index each table by PK tuple; collect all unique PK tuples in encounter order.
-    all_pk_vals: list[tuple] = []
-    seen_pk: set[tuple] = set()
-    table_index: dict[str, dict[tuple, dict]] = {}
-    for cat in present:
-        table_index[cat] = {}
-        for row in table_rows[cat]:
-            pk_tuple = tuple(row.get(pk) for pk in shared_pks)
-            if pk_tuple not in seen_pk:
-                seen_pk.add(pk_tuple)
-                all_pk_vals.append(pk_tuple)
-            table_index[cat][pk_tuple] = row
+    cat_active = _compute_merge_cat_active(
+        present, table_index, pk_sets[0], schema, spec, reconstruct_su,
+        effective_suppressed, suppress_all_fk_to_set,
+    )
 
-    # Determine active (non-PK) columns per table.
-    cat_active: dict[str, list[str]] = {}
-    for cat in present:
-        tdef = schema.tables[cat]
-        all_rows = list(table_index[cat].values())
-        cols = _active_cols(tdef, all_rows, spec, reconstruct_su)
-        # Exclude shared PKs; they appear once at the start.
-        non_pk_cols = [c for c in cols if c not in pk_sets[0]]
-        if suppress_all_fk_to_set:
-            suppressed = effective_suppressed.get(cat, set())
-            non_pk_cols = [c for c in non_pk_cols if c not in suppressed]
-            non_pk_cols = [c for c in non_pk_cols if not all(row.get(c) == '.' for row in all_rows)]
-        if non_pk_cols or cols:
-            cat_active[cat] = non_pk_cols
-
-    # Build merged column list: shared PKs (from first present cat), then each table's non-PK cols.
     first_cat = present[0]
-    first_tdef = schema.tables[first_cat]
-    first_active = _active_cols(first_tdef, list(table_index[first_cat].values()), spec, reconstruct_su)
-    _suppress = suppress_pk_cols or set()
-    pk_in_first = [pk for pk in shared_pks if pk in set(first_active) and pk not in _suppress]
-
-    merged_cols: list[tuple[str, str]] = [(first_cat, pk) for pk in pk_in_first]
-    pk_set = set(shared_pks)
-    for cat in present:
-        for col in cat_active.get(cat, []):
-            if col not in pk_set:
-                merged_cols.append((cat, col))
+    merged_cols = _build_merge_merged_cols(
+        present, cat_active, first_cat, table_index, shared_pks,
+        schema, spec, reconstruct_su, suppress_pk_cols,
+    )
 
     if not merged_cols:
         return []
@@ -2236,27 +2325,9 @@ def _render_merge_group(
         lines.append(f'  {_col_tag(cat, col, schema)}')
 
     su_maps = {cat: (_su_col_map(schema.tables[cat]) if reconstruct_su else {}) for cat in present}
-
-    # Build token matrix.
-    matrix: list[list[str]] = []
-    for pk_vals in all_pk_vals:
-        tokens = []
-        for cat, col in merged_cols:
-            row = table_index[cat].get(pk_vals, {})
-            value = row.get(col)
-            if value is None:
-                token = '.'
-            else:
-                su_map = su_maps[cat]
-                if reconstruct_su and col in su_map:
-                    su_val = row.get(su_map[col])
-                    if su_val is not None:
-                        value = _merge_su(value, su_val)
-                token = quote(value, version)
-                if line_limit is not None:
-                    token = _apply_line_limit(value, token, line_limit)
-            tokens.append(token)
-        matrix.append(tokens)
+    matrix = _build_merge_token_matrix(
+        merged_cols, all_pk_vals, table_index, su_maps, reconstruct_su, version, line_limit,
+    )
 
     if pretty:
         real_idx = _real_col_indices_merged(merged_cols, schema)

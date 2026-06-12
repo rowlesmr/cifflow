@@ -2611,6 +2611,254 @@ class TestMergeGroup:
         assert '_meas.intensity' in result
         assert '_expt.id' in result
 
+    def test_empty_group_emits_nothing(self, schema):
+        """When no category in the group has rows, merge group returns [] (guard branch)."""
+        conn_empty = _ingest_src('#\\#CIF_2.0\ndata_b\n_expt.id  E1\n', schema)
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn_empty, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
+        assert 'loop_' not in result
+
+    def test_pretty_false_compact_output(self, conn, schema):
+        """pretty=False disables column alignment; all merge-group data still present."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan, pretty=False)
+        assert 'loop_' in result
+        assert '_meas.intensity' in result
+        assert '_calc.intensity' in result
+
+
+# Schema: EXPT (Set) + MEAS and CALC (both Loop with composite FK-in-PK pointing to EXPT).
+# Used to test _render_merge_group with suppress_all_fk_to_set=True (GROUPED mode).
+# After suppressing the expt_id FK, both tables share effective PK {point_id} → compatible.
+_MERGE_GROUPED_FK_DIC = """\
+#\\#CIF_2.0
+data_merge_grouped_fk_dic
+
+save_EXPT
+  _definition.id        EXPT
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     expt
+  _category_key.name    '_expt.id'
+save_
+
+save_expt.id
+  _definition.id        '_expt.id'
+  _definition.class     Attribute
+  _name.category_id     expt
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_MEAS
+  _definition.id        MEAS
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     meas
+  loop_
+    _category_key.name
+    '_meas.expt_id'
+    '_meas.point_id'
+save_
+
+save_meas.expt_id
+  _definition.id        '_meas.expt_id'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       expt_id
+  _type.purpose         Link
+  _type.source          Related
+  _type.container       Single
+  _type.contents        Code
+  _name.linked_item_id  '_expt.id'
+save_
+
+save_meas.point_id
+  _definition.id        '_meas.point_id'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       point_id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Integer
+save_
+
+save_meas.intensity
+  _definition.id        '_meas.intensity'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       intensity
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+
+save_CALC
+  _definition.id        CALC
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     calc
+  loop_
+    _category_key.name
+    '_calc.expt_id'
+    '_calc.point_id'
+save_
+
+save_calc.expt_id
+  _definition.id        '_calc.expt_id'
+  _definition.class     Attribute
+  _name.category_id     calc
+  _name.object_id       expt_id
+  _type.purpose         Link
+  _type.source          Related
+  _type.container       Single
+  _type.contents        Code
+  _name.linked_item_id  '_expt.id'
+save_
+
+save_calc.point_id
+  _definition.id        '_calc.point_id'
+  _definition.class     Attribute
+  _name.category_id     calc
+  _name.object_id       point_id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Integer
+save_
+
+save_calc.intensity
+  _definition.id        '_calc.intensity'
+  _definition.class     Attribute
+  _name.category_id     calc
+  _name.object_id       intensity
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+"""
+
+_MERGE_GROUPED_FK_CIF = (
+    '#\\#CIF_2.0\n'
+    'data_run1\n'
+    '_expt.id  E1\n'
+    'loop_\n  _meas.expt_id\n  _meas.point_id\n  _meas.intensity\n'
+    '  E1  1  10.0\n  E1  2  20.0\n'
+    'loop_\n  _calc.expt_id\n  _calc.point_id\n  _calc.intensity\n'
+    '  E1  1  11.0\n  E1  2  21.0\n'
+)
+
+
+class TestMergeGroupSuppressedFK:
+    """_render_merge_group with suppress_all_fk_to_set=True (GROUPED mode).
+
+    MEAS and CALC both have composite PK [expt_id→expt, point_id].  After
+    removing the FK-to-Set column from the effective PK, both share {point_id}
+    and are compatible for merging.
+    """
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_MERGE_GROUPED_FK_DIC)
+
+    @pytest.fixture
+    def conn(self, schema):
+        return _ingest_src(_MERGE_GROUPED_FK_CIF, schema)
+
+    def test_compatible_after_fk_suppression(self, conn, schema):
+        """With expt_id suppressed, meas and calc share effective PK {point_id} → one loop_."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert result.count('loop_') == 1
+
+    def test_merged_loop_contains_both_intensities(self, conn, schema):
+        """Merged loop contains columns from both meas and calc."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert '_meas.intensity' in result
+        assert '_calc.intensity' in result
+
+    def test_fk_col_suppressed_from_loop_header(self, conn, schema):
+        """_meas.expt_id and _calc.expt_id must not appear in the loop_ header."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert '_meas.expt_id' not in result
+        assert '_calc.expt_id' not in result
+
+    def test_set_scalar_present_in_block(self, conn, schema):
+        """_expt.id is emitted as a scalar tag-value pair in the block."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_expt.id'][0]) == 'E1'
+
+    def test_output_is_valid_cif(self, conn, schema):
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        _, errors = build(result)
+        assert not errors, errors
+
+
+class TestMergeGroupReconstructSU:
+    """_render_merge_group with reconstruct_su=True.
+
+    _SU_FK_PK_DIC has pd_data (Loop, PK=point_id) and meas (Loop, PK=point_id)
+    with an SU pair (intensity / intensity_su).  A merge group [pd_data, meas]
+    exercises the token-matrix SU-reconstruction branch.
+    """
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_SU_FK_PK_DIC)
+
+    @pytest.fixture
+    def conn(self, schema):
+        return _ingest_src(_SU_FK_PK_CIF, schema)
+
+    def test_su_merged_into_parenthetical_form(self, conn, schema):
+        """reconstruct_su=True merges intensity_su into intensity(su) in the merged loop."""
+        spec = BlockSpec(category_order=[['pd_data', 'meas']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan, reconstruct_su=True)
+        # _merge_su('10.0', '0.1') → '10.0(1)'
+        assert '10.0(1)' in result
+
+    def test_su_col_absent_from_merged_header(self, conn, schema):
+        """_meas.intensity_su must not appear as a standalone column header."""
+        spec = BlockSpec(category_order=[['pd_data', 'meas']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan, reconstruct_su=True)
+        assert '_meas.intensity_su' not in result
+
+    def test_one_merged_loop_emitted(self, conn, schema):
+        """pd_data and meas share PK point_id → compatible → one loop_."""
+        spec = BlockSpec(category_order=[['pd_data', 'meas']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan, reconstruct_su=True)
+        assert result.count('loop_') == 1
+
+    def test_output_is_valid_cif(self, conn, schema):
+        spec = BlockSpec(category_order=[['pd_data', 'meas']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan, reconstruct_su=True)
+        _, errors = build(result)
+        assert not errors, errors
+
 
 class TestSingleBlock:
     """BlockSpec.single_block=True collapses all matching blocks into one."""

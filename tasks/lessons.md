@@ -1547,6 +1547,16 @@
 
 ---
 
+## Lesson 155 — Extracting helpers from a high-CC render function: keep debug prints at the dispatch site (2026-06-12)
+
+**Context:** `_render_merge_group` (CC F/54) was refactored by extracting five helpers: `_build_merge_table_index`, `_compute_merge_cat_active`, `_build_merge_merged_cols`, `_build_merge_token_matrix`, and `_render_merge_group_incompatible`. The incompatible-path helper is called when PK sets are non-uniform, and a debug `print(f"MERGE FAIL: {group}, present={present}, pk_sets=...")` precedes it.
+
+**Observation:** The print references both `group` (a parameter of `_render_merge_group`) and `pk_sets` (a local computed just before the branch). Passing these into the helper solely to keep the print inside it would bloat the helper's signature for no gain.
+
+**Rule:** When a debug or diagnostic print references variables from the caller's local scope, keep the print at the call site (the dispatch point), not inside the extracted helper. The helper's job is the logic, not the diagnosis.
+
+---
+
 ## Lesson 153 — `all_items` in `_load_recursive` can contain duplicate `definition_id`s (2026-06-06)
 
 **Context:** `_load_recursive` builds `all_items = list(pool.values()) + primary_items`. `pool` holds items from constituent imports; `primary_items` holds items from the current file's own frames. When a constituent and the current file both define the same item (e.g., `_exptl_crystal.id` in both `multi_block_core.dic` and `cif_core.dic` which it imports), both `DdlmItem` objects end up in `all_items` with the same `definition_id`. `_build_lookup_tables` handles the duplicate definition_id by overwriting in its first loop (primary wins), but then processes both items' alias lists — causing spurious "alias X collides with existing entry Y" warnings for the second item.
