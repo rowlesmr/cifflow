@@ -4,6 +4,25 @@
 
 ## ▶ RESUME FROM HERE
 
+## What was done (2026-06-05/06)
+
+**`inspect_fk_path` partial links (Lesson 151):**
+- Added `PartialLinkDef` dataclass to `schema.py`; `generate_schema` now records every DDLm Link item skipped due to incomplete PK coverage, non-PK target, or ambiguity
+- `inspect_fk_path` displays these as `~>` partial connections (with covered/missing PK columns and reason) when no complete FK or bridge path is found
+- `PartialLinkDef` exported from `cifflow.dictionary`
+
+**`parser/__init__.py` restored (Lesson 152):**
+- Deleting it caused CI docs build failure (`cifflow.parser.version` unreachable)
+- Restored as a stub; `detect_version` remains available for `inspect_lexer` and `test_version.py`
+
+**Loader bug fix — spurious alias collision warnings (Lesson 153):**
+- `_load_recursive` built `all_items = list(pool.values()) + primary_items` without deduplicating by `definition_id`. When a constituent and the current file both define the same item (e.g. `_exptl_crystal.id` in both `multi_block_core.dic` and imported `cif_core.dic`), `_build_lookup_tables` received two copies and fired a false alias collision warning for the second.
+- Fixed by deduplicating via a dict merge (primary overwrites constituent) before calling `_build_lookup_tables`
+
+Test count: 1858 (all passing).
+
+---
+
 ## What was done (2026-06-03/04, multiple branches)
 
 **Dictionary / schema additions:**

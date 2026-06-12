@@ -25,6 +25,7 @@ from cifflow.dictionary.loader import (
 from cifflow.dictionary.schema import (
     ColumnDef,
     ForeignKeyDef,
+    PartialLinkDef,
     SchemaSpec,
     TableDef,
     emit_create_statements,
@@ -44,6 +45,7 @@ __all__ = [
     'directory_path_resolver',
     'merge_dictionaries',
     'ForeignKeyDef',
+    'PartialLinkDef',
     'ColumnDef',
     'TableDef',
     'SchemaSpec',
