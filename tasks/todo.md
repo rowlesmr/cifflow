@@ -165,6 +165,49 @@ Completed the full MkDocs + mkdocstrings documentation pipeline (Phases 1–5 of
 
 ---
 
+## Complexity Reduction (radon/xenon analysis, 2026-06-12)
+
+Radon grades: A ≤5, B 6–10, C 11–15, D 16–25, E 26–50, F 51+.
+Run: `.venv/Scripts/python -m radon cc src/ --show-complexity --min C`
+Enforce: `.venv/Scripts/xenon src/ --max-average B --max-modules C --max-absolute D`
+
+**Rule: write function-level tests locking down current behaviour before refactoring any function below.**
+
+### F-grade (must fix)
+
+| CC | Location | Notes |
+|----|----------|-------|
+| 170 | `output/emit.py:540 _collect_grouped` | Largest function in codebase |
+| 98 | `dictionary/schema.py:485 generate_schema` | FK/bridge/propagation all tangled together |
+| 69 | `output/emit.py:1671 _render_block` | Large dispatch over emit modes |
+| 61 | `inspect/_schema.py:12 inspect_schema` | Long sequential display logic |
+| 55 | `dictionary/visualise.py:449 visualise_schema` | Long sequential display logic |
+| 54 | `output/emit.py:2076 _render_merge_group` | |
+| 45 | `output/emit.py:1504 _collect_all_blocks` | |
+
+### E-grade (should fix)
+
+| CC | Location |
+|----|----------|
+| 39 | `ingestion/duckdb_ingest.py:538 _run_fk_fill_pass` |
+| 36 | `ingestion/duckdb_ingest.py:750 propagate_fk_sql` |
+| 33 | `database/component_intensities.py:41 consolidate_component_intensities` |
+| 32 | `output/emit.py:1211 _collect_structure` |
+| 31 | `output/emit.py:2351 _render_set_category` |
+
+### D-grade (document or fix)
+
+`dictionary/loader.py`: `_extract_item` (30), `_load_recursive` (27), `_resolve_imports` (25)
+`dictionary/schema.py`: `_find_transitive_bridge` (28)
+`output/emit.py`: `_render_original_loop_group` (38 — E, already above), `_ordered_categories` (25), `_compute_original_category_order` (24), `_render_loop_category` (22), `_suppressed_fk_pk_cols` (22), `_find_set_anchor` (22), `_render_pure_fallback_loop` (21)
+`inspect/_schema.py`: `inspect_fk_path` (26)
+`inspect/_model.py`: `_print_namespace` (25)
+`database/compact.py`: `convert_database` (28)
+`database/defaults.py`: `_make_keyed_op` (22)
+`validation/_validate.py`: `validate` (22)
+
+---
+
 ## Remaining Items (unscheduled)
 
 

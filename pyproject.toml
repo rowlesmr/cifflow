@@ -31,6 +31,8 @@ dev = [
     "bump-my-version",
     "ruff>=0.4",
     "pydoclint[flake8]>=0.4",
+    "radon>=6.0",
+    "xenon>=0.9",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -97,3 +99,6 @@ convention = "numpy"
 [tool.pydoclint]
 style = "numpy"
 arg-type-hints-in-docstring = false
+
+[tool.radon]
+exclude = "tests/*"

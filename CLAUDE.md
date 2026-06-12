@@ -222,6 +222,18 @@ Ingest a known-good file, emit, re-ingest, compare. `second.cif` is the primary 
 Load `cif_pow.dic` via `DictionaryLoader`, call `generate_schema`, call
 `apply_schema`. See `tests/ingestion/test_integration.py` for the reference pattern.
 
+### Complexity analysis
+```
+# Show all functions rated C or worse (the refactoring backlog)
+.venv/Scripts/python -m radon cc src/ --show-complexity --min C
+
+# Enforce thresholds (exits non-zero if any module averages above B,
+# any function exceeds C, or any block exceeds D)
+.venv/Scripts/xenon src/ --max-average B --max-modules C --max-absolute D
+```
+Grade scale: A ≤5, B 6–10, C 11–15, D 16–25, E 26–50, F 51+.
+Target: no F or E functions; D functions should have a documented reason.
+
 ---
 
 ## Checklist Before Any Change
