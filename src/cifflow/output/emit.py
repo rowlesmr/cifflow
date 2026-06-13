@@ -1714,6 +1714,211 @@ def _collect_all_blocks(
 # Block renderer
 # ---------------------------------------------------------------------------
 
+def _render_merge_group_item(
+    item: list[str],
+    data: '_BlockData',
+    schema: SchemaSpec,
+    version: CifVersion,
+    spec: 'BlockSpec | None',
+    reconstruct_su: bool,
+    pretty: bool,
+    line_limit: int | None,
+    extra_cols_for: dict,
+) -> list[str]:
+    """Render one merge-group item from _ordered_categories."""
+    if data.suppress_loop_fk_pk:
+        # ORIGINAL mode: join positionally by _loop_id + _iter_idx
+        return _render_original_loop_group(
+            item, data.table_rows, data, schema, version, spec,
+            reconstruct_su, pretty, line_limit, extra_cols_for,
+        )
+    suppress_pkg = None
+    if data.suppress_fk_pk and data.suppress_all_fk_to_set:
+        first_present = next((c for c in item if data.table_rows.get(c)), None)
+        if first_present:
+            ftdef = schema.tables.get(first_present)
+            frows = data.table_rows.get(first_present, [])
+            if ftdef and frows:
+                suppress_pkg = _suppressed_fk_pk_cols(ftdef, frows, data.table_rows, schema)
+    return _render_merge_group(
+        item, data.table_rows, schema, version, spec,
+        reconstruct_su, pretty, line_limit,
+        suppress_pk_cols=suppress_pkg,
+        suppress_all_fk_to_set=data.suppress_all_fk_to_set,
+    )
+
+
+def _render_single_table_item(
+    table_name: str,
+    data: '_BlockData',
+    schema: SchemaSpec,
+    version: CifVersion,
+    spec: 'BlockSpec | None',
+    reconstruct_su: bool,
+    pretty: bool,
+    line_limit: int | None,
+    extra_cols_for: dict,
+) -> list[str]:
+    """Render one single-table item from _ordered_categories.
+
+    Returns [] to signal the table should be skipped.
+    """
+    rows = data.table_rows.get(table_name)
+    if not rows:
+        return []
+    table_def = schema.tables[table_name]
+    cols = _active_cols(table_def, rows, spec, reconstruct_su)
+    if not cols:
+        return []
+
+    if data.suppress_fk_pk and (
+        (table_def.category_class == 'Set' and len(rows) == 1)
+        or data.suppress_loop_fk_pk
+        or data.suppress_all_fk_to_set
+    ):
+        suppressed = _suppressed_fk_pk_cols(
+            table_def, rows, data.table_rows, schema,
+            suppress_all_to_set=data.suppress_all_fk_to_set,
+        )
+        cols = [c for c in cols if c not in suppressed]
+    if not cols:
+        return []
+
+    if data.suppress_all_fk_to_set:
+        # GROUPED mode: suppress columns whose every value is '.' (inapplicable).
+        cols = [c for c in cols if not all(row.get(c) == '.' for row in rows)]
+        if not cols:
+            return []
+
+    extra = extra_cols_for.get(table_name)
+    if table_def.category_class == 'Set' and len(rows) == 1:
+        return _render_set_category(
+            rows[0], cols, table_name, schema, version, table_def,
+            reconstruct_su, pretty, line_limit,
+        )
+    return _render_loop_category(
+        rows, cols, table_name, schema, version, table_def,
+        reconstruct_su, pretty, line_limit, extra_fallback_cols=extra,
+    )
+
+
+def _collect_remnant_rows(
+    extra_cols_for: dict,
+    table_rows: dict,
+    initial_rows: list[dict],
+) -> list[dict]:
+    """Collect fallback rows not rendered as part of any table."""
+    result = initial_rows
+    for ref, cols_list in extra_cols_for.items():
+        if ref not in table_rows:
+            for tag, _ci, row_vals in cols_list:
+                for _rid, (val, vtype) in row_vals.items():
+                    result.append({'tag': tag, 'value': val, 'value_type': vtype})
+    return result
+
+
+def _inject_header_items(
+    lines: list[str],
+    data: '_BlockData',
+    schema: SchemaSpec,
+    version: CifVersion,
+    remnant_rows: list[dict],
+    audit_id_tag: str,
+) -> bool:
+    """Inject conformance tags and _audit_dataset.id before main block content.
+
+    Mutates *lines* in place.  Returns True if anything was injected
+    (caller should set first_category = False).
+    """
+    injected = False
+
+    if data.conformance_tags:
+        for ctag, cval in data.conformance_tags:
+            lines.append(f'{ctag}  {quote(cval, version)}')
+        injected = True
+
+    if data.dataset_id is not None:
+        # If audit_dataset is a Loop category in table_rows it would render as loop_.
+        # Remove it so the scalar injection below always controls the output format.
+        audit_td = schema.tables.get('audit_dataset')
+        if (audit_td is not None
+                and audit_td.category_class != 'Set'
+                and 'audit_dataset' in data.table_rows):
+            data.table_rows.pop('audit_dataset')
+
+        audit_in_table = 'audit_dataset' in data.table_rows
+        # Check only remnant (scalar) fallback rows — loop-form rows were stripped above.
+        audit_in_fallback = any(
+            (r.get('tag') or '').lower() == audit_id_tag
+            for r in remnant_rows
+        )
+        if not audit_in_table and not audit_in_fallback:
+            audit_tag = schema.column_to_tag.get(('audit_dataset', 'id'), '_audit_dataset.id')
+            if isinstance(data.dataset_id, list):
+                lines.append('loop_')
+                lines.append(f'  {audit_tag}')
+                for did in data.dataset_id:
+                    lines.append(f'  {quote(did, version)}')
+            else:
+                lines.append(f'{audit_tag}  {quote(data.dataset_id, version)}')
+            injected = True
+
+    return injected
+
+
+def _organise_fallback_rows(
+    fallback_rows: list[dict],
+    audit_id_tag: str,
+) -> 'tuple[dict, list[dict], dict]':
+    """Partition fallback rows into pure-loop, remnant, and per-table extra-column structures.
+
+    *audit_id_tag* rows are stripped from pure-loop groups so scalar injection controls output.
+    """
+    mixed_fallback: dict[str, dict[int, dict[int, dict[int, tuple]]]] = {}
+    pure_loop_rows: dict[int, list[dict]] = {}
+    remnant_rows: list[dict] = []
+
+    for r in fallback_rows:
+        lid = r.get('loop_id')
+        ref = r.get('ref_table')
+        if lid is None:
+            remnant_rows.append(r)
+        elif ref is not None:
+            col_idx = r.get('col_index', 0) or 0
+            row_id = r.get('_cifflow_row_id', 0)
+            val = r.get('value', '')
+            vtype = r.get('value_type', '')
+            tag = r.get('tag', '')
+            (mixed_fallback
+             .setdefault(ref, {})
+             .setdefault(lid, {})
+             .setdefault(col_idx, {}))[row_id] = (tag, val, vtype)
+        else:
+            pure_loop_rows.setdefault(lid, []).append(r)
+
+    # Strip _audit_dataset.id from pure-loop groups — scalar injection takes over.
+    pure_loop_rows = {
+        lid: [r for r in rows if (r.get('tag') or '').lower() != audit_id_tag]
+        for lid, rows in pure_loop_rows.items()
+    }
+    pure_loop_rows = {lid: rows for lid, rows in pure_loop_rows.items() if rows}
+
+    # Build per-table extra-column list ordered by (loop_id, col_index).
+    extra_cols_for: dict[str, list[tuple[str, int, dict[int, tuple]]]] = {}
+    for ref, loop_dict in mixed_fallback.items():
+        cols_list: list[tuple[str, int, dict[int, tuple]]] = []
+        for lid in sorted(loop_dict):
+            for col_idx in sorted(loop_dict[lid]):
+                cell_map = loop_dict[lid][col_idx]
+                sample = next(iter(cell_map.values()))
+                tag = sample[0]
+                row_vals = {rid: (v, vt) for rid, (_, v, vt) in cell_map.items()}
+                cols_list.append((tag, col_idx, row_vals))
+        extra_cols_for[ref] = cols_list
+
+    return pure_loop_rows, remnant_rows, extra_cols_for
+
+
 def _render_block(
     block_name: str,
     data: _BlockData,
@@ -1733,93 +1938,13 @@ def _render_block(
     lines: list[str] = [f'data_{block_name}']
     first_category = True
 
-    # Partition fallback rows into three groups:
-    #   mixed_fallback  — unknown tags that were in a loop alongside known tags;
-    #                     keyed ref_table -> loop_id -> col_index -> {row_id: (value, vtype)}
-    #   pure_loop_rows  — unknown tags in a loop with no known tags; keyed by loop_id
-    #   remnant_rows    — scalar fallback (loop_id is None) and anything not injected
-    mixed_fallback: dict[str, dict[int, dict[int, dict[int, tuple]]]] = {}
-    pure_loop_rows: dict[int, list[dict]] = {}
-    remnant_rows: list[dict] = []
-
-    for r in data.fallback_rows:
-        lid = r.get('loop_id')
-        ref = r.get('ref_table')
-        if lid is None:
-            remnant_rows.append(r)
-        elif ref is not None:
-            col_idx = r.get('col_index', 0) or 0
-            row_id = r.get('_cifflow_row_id', 0)
-            val = r.get('value', '')
-            vtype = r.get('value_type', '')
-            tag = r.get('tag', '')
-            (mixed_fallback
-             .setdefault(ref, {})
-             .setdefault(lid, {})
-             .setdefault(col_idx, {}))[row_id] = (tag, val, vtype)
-        else:
-            pure_loop_rows.setdefault(lid, []).append(r)
-
-    # _audit_dataset.id must always be emitted as a scalar first-line item.
-    # Strip it from pure_loop_rows so the scalar injection below takes over.
-    # (FK propagation can carry a loop-form _audit_dataset.id from a publication
-    # block into sibling blocks, producing a spurious single-value loop_.)
     _audit_id_tag = schema.column_to_tag.get(('audit_dataset', 'id'), '_audit_dataset.id').lower()
-    pure_loop_rows = {
-        lid: [r for r in rows if (r.get('tag') or '').lower() != _audit_id_tag]
-        for lid, rows in pure_loop_rows.items()
-    }
-    pure_loop_rows = {lid: rows for lid, rows in pure_loop_rows.items() if rows}
+    pure_loop_rows, remnant_rows, extra_cols_for = _organise_fallback_rows(
+        data.fallback_rows, _audit_id_tag,
+    )
 
-    # Build per-table extra-column list:
-    # ref_table -> list of (tag, col_index, {row_id: (value, vtype)})
-    # ordered by (loop_id, col_index) to preserve original column ordering.
-    extra_cols_for: dict[str, list[tuple[str, int, dict[int, tuple]]]] = {}
-    for ref, loop_dict in mixed_fallback.items():
-        cols_list: list[tuple[str, int, dict[int, tuple]]] = []
-        for lid in sorted(loop_dict):
-            for col_idx in sorted(loop_dict[lid]):
-                cell_map = loop_dict[lid][col_idx]
-                # All cells for this (loop_id, col_idx) share the same tag.
-                sample = next(iter(cell_map.values()))
-                tag = sample[0]
-                # row_id -> (value, vtype)
-                row_vals = {rid: (v, vt) for rid, (_, v, vt) in cell_map.items()}
-                cols_list.append((tag, col_idx, row_vals))
-        extra_cols_for[ref] = cols_list
-
-    # Inject conformance tags (ONE_BLOCK) before all other content.
-    if data.conformance_tags:
-        for ctag, cval in data.conformance_tags:
-            lines.append(f'{ctag}  {quote(cval, version)}')
+    if _inject_header_items(lines, data, schema, version, remnant_rows, _audit_id_tag):
         first_category = False
-
-    # Inject _audit_dataset.id when requested.
-    if data.dataset_id is not None:
-        # If audit_dataset is a Loop category in table_rows it would render as loop_.
-        # Remove it so the scalar injection below always controls the output format.
-        audit_td = schema.tables.get('audit_dataset')
-        if (audit_td is not None
-                and audit_td.category_class != 'Set'
-                and 'audit_dataset' in data.table_rows):
-            data.table_rows.pop('audit_dataset')
-
-        audit_in_table = 'audit_dataset' in data.table_rows
-        # Check only remnant (scalar) fallback rows — loop-form rows were stripped above.
-        audit_in_fallback = any(
-            (r.get('tag') or '').lower() == _audit_id_tag
-            for r in remnant_rows
-        )
-        if not audit_in_table and not audit_in_fallback:
-            audit_tag = schema.column_to_tag.get(('audit_dataset', 'id'), '_audit_dataset.id')
-            if isinstance(data.dataset_id, list):
-                lines.append('loop_')
-                lines.append(f'  {audit_tag}')
-                for did in data.dataset_id:
-                    lines.append(f'  {quote(did, version)}')
-            else:
-                lines.append(f'{audit_tag}  {quote(data.dataset_id, version)}')
-            first_category = False
 
     effective_spec = spec
     if data.preferred_category_order and spec is None:
@@ -1830,72 +1955,20 @@ def _render_block(
 
     for item in _ordered_categories(schema, effective_spec, data.table_rows):
         if isinstance(item, list):
-            # Merge group
-            if data.suppress_loop_fk_pk:
-                # ORIGINAL mode: join positionally by _loop_id + _iter_idx
-                cat_lines = _render_original_loop_group(
-                    item, data.table_rows, data, schema, version, spec,
-                    reconstruct_su, pretty, line_limit, extra_cols_for,
-                )
-            else:
-                suppress_pkg = None
-                if data.suppress_fk_pk and data.suppress_all_fk_to_set:
-                    first_present = next((c for c in item if data.table_rows.get(c)), None)
-                    if first_present:
-                        ftdef = schema.tables.get(first_present)
-                        frows = data.table_rows.get(first_present, [])
-                        if ftdef and frows:
-                            suppress_pkg = _suppressed_fk_pk_cols(ftdef, frows, data.table_rows, schema)
-                cat_lines = _render_merge_group(
-                    item, data.table_rows, schema, version, spec,
-                    reconstruct_su, pretty, line_limit,
-                    suppress_pk_cols=suppress_pkg,
-                    suppress_all_fk_to_set=data.suppress_all_fk_to_set,
-                )
-            if cat_lines:
-                if not first_category:
-                    lines.append('')
-                first_category = False
-                lines.extend(cat_lines)
+            cat_lines = _render_merge_group_item(
+                item, data, schema, version, spec,
+                reconstruct_su, pretty, line_limit, extra_cols_for,
+            )
         else:
-            table_name = item
-            rows = data.table_rows.get(table_name)
-            if not rows:
-                continue
-            table_def = schema.tables[table_name]
-            cols = _active_cols(table_def, rows, spec, reconstruct_su)
-            if not cols:
-                continue
-
-            if data.suppress_fk_pk and (
-                (table_def.category_class == 'Set' and len(rows) == 1)
-                or data.suppress_loop_fk_pk
-                or data.suppress_all_fk_to_set
-            ):
-                suppressed = _suppressed_fk_pk_cols(
-                    table_def, rows, data.table_rows, schema,
-                    suppress_all_to_set=data.suppress_all_fk_to_set,
-                )
-                cols = [c for c in cols if c not in suppressed]
-            if not cols:
-                continue
-
-            if data.suppress_all_fk_to_set:
-                # GROUPED mode: suppress columns whose every value is '.' (inapplicable).
-                cols = [c for c in cols if not all(row.get(c) == '.' for row in rows)]
-                if not cols:
-                    continue
-
+            cat_lines = _render_single_table_item(
+                item, data, schema, version, spec,
+                reconstruct_su, pretty, line_limit, extra_cols_for,
+            )
+        if cat_lines:
             if not first_category:
                 lines.append('')
             first_category = False
-
-
-            extra = extra_cols_for.get(table_name)
-            if table_def.category_class == 'Set' and len(rows) == 1:
-                lines.extend(_render_set_category(rows[0], cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit))
-            else:
-                lines.extend(_render_loop_category(rows, cols, table_name, schema, version, table_def, reconstruct_su, pretty, line_limit, extra_fallback_cols=extra))
+            lines.extend(cat_lines)
 
     # Pure-fallback loops: emit each loop_id group as a standalone loop_.
     for lid in sorted(pure_loop_rows):
@@ -1905,15 +1978,7 @@ def _render_block(
         first_category = False
         lines.extend(_render_pure_fallback_loop(loop_rows, version, pretty, line_limit))
 
-    # Scalar fallback and any remnant rows (scalars, or loop rows whose ref_table
-    # is not present in this block's table_rows — treated as plain fallback).
-    actual_remnant = remnant_rows
-    for ref, cols_list in extra_cols_for.items():
-        if ref not in data.table_rows:
-            # ref_table not rendered in this block: fall back to plain fallback.
-            for tag, _ci, row_vals in cols_list:
-                for _rid, (val, vtype) in row_vals.items():
-                    actual_remnant.append({'tag': tag, 'value': val, 'value_type': vtype})
+    actual_remnant = _collect_remnant_rows(extra_cols_for, data.table_rows, remnant_rows)
     if actual_remnant:
         if not first_category:
             lines.append('')

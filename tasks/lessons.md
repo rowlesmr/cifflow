@@ -6,7 +6,7 @@
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123, 145
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64, 151, 152, 153
-- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141, 146, 147, 148
+- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141, 146, 147, 148, 156
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
@@ -1554,6 +1554,18 @@
 **Observation:** The print references both `group` (a parameter of `_render_merge_group`) and `pk_sets` (a local computed just before the branch). Passing these into the helper solely to keep the print inside it would bloat the helper's signature for no gain.
 
 **Rule:** When a debug or diagnostic print references variables from the caller's local scope, keep the print at the call site (the dispatch point), not inside the extracted helper. The helper's job is the logic, not the diagnosis.
+
+---
+
+## Lesson 156 — `_suppressed_fk_pk_cols` only suppresses composite PK FK columns (2026-06-13)
+
+**Context:** Writing tests for `_render_block` / `_render_single_table_item` in emit.py.
+
+**Mistake:** Assumed a plain FK column (FK to a parent table, but not part of the child's own PK) would be suppressed by `_suppressed_fk_pk_cols`. Wrote tests asserting the column was absent, but it remained.
+
+**Fix:** `_suppressed_fk_pk_cols` checks `is_fk_pk = all(c in pk_cols for c in fk.source_columns)` — a FK is only suppressed when its source columns are a subset of the child table's own PK columns. A plain FK column that is not in the child PK is never suppressed.
+
+**How to apply:** When writing tests for FK suppression, verify that the FK column is also declared in the child table's `primary_key`. Plain FK-only columns are never suppressed, regardless of mode.
 
 ---
 
