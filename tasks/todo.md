@@ -2,19 +2,17 @@
 
 ---
 
-## What was done (2026-06-13, complexity branch) — F-grade complexity reduction
+## What was done (2026-06-13/14, complexity branch) — F-grade complexity reduction complete
 
-Decomposed four F-grade functions (radon CC ≥ 51) into private helpers, writing branch-coverage tests before each refactor. Test count: 1858 → 1903 (45 new tests added).
+Decomposed all F-grade functions into private helpers, writing branch-coverage tests before each refactor. Test count: 1858 → 1980 (122 new tests added). No remaining F-grade functions.
 
 - **`inspect_schema` (CC 61 → 1)**: Decomposed into 7 private helpers; 16 tests added (`test_inspect_schema.py`).
-- **`_collect_all_blocks` (CC 45 → B/7)**: Decomposed into `_validate_all_blocks_preconditions`, `_inject_set_parents`, `_collect_set_table_blocks`, `_collect_loop_table_blocks`; 11 tests added.
+- **`_collect_all_blocks` (CC 45 → B/7)**: Decomposed into 4 private helpers; 11 tests added.
 - **`_render_merge_group` (CC 54 → D/21)**: Decomposed into 5 private helpers; 11 tests added.
-- **`visualise_schema` (CC 55 → B/7)**: Decomposed into `_build_vis_context`, `_emit_clustered_nodes`, `_emit_fk_edges`, `_emit_bridge_edges`, `_emit_parent_edges`; 6 tests added.
-
-- **`_render_block` (CC 69 → C/14)**: Decomposed into 5 private helpers (`_render_merge_group_item`, `_render_single_table_item`, `_collect_remnant_rows`, `_organise_fallback_rows`, `_inject_header_items`); 24 tests added (`test_emit_render_block.py`).
-- **`generate_schema` (CC 98 → A/2)**: Decomposed into 7 private helpers; 19 tests added to `test_schema.py`.
-
-Remaining F-grades: `_collect_grouped` (170).
+- **`visualise_schema` (CC 55 → B/7)**: Decomposed into 5 private helpers; 6 tests added.
+- **`_render_block` (CC 69 → C/14)**: Decomposed into 5 private helpers; 24 tests added (`test_emit_render_block.py`).
+- **`generate_schema` (CC 98 → A/2)**: Decomposed into 7 private helpers; 19 tests added (`test_schema.py`).
+- **`_collect_grouped` (CC 170 → D/26)**: Decomposed into 12 module-level helpers (`_collect_set_pk_vals`, `_fp_entries_for_expanded`, `_drop_incidental_child_sets`, `_compute_block_fingerprint`, `_compute_no_set_fk_routing`, `_collect_fp_table_rows`, `_compute_fp_anchor`, `_compute_primary_fp_anchors`, `_collect_incidental_block_rows`, `_bfs_collect_child_sets`, `_build_grouped_state`, `_emit_pure_loop_blocks`); 29 branch-coverage tests added (`test_collect_grouped.py`).
 
 ---
 
@@ -68,7 +66,7 @@ Enforce: `.venv/Scripts/xenon src/ --max-average B --max-modules C --max-absolut
 
 | CC | Location | Notes |
 |----|----------|-------|
-| 170 | `output/emit.py:540 _collect_grouped` | Largest function in codebase |
+| ~~170~~ → **D/26** | ~~`output/emit.py:540 _collect_grouped`~~ ✅ | Decomposed into 12 module-level helpers; 29 branch-coverage tests added (`test_collect_grouped.py`, suite: 1951 → 1980) |
 | ~~98~~ → **A/2** | ~~`dictionary/schema.py:485 generate_schema`~~ ✅ | Decomposed into 7 private helpers (`_determine_primary_keys`, `_build_table_columns`, `_build_tables`, `_resolve_fk_group`, `_build_foreign_keys`, `_build_propagation_links`, `_build_category_parent`, `_build_tag_metadata`); 19 branch-coverage tests added (suite: 1927 → 1951) |
 | ~~69~~ → **C/14** | ~~`output/emit.py:1671 _render_block`~~ ✅ | Decomposed into 5 private helpers (`_render_merge_group_item`, `_render_single_table_item`, `_collect_remnant_rows`, `_organise_fallback_rows`, `_inject_header_items`); 24 branch-coverage tests added (suite: 1903 → 1927) |
 | ~~61~~ → **1** | ~~`inspect/_schema.py:12 inspect_schema`~~ ✅ | Decomposed into 7 private helpers; 16 branch-coverage tests added (suite: 1858 → 1874) |

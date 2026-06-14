@@ -6,7 +6,7 @@
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123, 145
 - **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64, 151, 152, 153, 157
-- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141, 146, 147, 148, 156
+- **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141, 146, 147, 148, 156, 158, 159
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
 - **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
@@ -1564,6 +1564,26 @@
 **Observation:** The FK group resolution logic (`_resolve_fk_group`) landed at E/33 after extraction. The four resolution arms (dual-endpoint, one-missing-bridged, one-missing-no-bridge, >1-missing/ambiguous) cannot be sensibly separated because they share `tgt_to_srcs`, `missing_pk_cols`, `has_conflicts`, and `bridge_col_in_src` state. Splitting them would force awkward parameter passing or a class.
 
 **Rule:** When refactoring a high-CC function, extract clean passes (table-building, FK detection, propagation, metadata) first. Accept residual complexity in a tightly-coupled decision core rather than forcing a split that destroys readability. Document the residual E/D grade with a reason in the complexity table rather than chasing further decomposition.
+
+---
+
+## Lesson 159 — BFS child-Set collection requires a dedicated helper, not inline expansion (2026-06-14)
+
+**Context:** Extracting helpers from `_collect_grouped` (CC 170) in `output/emit.py`.
+
+**Observation:** The child-Set BFS loop inside `_collect_incidental_block_rows` accounted for ~20 of its ~39 CC points. It could not be removed by simplification — the BFS convergence logic, FK-filter construction, and row deduplication are all genuinely interdependent. Extracting the loop body to `_bfs_collect_child_sets` reduced `_collect_incidental_block_rows` from E/39 to C/18.
+
+**Rule:** When a nested iteration pattern (BFS, DFS, fixed-point loop) accounts for the majority of a function's CC, extract it as a named helper even if the signature is wide. The caller becomes linear; the helper documents the algorithm. Do not inline-expand the loop to reduce CC — that just distributes the branches without naming the concept.
+
+---
+
+## Lesson 158 — Nested functions inflate the outer function's CC; extract to module level before measuring (2026-06-14)
+
+**Context:** Analysing `_collect_grouped` (reported CC 170) in `output/emit.py`.
+
+**Observation:** Radon attributed the CC of the nested `_block_fingerprint` function (and its own nested `_fp_entries_for_expanded`) to the outer `_collect_grouped`. The CC appeared to be 170 for the outer function, but after lifting both nested functions to module level the outer function's true CC became measurable. The core body was approximately D/26 after helper extraction.
+
+**Rule:** Before planning refactors of high-CC functions, check for nested function definitions — radon rolls their CC into the enclosing function. Lift nested functions to module level first, re-measure, then decide how many additional helpers are needed.
 
 ---
 
