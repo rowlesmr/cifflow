@@ -9,6 +9,7 @@ from cifflow.dictionary.ddlm_parser import DdlmDictionary
 from cifflow.dictionary.schema import (
     ColumnDef,
     ForeignKeyDef,
+    PartialLinkDef,
     SchemaSpec,
     TableDef,
     emit_create_statements,
@@ -992,4 +993,386 @@ class TestDescendants:
         assert schema.descendants('does_not_exist') == frozenset()
 
 
+# ---------------------------------------------------------------------------
+# Dual links to the same PK (bond-endpoint pattern)
+# ---------------------------------------------------------------------------
+
+class TestDualLinkToSamePK:
+    """has_conflicts=True, missing_pk_cols={}: two source columns reference the same sole PK.
+    Expect one independent FK per source column (not a composite FK)."""
+
+    @pytest.fixture
+    def schema(self):
+        cats = [
+            _cat('atom', 'atom', 'Loop', ['_atom.number']),
+            _cat('bond', 'bond', 'Loop', ['_bond.id']),
+        ]
+        items = [
+            _item('_atom.number', 'atom', 'number', type_purpose='Key', type_contents='Text'),
+            _item('_bond.id', 'bond', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_bond.atom_1', 'bond', 'atom_1', type_purpose='Link',
+                  linked_item_id='_atom.number', type_contents='Text'),
+            _item('_bond.atom_2', 'bond', 'atom_2', type_purpose='Link',
+                  linked_item_id='_atom.number', type_contents='Text'),
+        ]
+        return generate_schema(_make_dict(cats, items))
+
+    def test_two_fks_produced(self, schema):
+        assert len(schema.tables['bond'].foreign_keys) == 2
+
+    def test_each_fk_targets_atom_number(self, schema):
+        for fk in schema.tables['bond'].foreign_keys:
+            assert fk.target_table == 'atom'
+            assert fk.target_columns == ['number']
+
+    def test_both_endpoint_columns_present_as_sources(self, schema):
+        src_cols = {fk.source_columns[0] for fk in schema.tables['bond'].foreign_keys}
+        assert src_cols == {'atom_1', 'atom_2'}
+
+
+# ---------------------------------------------------------------------------
+# Missing one PK column already present in source (no bridge lookup needed)
+# ---------------------------------------------------------------------------
+
+class TestMissingOnePKAlreadyInSrc:
+    """missing_pk_cols==1 and the missing column already exists in src.
+    Expect a composite FK formed without a transitive bridge lookup."""
+
+    def test_composite_fk_formed_from_existing_column(self):
+        # parent PKs: (a, b); child has 'b' in its own PK; child.c → parent.a
+        # missing_pk_col='b' is found directly in child's columns → FK formed.
+        cats = [
+            _cat('parent', 'parent', 'Loop', ['_parent.a', '_parent.b']),
+            _cat('child', 'child', 'Loop', ['_child.b', '_child.x']),
+        ]
+        items = [
+            _item('_parent.a', 'parent', 'a', type_purpose='Key', type_contents='Text'),
+            _item('_parent.b', 'parent', 'b', type_purpose='Key', type_contents='Text'),
+            _item('_child.b', 'child', 'b', type_purpose='Key', type_contents='Text'),
+            _item('_child.x', 'child', 'x', type_purpose='Key', type_contents='Text'),
+            _item('_child.c', 'child', 'c', type_purpose='Link',
+                  linked_item_id='_parent.a', type_contents='Text'),
+        ]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        fks = schema.tables['child'].foreign_keys
+        assert len(fks) == 1
+        fk = fks[0]
+        assert fk.target_table == 'parent'
+        assert fk.target_columns == ['a', 'b']
+        assert fk.source_columns == ['c', 'b']
+
+
+# ---------------------------------------------------------------------------
+# More than one PK column missing (bridge search skipped)
+# ---------------------------------------------------------------------------
+
+class TestMoreThanOneMissingPK:
+    """len(missing_pk_cols) > 1 — falls into the final elif arm (no bridge attempted)."""
+
+    @pytest.fixture
+    def schema(self):
+        cats = [
+            _cat('parent', 'parent', 'Loop', ['_parent.a', '_parent.b', '_parent.c']),
+            _cat('child', 'child', 'Loop', ['_child.id']),
+        ]
+        items = [
+            _item('_parent.a', 'parent', 'a', type_purpose='Key', type_contents='Text'),
+            _item('_parent.b', 'parent', 'b', type_purpose='Key', type_contents='Text'),
+            _item('_parent.c', 'parent', 'c', type_purpose='Key', type_contents='Text'),
+            _item('_child.id', 'child', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_child.a', 'child', 'a', type_purpose='Link',
+                  linked_item_id='_parent.a', type_contents='Text'),
+        ]
+        return generate_schema(_make_dict(cats, items))
+
+    def test_no_fk_produced(self, schema):
+        assert schema.tables['child'].foreign_keys == []
+
+    def test_warning_emitted(self, schema):
+        assert any('_child.a' in w and 'skipping' in w for w in schema.warnings)
+
+    def test_partial_link_recorded(self, schema):
+        assert any(
+            pl.source_table == 'child' and pl.source_column == 'a'
+            for pl in schema.partial_links
+        )
+
+
+# ---------------------------------------------------------------------------
+# partial_links field
+# ---------------------------------------------------------------------------
+
+class TestPartialLinks:
+    """PartialLinkDef entries are recorded for unresolvable Link items."""
+
+    @pytest.fixture
+    def schema(self):
+        # src.ref → tgt.extra where 'extra' is not a PK → partial link
+        cats = [
+            _cat('src', 'src', 'Loop', ['_src.id']),
+            _cat('tgt', 'tgt', 'Loop', ['_tgt.id']),
+        ]
+        items = [
+            _item('_src.id', 'src', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_tgt.id', 'tgt', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_tgt.extra', 'tgt', 'extra', type_contents='Text'),
+            _item('_src.ref', 'src', 'ref', type_purpose='Link',
+                  linked_item_id='_tgt.extra', type_contents='Text'),
+        ]
+        return generate_schema(_make_dict(cats, items))
+
+    def test_partial_link_in_list(self, schema):
+        assert any(
+            pl.source_table == 'src' and pl.source_column == 'ref'
+            for pl in schema.partial_links
+        )
+
+    def test_partial_link_target_fields(self, schema):
+        pl = next(p for p in schema.partial_links if p.source_column == 'ref')
+        assert pl.target_table == 'tgt'
+        assert pl.target_column == 'extra'
+
+    def test_partial_link_missing_pks(self, schema):
+        pl = next(p for p in schema.partial_links if p.source_column == 'ref')
+        assert 'id' in pl.missing_pk_cols
+
+
+# ---------------------------------------------------------------------------
+# Non-PK Link items in propagation_links
+# ---------------------------------------------------------------------------
+
+class TestPropagationLinksNonPK:
+    """Non-PK Link items enter propagation_links only when enumeration_default is set."""
+
+    def test_non_pk_link_with_default_in_propagation_links(self):
+        cats = [
+            _cat('parent', 'parent', 'Set', ['_parent.id']),
+            _cat('child', 'child', 'Loop', ['_child.id']),
+        ]
+        items = [
+            _item('_parent.id', 'parent', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_child.id', 'child', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_child.ref', 'child', 'ref', type_purpose='Link',
+                  linked_item_id='_parent.id', type_contents='Text',
+                  enumeration_default='DEFAULT_VAL'),
+        ]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        assert 'child' in schema.propagation_links
+        assert any(col == 'ref' for col, _, _ in schema.propagation_links['child'])
+
+    def test_non_pk_link_default_value_stored(self):
+        cats = [
+            _cat('parent', 'parent', 'Set', ['_parent.id']),
+            _cat('child', 'child', 'Loop', ['_child.id']),
+        ]
+        items = [
+            _item('_parent.id', 'parent', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_child.id', 'child', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_child.ref', 'child', 'ref', type_purpose='Link',
+                  linked_item_id='_parent.id', type_contents='Text',
+                  enumeration_default='MY_DEFAULT'),
+        ]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        entry = next(e for e in schema.propagation_links['child'] if e[0] == 'ref')
+        assert entry[2] == 'MY_DEFAULT'
+
+    def test_non_pk_link_without_default_excluded(self):
+        cats = [
+            _cat('parent', 'parent', 'Set', ['_parent.id']),
+            _cat('child', 'child', 'Loop', ['_child.id']),
+        ]
+        items = [
+            _item('_parent.id', 'parent', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_child.id', 'child', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_child.ref', 'child', 'ref', type_purpose='Link',
+                  linked_item_id='_parent.id', type_contents='Text'),
+        ]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        entries = schema.propagation_links.get('child', [])
+        assert not any(col == 'ref' for col, _, _ in entries)
+
+    def test_non_pk_link_column_remains_nullable(self):
+        # Non-PK column should already be nullable — propagation_links does not change it
+        cats = [
+            _cat('parent', 'parent', 'Set', ['_parent.id']),
+            _cat('child', 'child', 'Loop', ['_child.id']),
+        ]
+        items = [
+            _item('_parent.id', 'parent', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_child.id', 'child', 'id', type_purpose='Key', type_contents='Text'),
+            _item('_child.ref', 'child', 'ref', type_purpose='Link',
+                  linked_item_id='_parent.id', type_contents='Text',
+                  enumeration_default='X'),
+        ]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        ref_col = next(c for c in schema.tables['child'].columns if c.name == 'ref')
+        assert ref_col.nullable is True
+
+
+# ---------------------------------------------------------------------------
+# Category parent map edge cases
+# ---------------------------------------------------------------------------
+
+class TestCategoryParentMapEdgeCases:
+    """Self-reference and parent-not-in-schema produce None in category_parent."""
+
+    def test_self_referential_category_has_none_parent(self):
+        # _cat('x', 'x', 'Set') → category_id == definition_id == 'x' → parent_tbl == tbl_name → None
+        cats = [_cat('x', 'x', 'Set')]
+        d = _make_dict(cats, [])
+        schema = generate_schema(d)
+        assert schema.category_parent.get('x') is None
+
+    def test_parent_not_in_schema_gives_none(self):
+        # child's category_id points to a Head category (not in tables) → None
+        head_cat = DdlmItem(
+            definition_id='headcat', scope='Category', definition_class='Head',
+            category_id='headcat', object_id=None, type_purpose=None, type_source=None,
+            type_container='Single', type_contents=None, linked_item_id=None,
+            units_code=None, description=None, category_keys=[],
+        )
+        child_cat = DdlmItem(
+            definition_id='child', scope='Category', definition_class='Loop',
+            category_id='headcat',  # parent is the Head category
+            object_id=None, type_purpose=None, type_source=None,
+            type_container='Single', type_contents=None, linked_item_id=None,
+            units_code=None, description=None, category_keys=[],
+        )
+        cats_map = {'headcat': head_cat, 'child': child_cat}
+        d = DdlmDictionary(
+            name='T', title=None, version=None,
+            categories=cats_map, items={}, tag_to_item=cats_map,
+            alias_to_definition_id={}, deprecated_ids=set(),
+        )
+        schema = generate_schema(d)
+        assert schema.category_parent.get('child') is None
+
+
+# ---------------------------------------------------------------------------
+# tag_to_category_class
+# ---------------------------------------------------------------------------
+
+class TestTagToCategoryClass:
+    def test_set_item_tagged_as_set(self):
+        cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
+        items = [_item('_cfg.id', 'cfg', 'id', type_contents='Text')]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        assert schema.tag_to_category_class.get('_cfg.id') == 'Set'
+
+    def test_loop_item_tagged_as_loop(self):
+        cats = [_cat('meas', 'meas', 'Loop', ['_meas.id'])]
+        items = [_item('_meas.id', 'meas', 'id', type_contents='Text')]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        assert schema.tag_to_category_class.get('_meas.id') == 'Loop'
+
+    def test_item_with_head_category_excluded(self):
+        # item whose category is Head → not in tag_to_category_class
+        head_cat = DdlmItem(
+            definition_id='hd', scope='Category', definition_class='Head',
+            category_id='hd', object_id=None, type_purpose=None, type_source=None,
+            type_container='Single', type_contents=None, linked_item_id=None,
+            units_code=None, description=None, category_keys=[],
+        )
+        head_item = DdlmItem(
+            definition_id='_hd.val', scope='Item', definition_class='Datum',
+            category_id='hd', object_id='val', type_purpose=None, type_source=None,
+            type_container='Single', type_contents='Text', linked_item_id=None,
+            units_code=None, description=None,
+        )
+        cats_map = {'hd': head_cat}
+        item_map = {'_hd.val': head_item}
+        tag_to_item = {**cats_map, **item_map}
+        d = DdlmDictionary(
+            name='T', title=None, version=None,
+            categories=cats_map, items=item_map, tag_to_item=tag_to_item,
+            alias_to_definition_id={}, deprecated_ids=set(),
+        )
+        schema = generate_schema(d)
+        assert '_hd.val' not in schema.tag_to_category_class
+
+
+# ---------------------------------------------------------------------------
+# deprecated_replacements
+# ---------------------------------------------------------------------------
+
+class TestDeprecatedReplacements:
+    def test_deprecated_item_in_deprecated_replacements(self):
+        cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
+        old_item = DdlmItem(
+            definition_id='_cfg.old_name', scope='Item', definition_class='Datum',
+            category_id='cfg', object_id='old_name', type_purpose=None, type_source=None,
+            type_container='Single', type_contents='Text', linked_item_id=None,
+            units_code=None, description=None,
+            is_deprecated=True, replaced_by=['_cfg.new_name'],
+        )
+        cats_d = {c.definition_id: c for c in cats}
+        item_map = {'_cfg.old_name': old_item}
+        tag_to_item = {**cats_d, **item_map}
+        d = DdlmDictionary(
+            name='T', title=None, version=None,
+            categories=cats_d, items=item_map, tag_to_item=tag_to_item,
+            alias_to_definition_id={}, deprecated_ids={'_cfg.old_name'},
+        )
+        schema = generate_schema(d)
+        assert '_cfg.old_name' in schema.deprecated_replacements
+        assert schema.deprecated_replacements['_cfg.old_name'] == ['_cfg.new_name']
+
+    def test_non_deprecated_item_absent_from_deprecated_replacements(self):
+        cats = [_cat('cfg', 'cfg', 'Set', ['_cfg.id'])]
+        items = [_item('_cfg.id', 'cfg', 'id', type_contents='Text')]
+        d = _make_dict(cats, items)
+        schema = generate_schema(d)
+        assert '_cfg.id' not in schema.deprecated_replacements
+
+
+# ---------------------------------------------------------------------------
+# SchemaSpec passthrough fields
+# ---------------------------------------------------------------------------
+
+class TestSchemaSpecPassthrough:
+    def test_alias_to_definition_id_passthrough(self):
+        cats = [_cat('cfg', 'cfg', 'Set')]
+        cats_d = {c.definition_id: c for c in cats}
+        d = DdlmDictionary(
+            name='T', title=None, version=None,
+            categories=cats_d, items={}, tag_to_item=cats_d,
+            alias_to_definition_id={'_cfg.old': '_cfg.new'},
+            deprecated_ids=set(),
+        )
+        schema = generate_schema(d)
+        assert schema.alias_to_definition_id == {'_cfg.old': '_cfg.new'}
+
+    def test_deprecated_ids_passthrough(self):
+        cats = [_cat('cfg', 'cfg', 'Set')]
+        cats_d = {c.definition_id: c for c in cats}
+        d = DdlmDictionary(
+            name='T', title=None, version=None,
+            categories=cats_d, items={}, tag_to_item=cats_d,
+            alias_to_definition_id={},
+            deprecated_ids={'_cfg.old_tag'},
+        )
+        schema = generate_schema(d)
+        assert '_cfg.old_tag' in schema.deprecated_ids
+
+    def test_dictionary_metadata_passthrough(self):
+        cats = [_cat('cfg', 'cfg', 'Set')]
+        cats_d = {c.definition_id: c for c in cats}
+        d = DdlmDictionary(
+            name='MY_DICT', title='My Dictionary', version='2.0',
+            categories=cats_d, items={}, tag_to_item=cats_d,
+            alias_to_definition_id={}, deprecated_ids=set(),
+            uri='https://example.com/mydict.dic',
+        )
+        schema = generate_schema(d)
+        assert schema.dictionary_name == 'MY_DICT'
+        assert schema.dictionary_title == 'My Dictionary'
+        assert schema.dictionary_version == '2.0'
+        assert schema.dictionary_uri == 'https://example.com/mydict.dic'
 

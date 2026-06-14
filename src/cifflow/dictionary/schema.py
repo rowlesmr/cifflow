@@ -479,6 +479,499 @@ def _find_transitive_bridge(
 
 
 # ---------------------------------------------------------------------------
+# generate_schema helpers
+# ---------------------------------------------------------------------------
+
+def _determine_primary_keys(
+    cat_id: str,
+    cat_class: str,
+    cat_item: DdlmItem,
+    dictionary: DdlmDictionary,
+    warnings: list[str],
+) -> 'tuple[list[str], list[str], bool]':
+    """Return (primary_keys, non_synthetic_pks, use_fallback_pk)."""
+    non_synthetic_pks: list[str] = []
+    for key_tag in cat_item.category_keys:
+        key_item = dictionary.tag_to_item.get(key_tag)
+        if key_item is None:
+            warnings.append(
+                f"category {cat_id!r}: category key {key_tag!r} not found "
+                f"in dictionary -- skipped"
+            )
+            continue
+        if key_item.object_id is None:
+            warnings.append(
+                f"category {cat_id!r}: category key {key_tag!r} has no "
+                f"object_id -- skipped"
+            )
+            continue
+        non_synthetic_pks.append(key_item.object_id)
+    use_fallback_pk = not non_synthetic_pks
+    if use_fallback_pk:
+        if cat_class == 'Set':
+            warnings.append(
+                f"category {cat_id!r} (Set) has no _category_key.name -- "
+                f"using _cifflow_id as primary key"
+            )
+            primary_keys: list[str] = ['_cifflow_id']
+        else:
+            warnings.append(
+                f"category {cat_id!r} (Loop) has no _category_key.name -- "
+                f"using _cifflow_block_id + _cifflow_row_id as primary key"
+            )
+            primary_keys = ['_cifflow_block_id', '_cifflow_row_id']
+    else:
+        primary_keys = list(non_synthetic_pks)
+    return primary_keys, non_synthetic_pks, use_fallback_pk
+
+
+def _build_table_columns(
+    cat_class: str,
+    tbl_name: str,
+    domain_items: 'dict[str, DdlmItem]',
+    non_synthetic_pks: list[str],
+    use_fallback_pk: bool,
+    primary_keys: list[str],
+    warnings: list[str],
+    column_to_tag: 'dict[tuple[str, str], str]',
+) -> list[ColumnDef]:
+    columns: list[ColumnDef] = []
+    block_id_is_pk = '_cifflow_block_id' in primary_keys
+    columns.append(ColumnDef(
+        name='_cifflow_block_id',
+        definition_id='',
+        type_contents=None,
+        type_container=None,
+        nullable=False,
+        is_primary_key=block_id_is_pk,
+        is_synthetic=True,
+        linked_item_id=None,
+    ))
+    if use_fallback_pk and cat_class == 'Set':
+        columns.append(ColumnDef(
+            name='_cifflow_id',
+            definition_id='',
+            type_contents=None,
+            type_container=None,
+            nullable=False,
+            is_primary_key=True,
+            is_synthetic=True,
+            linked_item_id=None,
+        ))
+    row_id_is_pk = '_cifflow_row_id' in primary_keys
+    columns.append(ColumnDef(
+        name='_cifflow_row_id',
+        definition_id='',
+        type_contents=None,
+        type_container=None,
+        nullable=False,
+        is_primary_key=row_id_is_pk,
+        is_synthetic=True,
+        linked_item_id=None,
+    ))
+    for obj_id in non_synthetic_pks:
+        item = domain_items.get(obj_id)
+        if item is None:
+            warnings.append(
+                f"table {tbl_name!r}: primary key column {obj_id!r} not "
+                f"found in category items -- using TEXT"
+            )
+            col = ColumnDef(
+                name=obj_id,
+                definition_id='',
+                type_contents=None,
+                type_container=None,
+                nullable=False,
+                is_primary_key=True,
+                is_synthetic=False,
+                linked_item_id=None,
+            )
+        else:
+            col = ColumnDef(
+                name=obj_id,
+                definition_id=item.definition_id,
+                type_contents=item.type_contents or 'Text',
+                type_container=item.type_container or 'Single',
+                nullable=False,
+                is_primary_key=True,
+                is_synthetic=False,
+                linked_item_id=item.linked_item_id,
+                enumeration_states=item.enumeration_states,
+                enumeration_range=item.enumeration_range,
+                type_dimension=item.type_dimension,
+                enumeration_default=item.enumeration_default,
+                enumeration_def_index_ids=item.enumeration_def_index_ids,
+                enumeration_defaults=item.enumeration_defaults,
+            )
+            column_to_tag[(tbl_name, obj_id)] = item.definition_id
+        columns.append(col)
+    pk_set = set(non_synthetic_pks)
+    for obj_id, item in sorted(domain_items.items()):
+        if obj_id in pk_set:
+            continue
+        col = ColumnDef(
+            name=obj_id,
+            definition_id=item.definition_id,
+            type_contents=item.type_contents or 'Text',
+            type_container=item.type_container or 'Single',
+            nullable=True,
+            is_primary_key=False,
+            is_synthetic=False,
+            linked_item_id=(
+                item.linked_item_id if item.type_purpose == 'SU' else None
+            ),
+            enumeration_states=item.enumeration_states,
+            enumeration_range=item.enumeration_range,
+            type_dimension=item.type_dimension,
+            enumeration_default=item.enumeration_default,
+            enumeration_def_index_ids=item.enumeration_def_index_ids,
+            enumeration_defaults=item.enumeration_defaults,
+        )
+        columns.append(col)
+        column_to_tag[(tbl_name, obj_id)] = item.definition_id
+    return columns
+
+
+def _build_tables(
+    dictionary: DdlmDictionary,
+    warnings: list[str],
+) -> 'tuple[dict[str, TableDef], dict[tuple[str, str], str]]':
+    tables: dict[str, TableDef] = {}
+    column_to_tag: dict[tuple[str, str], str] = {}
+    for cat_id, cat_item in dictionary.categories.items():
+        cat_class = cat_item.definition_class
+        if cat_class not in ('Set', 'Loop'):
+            if cat_class not in ('Head', 'Functions'):
+                warnings.append(
+                    f"category {cat_id!r} has unsupported class {cat_class!r} -- skipped"
+                )
+            continue
+        tbl_name = _table_name(cat_item.definition_id)
+        domain_items: dict[str, DdlmItem] = {
+            item.object_id: item
+            for item in dictionary.items.values()
+            if item.category_id == cat_item.definition_id
+            and item.object_id is not None
+        }
+        primary_keys, non_synthetic_pks, use_fallback_pk = _determine_primary_keys(
+            cat_id, cat_class, cat_item, dictionary, warnings,
+        )
+        columns = _build_table_columns(
+            cat_class, tbl_name, domain_items, non_synthetic_pks,
+            use_fallback_pk, primary_keys, warnings, column_to_tag,
+        )
+        tables[tbl_name] = TableDef(
+            name=tbl_name,
+            definition_id=cat_item.definition_id,
+            category_class=cat_class,
+            columns=columns,
+            primary_keys=primary_keys,
+            foreign_keys=[],
+        )
+    return tables, column_to_tag
+
+
+def _resolve_fk_group(
+    src_tbl: str,
+    tgt_tbl: str,
+    pairs: 'list[tuple[str, str, DdlmItem]]',
+    tgt_pks: list[str],
+    tables: 'dict[str, TableDef]',
+    dictionary: DdlmDictionary,
+    link_groups: dict,
+    warnings: list[str],
+    bridge_columns: list[BridgeColumnDef],
+    partial_links: list[PartialLinkDef],
+) -> None:
+    """Resolve one (src_tbl, tgt_tbl) link group into FK constraints."""
+    tgt_pks_set = set(tgt_pks)
+    pk_pairs = []
+    for src_col, tgt_col, item in pairs:
+        if tgt_col not in tgt_pks_set:
+            warnings.append(
+                f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                f"target column '{tgt_col}' is not a PK of "
+                f"'{tgt_tbl}' (PKs={tgt_pks}) -- skipping FK constraint"
+            )
+            partial_links.append(PartialLinkDef(
+                source_table=src_tbl,
+                source_column=src_col,
+                target_table=tgt_tbl,
+                target_column=tgt_col,
+                covered_pk_cols=[],
+                missing_pk_cols=list(tgt_pks),
+                reason=f"target column '{tgt_col}' is not a PK of '{tgt_tbl}'",
+            ))
+        else:
+            pk_pairs.append((src_col, tgt_col, item))
+    if not pk_pairs:
+        return
+    pairs = pk_pairs
+    tgt_to_srcs: dict[str, list[str]] = defaultdict(list)
+    for src_col, tgt_col, _ in pairs:
+        tgt_to_srcs[tgt_col].append(src_col)
+    tgt_cols_covered = set(tgt_to_srcs.keys())
+    missing_pk_cols = tgt_pks_set - tgt_cols_covered
+    has_conflicts = any(len(v) > 1 for v in tgt_to_srcs.values())
+    if has_conflicts and not missing_pk_cols:
+        for tgt_col, src_list in tgt_to_srcs.items():
+            for src_col in src_list:
+                tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                    source_table=src_tbl,
+                    source_columns=[src_col],
+                    target_table=tgt_tbl,
+                    target_columns=[tgt_col],
+                ))
+    elif len(missing_pk_cols) == 1:
+        [missing_pk_col] = missing_pk_cols
+        src_col_names = {c.name for c in tables[src_tbl].columns}
+        bridge_col_in_src: str | None = (
+            missing_pk_col if missing_pk_col in src_col_names else None
+        )
+        if bridge_col_in_src is None:
+            found = _find_transitive_bridge(
+                src_tbl, tgt_tbl, missing_pk_col, tables, dictionary, link_groups,
+            )
+            if found is not None:
+                primary = found[0]
+                hops = [(vc, bt, bp) for vc, bt, bp, _ in primary]
+                bridge_val_col = primary[-1][3]
+                fallback_chains = [
+                    ([(vc, bt, bp) for vc, bt, bp, _ in alt], alt[-1][3])
+                    for alt in found[1:]
+                ]
+                tables[src_tbl].columns.append(ColumnDef(
+                    name=missing_pk_col,
+                    definition_id='',
+                    type_contents=None,
+                    type_container=None,
+                    nullable=True,
+                    is_primary_key=False,
+                    is_synthetic=True,
+                    linked_item_id=None,
+                ))
+                bridge_columns.append(BridgeColumnDef(
+                    table_name=src_tbl,
+                    column_name=missing_pk_col,
+                    hops=hops,
+                    bridge_value_column=bridge_val_col,
+                    fallback_chains=fallback_chains,
+                ))
+                bridge_col_in_src = missing_pk_col
+        if bridge_col_in_src is not None:
+            if has_conflicts:
+                for tgt_col, src_list in tgt_to_srcs.items():
+                    for src_col in src_list:
+                        src_ordered = [
+                            src_col if pk == tgt_col else bridge_col_in_src
+                            for pk in tgt_pks
+                        ]
+                        tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                            source_table=src_tbl,
+                            source_columns=src_ordered,
+                            target_table=tgt_tbl,
+                            target_columns=list(tgt_pks),
+                        ))
+            else:
+                src_ordered = [
+                    tgt_to_srcs[pk][0] if pk in tgt_to_srcs else bridge_col_in_src
+                    for pk in tgt_pks
+                ]
+                tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+                    source_table=src_tbl,
+                    source_columns=src_ordered,
+                    target_table=tgt_tbl,
+                    target_columns=list(tgt_pks),
+                ))
+        else:
+            for src_col, tgt_col, item in pairs:
+                warnings.append(
+                    f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                    f"partial FK to '{tgt_tbl}' -- covers "
+                    f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}, "
+                    f"no transitive bridge found -- skipping FK constraint"
+                )
+                partial_links.append(PartialLinkDef(
+                    source_table=src_tbl,
+                    source_column=src_col,
+                    target_table=tgt_tbl,
+                    target_column=tgt_col,
+                    covered_pk_cols=sorted(tgt_cols_covered),
+                    missing_pk_cols=sorted(missing_pk_cols),
+                    reason=f"covers {sorted(tgt_cols_covered)} of PKs={tgt_pks}, no bridge found",
+                ))
+    elif missing_pk_cols or has_conflicts:
+        for src_col, tgt_col, item in pairs:
+            if len(tgt_to_srcs.get(tgt_col, [])) > 1:
+                msg = (
+                    f"ambiguous composite FK -- multiple source columns "
+                    f"link to '{tgt_tbl}'.'{tgt_col}'"
+                )
+                reason = f"ambiguous: multiple source columns link to '{tgt_tbl}'.'{tgt_col}'"
+            elif len(missing_pk_cols) > 1:
+                msg = (
+                    f"partial FK to '{tgt_tbl}' -- covers "
+                    f"['{tgt_col}'] of PKs={tgt_pks} "
+                    f"({len(missing_pk_cols)} missing PKs, bridge search skipped)"
+                )
+                reason = f"covers ['{tgt_col}'] of PKs={tgt_pks}, {len(missing_pk_cols)} missing (bridge search skipped)"
+            else:
+                msg = (
+                    f"partial FK to '{tgt_tbl}' -- covers "
+                    f"['{tgt_col}'] of PKs={tgt_pks}"
+                )
+                reason = f"covers ['{tgt_col}'] of PKs={tgt_pks}"
+            warnings.append(
+                f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                f"{msg} -- skipping FK constraint"
+            )
+            partial_links.append(PartialLinkDef(
+                source_table=src_tbl,
+                source_column=src_col,
+                target_table=tgt_tbl,
+                target_column=tgt_col,
+                covered_pk_cols=sorted(tgt_cols_covered),
+                missing_pk_cols=sorted(missing_pk_cols),
+                reason=reason,
+            ))
+    else:
+        src_ordered = [tgt_to_srcs[tc][0] for tc in tgt_pks]
+        tables[src_tbl].foreign_keys.append(ForeignKeyDef(
+            source_table=src_tbl,
+            source_columns=src_ordered,
+            target_table=tgt_tbl,
+            target_columns=list(tgt_pks),
+        ))
+
+
+def _build_foreign_keys(
+    dictionary: DdlmDictionary,
+    tables: 'dict[str, TableDef]',
+    warnings: list[str],
+    partial_links: list[PartialLinkDef],
+) -> list[BridgeColumnDef]:
+    bridge_columns: list[BridgeColumnDef] = []
+    _link_groups: dict[
+        tuple[str, str], list[tuple[str, str, DdlmItem]]
+    ] = defaultdict(list)
+    for item in dictionary.items.values():
+        if item.type_purpose != 'Link' or item.linked_item_id is None:
+            continue
+        target_item = dictionary.tag_to_item.get(item.linked_item_id)
+        if target_item is None:
+            warnings.append(
+                f"FK: linked_item_id {item.linked_item_id!r} for "
+                f"{item.definition_id!r} not found in dictionary -- skipped"
+            )
+            continue
+        if item.category_id is None or item.object_id is None:
+            continue
+        if target_item.category_id is None or target_item.object_id is None:
+            continue
+        src_tbl = _table_name(item.category_id)
+        tgt_tbl = _table_name(target_item.category_id)
+        if src_tbl not in tables:
+            continue
+        if tgt_tbl not in tables:
+            warnings.append(
+                f"FK: target table {tgt_tbl!r} for {item.definition_id!r} "
+                f"not in schema -- skipped"
+            )
+            continue
+        tgt_cat = dictionary.categories.get(target_item.category_id)
+        if tgt_cat and item.linked_item_id not in tgt_cat.category_keys:
+            warnings.append(
+                f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
+                f"target is not a declared category key of "
+                f"{target_item.category_id!r} "
+                f"(PKs={sorted(dictionary.tag_to_item[k].object_id for k in tgt_cat.category_keys if k in dictionary.tag_to_item)}) -- attempting FK resolution"
+            )
+        _link_groups[(src_tbl, tgt_tbl)].append(
+            (item.object_id, target_item.object_id, item)
+        )
+    for (src_tbl, tgt_tbl), pairs in sorted(_link_groups.items()):
+        tgt_pks: list[str] = tables[tgt_tbl].primary_keys
+        _resolve_fk_group(
+            src_tbl, tgt_tbl, pairs, tgt_pks,
+            tables, dictionary, _link_groups,
+            warnings, bridge_columns, partial_links,
+        )
+    return bridge_columns
+
+
+def _build_tag_metadata(
+    dictionary: DdlmDictionary,
+) -> 'tuple[dict[str, str], dict[str, list[str]]]':
+    tag_to_category_class: dict[str, str] = {}
+    deprecated_replacements: dict[str, list[str]] = {}
+    for defn_id, item in dictionary.tag_to_item.items():
+        if item.category_id:
+            cat = dictionary.categories.get(item.category_id)
+            if cat and cat.definition_class in ('Set', 'Loop'):
+                tag_to_category_class[defn_id] = cat.definition_class
+        if item.is_deprecated:
+            deprecated_replacements[defn_id] = item.replaced_by
+    return tag_to_category_class, deprecated_replacements
+
+
+def _build_category_parent(
+    dictionary: DdlmDictionary,
+    tables: 'dict[str, TableDef]',
+) -> 'dict[str, str | None]':
+    category_parent: dict[str, str | None] = {}
+    for _cat_id, cat_item in dictionary.categories.items():
+        if cat_item.definition_class not in ('Set', 'Loop'):
+            continue
+        tbl_name = _table_name(cat_item.definition_id)
+        if tbl_name not in tables:
+            continue
+        parent_id = cat_item.category_id
+        if parent_id:
+            parent_tbl = _table_name(parent_id)
+            category_parent[tbl_name] = (
+                parent_tbl if parent_tbl in tables and parent_tbl != tbl_name else None
+            )
+        else:
+            category_parent[tbl_name] = None
+    return category_parent
+
+
+def _build_propagation_links(
+    dictionary: DdlmDictionary,
+    tables: 'dict[str, TableDef]',
+) -> 'dict[str, list[tuple[str, str, str | None]]]':
+    propagation_links: dict[str, list[tuple[str, str, str | None]]] = {}
+    _seen_prop: set[tuple[str, str]] = set()
+    for item in dictionary.items.values():
+        if item.type_purpose != 'Link' or item.linked_item_id is None:
+            continue
+        if item.category_id is None or item.object_id is None:
+            continue
+        src_tbl = _table_name(item.category_id)
+        if src_tbl not in tables:
+            continue
+        src_col_def = next(
+            (c for c in tables[src_tbl].columns if c.name == item.object_id),
+            None,
+        )
+        if src_col_def is None:
+            continue
+        is_pk = src_col_def.is_primary_key
+        if not is_pk and item.enumeration_default is None:
+            continue
+        key = (src_tbl, item.object_id)
+        if key in _seen_prop:
+            continue
+        _seen_prop.add(key)
+        propagation_links.setdefault(src_tbl, []).append(
+            (item.object_id, item.linked_item_id, item.enumeration_default)
+        )
+        if is_pk:
+            src_col_def.nullable = True
+    return propagation_links
+
+
+# ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
 
@@ -515,503 +1008,13 @@ def generate_schema(dictionary: DdlmDictionary) -> SchemaSpec:
         ``column_to_tag`` mapping, and alias/deprecation metadata.
     """
     warnings: list[str] = []
-    tables: dict[str, TableDef] = {}
-    column_to_tag: dict[tuple[str, str], str] = {}
     partial_links: list[PartialLinkDef] = []
 
-    for cat_id, cat_item in dictionary.categories.items():
-        cat_class = cat_item.definition_class
-        if cat_class not in ('Set', 'Loop'):
-            if cat_class not in ('Head', 'Functions'):
-                warnings.append(
-                    f"category {cat_id!r} has unsupported class {cat_class!r} -- skipped"
-                )
-            continue
-
-        # Table name is derived from the category's own definition_id.
-        tbl_name = _table_name(cat_item.definition_id)
-
-        # Domain items: those whose _name.category_id points to this category.
-        domain_items: dict[str, DdlmItem] = {
-            item.object_id: item
-            for item in dictionary.items.values()
-            if item.category_id == cat_item.definition_id
-            and item.object_id is not None
-        }
-
-        # --- Determine primary key column names ---
-        non_synthetic_pks: list[str] = []
-        for key_tag in cat_item.category_keys:
-            key_item = dictionary.tag_to_item.get(key_tag)
-            if key_item is None:
-                warnings.append(
-                    f"category {cat_id!r}: category key {key_tag!r} not found "
-                    f"in dictionary -- skipped"
-                )
-                continue
-            if key_item.object_id is None:
-                warnings.append(
-                    f"category {cat_id!r}: category key {key_tag!r} has no "
-                    f"object_id -- skipped"
-                )
-                continue
-            non_synthetic_pks.append(key_item.object_id)
-
-        use_fallback_pk = not non_synthetic_pks
-        if use_fallback_pk:
-            if cat_class == 'Set':
-                warnings.append(
-                    f"category {cat_id!r} (Set) has no _category_key.name -- "
-                    f"using _cifflow_id as primary key"
-                )
-                primary_keys = ['_cifflow_id']
-            else:  # Loop
-                warnings.append(
-                    f"category {cat_id!r} (Loop) has no _category_key.name -- "
-                    f"using _cifflow_block_id + _cifflow_row_id as primary key"
-                )
-                primary_keys = ['_cifflow_block_id', '_cifflow_row_id']
-        else:
-            primary_keys = list(non_synthetic_pks)
-
-        # --- Build columns in specified order ---
-        columns: list[ColumnDef] = []
-
-        # 1. _cifflow_block_id (always first; informational only for keyed tables)
-        block_id_is_pk = '_cifflow_block_id' in primary_keys
-        columns.append(ColumnDef(
-            name='_cifflow_block_id',
-            definition_id='',
-            type_contents=None,
-            type_container=None,
-            nullable=False,
-            is_primary_key=block_id_is_pk,
-            is_synthetic=True,
-            linked_item_id=None,
-        ))
-
-        # 2. _cifflow_id (keyless Set tables only)
-        if use_fallback_pk and cat_class == 'Set':
-            columns.append(ColumnDef(
-                name='_cifflow_id',
-                definition_id='',
-                type_contents=None,
-                type_container=None,
-                nullable=False,
-                is_primary_key=True,
-                is_synthetic=True,
-                linked_item_id=None,
-            ))
-
-        # 3. _cifflow_row_id (all Set and Loop tables)
-        row_id_is_pk = '_cifflow_row_id' in primary_keys
-        columns.append(ColumnDef(
-            name='_cifflow_row_id',
-            definition_id='',
-            type_contents=None,
-            type_container=None,
-            nullable=False,
-            is_primary_key=row_id_is_pk,
-            is_synthetic=True,
-            linked_item_id=None,
-        ))
-
-        # 4. Non-synthetic primary-key columns (in category_keys order)
-        for obj_id in non_synthetic_pks:
-            item = domain_items.get(obj_id)
-            if item is None:
-                warnings.append(
-                    f"table {tbl_name!r}: primary key column {obj_id!r} not "
-                    f"found in category items -- using TEXT"
-                )
-                col = ColumnDef(
-                    name=obj_id,
-                    definition_id='',
-                    type_contents=None,
-                    type_container=None,
-                    nullable=False,
-                    is_primary_key=True,
-                    is_synthetic=False,
-                    linked_item_id=None,
-                )
-            else:
-                col = ColumnDef(
-                    name=obj_id,
-                    definition_id=item.definition_id,
-                    type_contents=item.type_contents or 'Text',
-                    type_container=item.type_container or 'Single',
-                    nullable=False,
-                    is_primary_key=True,
-                    is_synthetic=False,
-                    linked_item_id=item.linked_item_id,
-                    enumeration_states=item.enumeration_states,
-                    enumeration_range=item.enumeration_range,
-                    type_dimension=item.type_dimension,
-                    enumeration_default=item.enumeration_default,
-                    enumeration_def_index_ids=item.enumeration_def_index_ids,
-                    enumeration_defaults=item.enumeration_defaults,
-                )
-                column_to_tag[(tbl_name, obj_id)] = item.definition_id
-            columns.append(col)
-
-        # 5. Remaining domain columns (alphabetically, excluding PKs)
-        pk_set = set(non_synthetic_pks)
-        for obj_id, item in sorted(domain_items.items()):
-            if obj_id in pk_set:
-                continue
-            col = ColumnDef(
-                name=obj_id,
-                definition_id=item.definition_id,
-                type_contents=item.type_contents or 'Text',
-                type_container=item.type_container or 'Single',
-                nullable=True,
-                is_primary_key=False,
-                is_synthetic=False,
-                linked_item_id=(
-                    item.linked_item_id if item.type_purpose == 'SU' else None
-                ),
-                enumeration_states=item.enumeration_states,
-                enumeration_range=item.enumeration_range,
-                type_dimension=item.type_dimension,
-                enumeration_default=item.enumeration_default,
-                enumeration_def_index_ids=item.enumeration_def_index_ids,
-                enumeration_defaults=item.enumeration_defaults,
-            )
-            columns.append(col)
-            column_to_tag[(tbl_name, obj_id)] = item.definition_id
-
-        tables[tbl_name] = TableDef(
-            name=tbl_name,
-            definition_id=cat_item.definition_id,
-            category_class=cat_class,
-            columns=columns,
-            primary_keys=primary_keys,
-            foreign_keys=[],
-        )
-
-    # --- Second pass: foreign-key detection ---
-    # Collect all Link items grouped by (src_tbl, tgt_tbl).  When multiple
-    # source columns all link to columns that together cover the target table's
-    # full composite PK, emit one composite FOREIGN KEY constraint.  Single-
-    # column FKs targeting a sole PK are handled as the degenerate case.
-    #
-    # SQLite requires the FK target to have a UNIQUE index.  For a sole-PK
-    # table SQLite creates one automatically; for a composite PK it does NOT
-    # create per-column UNIQUE indices.  Therefore a valid FK must reference
-    # EITHER the sole PK (single-column FK) OR the full composite PK (multi-
-    # column FK).  Partial or non-PK references are warned and skipped.
-
-    bridge_columns: list[BridgeColumnDef] = []
-
-    _link_groups: dict[
-        tuple[str, str], list[tuple[str, str, DdlmItem]]
-    ] = defaultdict(list)   # (src_tbl, tgt_tbl) → [(src_col, tgt_col, item)]
-
-    for item in dictionary.items.values():
-        if item.type_purpose != 'Link' or item.linked_item_id is None:
-            continue
-
-        target_item = dictionary.tag_to_item.get(item.linked_item_id)
-        if target_item is None:
-            warnings.append(
-                f"FK: linked_item_id {item.linked_item_id!r} for "
-                f"{item.definition_id!r} not found in dictionary -- skipped"
-            )
-            continue
-
-        if item.category_id is None or item.object_id is None:
-            continue
-        if target_item.category_id is None or target_item.object_id is None:
-            continue
-
-        src_tbl = _table_name(item.category_id)
-        tgt_tbl = _table_name(target_item.category_id)
-
-        if src_tbl not in tables:
-            continue  # source category not schema-generating (Head etc.)
-        if tgt_tbl not in tables:
-            warnings.append(
-                f"FK: target table {tgt_tbl!r} for {item.definition_id!r} "
-                f"not in schema -- skipped"
-            )
-            continue
-
-        # Warn if linked item is not a category key of the target.
-        tgt_cat = dictionary.categories.get(target_item.category_id)
-        if tgt_cat and item.linked_item_id not in tgt_cat.category_keys:
-            warnings.append(
-                f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
-                f"target is not a declared category key of "
-                f"{target_item.category_id!r} "
-                f"(PKs={sorted(dictionary.tag_to_item[k].object_id for k in tgt_cat.category_keys if k in dictionary.tag_to_item)}) -- attempting FK resolution"
-            )
-
-        _link_groups[(src_tbl, tgt_tbl)].append(
-            (item.object_id, target_item.object_id, item)
-        )
-
-    for (src_tbl, tgt_tbl), pairs in sorted(_link_groups.items()):
-        tgt_pks: list[str] = tables[tgt_tbl].primary_keys
-        tgt_pks_set = set(tgt_pks)
-
-        # Strip pairs that target non-PK columns and warn about each one.
-        # A mixed group must not prevent valid PK-targeting pairs from forming FKs.
-        pk_pairs = []
-        for src_col, tgt_col, item in pairs:
-            if tgt_col not in tgt_pks_set:
-                warnings.append(
-                    f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
-                    f"target column '{tgt_col}' is not a PK of "
-                    f"'{tgt_tbl}' (PKs={tgt_pks}) -- skipping FK constraint"
-                )
-                partial_links.append(PartialLinkDef(
-                    source_table=src_tbl,
-                    source_column=src_col,
-                    target_table=tgt_tbl,
-                    target_column=tgt_col,
-                    covered_pk_cols=[],
-                    missing_pk_cols=list(tgt_pks),
-                    reason=f"target column '{tgt_col}' is not a PK of '{tgt_tbl}'",
-                ))
-            else:
-                pk_pairs.append((src_col, tgt_col, item))
-
-        if not pk_pairs:
-            continue
-        pairs = pk_pairs
-
-        # tgt_col → [src_col, ...]: detect full coverage and duplicate targets
-        tgt_to_srcs: dict[str, list[str]] = defaultdict(list)
-        for src_col, tgt_col, _ in pairs:
-            tgt_to_srcs[tgt_col].append(src_col)
-
-        tgt_cols_covered = set(tgt_to_srcs.keys())
-        missing_pk_cols  = tgt_pks_set - tgt_cols_covered
-        has_conflicts    = any(len(v) > 1 for v in tgt_to_srcs.values())
-
-        if has_conflicts and not missing_pk_cols:
-            # Multiple source columns each independently reference the full PK
-            # (e.g. bond.atom_1 and bond.atom_2 both → atom.number).
-            # Emit one separate single/composite FK per source column.
-            for tgt_col, src_list in tgt_to_srcs.items():
-                for src_col in src_list:
-                    tables[src_tbl].foreign_keys.append(ForeignKeyDef(
-                        source_table=src_tbl,
-                        source_columns=[src_col],
-                        target_table=tgt_tbl,
-                        target_columns=[tgt_col],
-                    ))
-        elif len(missing_pk_cols) == 1:
-            # All covered columns are PKs; exactly one PK column is missing.
-            # Sub-case A: the missing column already exists in src_tbl (self-ref
-            #   or previously bridged) -- use it directly.
-            # Sub-case B: try to derive it via a transitive bridge table.
-            [missing_pk_col] = missing_pk_cols
-            src_col_names = {c.name for c in tables[src_tbl].columns}
-            bridge_col_in_src: str | None = (
-                missing_pk_col if missing_pk_col in src_col_names else None
-            )
-
-            if bridge_col_in_src is None:
-                found = _find_transitive_bridge(
-                    src_tbl, tgt_tbl, missing_pk_col,
-                    tables, dictionary, _link_groups,
-                )
-                if found is not None:
-                    # found is a list of paths; each path is a list of
-                    # (via_col, bridge_tbl, bridge_pk, val_col_or_None) tuples.
-                    # Intermediate entries carry None; the last entry carries
-                    # the real value column.  Use the first path as primary and
-                    # carry the rest as fallback chains so ingest can try them
-                    # in order when the primary yields None for a given row.
-                    primary = found[0]
-                    hops = [(vc, bt, bp) for vc, bt, bp, _ in primary]
-                    bridge_val_col = primary[-1][3]
-                    fallback_chains = [
-                        ([(vc, bt, bp) for vc, bt, bp, _ in alt], alt[-1][3])
-                        for alt in found[1:]
-                    ]
-                    # Add derived column once per (src_tbl, col) pair
-                    tables[src_tbl].columns.append(ColumnDef(
-                        name=missing_pk_col,
-                        definition_id='',
-                        type_contents=None,
-                        type_container=None,
-                        nullable=True,
-                        is_primary_key=False,
-                        is_synthetic=True,  # transitive bridge -- no CIF tag
-                        linked_item_id=None,
-                    ))
-                    bridge_columns.append(BridgeColumnDef(
-                        table_name=src_tbl,
-                        column_name=missing_pk_col,
-                        hops=hops,
-                        bridge_value_column=bridge_val_col,
-                        fallback_chains=fallback_chains,
-                    ))
-                    bridge_col_in_src = missing_pk_col
-
-            if bridge_col_in_src is not None:
-                # Emit one composite FK per conflicting src column (or one if
-                # no conflicts), with tgt_pks ordering throughout.
-                if has_conflicts:
-                    for tgt_col, src_list in tgt_to_srcs.items():
-                        for src_col in src_list:
-                            src_ordered = [
-                                src_col if pk == tgt_col else bridge_col_in_src
-                                for pk in tgt_pks
-                            ]
-                            tables[src_tbl].foreign_keys.append(ForeignKeyDef(
-                                source_table=src_tbl,
-                                source_columns=src_ordered,
-                                target_table=tgt_tbl,
-                                target_columns=list(tgt_pks),
-                            ))
-                else:
-                    src_ordered = [
-                        tgt_to_srcs[pk][0] if pk in tgt_to_srcs else bridge_col_in_src
-                        for pk in tgt_pks
-                    ]
-                    tables[src_tbl].foreign_keys.append(ForeignKeyDef(
-                        source_table=src_tbl,
-                        source_columns=src_ordered,
-                        target_table=tgt_tbl,
-                        target_columns=list(tgt_pks),
-                    ))
-            else:
-                # No bridge found -- warn per pair
-                for src_col, tgt_col, item in pairs:
-                    warnings.append(
-                        f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
-                        f"partial FK to '{tgt_tbl}' -- covers "
-                        f"{sorted(tgt_cols_covered)} of PKs={tgt_pks}, "
-                        f"no transitive bridge found -- skipping FK constraint"
-                    )
-                    partial_links.append(PartialLinkDef(
-                        source_table=src_tbl,
-                        source_column=src_col,
-                        target_table=tgt_tbl,
-                        target_column=tgt_col,
-                        covered_pk_cols=sorted(tgt_cols_covered),
-                        missing_pk_cols=sorted(missing_pk_cols),
-                        reason=f"covers {sorted(tgt_cols_covered)} of PKs={tgt_pks}, no bridge found",
-                    ))
-        elif missing_pk_cols or has_conflicts:
-            # Cannot form a complete, unambiguous (composite) FK.
-            # Emit one warning per failing pair so each source item is named.
-            for src_col, tgt_col, item in pairs:
-                if len(tgt_to_srcs.get(tgt_col, [])) > 1:
-                    msg = (
-                        f"ambiguous composite FK -- multiple source columns "
-                        f"link to '{tgt_tbl}'.'{tgt_col}'"
-                    )
-                    reason = f"ambiguous: multiple source columns link to '{tgt_tbl}'.'{tgt_col}'"
-                elif len(missing_pk_cols) > 1:
-                    msg = (
-                        f"partial FK to '{tgt_tbl}' -- covers "
-                        f"['{tgt_col}'] of PKs={tgt_pks} "
-                        f"({len(missing_pk_cols)} missing PKs, bridge search skipped)"
-                    )
-                    reason = f"covers ['{tgt_col}'] of PKs={tgt_pks}, {len(missing_pk_cols)} missing (bridge search skipped)"
-                else:
-                    msg = (
-                        f"partial FK to '{tgt_tbl}' -- covers "
-                        f"['{tgt_col}'] of PKs={tgt_pks}"
-                    )
-                    reason = f"covers ['{tgt_col}'] of PKs={tgt_pks}"
-                warnings.append(
-                    f"FK: {item.definition_id!r} -> {item.linked_item_id!r}: "
-                    f"{msg} -- skipping FK constraint"
-                )
-                partial_links.append(PartialLinkDef(
-                    source_table=src_tbl,
-                    source_column=src_col,
-                    target_table=tgt_tbl,
-                    target_column=tgt_col,
-                    covered_pk_cols=sorted(tgt_cols_covered),
-                    missing_pk_cols=sorted(missing_pk_cols),
-                    reason=reason,
-                ))
-        else:
-            # All PKs covered, no non-PK targets, no duplicate targets.
-            # Order source columns to match the target PK column order.
-            src_ordered = [tgt_to_srcs[tc][0] for tc in tgt_pks]
-            tables[src_tbl].foreign_keys.append(ForeignKeyDef(
-                source_table=src_tbl,
-                source_columns=src_ordered,
-                target_table=tgt_tbl,
-                target_columns=list(tgt_pks),
-            ))
-
-    # --- Third pass: propagation links ---
-    # For every PK column that is a Link item, record the target definition_id
-    # so that _apply_fk can still fill the column from the fk_accumulator or
-    # loop values even when no formal FK constraint was emitted.
-    #
-    # Additionally, PK Link columns with skipped FKs are made nullable: the
-    # database cannot enforce referential integrity for them, and NULL is the
-    # correct representation of an absent/default value.
-    propagation_links: dict[str, list[tuple[str, str, str | None]]] = {}
-    _seen_prop: set[tuple[str, str]] = set()
-    for item in dictionary.items.values():
-        if item.type_purpose != 'Link' or item.linked_item_id is None:
-            continue
-        if item.category_id is None or item.object_id is None:
-            continue
-        src_tbl = _table_name(item.category_id)
-        if src_tbl not in tables:
-            continue
-        src_col_def = next(
-            (c for c in tables[src_tbl].columns if c.name == item.object_id),
-            None,
-        )
-        if src_col_def is None:
-            continue
-        is_pk = src_col_def.is_primary_key
-        # Non-PK items: only include when they carry an enumeration_default that
-        # should be applied to absent columns.
-        if not is_pk and item.enumeration_default is None:
-            continue
-        key = (src_tbl, item.object_id)
-        if key in _seen_prop:
-            continue
-        _seen_prop.add(key)
-        propagation_links.setdefault(src_tbl, []).append(
-            (item.object_id, item.linked_item_id, item.enumeration_default)
-        )
-        if is_pk:
-            # Make PK column nullable: FK was skipped, so NULL is valid here.
-            src_col_def.nullable = True
-
-    # Build category parent map: table_name → parent table_name (or None).
-    # Used by the output layer for wildcard category expansion.
-    category_parent: dict[str, str | None] = {}
-    for cat_id, cat_item in dictionary.categories.items():
-        if cat_item.definition_class not in ('Set', 'Loop'):
-            continue
-        tbl_name = _table_name(cat_item.definition_id)
-        if tbl_name not in tables:
-            continue
-        parent_id = cat_item.category_id
-        if parent_id:
-            parent_tbl = _table_name(parent_id)
-            # Exclude self-references (top-level categories often have
-            # _name.category_id pointing to themselves).
-            category_parent[tbl_name] = (
-                parent_tbl if parent_tbl in tables and parent_tbl != tbl_name else None
-            )
-        else:
-            category_parent[tbl_name] = None
-
-    tag_to_category_class: dict[str, str] = {}
-    deprecated_replacements: dict[str, list[str]] = {}
-    for defn_id, item in dictionary.tag_to_item.items():
-        if item.category_id:
-            cat = dictionary.categories.get(item.category_id)
-            if cat and cat.definition_class in ('Set', 'Loop'):
-                tag_to_category_class[defn_id] = cat.definition_class
-        if item.is_deprecated:
-            deprecated_replacements[defn_id] = item.replaced_by
+    tables, column_to_tag = _build_tables(dictionary, warnings)
+    bridge_columns = _build_foreign_keys(dictionary, tables, warnings, partial_links)
+    propagation_links = _build_propagation_links(dictionary, tables)
+    category_parent = _build_category_parent(dictionary, tables)
+    tag_to_category_class, deprecated_replacements = _build_tag_metadata(dictionary)
 
     return SchemaSpec(
         tables=tables,

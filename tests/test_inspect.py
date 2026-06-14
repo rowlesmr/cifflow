@@ -492,6 +492,287 @@ save_
 
 
 # ---------------------------------------------------------------------------
+# inspect_schema — branch coverage
+# ---------------------------------------------------------------------------
+
+# A DIC with a Set category (tests Set class colour path and non-floating loops).
+_SET_AND_LOOP_DIC = """\
+#\\#CIF_2.0
+data_TEST
+
+save_BASE
+  _definition.id           BASE
+  _definition.scope        Category
+  _definition.class        Set
+  _name.category_id        base
+  _category_key.name       '_base.id'
+save_
+
+save_base.id
+  _definition.id           '_base.id'
+  _definition.class        Attribute
+  _name.category_id        base
+  _name.object_id          id
+  _type.purpose            Key
+  _type.contents           Text
+save_
+
+save_CHILD
+  _definition.id           CHILD
+  _definition.scope        Category
+  _definition.class        Loop
+  _name.category_id        child
+  _category_key.name       '_child.id'
+save_
+
+save_child.id
+  _definition.id           '_child.id'
+  _definition.class        Attribute
+  _name.category_id        child
+  _name.object_id          id
+  _type.purpose            Key
+  _name.linked_item_id     '_base.id'
+  _type.contents           Text
+save_
+"""
+
+# A DIC for transitive _resolves_to_set: A.id -> B.code (Loop) -> S.id (Set).
+_TRANSITIVE_DIC = """\
+#\\#CIF_2.0
+data_TEST
+
+save_S
+  _definition.id           S
+  _definition.scope        Category
+  _definition.class        Set
+  _name.category_id        s
+  _category_key.name       '_s.id'
+save_
+
+save_s.id
+  _definition.id           '_s.id'
+  _definition.class        Attribute
+  _name.category_id        s
+  _name.object_id          id
+  _type.purpose            Key
+  _type.contents           Text
+save_
+
+save_B
+  _definition.id           B
+  _definition.scope        Category
+  _definition.class        Loop
+  _name.category_id        b
+  _category_key.name       '_b.code'
+save_
+
+save_b.code
+  _definition.id           '_b.code'
+  _definition.class        Attribute
+  _name.category_id        b
+  _name.object_id          code
+  _type.purpose            Key
+  _name.linked_item_id     '_s.id'
+  _type.contents           Text
+save_
+
+save_A
+  _definition.id           A
+  _definition.scope        Category
+  _definition.class        Loop
+  _name.category_id        a
+  _category_key.name       '_a.id'
+save_
+
+save_a.id
+  _definition.id           '_a.id'
+  _definition.class        Attribute
+  _name.category_id        a
+  _name.object_id          id
+  _type.purpose            Key
+  _name.linked_item_id     '_b.code'
+  _type.contents           Text
+save_
+"""
+
+
+class TestInspectSchemaBranchCoverage:
+    """Branch-coverage tests written before the CC-61 refactor of inspect_schema."""
+
+    # --- _depr_suffix branches ---
+
+    def test_deprecated_table_with_replacement_shown(self):
+        """_depr_suffix: deprecated_ids contains definition_id AND replacements exist."""
+        from cifflow.dictionary.schema import SchemaSpec, TableDef, ColumnDef
+        col = ColumnDef(name='_cifflow_block_id', definition_id='', type_contents=None,
+                        nullable=False, is_primary_key=True, is_synthetic=True,
+                        linked_item_id=None)
+        tdef = TableDef(name='old_tbl', definition_id='OLD_TBL',
+                        category_class='Loop', columns=[col],
+                        primary_keys=['_cifflow_block_id'])
+        schema = SchemaSpec(
+            tables={'old_tbl': tdef},
+            column_to_tag={},
+            deprecated_ids={'OLD_TBL'},
+            deprecated_replacements={'OLD_TBL': ['NEW_TBL']},
+        )
+        out = _capture(inspect_schema, schema)
+        assert 'DEPRECATED' in out
+        assert 'NEW_TBL' in out
+
+    def test_deprecated_table_no_replacement_shown(self):
+        """_depr_suffix: deprecated_ids contains definition_id but replacements empty."""
+        from cifflow.dictionary.schema import SchemaSpec, TableDef, ColumnDef
+        col = ColumnDef(name='_cifflow_block_id', definition_id='', type_contents=None,
+                        nullable=False, is_primary_key=True, is_synthetic=True,
+                        linked_item_id=None)
+        tdef = TableDef(name='old_tbl', definition_id='OLD_TBL',
+                        category_class='Loop', columns=[col],
+                        primary_keys=['_cifflow_block_id'])
+        schema = SchemaSpec(
+            tables={'old_tbl': tdef},
+            column_to_tag={},
+            deprecated_ids={'OLD_TBL'},
+            deprecated_replacements={'OLD_TBL': []},
+        )
+        out = _capture(inspect_schema, schema)
+        assert 'DEPRECATED' in out
+        assert '->' not in out
+
+    def test_deprecated_column_with_replacement_shown(self):
+        """_depr_suffix on a column definition_id with a replacement."""
+        from cifflow.dictionary.schema import SchemaSpec, TableDef, ColumnDef
+        col = ColumnDef(name='old_col', definition_id='_t.old',
+                        type_contents='Text', nullable=True,
+                        is_primary_key=False, is_synthetic=False,
+                        linked_item_id=None)
+        tdef = TableDef(name='t', definition_id='T',
+                        category_class='Loop',
+                        columns=[col], primary_keys=[])
+        schema = SchemaSpec(
+            tables={'t': tdef},
+            column_to_tag={('t', 'old_col'): '_t.old'},
+            deprecated_ids={'_t.old'},
+            deprecated_replacements={'_t.old': ['_t.new']},
+        )
+        out = _capture(inspect_schema, schema)
+        assert 'DEPRECATED' in out
+        assert '_t.new' in out
+
+    # --- Set category class path ---
+
+    def test_set_category_class_shown(self):
+        """A Set-class table displays '[Set]' in the header."""
+        out = _capture(inspect_schema, _SET_AND_LOOP_DIC)
+        assert 'Set' in out
+
+    def test_set_category_in_summary_count(self):
+        """Summary line reports correct Set/Loop split."""
+        out = _capture(inspect_schema, _SET_AND_LOOP_DIC)
+        assert '1 Set' in out
+        assert '1 Loop' in out
+
+    # --- Summary line content ---
+
+    def test_summary_table_count(self):
+        """Summary line contains the correct number of tables."""
+        out = _capture(inspect_schema, _SCHEMA_DIC)
+        assert '1 table' in out
+
+    def test_summary_fk_count(self):
+        """Summary line contains FK count."""
+        out = _capture(inspect_schema, _SET_AND_LOOP_DIC)
+        assert 'FK' in out
+
+    # --- Column flag: UNIQUE on _cifflow_row_id ---
+
+    def test_unique_flag_on_cifflow_row_id(self):
+        """_cifflow_row_id is marked UNIQUE when it is not part of the PK."""
+        out = _capture(inspect_schema, _SCHEMA_DIC)
+        # _cifflow_row_id is NOT the PK for a keyed Loop → UNIQUE flag shown
+        assert 'UNIQUE' in out
+
+    # --- show_ddl=False path ---
+
+    def test_show_ddl_false_no_create_table(self):
+        """When show_ddl=False (default) no CREATE TABLE appears."""
+        out = _capture(inspect_schema, _SCHEMA_DIC)
+        assert 'CREATE TABLE' not in out
+
+    # --- Floating loop section ---
+
+    def test_floating_loop_section_shown_when_no_set_link(self):
+        """A Loop with no Set-derived PK appears in the floating-loop section."""
+        out = _capture(inspect_schema, _SCHEMA_DIC)
+        # widget.id has no linked_item_id → widget is floating
+        assert 'loop tables without Set-derived' in out
+        assert 'widget' in out
+
+    def test_non_floating_loop_absent_from_floating_section(self):
+        """A Loop whose PK links to a Set category does NOT appear in floating section."""
+        out = _capture(inspect_schema, _SET_AND_LOOP_DIC)
+        # child.id links to base.id (Set) → child is not floating
+        assert 'child' not in out.split('loop tables without Set-derived')[-1] \
+            if 'loop tables without Set-derived' in out else True
+
+    def test_no_floating_section_when_all_loops_anchored(self):
+        """No floating-loop section header when every Loop has a Set-derived key."""
+        out = _capture(inspect_schema, _SET_AND_LOOP_DIC)
+        assert 'loop tables without Set-derived' not in out
+
+    # --- _resolves_to_set transitive chain ---
+
+    def test_transitive_loop_to_set_not_floating(self):
+        """A.id -> B.code (Loop) -> S.id (Set): A is not floating."""
+        out = _capture(inspect_schema, _TRANSITIVE_DIC)
+        # a is not floating because it transitively reaches Set S
+        floating_section = ''
+        if 'loop tables without Set-derived' in out:
+            floating_section = out.split('loop tables without Set-derived')[1]
+        assert 'a' not in floating_section
+
+    # --- Warnings section ---
+
+    def test_no_warnings_section_when_schema_clean(self):
+        """When schema has no warnings, the warnings header does not appear."""
+        from cifflow.dictionary.loader import DictionaryLoader
+        from cifflow.dictionary.schema import generate_schema
+        loader = DictionaryLoader()
+        schema = generate_schema(loader.load(_SCHEMA_DIC))
+        if not schema.warnings:
+            out = _capture(inspect_schema, schema)
+            assert 'schema warnings' not in out
+
+    def test_warnings_section_shown_when_warnings_present(self):
+        """When schema.warnings is non-empty, the warnings block is printed."""
+        from cifflow.dictionary.schema import SchemaSpec, TableDef, ColumnDef
+        col = ColumnDef(name='_cifflow_block_id', definition_id='', type_contents=None,
+                        nullable=False, is_primary_key=True, is_synthetic=True,
+                        linked_item_id=None)
+        tdef = TableDef(name='t', definition_id='T', category_class='Loop',
+                        columns=[col], primary_keys=['_cifflow_block_id'])
+        schema = SchemaSpec(
+            tables={'t': tdef},
+            column_to_tag={},
+            warnings=['something went wrong'],
+        )
+        out = _capture(inspect_schema, schema)
+        assert 'schema warnings' in out
+        assert 'something went wrong' in out
+
+    # --- Source dispatch: DdlmDictionary import fallback ---
+
+    def test_source_as_schema_spec_bypasses_loading(self):
+        """Passing a SchemaSpec directly skips all loading paths."""
+        from cifflow.dictionary.loader import DictionaryLoader
+        from cifflow.dictionary.schema import generate_schema
+        loader = DictionaryLoader()
+        schema = generate_schema(loader.load(_SCHEMA_DIC))
+        out = _capture(inspect_schema, schema)
+        assert 'widget' in out
+
+
+# ---------------------------------------------------------------------------
 # inspect_ingest + TraceEvent
 # ---------------------------------------------------------------------------
 

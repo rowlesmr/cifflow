@@ -535,44 +535,83 @@ def flush_table_batches(
 # FK propagation (SQL)
 # ---------------------------------------------------------------------------
 
-def _run_fk_fill_pass(
+def _fill_single_fk(
     db: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    table: 'TableDef',
+    col_by_name: dict,
     schema: SchemaSpec,
-    topo: list[str],
-    tag_to_column: dict[str, tuple[str, str]],
     propagate_fk: bool,
     emit: Callable[..., None],
-    populated: set[str] | None = None,
 ) -> None:
-    """One pass of FK fill: propagate parent values into child FK columns."""
-    for tbl_name in topo:
-        if populated is not None and tbl_name not in populated:
+    """Propagate single-column FK values from parent staging tables."""
+    for fk in table.foreign_keys:
+        if len(fk.source_columns) != 1:
             continue
-        table = schema.tables[tbl_name]
-        col_by_name = {c.name: c for c in table.columns if not c.is_synthetic}
+        src_col = fk.source_columns[0]
+        tgt_col = fk.target_columns[0]
+        col = col_by_name.get(src_col)
+        if col is None:
+            continue
+        is_key_fk = col.is_primary_key
+        if not is_key_fk and not propagate_fk:
+            continue
+        tgt_tbl = fk.target_table
+        if tgt_tbl not in schema.tables:
+            if is_key_fk:
+                emit(
+                    f"FK target '{tgt_tbl}'.'{tgt_col}' not in structured schema; "
+                    f"leaving NULL"
+                )
+            continue
+        db.execute(f"""
+            UPDATE "_raw_{tbl_name}" c
+            SET "{src_col}" = COALESCE(
+                (SELECT p."{tgt_col}" FROM "_raw_{tgt_tbl}" p
+                 WHERE p._cifflow_block_id = c._cifflow_block_id
+                   AND p._loop_id = c._loop_id
+                   AND p._iter_idx = c._iter_idx
+                   AND p."{tgt_col}" IS NOT NULL
+                 LIMIT 1),
+                (SELECT p."{tgt_col}" FROM "_raw_{tgt_tbl}" p
+                 WHERE p._cifflow_block_id = c._cifflow_block_id
+                   AND p._loop_id = '{_SCALARS_LOOP_ID}'
+                   AND p."{tgt_col}" IS NOT NULL
+                 LIMIT 1),
+                (SELECT p."{tgt_col}" FROM "_raw_{tgt_tbl}" p
+                 WHERE p._cifflow_block_id = c._cifflow_block_id
+                   AND p."{tgt_col}" IS NOT NULL
+                 ORDER BY (p._loop_id = '{_SCALARS_LOOP_ID}') DESC, p._iter_idx
+                 LIMIT 1)
+            )
+            WHERE c."{src_col}" IS NULL
+        """)
 
-        # --- Single-column FKs ---
-        for fk in table.foreign_keys:
-            if len(fk.source_columns) != 1:
-                continue
-            src_col = fk.source_columns[0]
-            tgt_col = fk.target_columns[0]
-            col = col_by_name.get(src_col)
-            if col is None:
-                continue
-            is_key_fk = col.is_primary_key
-            if not is_key_fk and not propagate_fk:
-                continue
 
-            tgt_tbl = fk.target_table
-            if tgt_tbl not in schema.tables:
-                if is_key_fk:
-                    emit(
-                        f"FK target '{tgt_tbl}'.'{tgt_col}' not in structured schema; "
-                        f"leaving NULL"
-                    )
-                continue
-
+def _fill_composite_fk(
+    db: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    table: 'TableDef',
+    col_by_name: dict,
+    schema: SchemaSpec,
+    propagate_fk: bool,
+) -> None:
+    """Propagate composite FK values from parent staging tables."""
+    for fk in table.foreign_keys:
+        if len(fk.source_columns) <= 1:
+            continue
+        is_key_fk = all(
+            col_by_name.get(sc) is not None and col_by_name[sc].is_primary_key
+            for sc in fk.source_columns
+        )
+        if not is_key_fk and not propagate_fk:
+            continue
+        tgt_tbl = fk.target_table
+        if tgt_tbl not in schema.tables:
+            continue
+        if not all(sc in col_by_name for sc in fk.source_columns):
+            continue
+        for src_col, tgt_col in zip(fk.source_columns, fk.target_columns):
             db.execute(f"""
                 UPDATE "_raw_{tbl_name}" c
                 SET "{src_col}" = COALESCE(
@@ -596,116 +635,103 @@ def _run_fk_fill_pass(
                 WHERE c."{src_col}" IS NULL
             """)
 
-        # --- Composite FKs ---
-        for fk in table.foreign_keys:
-            if len(fk.source_columns) <= 1:
-                continue
-            is_key_fk = all(
-                col_by_name.get(sc) is not None and col_by_name[sc].is_primary_key
-                for sc in fk.source_columns
-            )
-            if not is_key_fk and not propagate_fk:
-                continue
 
-            tgt_tbl = fk.target_table
-            if tgt_tbl not in schema.tables:
-                continue
-            if not all(sc in col_by_name for sc in fk.source_columns):
-                continue
+def _fill_propagation_links(
+    db: duckdb.DuckDBPyConnection,
+    tbl_name: str,
+    table: 'TableDef',
+    col_by_name: dict,
+    schema: SchemaSpec,
+    propagate_fk: bool,
+    tag_to_column: dict[str, tuple[str, str]],
+) -> None:
+    """Propagate values via schema propagation links and apply enumeration defaults."""
+    for col_name, target_def_id, default_val in schema.propagation_links.get(tbl_name, []):
+        col = col_by_name.get(col_name)
+        if col is None:
+            continue
+        do_fk_propagate = col.is_primary_key or propagate_fk
+        if not do_fk_propagate and default_val is None:
+            continue
 
-            for src_col, tgt_col in zip(fk.source_columns, fk.target_columns):
-                db.execute(f"""
-                    UPDATE "_raw_{tbl_name}" c
-                    SET "{src_col}" = COALESCE(
-                        (SELECT p."{tgt_col}" FROM "_raw_{tgt_tbl}" p
-                         WHERE p._cifflow_block_id = c._cifflow_block_id
-                           AND p._loop_id = c._loop_id
-                           AND p._iter_idx = c._iter_idx
-                           AND p."{tgt_col}" IS NOT NULL
-                         LIMIT 1),
-                        (SELECT p."{tgt_col}" FROM "_raw_{tgt_tbl}" p
-                         WHERE p._cifflow_block_id = c._cifflow_block_id
-                           AND p._loop_id = '{_SCALARS_LOOP_ID}'
-                           AND p."{tgt_col}" IS NOT NULL
-                         LIMIT 1),
-                        (SELECT p."{tgt_col}" FROM "_raw_{tgt_tbl}" p
-                         WHERE p._cifflow_block_id = c._cifflow_block_id
-                           AND p."{tgt_col}" IS NOT NULL
-                         ORDER BY (p._loop_id = '{_SCALARS_LOOP_ID}') DESC, p._iter_idx
-                         LIMIT 1)
-                    )
-                    WHERE c."{src_col}" IS NULL
-                """)
+        if do_fk_propagate:
+            # Follow the propagation chain transitively so that across-block
+            # scenarios (ALL_BLOCKS re-ingest) can fall back to deeper ancestors.
+            lookup_chain: list[tuple[str, str]] = []
+            current_def_id = target_def_id
+            visited_defs: set[str] = set()
+            for _ in range(8):
+                if current_def_id in visited_defs:
+                    break
+                visited_defs.add(current_def_id)
+                loc = tag_to_column.get(current_def_id)
+                if not loc:
+                    break
+                tgt_tbl_c, tgt_col_c = loc
+                if tgt_tbl_c not in schema.tables:
+                    break
+                lookup_chain.append((tgt_tbl_c, tgt_col_c))
+                next_link = next(
+                    (lnk for lnk in schema.propagation_links.get(tgt_tbl_c, [])
+                     if lnk[0] == tgt_col_c),
+                    None,
+                )
+                if next_link is None:
+                    break
+                current_def_id = next_link[1]
+        else:
+            lookup_chain = []
 
-        # --- Propagation links ---
-        for col_name, target_def_id, default_val in schema.propagation_links.get(tbl_name, []):
-            col = col_by_name.get(col_name)
-            if col is None:
-                continue
-            do_fk_propagate = col.is_primary_key or propagate_fk
-            # Non-PK items without a default have nothing to do here.
-            if not do_fk_propagate and default_val is None:
-                continue
+        if lookup_chain:
+            subs: list[str] = []
+            for tgt_tbl_c, tgt_col_c in lookup_chain:
+                subs += [
+                    f'(SELECT p."{tgt_col_c}" FROM "_raw_{tgt_tbl_c}" p'
+                    f' WHERE p._cifflow_block_id = c._cifflow_block_id'
+                    f'   AND p._loop_id = c._loop_id AND p._iter_idx = c._iter_idx'
+                    f'   AND p."{tgt_col_c}" IS NOT NULL LIMIT 1)',
+                    f'(SELECT p."{tgt_col_c}" FROM "_raw_{tgt_tbl_c}" p'
+                    f' WHERE p._cifflow_block_id = c._cifflow_block_id'
+                    f"   AND p._loop_id = '{_SCALARS_LOOP_ID}'"
+                    f'   AND p."{tgt_col_c}" IS NOT NULL LIMIT 1)',
+                    f'(SELECT p."{tgt_col_c}" FROM "_raw_{tgt_tbl_c}" p'
+                    f' WHERE p._cifflow_block_id = c._cifflow_block_id'
+                    f'   AND p."{tgt_col_c}" IS NOT NULL'
+                    f"  ORDER BY (p._loop_id = '{_SCALARS_LOOP_ID}') DESC, p._iter_idx"
+                    f' LIMIT 1)',
+                ]
+            db.execute(f"""
+                UPDATE "_raw_{tbl_name}" c
+                SET "{col_name}" = COALESCE({", ".join(subs)})
+                WHERE c."{col_name}" IS NULL
+            """)
 
-            if do_fk_propagate:
-                # Follow the propagation chain transitively so that across-block
-                # scenarios (ALL_BLOCKS re-ingest) can fall back to deeper ancestors
-                # that share the current block's _cifflow_block_id.
-                lookup_chain: list[tuple[str, str]] = []
-                current_def_id = target_def_id
-                visited_defs: set[str] = set()
-                for _ in range(8):
-                    if current_def_id in visited_defs:
-                        break
-                    visited_defs.add(current_def_id)
-                    loc = tag_to_column.get(current_def_id)
-                    if not loc:
-                        break
-                    tgt_tbl_c, tgt_col_c = loc
-                    if tgt_tbl_c not in schema.tables:
-                        break
-                    lookup_chain.append((tgt_tbl_c, tgt_col_c))
-                    next_link = next(
-                        (lnk for lnk in schema.propagation_links.get(tgt_tbl_c, [])
-                         if lnk[0] == tgt_col_c),
-                        None,
-                    )
-                    if next_link is None:
-                        break
-                    current_def_id = next_link[1]
-            else:
-                lookup_chain = []
+        if default_val is not None:
+            db.execute(f"""
+                UPDATE "_raw_{tbl_name}"
+                SET "{col_name}" = ?
+                WHERE "{col_name}" IS NULL
+            """, [default_val])
 
-            if lookup_chain:
-                subs: list[str] = []
-                for tgt_tbl_c, tgt_col_c in lookup_chain:
-                    subs += [
-                        f'(SELECT p."{tgt_col_c}" FROM "_raw_{tgt_tbl_c}" p'
-                        f' WHERE p._cifflow_block_id = c._cifflow_block_id'
-                        f'   AND p._loop_id = c._loop_id AND p._iter_idx = c._iter_idx'
-                        f'   AND p."{tgt_col_c}" IS NOT NULL LIMIT 1)',
-                        f'(SELECT p."{tgt_col_c}" FROM "_raw_{tgt_tbl_c}" p'
-                        f' WHERE p._cifflow_block_id = c._cifflow_block_id'
-                        f"   AND p._loop_id = '{_SCALARS_LOOP_ID}'"
-                        f'   AND p."{tgt_col_c}" IS NOT NULL LIMIT 1)',
-                        f'(SELECT p."{tgt_col_c}" FROM "_raw_{tgt_tbl_c}" p'
-                        f' WHERE p._cifflow_block_id = c._cifflow_block_id'
-                        f'   AND p."{tgt_col_c}" IS NOT NULL'
-                        f"  ORDER BY (p._loop_id = '{_SCALARS_LOOP_ID}') DESC, p._iter_idx"
-                        f' LIMIT 1)',
-                    ]
-                db.execute(f"""
-                    UPDATE "_raw_{tbl_name}" c
-                    SET "{col_name}" = COALESCE({", ".join(subs)})
-                    WHERE c."{col_name}" IS NULL
-                """)
 
-            if default_val is not None:
-                db.execute(f"""
-                    UPDATE "_raw_{tbl_name}"
-                    SET "{col_name}" = ?
-                    WHERE "{col_name}" IS NULL
-                """, [default_val])
+def _run_fk_fill_pass(
+    db: duckdb.DuckDBPyConnection,
+    schema: SchemaSpec,
+    topo: list[str],
+    tag_to_column: dict[str, tuple[str, str]],
+    propagate_fk: bool,
+    emit: Callable[..., None],
+    populated: set[str] | None = None,
+) -> None:
+    """One pass of FK fill: propagate parent values into child FK columns."""
+    for tbl_name in topo:
+        if populated is not None and tbl_name not in populated:
+            continue
+        table = schema.tables[tbl_name]
+        col_by_name = {c.name: c for c in table.columns if not c.is_synthetic}
+        _fill_single_fk(db, tbl_name, table, col_by_name, schema, propagate_fk, emit)
+        _fill_composite_fk(db, tbl_name, table, col_by_name, schema, propagate_fk)
+        _fill_propagation_links(db, tbl_name, table, col_by_name, schema, propagate_fk, tag_to_column)
 
 
 def _insert_key_fk_stubs(
@@ -747,25 +773,14 @@ def _insert_key_fk_stubs(
                 populated.add(tgt_tbl)
 
 
-def propagate_fk_sql(
+def _generate_uuid_pks(
     db: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
-    tag_to_column: dict[str, tuple[str, str]],
-    propagate_fk: bool,
-    emit: Callable[..., None],
-    populated: set[str] | None = None,
+    populated: set[str] | None,
 ) -> None:
-    """Fill missing FK/PK columns in DuckDB staging tables."""
-    topo = _topo_order(schema)
-
-    _run_fk_fill_pass(db, schema, topo, tag_to_column, propagate_fk, emit, populated)
-    _insert_key_fk_stubs(db, schema, topo, populated)
-    _run_fk_fill_pass(db, schema, topo, tag_to_column, propagate_fk, emit, populated)
-
-    # --- UUID generation for remaining NULL non-synthetic PKs ---
-    sibling_groups = _sibling_groups(schema)
+    """Assign UUIDs to NULL non-synthetic PK columns not already filled by FK propagation."""
     sibling_canonicals: dict[str, str] = {}
-    for group in sibling_groups:
+    for group in _sibling_groups(schema):
         canonical = group[0]
         for t in group:
             sibling_canonicals[t] = canonical
@@ -780,7 +795,6 @@ def propagate_fk_sql(
             )
             if has_single_fk:
                 continue
-
             canonical_tbl = sibling_canonicals.get(tbl_name, tbl_name)
             if canonical_tbl == tbl_name:
                 db.execute(f"""
@@ -808,7 +822,14 @@ def propagate_fk_sql(
                     WHERE "{pk_col.name}" IS NULL
                 """)
 
-    # --- Create stub parent rows for non-null FK values ---
+
+def _create_composite_fk_stub_parents(
+    db: duckdb.DuckDBPyConnection,
+    schema: SchemaSpec,
+    topo: list[str],
+    populated: set[str] | None,
+) -> None:
+    """Insert missing parent rows for composite FKs in topological order."""
     for tbl_name in topo:
         if populated is not None and tbl_name not in populated:
             continue
@@ -843,6 +864,14 @@ def propagate_fk_sql(
             if populated is not None:
                 populated.add(tgt_tbl)
 
+
+def _create_single_fk_stub_parents(
+    db: duckdb.DuckDBPyConnection,
+    schema: SchemaSpec,
+    topo: list[str],
+    populated: set[str] | None,
+) -> None:
+    """Insert missing parent rows for single-column FKs in topological order."""
     for tbl_name in topo:
         if populated is not None and tbl_name not in populated:
             continue
@@ -869,6 +898,24 @@ def propagate_fk_sql(
             """)
             if populated is not None:
                 populated.add(tgt_tbl)
+
+
+def propagate_fk_sql(
+    db: duckdb.DuckDBPyConnection,
+    schema: SchemaSpec,
+    tag_to_column: dict[str, tuple[str, str]],
+    propagate_fk: bool,
+    emit: Callable[..., None],
+    populated: set[str] | None = None,
+) -> None:
+    """Fill missing FK/PK columns in DuckDB staging tables."""
+    topo = _topo_order(schema)
+    _run_fk_fill_pass(db, schema, topo, tag_to_column, propagate_fk, emit, populated)
+    _insert_key_fk_stubs(db, schema, topo, populated)
+    _run_fk_fill_pass(db, schema, topo, tag_to_column, propagate_fk, emit, populated)
+    _generate_uuid_pks(db, schema, populated)
+    _create_composite_fk_stub_parents(db, schema, topo, populated)
+    _create_single_fk_stub_parents(db, schema, topo, populated)
 
 
 # ---------------------------------------------------------------------------

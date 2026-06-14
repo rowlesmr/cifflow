@@ -749,6 +749,12 @@ class TestAllBlocks:
         assert len(dataset_ids) == len(cif2.blocks)
         assert len(set(dataset_ids)) == 1
 
+    def test_keyless_set_zero_rows_no_raise(self, mini_schema):
+        """Keyless Set table with 0 rows should not raise — guard only fires on non-empty tables."""
+        conn = _ingest_src('#\\#CIF_2.0\ndata_empty\n', mini_schema)
+        result = emit(conn, schema=mini_schema, mode=EmitMode.ALL_BLOCKS)
+        assert result is not None
+
 
 # Schema with Loop table whose PK includes a Set FK — exercises header scalars.
 _SET_KEY_IN_PK_DIC = """\
@@ -902,6 +908,221 @@ class TestAllBlocksSetKeyInPK:
                 assert values == [1.0, 2.0]
             elif meas_id == 'M2':
                 assert values == [3.0, 4.0]
+
+    def test_output_is_valid_cif(self, conn, schema):
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        _, errors = build(result)
+        assert not errors, errors
+
+
+# ---------------------------------------------------------------------------
+# ALL_BLOCKS — pure Loop (no Set FK in PK)
+# ---------------------------------------------------------------------------
+
+class TestAllBlocksPureLoop:
+    """ALL_BLOCKS: Loop table whose PK contains only Loop-category keys.
+
+    _collect_all_blocks must produce exactly one block for all rows
+    (``set_key_cols`` is empty → the pure-Loop branch).
+    """
+
+    # _COMPOSITE_DIC contains SCAN (Loop, key=scan.id, no FK to any Set)
+    # alongside EXPT (Set) and RESULT (Loop with Set FK in PK).
+    # Ingesting only scan data exercises the pure-Loop path.
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_COMPOSITE_DIC)
+
+    _SCAN_ONLY_CIF = (
+        '#\\#CIF_2.0\n'
+        'data_scans\n'
+        'loop_\n  _scan.id\n'
+        '  sc1\n  sc2\n  sc3\n'
+    )
+
+    def test_pure_loop_one_block_for_all_rows(self, schema):
+        """Pure Loop emits exactly one block containing all rows."""
+        conn = _ingest_src(self._SCAN_ONLY_CIF, schema)
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        scan_blocks = [n for n in cif2.blocks if '_scan.id' in cif2[n]]
+        assert len(scan_blocks) == 1
+
+    def test_pure_loop_block_contains_all_rows(self, schema):
+        """The single scan block contains all 3 scan rows."""
+        conn = _ingest_src(self._SCAN_ONLY_CIF, schema)
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        scan_block = next(n for n in cif2.blocks if '_scan.id' in cif2[n])
+        ids = sorted(str(v) for v in cif2[scan_block]['_scan.id'])
+        assert ids == ['sc1', 'sc2', 'sc3']
+
+    def test_pure_loop_block_named_after_table(self, schema):
+        """Block name for a pure Loop is derived from the table name."""
+        conn = _ingest_src(self._SCAN_ONLY_CIF, schema)
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        headers = [l[len('data_'):] for l in result.splitlines() if l.startswith('data_')]
+        assert any(h.startswith('scan') for h in headers)
+
+    def test_pure_loop_has_loop_header(self, schema):
+        """The single scan block uses a loop_ structure (not scalar tags)."""
+        conn = _ingest_src(self._SCAN_ONLY_CIF, schema)
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        assert 'loop_' in result
+
+    def test_pure_loop_output_is_valid_cif(self, schema):
+        conn = _ingest_src(self._SCAN_ONLY_CIF, schema)
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        _, errors = build(result)
+        assert not errors, errors
+
+
+# Schema with a nested Set (child Set whose PK FK-links to a parent Set).
+# EXPT (Set, key=expt.id) + SAMPLE (Set, composite key: expt_id→expt + id).
+# Exercises the Set path in _collect_all_blocks where set_key_cols is non-empty.
+_NESTED_SET_DIC = """\
+#\\#CIF_2.0
+data_nested_set_dic
+
+save_EXPT
+  _definition.id        EXPT
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     expt
+  _category_key.name    '_expt.id'
+save_
+
+save_expt.id
+  _definition.id        '_expt.id'
+  _definition.class     Attribute
+  _name.category_id     expt
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_SAMPLE
+  _definition.id        SAMPLE
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     sample
+  loop_
+    _category_key.name
+    '_sample.expt_id'
+    '_sample.id'
+save_
+
+save_sample.expt_id
+  _definition.id        '_sample.expt_id'
+  _definition.class     Attribute
+  _name.category_id     sample
+  _name.object_id       expt_id
+  _type.purpose         Link
+  _type.source          Related
+  _type.container       Single
+  _type.contents        Code
+  _name.linked_item_id  '_expt.id'
+save_
+
+save_sample.id
+  _definition.id        '_sample.id'
+  _definition.class     Attribute
+  _name.category_id     sample
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_sample.name
+  _definition.id        '_sample.name'
+  _definition.class     Attribute
+  _name.category_id     sample
+  _name.object_id       name
+  _type.purpose         Describe
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Text
+save_
+"""
+
+# Two sample entities in the same experiment, across two CIF blocks.
+_NESTED_SET_CIF = (
+    '#\\#CIF_2.0\n'
+    'data_e1s1\n'
+    '_expt.id  E1\n'
+    '_sample.expt_id  E1\n'
+    '_sample.id  S1\n'
+    '_sample.name  Alpha\n'
+    '\n\n'
+    'data_e1s2\n'
+    '_expt.id  E1\n'
+    '_sample.expt_id  E1\n'
+    '_sample.id  S2\n'
+    '_sample.name  Beta\n'
+)
+
+
+# ---------------------------------------------------------------------------
+# ALL_BLOCKS — Set category with FK in its own PK (nested Set)
+# ---------------------------------------------------------------------------
+
+class TestAllBlocksNestedSet:
+    """ALL_BLOCKS: child Set whose composite PK includes a FK to a parent Set.
+
+    _collect_all_blocks must inject a synthetic parent row (expt) so that
+    _suppressed_fk_pk_cols suppresses the FK column and emits _expt.id as a
+    scalar above the sample tags.
+    """
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_NESTED_SET_DIC)
+
+    @pytest.fixture
+    def conn(self, schema):
+        return _ingest_src(_NESTED_SET_CIF, schema)
+
+    def test_sample_blocks_one_per_row(self, conn, schema):
+        """Each sample entity gets its own block."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        sample_blocks = [n for n in cif2.blocks if '_sample.id' in cif2[n]]
+        assert len(sample_blocks) == 2
+
+    def test_parent_set_scalar_injected(self, conn, schema):
+        """_expt.id appears as a scalar tag-value pair in each sample block."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        sample_blocks = [n for n in cif2.blocks if '_sample.id' in cif2[n]]
+        for bname in sample_blocks:
+            assert '_expt.id' in cif2[bname], f"_expt.id missing in block {bname}"
+            assert str(cif2[bname]['_expt.id'][0]) == 'E1'
+
+    def test_fk_column_suppressed(self, conn, schema):
+        """_sample.expt_id is suppressed (the scalar _expt.id takes its place)."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        assert '_sample.expt_id' not in result
+
+    def test_sample_values_correct(self, conn, schema):
+        """Each sample block contains the correct name for its id."""
+        result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
+        cif2, errors = build(result)
+        assert not errors
+        sample_blocks = [n for n in cif2.blocks if '_sample.id' in cif2[n]]
+        id_to_name = {
+            str(cif2[b]['_sample.id'][0]): str(cif2[b]['_sample.name'][0])
+            for b in sample_blocks
+        }
+        assert id_to_name == {'S1': 'Alpha', 'S2': 'Beta'}
 
     def test_output_is_valid_cif(self, conn, schema):
         result = emit(conn, schema=schema, mode=EmitMode.ALL_BLOCKS)
@@ -2389,6 +2610,254 @@ class TestMergeGroup:
         # Should produce separate loops for meas and expt
         assert '_meas.intensity' in result
         assert '_expt.id' in result
+
+    def test_empty_group_emits_nothing(self, schema):
+        """When no category in the group has rows, merge group returns [] (guard branch)."""
+        conn_empty = _ingest_src('#\\#CIF_2.0\ndata_b\n_expt.id  E1\n', schema)
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn_empty, schema, mode=EmitMode.ONE_BLOCK, plan=plan)
+        assert 'loop_' not in result
+
+    def test_pretty_false_compact_output(self, conn, schema):
+        """pretty=False disables column alignment; all merge-group data still present."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan, pretty=False)
+        assert 'loop_' in result
+        assert '_meas.intensity' in result
+        assert '_calc.intensity' in result
+
+
+# Schema: EXPT (Set) + MEAS and CALC (both Loop with composite FK-in-PK pointing to EXPT).
+# Used to test _render_merge_group with suppress_all_fk_to_set=True (GROUPED mode).
+# After suppressing the expt_id FK, both tables share effective PK {point_id} → compatible.
+_MERGE_GROUPED_FK_DIC = """\
+#\\#CIF_2.0
+data_merge_grouped_fk_dic
+
+save_EXPT
+  _definition.id        EXPT
+  _definition.scope     Category
+  _definition.class     Set
+  _name.category_id     expt
+  _category_key.name    '_expt.id'
+save_
+
+save_expt.id
+  _definition.id        '_expt.id'
+  _definition.class     Attribute
+  _name.category_id     expt
+  _name.object_id       id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Code
+save_
+
+save_MEAS
+  _definition.id        MEAS
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     meas
+  loop_
+    _category_key.name
+    '_meas.expt_id'
+    '_meas.point_id'
+save_
+
+save_meas.expt_id
+  _definition.id        '_meas.expt_id'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       expt_id
+  _type.purpose         Link
+  _type.source          Related
+  _type.container       Single
+  _type.contents        Code
+  _name.linked_item_id  '_expt.id'
+save_
+
+save_meas.point_id
+  _definition.id        '_meas.point_id'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       point_id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Integer
+save_
+
+save_meas.intensity
+  _definition.id        '_meas.intensity'
+  _definition.class     Attribute
+  _name.category_id     meas
+  _name.object_id       intensity
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+
+save_CALC
+  _definition.id        CALC
+  _definition.scope     Category
+  _definition.class     Loop
+  _name.category_id     calc
+  loop_
+    _category_key.name
+    '_calc.expt_id'
+    '_calc.point_id'
+save_
+
+save_calc.expt_id
+  _definition.id        '_calc.expt_id'
+  _definition.class     Attribute
+  _name.category_id     calc
+  _name.object_id       expt_id
+  _type.purpose         Link
+  _type.source          Related
+  _type.container       Single
+  _type.contents        Code
+  _name.linked_item_id  '_expt.id'
+save_
+
+save_calc.point_id
+  _definition.id        '_calc.point_id'
+  _definition.class     Attribute
+  _name.category_id     calc
+  _name.object_id       point_id
+  _type.purpose         Key
+  _type.source          Assigned
+  _type.container       Single
+  _type.contents        Integer
+save_
+
+save_calc.intensity
+  _definition.id        '_calc.intensity'
+  _definition.class     Attribute
+  _name.category_id     calc
+  _name.object_id       intensity
+  _type.purpose         Number
+  _type.source          Measured
+  _type.container       Single
+  _type.contents        Real
+save_
+"""
+
+_MERGE_GROUPED_FK_CIF = (
+    '#\\#CIF_2.0\n'
+    'data_run1\n'
+    '_expt.id  E1\n'
+    'loop_\n  _meas.expt_id\n  _meas.point_id\n  _meas.intensity\n'
+    '  E1  1  10.0\n  E1  2  20.0\n'
+    'loop_\n  _calc.expt_id\n  _calc.point_id\n  _calc.intensity\n'
+    '  E1  1  11.0\n  E1  2  21.0\n'
+)
+
+
+class TestMergeGroupSuppressedFK:
+    """_render_merge_group with suppress_all_fk_to_set=True (GROUPED mode).
+
+    MEAS and CALC both have composite PK [expt_id→expt, point_id].  After
+    removing the FK-to-Set column from the effective PK, both share {point_id}
+    and are compatible for merging.
+    """
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_MERGE_GROUPED_FK_DIC)
+
+    @pytest.fixture
+    def conn(self, schema):
+        return _ingest_src(_MERGE_GROUPED_FK_CIF, schema)
+
+    def test_compatible_after_fk_suppression(self, conn, schema):
+        """With expt_id suppressed, meas and calc share effective PK {point_id} → one loop_."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert result.count('loop_') == 1
+
+    def test_merged_loop_contains_both_intensities(self, conn, schema):
+        """Merged loop contains columns from both meas and calc."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert '_meas.intensity' in result
+        assert '_calc.intensity' in result
+
+    def test_fk_col_suppressed_from_loop_header(self, conn, schema):
+        """_meas.expt_id and _calc.expt_id must not appear in the loop_ header."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        assert '_meas.expt_id' not in result
+        assert '_calc.expt_id' not in result
+
+    def test_set_scalar_present_in_block(self, conn, schema):
+        """_expt.id is emitted as a scalar tag-value pair in the block."""
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        cif2, errors = build(result)
+        assert not errors
+        block = cif2[cif2.blocks[0]]
+        assert str(block['_expt.id'][0]) == 'E1'
+
+    def test_output_is_valid_cif(self, conn, schema):
+        spec = BlockSpec(category_order=[['meas', 'calc']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.GROUPED, plan=plan)
+        _, errors = build(result)
+        assert not errors, errors
+
+
+class TestMergeGroupReconstructSU:
+    """_render_merge_group with reconstruct_su=True.
+
+    _SU_FK_PK_DIC has pd_data (Loop, PK=point_id) and meas (Loop, PK=point_id)
+    with an SU pair (intensity / intensity_su).  A merge group [pd_data, meas]
+    exercises the token-matrix SU-reconstruction branch.
+    """
+
+    @pytest.fixture
+    def schema(self):
+        return _make_schema(_SU_FK_PK_DIC)
+
+    @pytest.fixture
+    def conn(self, schema):
+        return _ingest_src(_SU_FK_PK_CIF, schema)
+
+    def test_su_merged_into_parenthetical_form(self, conn, schema):
+        """reconstruct_su=True merges intensity_su into intensity(su) in the merged loop."""
+        spec = BlockSpec(category_order=[['pd_data', 'meas']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan, reconstruct_su=True)
+        # _merge_su('10.0', '0.1') → '10.0(1)'
+        assert '10.0(1)' in result
+
+    def test_su_col_absent_from_merged_header(self, conn, schema):
+        """_meas.intensity_su must not appear as a standalone column header."""
+        spec = BlockSpec(category_order=[['pd_data', 'meas']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan, reconstruct_su=True)
+        assert '_meas.intensity_su' not in result
+
+    def test_one_merged_loop_emitted(self, conn, schema):
+        """pd_data and meas share PK point_id → compatible → one loop_."""
+        spec = BlockSpec(category_order=[['pd_data', 'meas']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan, reconstruct_su=True)
+        assert result.count('loop_') == 1
+
+    def test_output_is_valid_cif(self, conn, schema):
+        spec = BlockSpec(category_order=[['pd_data', 'meas']])
+        plan = OutputPlan(specs=[spec])
+        result = emit(conn, schema, mode=EmitMode.ONE_BLOCK, plan=plan, reconstruct_su=True)
+        _, errors = build(result)
+        assert not errors, errors
 
 
 class TestSingleBlock:
