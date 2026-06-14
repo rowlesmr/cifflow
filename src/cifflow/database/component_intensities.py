@@ -43,7 +43,7 @@ def _consolidate_within_transaction(
     diff_ids: list[str],
     clear_source: bool,
 ) -> tuple[int, bool, bool]:
-    """Steps 1-3 of consolidation, run inside an open transaction.
+    """Run Steps 1-3 of consolidation inside an open transaction.
 
     Returns (total_rows_updated, any_real_net, any_real_total).
     """
