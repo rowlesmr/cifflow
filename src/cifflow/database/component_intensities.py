@@ -38,6 +38,182 @@ def _all_dot(stored: str) -> bool:
         return False
 
 
+def _consolidate_within_transaction(
+    connection: duckdb.DuckDBPyConnection,
+    diff_ids: list[str],
+    clear_source: bool,
+) -> tuple[int, bool, bool]:
+    """Steps 1-3 of consolidation, run inside an open transaction.
+
+    Returns (total_rows_updated, any_real_net, any_real_total).
+    """
+    # Step 1 — Presentation order: sorted distinct phase_ids per diffractogram.
+    # DuckDB produces plain JSON; _prefix_sql() re-adds _CONTAINER_PREFIX at
+    # DuckDB runtime (via chr(0)||) so quote() renders it as a CIF list.
+    raw_pres = connection.execute("""
+        SELECT "diffractogram_id",
+               to_json(list("phase_id" ORDER BY "phase_id"))::VARCHAR
+        FROM (SELECT DISTINCT "diffractogram_id", "phase_id"
+              FROM pd_calc_component
+              WHERE "diffractogram_id" IS NOT NULL AND "phase_id" IS NOT NULL)
+        GROUP BY "diffractogram_id"
+    """).fetchall()
+
+    existing_diffs = {
+        r[0] for r in connection.execute(
+            'SELECT "diffractogram_id" FROM pd_calc_overall'
+            ' WHERE "diffractogram_id" IS NOT NULL'
+        ).fetchall()
+    }
+    to_update = [(pres, d) for d, pres in raw_pres if d in existing_diffs]
+    to_insert = [(d, pres) for d, pres in raw_pres if d not in existing_diffs]
+
+    if to_update:
+        vals_sql = ', '.join(
+            f'({_prefix_sql(pres)}, {_sl(d)})' for pres, d in to_update
+        )
+        connection.execute(f"""
+            UPDATE pd_calc_overall
+            SET "component_presentation_order" = t.pres
+            FROM (VALUES {vals_sql}) AS t(pres, "diffractogram_id")
+            WHERE pd_calc_overall."diffractogram_id" = t."diffractogram_id"
+        """)
+    if to_insert:
+        vals_sql = ', '.join(
+            f'({_sl(d)}, {_prefix_sql(pres)})' for d, pres in to_insert
+        )
+        connection.execute(f"""
+            INSERT INTO pd_calc_overall ("diffractogram_id", "component_presentation_order")
+            SELECT "diffractogram_id", pres
+            FROM (VALUES {vals_sql}) AS t("diffractogram_id", pres)
+        """)
+
+    # Step 2 — Ensure pd_calc rows exist for every (point_id, diffractogram_id) in component.
+    # MIN(_cifflow_block_id) carries a valid block ID so the emit layer can locate the rows.
+    connection.execute("""
+        INSERT INTO pd_calc ("point_id", "diffractogram_id", "_cifflow_block_id")
+        SELECT c."point_id", c."diffractogram_id", MIN(c."_cifflow_block_id")
+        FROM pd_calc_component c
+        WHERE c."point_id" IS NOT NULL
+          AND c."diffractogram_id" IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM pd_calc p
+              WHERE p."point_id" = c."point_id"
+                AND p."diffractogram_id" = c."diffractogram_id"
+          )
+        GROUP BY c."point_id", c."diffractogram_id"
+    """)
+
+    # Step 3 — Assemble and write intensity lists, per diffractogram.
+    # CROSS JOIN the full phase list against each point so every phase slot is
+    # always present (LEFT JOIN fills absent phases with NULL → COALESCE → '.').
+    # One batch VALUES UPDATE per diffractogram — avoids per-row execute() calls
+    # which are slow on Windows due to AV scanning overhead.
+    pres_by_diff = dict(raw_pres)  # diff_id -> plain JSON string (no prefix)
+    total = 0
+    any_real_net = False
+    any_real_total = False
+
+    for diff_id in diff_ids:
+        pres_json = pres_by_diff.get(diff_id)
+        if not pres_json:
+            continue
+
+        rows = connection.execute(f"""
+            WITH phases AS (
+                SELECT unnest(from_json({_sl(pres_json)}, '["VARCHAR"]')) AS phase_id,
+                       generate_subscripts(from_json({_sl(pres_json)}, '["VARCHAR"]'), 1) AS ord
+            ),
+            points AS (
+                SELECT DISTINCT "point_id"
+                FROM pd_calc_component
+                WHERE "diffractogram_id" = {_sl(diff_id)}
+                  AND "point_id" IS NOT NULL
+            )
+            SELECT
+                p."point_id",
+                to_json(list(COALESCE(c."intensity_net",   '.') ORDER BY ph.ord))::VARCHAR,
+                to_json(list(COALESCE(c."intensity_total", '.') ORDER BY ph.ord))::VARCHAR
+            FROM points p
+            CROSS JOIN phases ph
+            LEFT JOIN pd_calc_component c
+                ON  c."point_id"         = p."point_id"
+                AND c."diffractogram_id"  = {_sl(diff_id)}
+                AND c."phase_id"          = ph.phase_id
+            GROUP BY p."point_id"
+        """).fetchall()
+
+        if rows:
+            vals_sql = ', '.join(
+                f'({_sl(r[0])}, {_prefix_sql(r[1])}, {_prefix_sql(r[2])})' for r in rows
+            )
+            n = connection.execute(f"""
+                UPDATE pd_calc
+                SET "component_intensities_net"   = t.net_list,
+                    "component_intensities_total"  = t.total_list
+                FROM (VALUES {vals_sql}) AS t("point_id", net_list, total_list)
+                WHERE pd_calc."point_id" = t."point_id"
+                  AND pd_calc."diffractogram_id" = {_sl(diff_id)}
+                  AND pd_calc."component_intensities_net" IS NULL
+            """).fetchone()[0]
+            total += n
+            any_real_net   = any_real_net   or not all(_all_dot(r[1]) for r in rows)
+            any_real_total = any_real_total or not all(_all_dot(r[2]) for r in rows)
+
+        # Fill pd_calc rows that have no component data at all for this diffractogram
+        # (the CROSS JOIN only covers points present in pd_calc_component).
+        n_phases = len(json.loads(pres_json))
+        all_dot = json.dumps(['.'] * n_phases)
+        connection.execute(f"""
+            UPDATE pd_calc
+            SET "component_intensities_net"   = {_prefix_sql(all_dot)},
+                "component_intensities_total"  = {_prefix_sql(all_dot)}
+            WHERE "diffractogram_id" = {_sl(diff_id)}
+              AND "component_intensities_net" IS NULL
+        """)
+
+    if clear_source:
+        connection.execute('DELETE FROM pd_calc_component')
+
+    return total, any_real_net, any_real_total
+
+
+def _drop_all_dot_columns(
+    connection: duckdb.DuckDBPyConnection,
+    any_real_net: bool,
+    any_real_total: bool,
+) -> None:
+    """Drop all-'.' intensity columns from pd_calc (DDL outside the transaction)."""
+    if not any_real_net:
+        net_vals = connection.execute(
+            'SELECT "component_intensities_net" FROM pd_calc'
+            ' WHERE "component_intensities_net" IS NOT NULL'
+        ).fetchall()
+        if all(_all_dot(r[0]) for r in net_vals):
+            connection.execute(
+                'ALTER TABLE pd_calc DROP COLUMN "component_intensities_net"'
+            )
+        else:
+            any_real_net = True
+
+    if not any_real_total:
+        total_vals = connection.execute(
+            'SELECT "component_intensities_total" FROM pd_calc'
+            ' WHERE "component_intensities_total" IS NOT NULL'
+        ).fetchall()
+        if all(_all_dot(r[0]) for r in total_vals):
+            connection.execute(
+                'ALTER TABLE pd_calc DROP COLUMN "component_intensities_total"'
+            )
+        else:
+            any_real_total = True
+
+    if not any_real_net and not any_real_total:
+        connection.execute(
+            'ALTER TABLE pd_calc_overall DROP COLUMN "component_presentation_order"'
+        )
+
+
 def consolidate_component_intensities(
     connection: duckdb.DuckDBPyConnection,
     schema: SchemaSpec,
@@ -95,136 +271,13 @@ def consolidate_component_intensities(
 
     connection.execute('BEGIN TRANSACTION')
     total = 0
-    ok = False
     any_real_net = False
     any_real_total = False
+    ok = False
     try:
-        # Step 1 — Presentation order: sorted distinct phase_ids per diffractogram.
-        # DuckDB produces plain JSON; _prefix_sql() re-adds _CONTAINER_PREFIX at
-        # DuckDB runtime (via chr(0)||) so quote() renders it as a CIF list.
-        raw_pres = connection.execute("""
-            SELECT "diffractogram_id",
-                   to_json(list("phase_id" ORDER BY "phase_id"))::VARCHAR
-            FROM (SELECT DISTINCT "diffractogram_id", "phase_id"
-                  FROM pd_calc_component
-                  WHERE "diffractogram_id" IS NOT NULL AND "phase_id" IS NOT NULL)
-            GROUP BY "diffractogram_id"
-        """).fetchall()
-
-        existing_diffs = {
-            r[0] for r in connection.execute(
-                'SELECT "diffractogram_id" FROM pd_calc_overall'
-                ' WHERE "diffractogram_id" IS NOT NULL'
-            ).fetchall()
-        }
-        to_update = [(pres, d) for d, pres in raw_pres if d in existing_diffs]
-        to_insert = [(d, pres) for d, pres in raw_pres if d not in existing_diffs]
-
-        if to_update:
-            vals_sql = ', '.join(
-                f'({_prefix_sql(pres)}, {_sl(d)})' for pres, d in to_update
-            )
-            connection.execute(f"""
-                UPDATE pd_calc_overall
-                SET "component_presentation_order" = t.pres
-                FROM (VALUES {vals_sql}) AS t(pres, "diffractogram_id")
-                WHERE pd_calc_overall."diffractogram_id" = t."diffractogram_id"
-            """)
-        if to_insert:
-            vals_sql = ', '.join(
-                f'({_sl(d)}, {_prefix_sql(pres)})' for d, pres in to_insert
-            )
-            connection.execute(f"""
-                INSERT INTO pd_calc_overall ("diffractogram_id", "component_presentation_order")
-                SELECT "diffractogram_id", pres
-                FROM (VALUES {vals_sql}) AS t("diffractogram_id", pres)
-            """)
-
-        # Step 2 — Ensure pd_calc rows exist for every (point_id, diffractogram_id) in component.
-        # MIN(_cifflow_block_id) carries a valid block ID so the emit layer can locate the rows.
-        connection.execute("""
-            INSERT INTO pd_calc ("point_id", "diffractogram_id", "_cifflow_block_id")
-            SELECT c."point_id", c."diffractogram_id", MIN(c."_cifflow_block_id")
-            FROM pd_calc_component c
-            WHERE c."point_id" IS NOT NULL
-              AND c."diffractogram_id" IS NOT NULL
-              AND NOT EXISTS (
-                  SELECT 1 FROM pd_calc p
-                  WHERE p."point_id" = c."point_id"
-                    AND p."diffractogram_id" = c."diffractogram_id"
-              )
-            GROUP BY c."point_id", c."diffractogram_id"
-        """)
-
-        # Step 3 — Assemble and write intensity lists, per diffractogram.
-        # CROSS JOIN the full phase list against each point so every phase slot is
-        # always present (LEFT JOIN fills absent phases with NULL → COALESCE → '.').
-        # One batch VALUES UPDATE per diffractogram — avoids per-row execute() calls
-        # which are slow on Windows due to AV scanning overhead.
-        pres_by_diff = dict(raw_pres)  # diff_id -> plain JSON string (no prefix)
-
-        for diff_id in diff_ids:
-            pres_json = pres_by_diff.get(diff_id)
-            if not pres_json:
-                continue
-
-            rows = connection.execute(f"""
-                WITH phases AS (
-                    SELECT unnest(from_json({_sl(pres_json)}, '["VARCHAR"]')) AS phase_id,
-                           generate_subscripts(from_json({_sl(pres_json)}, '["VARCHAR"]'), 1) AS ord
-                ),
-                points AS (
-                    SELECT DISTINCT "point_id"
-                    FROM pd_calc_component
-                    WHERE "diffractogram_id" = {_sl(diff_id)}
-                      AND "point_id" IS NOT NULL
-                )
-                SELECT
-                    p."point_id",
-                    to_json(list(COALESCE(c."intensity_net",   '.') ORDER BY ph.ord))::VARCHAR,
-                    to_json(list(COALESCE(c."intensity_total", '.') ORDER BY ph.ord))::VARCHAR
-                FROM points p
-                CROSS JOIN phases ph
-                LEFT JOIN pd_calc_component c
-                    ON  c."point_id"         = p."point_id"
-                    AND c."diffractogram_id"  = {_sl(diff_id)}
-                    AND c."phase_id"          = ph.phase_id
-                GROUP BY p."point_id"
-            """).fetchall()
-
-            if rows:
-                vals_sql = ', '.join(
-                    f'({_sl(r[0])}, {_prefix_sql(r[1])}, {_prefix_sql(r[2])})' for r in rows
-                )
-                n = connection.execute(f"""
-                    UPDATE pd_calc
-                    SET "component_intensities_net"   = t.net_list,
-                        "component_intensities_total"  = t.total_list
-                    FROM (VALUES {vals_sql}) AS t("point_id", net_list, total_list)
-                    WHERE pd_calc."point_id" = t."point_id"
-                      AND pd_calc."diffractogram_id" = {_sl(diff_id)}
-                      AND pd_calc."component_intensities_net" IS NULL
-                """).fetchone()[0]
-                total += n
-                any_real_net   = any_real_net   or not all(_all_dot(r[1]) for r in rows)
-                any_real_total = any_real_total or not all(_all_dot(r[2]) for r in rows)
-
-            # Fill pd_calc rows that have no component data at all for this diffractogram
-            # (the CROSS JOIN only covers points present in pd_calc_component).
-            n_phases = len(json.loads(pres_json))
-            all_dot = json.dumps(['.'] * n_phases)
-            connection.execute(f"""
-                UPDATE pd_calc
-                SET "component_intensities_net"   = {_prefix_sql(all_dot)},
-                    "component_intensities_total"  = {_prefix_sql(all_dot)}
-                WHERE "diffractogram_id" = {_sl(diff_id)}
-                  AND "component_intensities_net" IS NULL
-            """)
-
-        # Step 5 — Clear source values (optional).
-        if clear_source:
-            connection.execute('DELETE FROM pd_calc_component')
-
+        total, any_real_net, any_real_total = _consolidate_within_transaction(
+            connection, diff_ids, clear_source
+        )
         ok = True
     except Exception:
         raise
@@ -237,34 +290,5 @@ def consolidate_component_intensities(
             except duckdb.Error:
                 pass
 
-    # Step 4 — Drop all-'.' columns (DDL runs outside the transaction).
-    if not any_real_net:
-        net_vals = connection.execute(
-            'SELECT "component_intensities_net" FROM pd_calc'
-            ' WHERE "component_intensities_net" IS NOT NULL'
-        ).fetchall()
-        if all(_all_dot(r[0]) for r in net_vals):
-            connection.execute(
-                'ALTER TABLE pd_calc DROP COLUMN "component_intensities_net"'
-            )
-        else:
-            any_real_net = True
-
-    if not any_real_total:
-        total_vals = connection.execute(
-            'SELECT "component_intensities_total" FROM pd_calc'
-            ' WHERE "component_intensities_total" IS NOT NULL'
-        ).fetchall()
-        if all(_all_dot(r[0]) for r in total_vals):
-            connection.execute(
-                'ALTER TABLE pd_calc DROP COLUMN "component_intensities_total"'
-            )
-        else:
-            any_real_total = True
-
-    if not any_real_net and not any_real_total:
-        connection.execute(
-            'ALTER TABLE pd_calc_overall DROP COLUMN "component_presentation_order"'
-        )
-
+    _drop_all_dot_columns(connection, any_real_net, any_real_total)
     return total

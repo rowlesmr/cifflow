@@ -2,17 +2,26 @@
 
 ---
 
-## What was done (2026-06-13/14, complexity branch) — F-grade complexity reduction complete
+## What was done (2026-06-13/14, complexity branch) — F-grade and most E-grade complete
 
-Decomposed all F-grade functions into private helpers, writing branch-coverage tests before each refactor. Test count: 1858 → 1980 (122 new tests added). No remaining F-grade functions.
+Decomposed all F-grade and all 6 reducible E-grade functions into private helpers, writing branch-coverage tests before each refactor. Test count: 1858 → 2076 (218 new tests added). No remaining F-grade or reducible E-grade functions.
 
-- **`inspect_schema` (CC 61 → 1)**: Decomposed into 7 private helpers; 16 tests added (`test_inspect_schema.py`).
-- **`_collect_all_blocks` (CC 45 → B/7)**: Decomposed into 4 private helpers; 11 tests added.
-- **`_render_merge_group` (CC 54 → D/21)**: Decomposed into 5 private helpers; 11 tests added.
-- **`visualise_schema` (CC 55 → B/7)**: Decomposed into 5 private helpers; 6 tests added.
-- **`_render_block` (CC 69 → C/14)**: Decomposed into 5 private helpers; 24 tests added (`test_emit_render_block.py`).
-- **`generate_schema` (CC 98 → A/2)**: Decomposed into 7 private helpers; 19 tests added (`test_schema.py`).
-- **`_collect_grouped` (CC 170 → D/26)**: Decomposed into 12 module-level helpers (`_collect_set_pk_vals`, `_fp_entries_for_expanded`, `_drop_incidental_child_sets`, `_compute_block_fingerprint`, `_compute_no_set_fk_routing`, `_collect_fp_table_rows`, `_compute_fp_anchor`, `_compute_primary_fp_anchors`, `_collect_incidental_block_rows`, `_bfs_collect_child_sets`, `_build_grouped_state`, `_emit_pure_loop_blocks`); 29 branch-coverage tests added (`test_collect_grouped.py`).
+**F-grade (all resolved):**
+- **`inspect_schema` (CC 61 → 1)**: 7 helpers; 16 tests.
+- **`_collect_all_blocks` (CC 45 → B/7)**: 4 helpers; 11 tests.
+- **`_render_merge_group` (CC 54 → D/21)**: 5 helpers; 11 tests.
+- **`visualise_schema` (CC 55 → B/7)**: 5 helpers; 6 tests.
+- **`_render_block` (CC 69 → C/14)**: 5 helpers; 24 tests.
+- **`generate_schema` (CC 98 → A/2)**: 7 helpers; 19 tests.
+- **`_collect_grouped` (CC 170 → D/26)**: 12 helpers; 29 tests.
+
+**E-grade (all 6 reducible resolved):**
+- **`propagate_fk_sql` (E/36 → A)**: 3 helpers; 17 tests.
+- **`_run_fk_fill_pass` (E/39 → A)**: 3 helpers; 11 tests.
+- **`_collect_structure` (E/32 → A)**: 2 helpers; 20 tests.
+- **`_render_original_loop_group` (E/38 → C/15)**: 1 helper (`_render_positional_join` D/24); 8 tests.
+- **`_render_set_category` (E/31 → A)**: 3 helpers; 19 tests.
+- **`consolidate_component_intensities` (E/33 → B/7)**: 2 helpers (`_consolidate_within_transaction` C/19, `_drop_all_dot_columns` B/9); 21 tests.
 
 ---
 
@@ -78,29 +87,29 @@ Enforce: `.venv/Scripts/xenon src/ --max-average B --max-modules C --max-absolut
 
 ### E-grade (xenon violations — should fix)
 
-| CC | Location |
-|----|----------|
-| 39 | `ingestion/duckdb_ingest.py:538 _run_fk_fill_pass` |
-| 38 | `output/emit.py:2468 _render_original_loop_group` |
-| 36 | `ingestion/duckdb_ingest.py:750 propagate_fk_sql` |
-| 33 | `database/component_intensities.py:41 consolidate_component_intensities` |
-| 33 | `dictionary/schema.py:674 _resolve_fk_group` — irreducible FK resolution core; see Lesson 157 |
-| 32 | `output/emit.py:1269 _collect_structure` |
-| 31 | `output/emit.py:2591 _render_set_category` |
+| CC | Location | Status |
+|----|----------|--------|
+| ~~39~~ → **A** | ~~`ingestion/duckdb_ingest.py:538 _run_fk_fill_pass`~~ ✅ | Extracted `_fill_single_fk`, `_fill_composite_fk`, `_fill_propagation_links`; 11 tests (suite: 2008 → 2019) |
+| ~~38~~ → **C/15** | ~~`output/emit.py:2468 _render_original_loop_group`~~ ✅ | Extracted `_render_positional_join` D/24; 8 tests (suite: 2025 → 2033) |
+| ~~36~~ → **A** | ~~`ingestion/duckdb_ingest.py:750 propagate_fk_sql`~~ ✅ | Extracted `_generate_uuid_pks`, `_create_composite_fk_stub_parents`, `_create_single_fk_stub_parents`; 17 tests (suite: 1980 → 1997) |
+| ~~32~~ → **A** | ~~`output/emit.py:1269 _collect_structure`~~ ✅ | Extracted `_segregate_structure_blocks` C/15, `_collect_satellite_merges` C/13; 20 tests (suite: 2005 → 2025) |
+| ~~31~~ → **A** | ~~`output/emit.py:2591 _render_set_category`~~ ✅ | Extracted `_build_set_quads`, `_requote_set_quads`, `_decimal_align_set_quads`; 19 tests (suite: 2036 → 2055) |
+| ~~33~~ → **C/19** | ~~`database/component_intensities.py:41 consolidate_component_intensities`~~ ✅ | Extracted `_consolidate_within_transaction` C/19, `_drop_all_dot_columns` B/9; 21 tests (suite: 2055 → 2076) |
+| 33 | `dictionary/schema.py:674 _resolve_fk_group` — irreducible FK resolution core; see Lesson 157 | leave |
 
 ### D-grade (document or fix)
 
 `dictionary/loader.py`: `_extract_item` (30), `_load_recursive` (27), `_resolve_imports` (25)
 `dictionary/schema.py`: `_find_transitive_bridge` (28)
 `dictionary/visualise.py`: `_emit_clustered_nodes` (25), `_classify_tables` (21), `_column_rows` (21)
-`output/emit.py`: `_render_fallback` (29), `_compute_fp_anchor` (28)†, `_collect_fp_table_rows` (27)†, `_collect_grouped` (26)†, `_ordered_categories` (25), `_compute_original_category_order` (24), `_bfs_collect_child_sets` (22)†, `_render_loop_category` (22), `_suppressed_fk_pk_cols` (22), `_find_set_anchor` (22), `_build_grouped_state` (21)†, `_render_merge_group` (21), `_render_pure_fallback_loop` (21)
+`output/emit.py`: `_render_fallback` (29), `_compute_fp_anchor` (28)†, `_collect_fp_table_rows` (27)†, `_collect_grouped` (26)†, `_ordered_categories` (25), `_compute_original_category_order` (24), `_render_positional_join` (24)†, `_bfs_collect_child_sets` (22)†, `_render_loop_category` (22), `_suppressed_fk_pk_cols` (22), `_find_set_anchor` (22), `_build_grouped_state` (21)†, `_render_merge_group` (21), `_render_pure_fallback_loop` (21)
 `inspect/_schema.py`: `inspect_fk_path` (26)
 `inspect/_model.py`: `_print_namespace` (25)
 `database/compact.py`: `convert_database` (28)
 `database/defaults.py`: `_make_keyed_op` (22)
 `validation/_validate.py`: `validate` (22)
 
-† Helpers extracted from `_collect_grouped`; D-grade by nature of the logic they encapsulate.
+† Helpers extracted during E/F-grade reduction; D-grade by nature of the logic they encapsulate.
 
 ---
 
