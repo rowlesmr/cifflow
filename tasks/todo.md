@@ -2,26 +2,26 @@
 
 ---
 
-## What was done (2026-06-13/14, complexity branch) — F-grade and most E-grade complete
+## What was done (2026-06-13/14, complexity branch)
 
-Decomposed all F-grade and all 6 reducible E-grade functions into private helpers, writing branch-coverage tests before each refactor. Test count: 1858 → 2076 (218 new tests added). No remaining F-grade or reducible E-grade functions.
+Decomposed all F-grade and all 6 reducible E-grade functions into private helpers, writing branch-coverage tests before each refactor. Test count: 1858 → 2076 (+218). No remaining F-grade or reducible E-grade; only `_resolve_fk_group` (E/33) stays as an irreducible xenon exception.
 
 **F-grade (all resolved):**
-- **`inspect_schema` (CC 61 → 1)**: 7 helpers; 16 tests.
-- **`_collect_all_blocks` (CC 45 → B/7)**: 4 helpers; 11 tests.
-- **`_render_merge_group` (CC 54 → D/21)**: 5 helpers; 11 tests.
-- **`visualise_schema` (CC 55 → B/7)**: 5 helpers; 6 tests.
-- **`_render_block` (CC 69 → C/14)**: 5 helpers; 24 tests.
-- **`generate_schema` (CC 98 → A/2)**: 7 helpers; 19 tests.
-- **`_collect_grouped` (CC 170 → D/26)**: 12 helpers; 29 tests.
+- **`inspect_schema` (61 → 1)**: 7 helpers; 16 tests.
+- **`_collect_all_blocks` (45 → B/7)**: 4 helpers; 11 tests.
+- **`_render_merge_group` (54 → D/21)**: 5 helpers; 11 tests.
+- **`visualise_schema` (55 → B/7)**: 5 helpers; 6 tests.
+- **`_render_block` (69 → C/14)**: 5 helpers; 24 tests.
+- **`generate_schema` (98 → A/2)**: 7 helpers; 19 tests.
+- **`_collect_grouped` (170 → D/26)**: 12 helpers; 29 tests.
 
-**E-grade (all 6 reducible resolved):**
-- **`propagate_fk_sql` (E/36 → A)**: 3 helpers; 17 tests.
-- **`_run_fk_fill_pass` (E/39 → A)**: 3 helpers; 11 tests.
-- **`_collect_structure` (E/32 → A)**: 2 helpers; 20 tests.
-- **`_render_original_loop_group` (E/38 → C/15)**: 1 helper (`_render_positional_join` D/24); 8 tests.
-- **`_render_set_category` (E/31 → A)**: 3 helpers; 19 tests.
-- **`consolidate_component_intensities` (E/33 → B/7)**: 2 helpers (`_consolidate_within_transaction` C/19, `_drop_all_dot_columns` B/9); 21 tests.
+**E-grade (all reducible resolved):**
+- **`propagate_fk_sql` (36 → A)**: 3 helpers; 17 tests.
+- **`_run_fk_fill_pass` (39 → A)**: 3 helpers; 11 tests.
+- **`_collect_structure` (32 → A)**: 2 helpers; 20 tests.
+- **`_render_original_loop_group` (38 → C/15)**: extracted `_render_positional_join` D/24; 8 tests.
+- **`_render_set_category` (31 → A)**: 3 helpers; 19 tests.
+- **`consolidate_component_intensities` (33 → B/7)**: 2 helpers; 21 tests.
 
 ---
 
@@ -38,7 +38,6 @@ Decomposed all F-grade and all 6 reducible E-grade functions into private helper
   6. **Ingest optimisation** — current 12s ingest is 97× faster than original. Main remaining
      bottleneck is `ROW_NUMBER()` sort for large tables. Not in scope unless a specific use case
      requires it.
-
 
 ---
 
@@ -63,58 +62,7 @@ Decomposed all F-grade and all 6 reducible E-grade functions into private helper
 
 ---
 
-## Complexity Reduction (radon/xenon analysis, 2026-06-12)
-
-Radon grades (empirical — confirmed from output): A ≤5, B 6–10, C 11–20, D 21–30, E 31–50, F 51+.
-(Note: CLAUDE.md documents "D 16–25" but radon's actual boundary is D=21–30, E=31+.)
-Xenon `--max-absolute D` flags grade E and above (CC ≥ 31).
-Run: `.venv/Scripts/python -m radon cc src/ --show-complexity --min C`
-Enforce: `.venv/Scripts/xenon src/ --max-average B --max-modules C --max-absolute D`
-
-**Rule: write function-level tests locking down current behaviour before refactoring any function below.**
-
-### F-grade (must fix) — ALL RESOLVED ✅
-
-| CC | Location | Notes |
-|----|----------|-------|
-| ~~170~~ → **D/26** | ~~`output/emit.py:540 _collect_grouped`~~ ✅ | Decomposed into 12 module-level helpers; 29 branch-coverage tests added (`test_collect_grouped.py`, suite: 1951 → 1980) |
-| ~~98~~ → **A/2** | ~~`dictionary/schema.py:485 generate_schema`~~ ✅ | Decomposed into 7 private helpers; 19 branch-coverage tests added (suite: 1927 → 1951) |
-| ~~69~~ → **C/14** | ~~`output/emit.py:1671 _render_block`~~ ✅ | Decomposed into 5 private helpers; 24 branch-coverage tests added (suite: 1903 → 1927) |
-| ~~61~~ → **A/1** | ~~`inspect/_schema.py:12 inspect_schema`~~ ✅ | Decomposed into 7 private helpers; 16 branch-coverage tests added (suite: 1858 → 1874) |
-| ~~55~~ → **B/7** | ~~`dictionary/visualise.py:449 visualise_schema`~~ ✅ | Decomposed into 5 private helpers; 6 branch-coverage tests added (suite: 1896 → 1903) |
-| ~~54~~ → **D/21** | ~~`output/emit.py:2076 _render_merge_group`~~ ✅ | Decomposed into 5 private helpers; 11 branch-coverage tests added (suite: 1885 → 1896) |
-| ~~45~~ → **B/7** | ~~`output/emit.py:1504 _collect_all_blocks`~~ ✅ | Decomposed into 4 private helpers; 11 branch-coverage tests added (suite: 1874 → 1885) |
-
-### E-grade (xenon violations — should fix)
-
-| CC | Location | Status |
-|----|----------|--------|
-| ~~39~~ → **A** | ~~`ingestion/duckdb_ingest.py:538 _run_fk_fill_pass`~~ ✅ | Extracted `_fill_single_fk`, `_fill_composite_fk`, `_fill_propagation_links`; 11 tests (suite: 2008 → 2019) |
-| ~~38~~ → **C/15** | ~~`output/emit.py:2468 _render_original_loop_group`~~ ✅ | Extracted `_render_positional_join` D/24; 8 tests (suite: 2025 → 2033) |
-| ~~36~~ → **A** | ~~`ingestion/duckdb_ingest.py:750 propagate_fk_sql`~~ ✅ | Extracted `_generate_uuid_pks`, `_create_composite_fk_stub_parents`, `_create_single_fk_stub_parents`; 17 tests (suite: 1980 → 1997) |
-| ~~32~~ → **A** | ~~`output/emit.py:1269 _collect_structure`~~ ✅ | Extracted `_segregate_structure_blocks` C/15, `_collect_satellite_merges` C/13; 20 tests (suite: 2005 → 2025) |
-| ~~31~~ → **A** | ~~`output/emit.py:2591 _render_set_category`~~ ✅ | Extracted `_build_set_quads`, `_requote_set_quads`, `_decimal_align_set_quads`; 19 tests (suite: 2036 → 2055) |
-| ~~33~~ → **C/19** | ~~`database/component_intensities.py:41 consolidate_component_intensities`~~ ✅ | Extracted `_consolidate_within_transaction` C/19, `_drop_all_dot_columns` B/9; 21 tests (suite: 2055 → 2076) |
-| 33 | `dictionary/schema.py:674 _resolve_fk_group` — irreducible FK resolution core; see Lesson 157 | leave |
-
-### D-grade (document or fix)
-
-`dictionary/loader.py`: `_extract_item` (30), `_load_recursive` (27), `_resolve_imports` (25)
-`dictionary/schema.py`: `_find_transitive_bridge` (28)
-`dictionary/visualise.py`: `_emit_clustered_nodes` (25), `_classify_tables` (21), `_column_rows` (21)
-`output/emit.py`: `_render_fallback` (29), `_compute_fp_anchor` (28)†, `_collect_fp_table_rows` (27)†, `_collect_grouped` (26)†, `_ordered_categories` (25), `_compute_original_category_order` (24), `_render_positional_join` (24)†, `_bfs_collect_child_sets` (22)†, `_render_loop_category` (22), `_suppressed_fk_pk_cols` (22), `_find_set_anchor` (22), `_build_grouped_state` (21)†, `_render_merge_group` (21), `_render_pure_fallback_loop` (21)
-`inspect/_schema.py`: `inspect_fk_path` (26)
-`inspect/_model.py`: `_print_namespace` (25)
-`database/compact.py`: `convert_database` (28)
-`database/defaults.py`: `_make_keyed_op` (22)
-`validation/_validate.py`: `validate` (22)
-
-† Helpers extracted during E/F-grade reduction; D-grade by nature of the logic they encapsulate.
-
----
-
 ## Remaining Items (unscheduled)
-
 
 - **`_validation_result` table** — see Open Decision 2.
 
