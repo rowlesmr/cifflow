@@ -1266,24 +1266,20 @@ def _replace_anchor(
     )
 
 
-def _collect_structure(
-    conn: duckdb.DuckDBPyConnection,
-    schema: SchemaSpec,
-    version: CifVersion,
-) -> list[_BlockData]:
-    """STRUCTURE mode: GROUPED plus absorption of pd_phase/space_group/model into structure blocks.
-
-    Satellite blocks (pd_phase, space_group, model with a single structure referent) whose
-    data is absorbed are removed from the top-level output.  Unreferenced satellites and
-    models with multiple structure referents are emitted unchanged.
-    """
-    grouped = _collect_grouped(conn, schema, version)
-
-    # --- Segregate ---
+def _segregate_structure_blocks(
+    grouped: list['_BlockData'],
+    schema: 'SchemaSpec | None' = None,
+) -> tuple[
+    list['_BlockData'],
+    dict[str, '_BlockData'],
+    dict[str, '_BlockData'],
+    dict[str, list['_BlockData']],
+    list['_BlockData'],
+]:
+    """Partition grouped blocks into structure, pd_phase, space_group, model, and other buckets."""
     structure_blocks: list[_BlockData] = []
-    pd_phase_blocks: dict[str, _BlockData] = {}     # phase_id  → block
-    space_group_blocks: dict[str, _BlockData] = {}  # sg_id     → block
-    # structure_id → list of model blocks whose model.structure_id matches
+    pd_phase_blocks: dict[str, _BlockData] = {}
+    space_group_blocks: dict[str, _BlockData] = {}
     model_blocks_by_struct: dict[str, list[_BlockData]] = {}
     other_blocks: list[_BlockData] = []
 
@@ -1293,13 +1289,13 @@ def _collect_structure(
             structure_blocks.append(block)
         elif afs == frozenset({'pd_phase'}):
             for phase_id in block.anchor_key_dict.get('pd_phase.id', []):
-                if phase_id in pd_phase_blocks:
+                if phase_id in pd_phase_blocks and schema is not None:
                     pd_phase_blocks[phase_id] = _merge_blocks_into(pd_phase_blocks[phase_id], [block], schema)
                 else:
                     pd_phase_blocks[phase_id] = block
         elif afs == frozenset({'space_group'}):
             for sg_id in block.anchor_key_dict.get('space_group.id', []):
-                if sg_id in space_group_blocks:
+                if sg_id in space_group_blocks and schema is not None:
                     space_group_blocks[sg_id] = _merge_blocks_into(space_group_blocks[sg_id], [block], schema)
                 else:
                     space_group_blocks[sg_id] = block
@@ -1317,51 +1313,82 @@ def _collect_structure(
         else:
             other_blocks.append(block)
 
-    # --- Merge satellites into structure blocks ---
-    consumed_block_ids: set[int] = set()   # id() of absorbed _BlockData objects
+    return structure_blocks, pd_phase_blocks, space_group_blocks, model_blocks_by_struct, other_blocks
+
+
+def _collect_satellite_merges(
+    block: '_BlockData',
+    pd_phase_blocks: dict[str, '_BlockData'],
+    space_group_blocks: dict[str, '_BlockData'],
+    model_blocks_by_struct: dict[str, list['_BlockData']],
+    consumed_block_ids: set[int],
+) -> list['_BlockData']:
+    """Return satellite blocks (pd_phase, space_group, single model) to merge into a structure block.
+
+    Mutates consumed_block_ids with the id()s of selected satellites.
+    """
+    to_merge: list[_BlockData] = []
+    seen_src_ids: set[int] = set()
+
+    for row in block.table_rows.get('structure', []):
+        phase_id = row.get('phase_id')
+        if phase_id and phase_id not in ('.', '?'):
+            src = pd_phase_blocks.get(str(phase_id))
+            if src is not None and id(src) not in seen_src_ids:
+                to_merge.append(src)
+                seen_src_ids.add(id(src))
+                consumed_block_ids.add(id(src))
+
+        sg_id = row.get('space_group_id')
+        if sg_id and sg_id not in ('.', '?'):
+            src = space_group_blocks.get(str(sg_id))
+            if src is not None and id(src) not in seen_src_ids:
+                to_merge.append(src)
+                seen_src_ids.add(id(src))
+                consumed_block_ids.add(id(src))
+
+        struct_id = row.get('id')
+        if struct_id is not None:
+            models = model_blocks_by_struct.get(str(struct_id), [])
+            if len(models) == 1 and id(models[0]) not in seen_src_ids:
+                to_merge.append(models[0])
+                seen_src_ids.add(id(models[0]))
+                consumed_block_ids.add(id(models[0]))
+
+    return to_merge
+
+
+def _collect_structure(
+    conn: duckdb.DuckDBPyConnection,
+    schema: SchemaSpec,
+    version: CifVersion,
+) -> list[_BlockData]:
+    """STRUCTURE mode: GROUPED plus absorption of pd_phase/space_group/model into structure blocks.
+
+    Satellite blocks (pd_phase, space_group, model with a single structure referent) whose
+    data is absorbed are removed from the top-level output.  Unreferenced satellites and
+    models with multiple structure referents are emitted unchanged.
+    """
+    grouped = _collect_grouped(conn, schema, version)
+    structure_blocks, pd_phase_blocks, space_group_blocks, model_blocks_by_struct, other_blocks = (
+        _segregate_structure_blocks(grouped, schema)
+    )
+
+    consumed_block_ids: set[int] = set()
     result: list[_BlockData] = []
 
     for block in structure_blocks:
-        struct_rows = block.table_rows.get('structure', [])
-        to_merge: list[_BlockData] = []
-        seen_src_ids: set[int] = set()
-
-        for row in struct_rows:
-            phase_id = row.get('phase_id')
-            if phase_id and phase_id not in ('.', '?'):
-                src = pd_phase_blocks.get(str(phase_id))
-                if src is not None and id(src) not in seen_src_ids:
-                    to_merge.append(src)
-                    seen_src_ids.add(id(src))
-                    consumed_block_ids.add(id(src))
-
-            sg_id = row.get('space_group_id')
-            if sg_id and sg_id not in ('.', '?'):
-                src = space_group_blocks.get(str(sg_id))
-                if src is not None and id(src) not in seen_src_ids:
-                    to_merge.append(src)
-                    seen_src_ids.add(id(src))
-                    consumed_block_ids.add(id(src))
-
-            struct_id = row.get('id')
-            if struct_id is not None:
-                models = model_blocks_by_struct.get(str(struct_id), [])
-                if len(models) == 1 and id(models[0]) not in seen_src_ids:
-                    to_merge.append(models[0])
-                    seen_src_ids.add(id(models[0]))
-                    consumed_block_ids.add(id(models[0]))
-
+        to_merge = _collect_satellite_merges(
+            block, pd_phase_blocks, space_group_blocks, model_blocks_by_struct, consumed_block_ids,
+        )
         if to_merge:
             original_anchor_fs = block.anchor_frozenset
             original_anchor_kd = block.anchor_key_dict
             block = _merge_blocks_into(block, to_merge, schema)
-            # Satellites are absorbed data passengers, not co-equal anchors.
-            # Keep the structure block's anchor identity so plan predicates
-            # such as only('structure') still match in STRUCTURE mode.
+            # Satellites are absorbed data passengers; keep structure block's anchor identity.
             block = _replace_anchor(block, original_anchor_fs, original_anchor_kd)
         result.append(block)
 
-    # --- Emit unconsumed satellite blocks ---
     seen_output_ids: set[int] = set()
     all_satellites = (
         list(pd_phase_blocks.values())
@@ -2465,6 +2492,71 @@ def _render_merge_group(
     return lines
 
 
+def _render_positional_join(
+    per_table: list[tuple[str, list[str], list[dict]]],
+    schema: 'SchemaSpec',
+    version: 'CifVersion',
+    reconstruct_su: bool,
+    pretty: bool,
+    line_limit: int | None,
+) -> list[str]:
+    """Positional join: zip rows from multiple Loop tables by sorted _cifflow_row_id."""
+    sorted_sets: list[tuple[str, list[str], list[dict]]] = [
+        (t, cols, sorted(rows, key=lambda r: r.get('_cifflow_row_id') or 0))
+        for t, cols, rows in per_table
+    ]
+    num_rows = max((len(rows) for _, _, rows in sorted_sets), default=0)
+    if num_rows == 0:
+        return []
+
+    su_maps = {
+        t: (_su_col_map(schema.tables[t]) if reconstruct_su else {})
+        for t, _, _ in sorted_sets
+    }
+
+    lines = ['loop_']
+    for table_name, cols, _ in sorted_sets:
+        for col in cols:
+            lines.append(f'  {_col_tag(table_name, col, schema)}')
+
+    matrix: list[list[str]] = []
+    for i in range(num_rows):
+        tokens: list[str] = []
+        for table_name, cols, sorted_rows in sorted_sets:
+            row = sorted_rows[i] if i < len(sorted_rows) else {}
+            su_map = su_maps[table_name]
+            for col in cols:
+                value = row.get(col)
+                if value is None:
+                    tokens.append('.')
+                else:
+                    if reconstruct_su and col in su_map:
+                        su_val = row.get(su_map[col])
+                        if su_val is not None:
+                            value = _merge_su(value, su_val)
+                    token = quote(value, version)
+                    if line_limit is not None:
+                        token = _apply_line_limit(value, token, line_limit)
+                    tokens.append(token)
+        matrix.append(tokens)
+
+    if pretty:
+        real_idx: list[int] = []
+        offset = 0
+        for table_name, cols, _ in sorted_sets:
+            for i in _real_col_indices(cols, schema.tables[table_name]):
+                real_idx.append(i + offset)
+            offset += len(cols)
+        if real_idx:
+            matrix = _apply_decimal_align(matrix, real_idx)
+
+    col_widths = _col_widths(matrix) if pretty else None
+    for tokens in matrix:
+        lines.extend(_format_row(tokens, col_widths, line_limit))
+
+    return lines
+
+
 def _render_original_loop_group(
     group: list[str],
     table_rows: dict[str, list[dict]],
@@ -2525,85 +2617,24 @@ def _render_original_loop_group(
                                    reconstruct_su, pretty, line_limit,
                                    suppress_pk_cols=suppress_pks)
 
-    # Positional join: sort each table's rows by _cifflow_row_id and zip by index.
-    # (_loop_id/_iter_idx are not copied to the final tables; positional order is equivalent.)
-    sorted_sets: list[tuple[str, list[str], list[dict]]] = [
-        (t, cols, sorted(rows, key=lambda r: r.get('_cifflow_row_id') or 0))
-        for t, cols, rows in per_table
-    ]
-
-    num_rows = max((len(rows) for _, _, rows in sorted_sets), default=0)
-    if num_rows == 0:
-        return []
-
-    su_maps = {
-        t: (_su_col_map(schema.tables[t]) if reconstruct_su else {})
-        for t, _, _ in sorted_sets
-    }
-
-    lines = ['loop_']
-    for table_name, cols, _ in sorted_sets:
-        for col in cols:
-            lines.append(f'  {_col_tag(table_name, col, schema)}')
-
-    matrix: list[list[str]] = []
-    for i in range(num_rows):
-        tokens: list[str] = []
-        for table_name, cols, sorted_rows in sorted_sets:
-            row = sorted_rows[i] if i < len(sorted_rows) else {}
-            su_map = su_maps[table_name]
-            for col in cols:
-                value = row.get(col)
-                if value is None:
-                    tokens.append('.')
-                else:
-                    if reconstruct_su and col in su_map:
-                        su_val = row.get(su_map[col])
-                        if su_val is not None:
-                            value = _merge_su(value, su_val)
-                    token = quote(value, version)
-                    if line_limit is not None:
-                        token = _apply_line_limit(value, token, line_limit)
-                    tokens.append(token)
-        matrix.append(tokens)
-
-    if pretty:
-        real_idx: list[int] = []
-        offset = 0
-        for table_name, cols, _ in sorted_sets:
-            for i in _real_col_indices(cols, schema.tables[table_name]):
-                real_idx.append(i + offset)
-            offset += len(cols)
-        if real_idx:
-            matrix = _apply_decimal_align(matrix, real_idx)
-
-    col_widths = _col_widths(matrix) if pretty else None
-    for tokens in matrix:
-        lines.extend(_format_row(tokens, col_widths, line_limit))
-
-    return lines
+    return _render_positional_join(per_table, schema, version, reconstruct_su, pretty, line_limit)
 
 
 # ---------------------------------------------------------------------------
 # Category renderers
 # ---------------------------------------------------------------------------
 
-def _render_set_category(
-    row: dict,
+def _build_set_quads(
     cols: list[str],
+    row: dict,
     table_name: str,
-    schema: SchemaSpec,
-    version: CifVersion,
-    table_def: TableDef,
+    schema: 'SchemaSpec',
+    version: 'CifVersion',
     reconstruct_su: bool,
-    pretty: bool,
-    line_limit: int | None = None,
-) -> list[str]:
-    """Emit a Set-class category as scalar tag–value pairs."""
-    lines = []
-    su_map = _su_col_map(table_def) if reconstruct_su else {}
-
-    # Build (tag, col, value, token) quads; apply folding to any multiline tokens.
+    su_map: dict[str, str],
+    line_limit: int | None,
+) -> list[tuple[str, str, str, str]]:
+    """Build (tag, col, value, token) quads for a Set row, skipping NULL values."""
     quads: list[tuple[str, str, str, str]] = []
     for col in cols:
         tag = _col_tag(table_name, col, schema)
@@ -2619,47 +2650,79 @@ def _render_set_category(
         if line_limit is not None and token.startswith('\n'):
             token = make_text_field(value, line_limit)
         quads.append((tag, col, value, token))
+    return quads
 
+
+def _requote_set_quads(
+    quads: list[tuple[str, str, str, str]],
+    tag_width: int,
+    line_limit: int,
+    pretty: bool,
+) -> tuple[list[tuple[str, str, str, str]], int]:
+    """Re-quote inline tokens that exceed line_limit; return updated quads and tag_width."""
+    new_quads: list[tuple[str, str, str, str]] = []
+    for tag, col, value, token in quads:
+        if not token.startswith('\n'):
+            line_str = f'{tag:<{tag_width}}  {token}' if pretty else f'{tag}  {token}'
+            if len(line_str) > line_limit:
+                token = make_text_field(value, line_limit)
+        new_quads.append((tag, col, value, token))
     if pretty:
         tag_width = max(
-            (len(tag) for tag, _c, _v, token in quads if not token.startswith('\n')),
+            (len(tag) for tag, _c, _v, token in new_quads if not token.startswith('\n')),
             default=0,
         )
-    else:
-        tag_width = 0
+    return new_quads, tag_width
 
-    # Re-quote inline tokens whose formatted line would exceed line_limit.
+
+def _decimal_align_set_quads(
+    quads: list[tuple[str, str, str, str]],
+    table_def: 'TableDef',
+) -> list[tuple[str, str, str, str]]:
+    """Decimal-align all inline Real/Float tokens within the quads list."""
+    col_type = {c.name: c.type_contents for c in table_def.columns}
+    real_positions = [
+        i for i, (tag, col, _v, token) in enumerate(quads)
+        if col_type.get(col) in ('Real', 'Float') and not token.startswith('\n')
+    ]
+    if not real_positions:
+        return quads
+    real_tokens = [quads[i][3] for i in real_positions]
+    aligned = _decimal_align_column(real_tokens)
+    quads = list(quads)
+    for pos, new_tok in zip(real_positions, aligned):
+        tag, col, val, _old = quads[pos]
+        quads[pos] = (tag, col, val, new_tok)
+    return quads
+
+
+def _render_set_category(
+    row: dict,
+    cols: list[str],
+    table_name: str,
+    schema: SchemaSpec,
+    version: CifVersion,
+    table_def: TableDef,
+    reconstruct_su: bool,
+    pretty: bool,
+    line_limit: int | None = None,
+) -> list[str]:
+    """Emit a Set-class category as scalar tag–value pairs."""
+    su_map = _su_col_map(table_def) if reconstruct_su else {}
+    quads = _build_set_quads(cols, row, table_name, schema, version, reconstruct_su, su_map, line_limit)
+
+    tag_width = (
+        max((len(tag) for tag, _c, _v, token in quads if not token.startswith('\n')), default=0)
+        if pretty else 0
+    )
+
     if line_limit is not None:
-        new_quads: list[tuple[str, str, str, str]] = []
-        for tag, col, value, token in quads:
-            if not token.startswith('\n'):
-                line_str = f'{tag:<{tag_width}}  {token}' if pretty else f'{tag}  {token}'
-                if len(line_str) > line_limit:
-                    token = make_text_field(value, line_limit)
-            new_quads.append((tag, col, value, token))
-        quads = new_quads
-        # Recompute tag_width now that some inline tokens may have become multiline.
-        if pretty:
-            tag_width = max(
-                (len(tag) for tag, _c, _v, token in quads if not token.startswith('\n')),
-                default=0,
-            )
+        quads, tag_width = _requote_set_quads(quads, tag_width, line_limit, pretty)
 
-    # Decimal-align all inline Real/Float tokens within this Set category.
     if pretty:
-        col_type = {c.name: c.type_contents for c in table_def.columns}
-        real_positions = [
-            i for i, (tag, col, _v, token) in enumerate(quads)
-            if col_type.get(col) in ('Real', 'Float') and not token.startswith('\n')
-        ]
-        if real_positions:
-            real_tokens = [quads[i][3] for i in real_positions]
-            aligned = _decimal_align_column(real_tokens)
-            quads = list(quads)
-            for pos, new_tok in zip(real_positions, aligned):
-                tag, col, val, _old = quads[pos]
-                quads[pos] = (tag, col, val, new_tok)
+        quads = _decimal_align_set_quads(quads, table_def)
 
+    lines = []
     for tag, _col, _value, token in quads:
         if token.startswith('\n'):
             lines.append(tag)
