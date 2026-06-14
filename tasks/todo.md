@@ -12,8 +12,9 @@ Decomposed four F-grade functions (radon CC ≥ 51) into private helpers, writin
 - **`visualise_schema` (CC 55 → B/7)**: Decomposed into `_build_vis_context`, `_emit_clustered_nodes`, `_emit_fk_edges`, `_emit_bridge_edges`, `_emit_parent_edges`; 6 tests added.
 
 - **`_render_block` (CC 69 → C/14)**: Decomposed into 5 private helpers (`_render_merge_group_item`, `_render_single_table_item`, `_collect_remnant_rows`, `_organise_fallback_rows`, `_inject_header_items`); 24 tests added (`test_emit_render_block.py`).
+- **`generate_schema` (CC 98 → A/2)**: Decomposed into 7 private helpers; 19 tests added to `test_schema.py`.
 
-Remaining F-grades: `_collect_grouped` (170), `generate_schema` (98).
+Remaining F-grades: `_collect_grouped` (170).
 
 ---
 
@@ -68,7 +69,7 @@ Enforce: `.venv/Scripts/xenon src/ --max-average B --max-modules C --max-absolut
 | CC | Location | Notes |
 |----|----------|-------|
 | 170 | `output/emit.py:540 _collect_grouped` | Largest function in codebase |
-| 98 | `dictionary/schema.py:485 generate_schema` | FK/bridge/propagation all tangled together |
+| ~~98~~ → **A/2** | ~~`dictionary/schema.py:485 generate_schema`~~ ✅ | Decomposed into 7 private helpers (`_determine_primary_keys`, `_build_table_columns`, `_build_tables`, `_resolve_fk_group`, `_build_foreign_keys`, `_build_propagation_links`, `_build_category_parent`, `_build_tag_metadata`); 19 branch-coverage tests added (suite: 1927 → 1951) |
 | ~~69~~ → **C/14** | ~~`output/emit.py:1671 _render_block`~~ ✅ | Decomposed into 5 private helpers (`_render_merge_group_item`, `_render_single_table_item`, `_collect_remnant_rows`, `_organise_fallback_rows`, `_inject_header_items`); 24 branch-coverage tests added (suite: 1903 → 1927) |
 | ~~61~~ → **1** | ~~`inspect/_schema.py:12 inspect_schema`~~ ✅ | Decomposed into 7 private helpers; 16 branch-coverage tests added (suite: 1858 → 1874) |
 | ~~55~~ → **B/7** | ~~`dictionary/visualise.py:449 visualise_schema`~~ ✅ | Decomposed into 5 private helpers (`_build_vis_context`, `_emit_clustered_nodes`, `_emit_fk_edges`, `_emit_bridge_edges`, `_emit_parent_edges`); 6 branch-coverage tests added (suite: 1896 → 1903) |
@@ -79,6 +80,7 @@ Enforce: `.venv/Scripts/xenon src/ --max-average B --max-modules C --max-absolut
 
 | CC | Location |
 |----|----------|
+| 33 | `dictionary/schema.py:674 _resolve_fk_group` — irreducible FK resolution core; see Lesson 157 |
 | 39 | `ingestion/duckdb_ingest.py:538 _run_fk_fill_pass` |
 | 36 | `ingestion/duckdb_ingest.py:750 propagate_fk_sql` |
 | 33 | `database/component_intensities.py:41 consolidate_component_intensities` |

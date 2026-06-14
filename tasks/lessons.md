@@ -5,7 +5,7 @@
 - **Arrow / PyO3 / Rust:** 103, 104, 105, 106, 107, 150
 - **CIF model / builder:** 5, 6, 7, 8, 88, 89, 90
 - **DuckDB ingest:** 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 123, 145
-- **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64, 151, 152, 153
+- **Dictionary / schema:** 12, 14, 15, 16, 17, 27, 31, 36, 38, 40, 41, 42, 64, 151, 152, 153, 157
 - **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141, 146, 147, 148, 156
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
@@ -1554,6 +1554,16 @@
 **Observation:** The print references both `group` (a parameter of `_render_merge_group`) and `pk_sets` (a local computed just before the branch). Passing these into the helper solely to keep the print inside it would bloat the helper's signature for no gain.
 
 **Rule:** When a debug or diagnostic print references variables from the caller's local scope, keep the print at the call site (the dispatch point), not inside the extracted helper. The helper's job is the logic, not the diagnosis.
+
+---
+
+## Lesson 157 — FK resolution is irreducibly complex; extract by pass, not by branch (2026-06-14)
+
+**Context:** Refactoring `generate_schema` (CC 98) in `dictionary/schema.py`.
+
+**Observation:** The FK group resolution logic (`_resolve_fk_group`) landed at E/33 after extraction. The four resolution arms (dual-endpoint, one-missing-bridged, one-missing-no-bridge, >1-missing/ambiguous) cannot be sensibly separated because they share `tgt_to_srcs`, `missing_pk_cols`, `has_conflicts`, and `bridge_col_in_src` state. Splitting them would force awkward parameter passing or a class.
+
+**Rule:** When refactoring a high-CC function, extract clean passes (table-building, FK detection, propagation, metadata) first. Accept residual complexity in a tightly-coupled decision core rather than forcing a split that destroys readability. Document the residual E/D grade with a reason in the complexity table rather than chasing further decomposition.
 
 ---
 
