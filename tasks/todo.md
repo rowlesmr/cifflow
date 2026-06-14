@@ -56,45 +56,51 @@ Decomposed all F-grade functions into private helpers, writing branch-coverage t
 
 ## Complexity Reduction (radon/xenon analysis, 2026-06-12)
 
-Radon grades: A ≤5, B 6–10, C 11–15, D 16–25, E 26–50, F 51+.
+Radon grades (empirical — confirmed from output): A ≤5, B 6–10, C 11–20, D 21–30, E 31–50, F 51+.
+(Note: CLAUDE.md documents "D 16–25" but radon's actual boundary is D=21–30, E=31+.)
+Xenon `--max-absolute D` flags grade E and above (CC ≥ 31).
 Run: `.venv/Scripts/python -m radon cc src/ --show-complexity --min C`
 Enforce: `.venv/Scripts/xenon src/ --max-average B --max-modules C --max-absolute D`
 
 **Rule: write function-level tests locking down current behaviour before refactoring any function below.**
 
-### F-grade (must fix)
+### F-grade (must fix) — ALL RESOLVED ✅
 
 | CC | Location | Notes |
 |----|----------|-------|
 | ~~170~~ → **D/26** | ~~`output/emit.py:540 _collect_grouped`~~ ✅ | Decomposed into 12 module-level helpers; 29 branch-coverage tests added (`test_collect_grouped.py`, suite: 1951 → 1980) |
-| ~~98~~ → **A/2** | ~~`dictionary/schema.py:485 generate_schema`~~ ✅ | Decomposed into 7 private helpers (`_determine_primary_keys`, `_build_table_columns`, `_build_tables`, `_resolve_fk_group`, `_build_foreign_keys`, `_build_propagation_links`, `_build_category_parent`, `_build_tag_metadata`); 19 branch-coverage tests added (suite: 1927 → 1951) |
-| ~~69~~ → **C/14** | ~~`output/emit.py:1671 _render_block`~~ ✅ | Decomposed into 5 private helpers (`_render_merge_group_item`, `_render_single_table_item`, `_collect_remnant_rows`, `_organise_fallback_rows`, `_inject_header_items`); 24 branch-coverage tests added (suite: 1903 → 1927) |
-| ~~61~~ → **1** | ~~`inspect/_schema.py:12 inspect_schema`~~ ✅ | Decomposed into 7 private helpers; 16 branch-coverage tests added (suite: 1858 → 1874) |
-| ~~55~~ → **B/7** | ~~`dictionary/visualise.py:449 visualise_schema`~~ ✅ | Decomposed into 5 private helpers (`_build_vis_context`, `_emit_clustered_nodes`, `_emit_fk_edges`, `_emit_bridge_edges`, `_emit_parent_edges`); 6 branch-coverage tests added (suite: 1896 → 1903) |
+| ~~98~~ → **A/2** | ~~`dictionary/schema.py:485 generate_schema`~~ ✅ | Decomposed into 7 private helpers; 19 branch-coverage tests added (suite: 1927 → 1951) |
+| ~~69~~ → **C/14** | ~~`output/emit.py:1671 _render_block`~~ ✅ | Decomposed into 5 private helpers; 24 branch-coverage tests added (suite: 1903 → 1927) |
+| ~~61~~ → **A/1** | ~~`inspect/_schema.py:12 inspect_schema`~~ ✅ | Decomposed into 7 private helpers; 16 branch-coverage tests added (suite: 1858 → 1874) |
+| ~~55~~ → **B/7** | ~~`dictionary/visualise.py:449 visualise_schema`~~ ✅ | Decomposed into 5 private helpers; 6 branch-coverage tests added (suite: 1896 → 1903) |
 | ~~54~~ → **D/21** | ~~`output/emit.py:2076 _render_merge_group`~~ ✅ | Decomposed into 5 private helpers; 11 branch-coverage tests added (suite: 1885 → 1896) |
-| ~~45~~ → **B/7** | ~~`output/emit.py:1504 _collect_all_blocks`~~ ✅ | Decomposed into 4 private helpers (`_validate_all_blocks_preconditions`, `_inject_set_parents`, `_collect_set_table_blocks`, `_collect_loop_table_blocks`); 11 branch-coverage tests added (suite: 1874 → 1885) |
+| ~~45~~ → **B/7** | ~~`output/emit.py:1504 _collect_all_blocks`~~ ✅ | Decomposed into 4 private helpers; 11 branch-coverage tests added (suite: 1874 → 1885) |
 
-### E-grade (should fix)
+### E-grade (xenon violations — should fix)
 
 | CC | Location |
 |----|----------|
-| 33 | `dictionary/schema.py:674 _resolve_fk_group` — irreducible FK resolution core; see Lesson 157 |
 | 39 | `ingestion/duckdb_ingest.py:538 _run_fk_fill_pass` |
+| 38 | `output/emit.py:2468 _render_original_loop_group` |
 | 36 | `ingestion/duckdb_ingest.py:750 propagate_fk_sql` |
 | 33 | `database/component_intensities.py:41 consolidate_component_intensities` |
-| 32 | `output/emit.py:1211 _collect_structure` |
-| 31 | `output/emit.py:2351 _render_set_category` |
+| 33 | `dictionary/schema.py:674 _resolve_fk_group` — irreducible FK resolution core; see Lesson 157 |
+| 32 | `output/emit.py:1269 _collect_structure` |
+| 31 | `output/emit.py:2591 _render_set_category` |
 
 ### D-grade (document or fix)
 
 `dictionary/loader.py`: `_extract_item` (30), `_load_recursive` (27), `_resolve_imports` (25)
 `dictionary/schema.py`: `_find_transitive_bridge` (28)
-`output/emit.py`: `_render_original_loop_group` (38 — E, already above), `_ordered_categories` (25), `_compute_original_category_order` (24), `_render_loop_category` (22), `_suppressed_fk_pk_cols` (22), `_find_set_anchor` (22), `_render_pure_fallback_loop` (21)
+`dictionary/visualise.py`: `_emit_clustered_nodes` (25), `_classify_tables` (21), `_column_rows` (21)
+`output/emit.py`: `_render_fallback` (29), `_compute_fp_anchor` (28)†, `_collect_fp_table_rows` (27)†, `_collect_grouped` (26)†, `_ordered_categories` (25), `_compute_original_category_order` (24), `_bfs_collect_child_sets` (22)†, `_render_loop_category` (22), `_suppressed_fk_pk_cols` (22), `_find_set_anchor` (22), `_build_grouped_state` (21)†, `_render_merge_group` (21), `_render_pure_fallback_loop` (21)
 `inspect/_schema.py`: `inspect_fk_path` (26)
 `inspect/_model.py`: `_print_namespace` (25)
 `database/compact.py`: `convert_database` (28)
 `database/defaults.py`: `_make_keyed_op` (22)
 `validation/_validate.py`: `validate` (22)
+
+† Helpers extracted from `_collect_grouped`; D-grade by nature of the logic they encapsulate.
 
 ---
 
