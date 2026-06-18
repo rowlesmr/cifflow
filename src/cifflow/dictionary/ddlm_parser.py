@@ -46,6 +46,10 @@ class DdlmDictionary:
     uri:
         Value of ``_dictionary.uri`` from the top-level dictionary source,
         or ``None`` if absent.
+    has_warnings:
+        ``True`` if any non-fatal issues were recorded during loading.
+        Warnings range from purely informational to significant; inspect
+        :attr:`warnings` directly to determine severity.
     """
 
     name: str
@@ -59,3 +63,10 @@ class DdlmDictionary:
     warnings: list[str] = field(default_factory=list)
     source_files: list[str] = field(default_factory=list)
     uri: str | None = None
+
+    @property
+    def has_warnings(self) -> bool:
+        return bool(self.warnings)
+
+    # def __bool__(self) -> bool:
+    #     return self.is_valid
