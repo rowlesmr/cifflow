@@ -26,6 +26,9 @@ class ParseHandler:
     show_values:
         If False, ``add_value`` calls are printed as a short summary rather
         than one line each.  Useful for large loop tables.  Default True.
+    use_colour:
+        If False, suppress all ANSI colour codes regardless of terminal type.
+        Default True.
     """
 
     def __init__(
@@ -34,14 +37,16 @@ class ParseHandler:
         *,
         file: TextIO = sys.stdout,
         show_values: bool = True,
+        use_colour: bool = True,
     ) -> None:
         self._inner       = inner
         self._file        = file
         self._show_values = show_values
+        self._use_colour  = use_colour
         self._depth       = 0
 
         print(
-            c('-- parser events --', BOLD, DIM, file=self._file),
+            c('-- parser events --', BOLD, DIM, file=self._file, use_colour=use_colour),
             file=self._file,
         )
 
@@ -51,8 +56,8 @@ class ParseHandler:
         return '  ' * self._depth
 
     def _print(self, text: str, colour: str = '') -> None:
-        prefix = c(self._indent(), DIM, file=self._file)
-        body   = c(text, colour, file=self._file) if colour else text
+        prefix = c(self._indent(), DIM, file=self._file, use_colour=self._use_colour)
+        body   = c(text, colour, file=self._file, use_colour=self._use_colour) if colour else text
         print(prefix + body, file=self._file)
 
     def _fwd(self, name: str, *args, **kwargs) -> None:
@@ -144,6 +149,7 @@ def inspect_parse(
     file: TextIO = sys.stdout,
     show_values: bool = True,
     show_tokens: bool = True,
+    use_colour: bool = True,
 ) -> None:
     """Run the full pipeline and print token stream then parser events.
 
@@ -160,12 +166,15 @@ def inspect_parse(
         for large files.
     show_tokens:
         If True (default), also print the lexer token stream before events.
+    use_colour:
+        If False, suppress all ANSI colour codes regardless of terminal type.
+        Default True.
     """
     source = resolve_source(source)
     if show_tokens:
-        inspect_lexer(source, file=file)
+        inspect_lexer(source, file=file, use_colour=use_colour)
 
     from cifflow import cifflow_core
-    handler = ParseHandler(inner, file=file, show_values=show_values)
+    handler = ParseHandler(inner, file=file, show_values=show_values, use_colour=use_colour)
     cifflow_core.parse(source, handler)
     print(file=file)
