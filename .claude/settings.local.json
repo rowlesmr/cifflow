@@ -104,7 +104,9 @@
       "PowerShell(.venv/Scripts/python -m pytest tests/dictionary/test_schema.py -x -q 2>&1 | Select-Object -Last 5)",
       "PowerShell(.venv/Scripts/python -m pytest -q --tb=short 2>&1 | Select-Object -Last 5)",
       "PowerShell(.venv/Scripts/python -m radon cc src/cifflow/dictionary/schema.py --show-complexity --min C 2>&1)",
-      "PowerShell(.venv/Scripts/python -m xenon src/ --max-average B --max-modules C --max-absolute D 2>&1)"
+      "PowerShell(.venv/Scripts/python -m xenon src/ --max-average B --max-modules C --max-absolute D 2>&1)",
+      "PowerShell(.venv/Scripts/python -m pytest -x -q --no-header 2>&1 | Select-Object -Last 5)",
+      "PowerShell(.venv/Scripts/ruff check src/cifflow/inspect/ 2>&1)"
     ]
   }
 }

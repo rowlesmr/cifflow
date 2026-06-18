@@ -40,6 +40,7 @@ def inspect_schema(
     *,
     show_ddl: bool = False,
     file: TextIO = sys.stdout,
+    use_colour: bool = True,
 ) -> None:
     """Print a structured summary of a ``SchemaSpec`` to *file*.
 
@@ -63,9 +64,12 @@ def inspect_schema(
         Default ``False``.
     file:
         Output stream.  Default ``sys.stdout``.
+    use_colour:
+        If False, suppress all ANSI colour codes regardless of terminal type.
+        Default True.
     """
     schema = _load_schema(source)
-    _print_schema(schema, show_ddl=show_ddl, file=file)
+    _print_schema(schema, show_ddl=show_ddl, file=file, use_colour=use_colour)
 
 
 def _col_display_type(col: 'ColumnDef') -> str:
@@ -75,38 +79,50 @@ def _col_display_type(col: 'ColumnDef') -> str:
     return col.type_contents or 'TEXT'
 
 
-def _depr_suffix(definition_id: str, schema: 'SchemaSpec', file: TextIO) -> str:
+def _depr_suffix(
+    definition_id: str,
+    schema: 'SchemaSpec',
+    file: TextIO,
+    use_colour: bool,
+) -> str:
     """Return a coloured deprecation annotation string, or empty string."""
     if definition_id not in schema.deprecated_ids:
         return ''
     replacements = [r for r in schema.deprecated_replacements.get(definition_id, []) if r]
     if replacements:
-        return '  ' + c('DEPRECATED -> ' + ', '.join(replacements), RED, file=file)
-    return '  ' + c('DEPRECATED', RED, file=file)
+        return '  ' + c('DEPRECATED -> ' + ', '.join(replacements), RED,
+                         file=file, use_colour=use_colour)
+    return '  ' + c('DEPRECATED', RED, file=file, use_colour=use_colour)
 
 
-def _column_flags(col: 'ColumnDef', file: TextIO) -> list[str]:
+def _column_flags(col: 'ColumnDef', file: TextIO, use_colour: bool) -> list[str]:
     """Return the ordered list of flag strings for one column."""
     flags: list[str] = []
     if not col.nullable:
-        flags.append(c('NOT NULL', DIM, file=file))
+        flags.append(c('NOT NULL', DIM, file=file, use_colour=use_colour))
     if col.is_synthetic and col.name == '_cifflow_row_id':
-        flags.append(c('UNIQUE', DIM, file=file))
+        flags.append(c('UNIQUE', DIM, file=file, use_colour=use_colour))
     if col.is_primary_key:
-        flags.append(c('PK', YELLOW, file=file))
+        flags.append(c('PK', YELLOW, file=file, use_colour=use_colour))
     if col.is_synthetic:
-        flags.append(c('synthetic', DIM, file=file))
+        flags.append(c('synthetic', DIM, file=file, use_colour=use_colour))
     return flags
 
 
-def _column_tag_part(col: 'ColumnDef', schema: 'SchemaSpec', file: TextIO) -> str:
+def _column_tag_part(
+    col: 'ColumnDef',
+    schema: 'SchemaSpec',
+    file: TextIO,
+    use_colour: bool,
+) -> str:
     """Return the definition-id / SU annotation / deprecation suffix for a column."""
     tag_part = ''
     if not col.is_synthetic:
-        tag_part = '  ' + c(col.definition_id, DIM, file=file)
+        tag_part = '  ' + c(col.definition_id, DIM, file=file, use_colour=use_colour)
     if col.linked_item_id and not col.is_primary_key:
-        tag_part += '  ' + c(f'->su {col.linked_item_id}', MAGENTA, file=file)
-    tag_part += _depr_suffix(col.definition_id, schema, file)
+        tag_part += '  ' + c(f'->su {col.linked_item_id}', MAGENTA,
+                               file=file, use_colour=use_colour)
+    tag_part += _depr_suffix(col.definition_id, schema, file, use_colour)
     return tag_part
 
 
@@ -116,49 +132,54 @@ def _print_table(
     schema: 'SchemaSpec',
     ddl_stmt: 'str | None',
     file: TextIO,
+    use_colour: bool,
 ) -> None:
     """Render one table block (header, PK, columns, FKs, optional DDL)."""
     cls_colour = CYAN if table.category_class == 'Loop' else BLUE
     header = (
-        c(table.name, BOLD, file=file)
+        c(table.name, BOLD, file=file, use_colour=use_colour)
         + '  '
-        + c(f'[{table.category_class}]', cls_colour, file=file)
-        + _depr_suffix(table.definition_id, schema, file)
+        + c(f'[{table.category_class}]', cls_colour, file=file, use_colour=use_colour)
+        + _depr_suffix(table.definition_id, schema, file, use_colour)
     )
     print(header, file=file)
 
-    pk_str = ', '.join(c(k, YELLOW, file=file) for k in table.primary_keys)
+    pk_str = ', '.join(c(k, YELLOW, file=file, use_colour=use_colour)
+                       for k in table.primary_keys)
     print(f'  PK  {pk_str}', file=file)
 
     col_name_w = max((len(col.name) for col in table.columns), default=8)
     type_w     = max((len(_col_display_type(col)) for col in table.columns), default=4)
 
-    print(f'  {c("columns", DIM, file=file)}', file=file)
+    print(f'  {c("columns", DIM, file=file, use_colour=use_colour)}', file=file)
     for col in table.columns:
-        name_part = c(col.name.ljust(col_name_w), YELLOW, file=file)
-        type_part = c(_col_display_type(col).ljust(type_w), GREEN, file=file)
-        flag_str  = '  '.join(_column_flags(col, file))
-        tag_part  = _column_tag_part(col, schema, file)
+        name_part = c(col.name.ljust(col_name_w), YELLOW, file=file, use_colour=use_colour)
+        type_part = c(_col_display_type(col).ljust(type_w), GREEN,
+                      file=file, use_colour=use_colour)
+        flag_str  = '  '.join(_column_flags(col, file, use_colour))
+        tag_part  = _column_tag_part(col, schema, file, use_colour)
         print(f'    {name_part}  {type_part}  {flag_str}{tag_part}', file=file)
 
     if table.foreign_keys:
-        print(f'  {c("foreign keys", DIM, file=file)}', file=file)
+        print(f'  {c("foreign keys", DIM, file=file, use_colour=use_colour)}', file=file)
         for fk in table.foreign_keys:
             if len(fk.source_columns) == 1:
-                src = c(fk.source_columns[0], YELLOW, file=file)
-                tgt = c(f'{fk.target_table}.{fk.target_columns[0]}', CYAN, file=file)
+                src = c(fk.source_columns[0], YELLOW, file=file, use_colour=use_colour)
+                tgt = c(f'{fk.target_table}.{fk.target_columns[0]}', CYAN,
+                        file=file, use_colour=use_colour)
             else:
-                src = c('(' + ', '.join(fk.source_columns) + ')', YELLOW, file=file)
+                src = c('(' + ', '.join(fk.source_columns) + ')', YELLOW,
+                        file=file, use_colour=use_colour)
                 tgt = c(
                     f'{fk.target_table}.(' + ', '.join(fk.target_columns) + ')',
-                    CYAN, file=file,
+                    CYAN, file=file, use_colour=use_colour,
                 )
             print(f'    {src} -> {tgt}  DEFERRABLE', file=file)
 
     if ddl_stmt is not None:
-        print(f'  {c("ddl", DIM, file=file)}', file=file)
+        print(f'  {c("ddl", DIM, file=file, use_colour=use_colour)}', file=file)
         for ddl_line in ddl_stmt.splitlines():
-            print(f'    {c(ddl_line, DIM, file=file)}', file=file)
+            print(f'    {c(ddl_line, DIM, file=file, use_colour=use_colour)}', file=file)
 
     print(file=file)
 
@@ -189,7 +210,12 @@ def _resolves_to_set(
     return False
 
 
-def _print_floating_loops(schema: 'SchemaSpec', *, file: TextIO) -> None:
+def _print_floating_loops(
+    schema: 'SchemaSpec',
+    *,
+    file: TextIO,
+    use_colour: bool,
+) -> None:
     """Print the floating-loop section (Loop tables with no Set-derived PK)."""
     set_tables = {name for name, t in schema.tables.items() if t.category_class == 'Set'}
 
@@ -227,14 +253,23 @@ def _print_floating_loops(schema: 'SchemaSpec', *, file: TextIO) -> None:
             floating_loops.append(table)
 
     if floating_loops:
-        print(c('-- loop tables without Set-derived category key --', BOLD, DIM, file=file), file=file)
+        print(c('-- loop tables without Set-derived category key --', BOLD, DIM,
+                 file=file, use_colour=use_colour), file=file)
         for table in sorted(floating_loops, key=lambda t: t.name):
-            pk_str = ', '.join(c(k, YELLOW, file=file) for k in table.primary_keys)
-            print(f'  {c(table.name, BOLD, file=file)}  PK: {pk_str}', file=file)
+            pk_str = ', '.join(c(k, YELLOW, file=file, use_colour=use_colour)
+                               for k in table.primary_keys)
+            print(f'  {c(table.name, BOLD, file=file, use_colour=use_colour)}  PK: {pk_str}',
+                  file=file)
         print(file=file)
 
 
-def _print_schema(schema: 'SchemaSpec', *, show_ddl: bool, file: TextIO) -> None:
+def _print_schema(
+    schema: 'SchemaSpec',
+    *,
+    show_ddl: bool,
+    file: TextIO,
+    use_colour: bool,
+) -> None:
     """Render the full schema summary to *file*."""
     from cifflow.dictionary.schema import emit_create_statements
 
@@ -250,8 +285,8 @@ def _print_schema(schema: 'SchemaSpec', *, show_ddl: bool, file: TextIO) -> None
         f'  {n_fk} FK{"s" if n_fk != 1 else ""}'
         f'  {n_warn} warning{"s" if n_warn != 1 else ""}'
     )
-    print(c('-- schema --', BOLD, DIM, file=file), file=file)
-    print(c(summary, DIM, file=file), file=file)
+    print(c('-- schema --', BOLD, DIM, file=file, use_colour=use_colour), file=file)
+    print(c(summary, DIM, file=file, use_colour=use_colour), file=file)
     print(file=file)
 
     ddl_stmts = emit_create_statements(schema) if show_ddl else []
@@ -261,16 +296,16 @@ def _print_schema(schema: 'SchemaSpec', *, show_ddl: bool, file: TextIO) -> None
             ddl_by_table[table.name] = stmt
 
     for table in sorted(schema.tables.values(), key=lambda t: t.name):
-        _print_table(table, schema=schema, ddl_stmt=ddl_by_table.get(table.name), file=file)
+        _print_table(table, schema=schema, ddl_stmt=ddl_by_table.get(table.name),
+                     file=file, use_colour=use_colour)
 
-    _print_floating_loops(schema, file=file)
+    _print_floating_loops(schema, file=file, use_colour=use_colour)
 
     if schema.warnings:
-        print(c('-- schema warnings --', BOLD, DIM, file=file), file=file)
+        print(c('-- schema warnings --', BOLD, DIM, file=file, use_colour=use_colour), file=file)
         for w in schema.warnings:
-            print(f'  {c("!", YELLOW, file=file)}  {w}', file=file)
+            print(f'  {c("!", YELLOW, file=file, use_colour=use_colour)}  {w}', file=file)
         print(file=file)
-
 
 
 def inspect_fk_path(
@@ -279,6 +314,7 @@ def inspect_fk_path(
     target: str,
     *,
     file: TextIO = sys.stdout,
+    use_colour: bool = True,
 ) -> bool:
     """Print all FK and bridge-column chains that connect *source* to *target*.
 
@@ -300,6 +336,9 @@ def inspect_fk_path(
         Table name to reach.
     file:
         Output stream.  Default ``sys.stdout``.
+    use_colour:
+        If False, suppress all ANSI colour codes regardless of terminal type.
+        Default True.
 
     Returns
     -------
@@ -307,16 +346,15 @@ def inspect_fk_path(
         ``True`` if at least one path was found, ``False`` otherwise.
     """
     if source not in schema.tables:
-        print(c(f'unknown table: {source!r}', RED, file=file), file=file)
+        print(c(f'unknown table: {source!r}', RED, file=file, use_colour=use_colour), file=file)
         return False
     if target not in schema.tables:
-        print(c(f'unknown table: {target!r}', RED, file=file), file=file)
+        print(c(f'unknown table: {target!r}', RED, file=file, use_colour=use_colour), file=file)
         return False
 
     found = False
 
     # --- 1. Direct FK chains (BFS over ForeignKeyDef edges) ---
-    # Find ALL simple paths (DFS with depth limit to avoid explosions).
     def _all_fk_paths(src: str, tgt: str) -> list[list[tuple]]:
         """Return all simple FK-edge paths from src to tgt."""
         results: list[list[tuple]] = []
@@ -337,44 +375,38 @@ def inspect_fk_path(
         (bc.table_name, bc.column_name): bc
         for bc in schema.bridge_columns
     }
-    # Build a set of synthetic column names per table for quick lookup.
-    synthetic_cols: dict[str, set[str]] = {
-        tbl: {col.name for col in td.columns if col.is_synthetic}
-        for tbl, td in schema.tables.items()
-    }
 
     def _print_fk_step(from_t: str, src_cols: list[str], tgt_t: str, tgt_cols: list[str], indent: str = '  ') -> None:
         """Print one FK hop, annotating synthetic source columns with their bridge derivation."""
         for src_col, tgt_col in zip(src_cols, tgt_cols):
             bc = bridge_by_col.get((from_t, src_col))
             if bc is not None:
-                # Synthetic: show all bridge chains (primary + fallbacks) that derive this column.
                 all_chains = [(bc.hops, bc.bridge_value_column)] + list(bc.fallback_chains)
                 n = len(all_chains)
                 for i, (chain_hops, chain_val) in enumerate(all_chains):
                     label_str = 'primary' if i == 0 else f'fallback {i}'
                     suffix = f' [{label_str}]' if n > 1 else ''
                     print(
-                        f'{indent}{c(src_col, YELLOW, file=file)}'
-                        f' {c(f"(synthetic, derived via bridge{suffix}):", DIM, file=file)}',
+                        f'{indent}{c(src_col, YELLOW, file=file, use_colour=use_colour)}'
+                        f' {c(f"(synthetic, derived via bridge{suffix}):", DIM, file=file, use_colour=use_colour)}',
                         file=file,
                     )
                     prev = from_t
                     for via_col, bridge_tbl, bridge_pk in chain_hops:
                         print(
-                            f'{indent}  {c(prev, CYAN, file=file)}.{c(via_col, YELLOW, file=file)}'
-                            f'  ->  {c(bridge_tbl, CYAN, file=file)}.{c(bridge_pk, GREEN, file=file)}',
+                            f'{indent}  {c(prev, CYAN, file=file, use_colour=use_colour)}.{c(via_col, YELLOW, file=file, use_colour=use_colour)}'
+                            f'  ->  {c(bridge_tbl, CYAN, file=file, use_colour=use_colour)}.{c(bridge_pk, GREEN, file=file, use_colour=use_colour)}',
                             file=file,
                         )
                         prev = bridge_tbl
                     print(
-                        f'{indent}  {c("value:", DIM, file=file)} {c(prev, CYAN, file=file)}.{c(chain_val, GREEN, file=file)}'
-                        f'  =>  {c(from_t, CYAN, file=file)}.{c(src_col, YELLOW, file=file)}',
+                        f'{indent}  {c("value:", DIM, file=file, use_colour=use_colour)} {c(prev, CYAN, file=file, use_colour=use_colour)}.{c(chain_val, GREEN, file=file, use_colour=use_colour)}'
+                        f'  =>  {c(from_t, CYAN, file=file, use_colour=use_colour)}.{c(src_col, YELLOW, file=file, use_colour=use_colour)}',
                         file=file,
                     )
             print(
-                f'{indent}{c(from_t, CYAN, file=file)}.{c(src_col, YELLOW, file=file)}'
-                f'  ->  {c(tgt_t, CYAN, file=file)}.{c(tgt_col, GREEN, file=file)}',
+                f'{indent}{c(from_t, CYAN, file=file, use_colour=use_colour)}.{c(src_col, YELLOW, file=file, use_colour=use_colour)}'
+                f'  ->  {c(tgt_t, CYAN, file=file, use_colour=use_colour)}.{c(tgt_col, GREEN, file=file, use_colour=use_colour)}',
                 file=file,
             )
 
@@ -382,7 +414,8 @@ def inspect_fk_path(
     if fk_paths:
         found = True
         label = 'FK edge' + ('s' if len(fk_paths) > 1 else '')
-        print(c(f'-- {label}: {source}  ->  {target} --', BOLD, file=file), file=file)
+        print(c(f'-- {label}: {source}  ->  {target} --', BOLD,
+                file=file, use_colour=use_colour), file=file)
         for path in fk_paths:
             for from_t, src_cols, tgt_t, tgt_cols in path:
                 _print_fk_step(from_t, src_cols, tgt_t, tgt_cols)
@@ -390,18 +423,17 @@ def inspect_fk_path(
                 print(file=file)
 
     # --- 2. Bridge column chains (BridgeColumnDef) ---
-    # A bridge chain on 'source' that passes through 'target' at some hop.
     def _render_chain(hops: list[tuple], val_col: str, from_table: str) -> None:
         prev = from_table
         for via_col, bridge_tbl, bridge_pk in hops:
             print(
-                f'    {c(prev, CYAN, file=file)}.{c(via_col, YELLOW, file=file)}'
-                f'  ->  {c(bridge_tbl, CYAN, file=file)}.{c(bridge_pk, GREEN, file=file)}',
+                f'    {c(prev, CYAN, file=file, use_colour=use_colour)}.{c(via_col, YELLOW, file=file, use_colour=use_colour)}'
+                f'  ->  {c(bridge_tbl, CYAN, file=file, use_colour=use_colour)}.{c(bridge_pk, GREEN, file=file, use_colour=use_colour)}',
                 file=file,
             )
             prev = bridge_tbl
         print(
-            f'    {c("value:", DIM, file=file)} {c(prev, CYAN, file=file)}.{c(val_col, GREEN, file=file)}',
+            f'    {c("value:", DIM, file=file, use_colour=use_colour)} {c(prev, CYAN, file=file, use_colour=use_colour)}.{c(val_col, GREEN, file=file, use_colour=use_colour)}',
             file=file,
         )
 
@@ -411,47 +443,51 @@ def inspect_fk_path(
     ]
     if bridge_hits:
         found = True
-        print(c(f'-- bridge columns: {source}  ->  {target} --', BOLD, file=file), file=file)
+        print(c(f'-- bridge columns: {source}  ->  {target} --', BOLD,
+                file=file, use_colour=use_colour), file=file)
         for bc in bridge_hits:
             print(
-                f'  {c(bc.table_name, CYAN, file=file)}.{c(bc.column_name, YELLOW, file=file)}'
+                f'  {c(bc.table_name, CYAN, file=file, use_colour=use_colour)}.{c(bc.column_name, YELLOW, file=file, use_colour=use_colour)}'
                 f'  (primary chain):',
                 file=file,
             )
             _render_chain(bc.hops, bc.bridge_value_column, bc.table_name)
             for i, (fb_hops, fb_val) in enumerate(bc.fallback_chains, 1):
-                print(f'  {c(f"fallback {i}:", DIM, file=file)}', file=file)
+                print(f'  {c(f"fallback {i}:", DIM, file=file, use_colour=use_colour)}',
+                      file=file)
                 _render_chain(fb_hops, fb_val, bc.table_name)
 
     if not found:
         print(
-            c(f'no FK or bridge path from {source!r} to {target!r}', RED, file=file),
+            c(f'no FK or bridge path from {source!r} to {target!r}', RED,
+              file=file, use_colour=use_colour),
             file=file,
         )
-        # Show partial links (unresolved DDLm Link items) as a hint.
         partials = [
             pl for pl in schema.partial_links
             if pl.source_table == source and pl.target_table == target
         ]
         if partials:
             print(
-                c(f'-- partial links: {source}  ~>  {target} (incomplete FK) --', BOLD, file=file),
+                c(f'-- partial links: {source}  ~>  {target} (incomplete FK) --', BOLD,
+                  file=file, use_colour=use_colour),
                 file=file,
             )
             for pl in partials:
                 print(
-                    f'  {c(pl.source_table, CYAN, file=file)}.{c(pl.source_column, YELLOW, file=file)}'
-                    f'  ~>  {c(pl.target_table, CYAN, file=file)}.{c(pl.target_column, GREEN, file=file)}',
+                    f'  {c(pl.source_table, CYAN, file=file, use_colour=use_colour)}.{c(pl.source_column, YELLOW, file=file, use_colour=use_colour)}'
+                    f'  ~>  {c(pl.target_table, CYAN, file=file, use_colour=use_colour)}.{c(pl.target_column, GREEN, file=file, use_colour=use_colour)}',
                     file=file,
                 )
                 covered = ', '.join(pl.covered_pk_cols) or '(none)'
                 missing = ', '.join(pl.missing_pk_cols)
                 print(
-                    f'    {c("covered PKs:", DIM, file=file)} {covered}'
-                    f'  {c("missing PKs:", DIM, file=file)} {c(missing, RED, file=file)}',
+                    f'    {c("covered PKs:", DIM, file=file, use_colour=use_colour)} {covered}'
+                    f'  {c("missing PKs:", DIM, file=file, use_colour=use_colour)} {c(missing, RED, file=file, use_colour=use_colour)}',
                     file=file,
                 )
-                print(f'    {c("reason:", DIM, file=file)} {pl.reason}', file=file)
+                print(f'    {c("reason:", DIM, file=file, use_colour=use_colour)} {pl.reason}',
+                      file=file)
 
     return found
 
