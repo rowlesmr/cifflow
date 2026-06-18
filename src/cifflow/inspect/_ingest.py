@@ -51,6 +51,7 @@ def inspect_ingest(
     propagate_fk: bool = False,
     dataset_id: str | None = None,
     file: Optional[TextIO] = None,
+    use_colour: bool = True,
 ) -> list[TraceEvent]:
     """Run ingestion, capture events, and pretty-print a diagnostic trace.
 
@@ -68,6 +69,9 @@ def inspect_ingest(
         Forwarded to ``ingest()``.
     file:
         Where to write the trace.  Defaults to ``sys.stdout``.
+    use_colour:
+        If False, suppress all ANSI colour codes regardless of terminal type.
+        Default True.
 
     Returns
     -------
@@ -81,7 +85,7 @@ def inspect_ingest(
 
     events: list[TraceEvent] = []
 
-    print(c('-- inspect_ingest --', BOLD, DIM, file=file), file=file)
+    print(c('-- inspect_ingest --', BOLD, DIM, file=file, use_colour=use_colour), file=file)
 
     try:
         _, ingest_errors = ingest(
@@ -102,29 +106,40 @@ def inspect_ingest(
     errors_ev = [e for e in events if e.kind == 'error']
 
     if warnings_ev:
-        print(c(f'  {len(warnings_ev)} semantic warning(s):', YELLOW, file=file), file=file)
+        print(c(f'  {len(warnings_ev)} semantic warning(s):', YELLOW,
+                file=file, use_colour=use_colour), file=file)
         for ev in warnings_ev:
-            print(f'    {c("~", YELLOW, file=file)}  {ev.detail}', file=file)
+            print(f'    {c("~", YELLOW, file=file, use_colour=use_colour)}  {ev.detail}',
+                  file=file)
 
     if errors_ev:
-        print(c(f'  {len(errors_ev)} error(s):', RED, BOLD, file=file), file=file)
+        print(c(f'  {len(errors_ev)} error(s):', RED, BOLD,
+                file=file, use_colour=use_colour), file=file)
         for ev in errors_ev:
-            print(f'    {c("!", RED, file=file)}  {ev.detail}', file=file)
+            print(f'    {c("!", RED, file=file, use_colour=use_colour)}  {ev.detail}',
+                  file=file)
 
     if not warnings_ev and not errors_ev:
-        print(c('  Ingestion completed with no warnings.', GREEN, file=file), file=file)
+        print(c('  Ingestion completed with no warnings.', GREEN,
+                file=file, use_colour=use_colour), file=file)
 
-    _print_trace_summary(events, file)
+    _print_trace_summary(events, file, use_colour=use_colour)
     return events
 
 
-def _print_trace_summary(events: list[TraceEvent], file: TextIO) -> None:
+def _print_trace_summary(
+    events: list[TraceEvent],
+    file: TextIO,
+    *,
+    use_colour: bool = True,
+) -> None:
+    """Print the warning/error count footer."""
     warnings  = sum(1 for e in events if e.kind == 'warning')
     errors    = sum(1 for e in events if e.kind == 'error')
     print(
         c(
             f'  [{warnings} warning(s)  {errors} error(s)]',
-            DIM, file=file,
+            DIM, file=file, use_colour=use_colour,
         ),
         file=file,
     )
