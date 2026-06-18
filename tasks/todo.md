@@ -49,9 +49,13 @@ Decomposed all F-grade and all 6 reducible E-grade functions into private helper
      ingest a real `.cif` to file-backed SQLite, emit to `.cif` and re-ingest, property-based
      tests for `_BlockData` helpers.
 
-  4. **Unify severity levels** across parser/ingest/validation — audit every `on_error` /
-     `ParseError` site; assign `'Error' | 'Warning' | 'Info'`; standardise message phrasing;
-     decide `ingest()` return type.
+  4. **Unify severity levels** across parser/ingest/validation/dictionary — audit every `on_error` /
+     `ParseError` site and every `warn()` call in `loader.py`; assign `'Error' | 'Warning' | 'Info'`;
+     standardise message phrasing; decide `ingest()` return type.  Dictionary warnings currently span
+     the full range from purely informational ("has 2 data blocks — using first") to effectively fatal
+     ("contains no data blocks"), making `DdlmDictionary.is_valid` / `__bool__` meaningless as a
+     single threshold.  Fix requires classifying each warning site before exposing validity on the
+     public API.
 
   6. **`CifBuilder` cross-type duplicate tag detection** — scalar-then-loop silently loses
      scalar; loop-then-scalar makes loop structurally inconsistent. Fix in `builder.py` with

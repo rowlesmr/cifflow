@@ -59,3 +59,17 @@ class DdlmDictionary:
     warnings: list[str] = field(default_factory=list)
     source_files: list[str] = field(default_factory=list)
     uri: str | None = None
+
+    @property
+    def has_warnings(self) -> bool:
+        """Return True if any non-fatal issues were recorded during loading.
+
+        Warnings range from purely informational (e.g. a dictionary with
+        multiple data blocks) to significant (e.g. a skipped import).  A
+        dictionary with warnings is not necessarily unusable; inspect
+        :attr:`warnings` to determine severity.
+        """
+        return bool(self.warnings)
+
+    # def __bool__(self) -> bool:
+    #     return self.is_valid
