@@ -46,10 +46,6 @@ class DdlmDictionary:
     uri:
         Value of ``_dictionary.uri`` from the top-level dictionary source,
         or ``None`` if absent.
-    has_warnings:
-        ``True`` if any non-fatal issues were recorded during loading.
-        Warnings range from purely informational to significant; inspect
-        :attr:`warnings` directly to determine severity.
     """
 
     name: str
