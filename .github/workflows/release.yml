@@ -15,7 +15,7 @@ jobs:
       version: ${{ steps.check.outputs.version }}
       do_release: ${{ steps.check.outputs.do_release }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -37,7 +37,7 @@ jobs:
     if: needs.check-and-tag.outputs.do_release == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: PyO3/maturin-action@v1
         with:
@@ -69,7 +69,7 @@ jobs:
             target: universal2-apple-darwin
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
