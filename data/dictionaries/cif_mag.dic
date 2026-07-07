@@ -11,7 +11,7 @@ data_CIF_MAG
     _dictionary.title             CIF_MAG
     _dictionary.class             Instance
     _dictionary.version           0.9.9
-    _dictionary.date              2026-05-28
+    _dictionary.date              2026-06-10
     _dictionary.uri
         https://raw.githubusercontent.com/COMCIFS/magnetic_dic/main/cif_mag.dic
     _dictionary.ddl_conformance   4.1.0
@@ -47,7 +47,7 @@ save_ATOM_SITE_MOMENT
     _definition.id                ATOM_SITE_MOMENT
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2016-05-24
+    _definition.update            2026-06-03
     _description.text
 ;
     This category provides a loop for presenting the magnetic moments
@@ -58,7 +58,11 @@ save_ATOM_SITE_MOMENT
 ;
     _name.category_id             ATOM_SITE
     _name.object_id               ATOM_SITE_MOMENT
-    _category_key.name            '_atom_site_moment.label'
+
+    loop_
+      _category_key.name
+         '_atom_site_moment.label'
+         '_atom_site_moment.structure_id'
 
 save_
 
@@ -626,6 +630,24 @@ save_atom_site_moment.spherical_polar_su
 
 save_
 
+save_atom_site_moment.structure_id
+
+    _definition.id                '_atom_site_moment.structure_id'
+    _definition.update            2026-06-03
+    _description.text
+;
+    A code identifying the structure to which this atom site moment belongs.
+;
+    _name.category_id             atom_site_moment
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_atom_site_moment.symmform
 
     _definition.id                '_atom_site_moment.symmform'
@@ -669,7 +691,7 @@ save_ATOM_SITE_ROTATION
     _definition.id                ATOM_SITE_ROTATION
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2018-07-18
+    _definition.update            2026-06-03
     _description.text
 ;
     This category provides a loop for presenting atom-site axial-vector
@@ -688,7 +710,11 @@ save_ATOM_SITE_ROTATION
 ;
     _name.category_id             ATOM_SITE
     _name.object_id               ATOM_SITE_ROTATION
-    _category_key.name            '_atom_site_rotation.label'
+
+    loop_
+      _category_key.name
+         '_atom_site_rotation.label'
+         '_atom_site_rotation.structure_id'
 
 save_
 
@@ -1261,6 +1287,24 @@ save_atom_site_rotation.spherical_polar_su
 
 save_
 
+save_atom_site_rotation.structure_id
+
+    _definition.id                '_atom_site_rotation.structure_id'
+    _definition.update            2026-06-03
+    _description.text
+;
+    A code identifying the structure to which this atom site rotation belongs.
+;
+    _name.category_id             atom_site_rotation
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_atom_site_rotation.symmform
 
     _definition.id                '_atom_site_rotation.symmform'
@@ -1304,7 +1348,7 @@ save_ATOM_SITE_MOMENT_FOURIER
     _definition.id                ATOM_SITE_MOMENT_FOURIER
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-05-17
+    _definition.update            2026-06-03
     _description.text
 ;
     Data items in the ATOM_SITE_MOMENT_FOURIER category record
@@ -1316,7 +1360,11 @@ save_ATOM_SITE_MOMENT_FOURIER
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               ATOM_SITE_MOMENT_FOURIER
-    _category_key.name            '_atom_site_moment_Fourier.id'
+
+    loop_
+      _category_key.name
+         '_atom_site_moment_Fourier.id'
+         '_atom_site_moment_Fourier.structure_id'
 
 save_
 
@@ -1326,7 +1374,8 @@ save_atom_site_moment_fourier.atom_site_label
     _definition.update            2016-05-24
     _description.text
 ;
-    This string uniquely identifies the atom for which the Fourier
+    This string, in conjunction with _atom_site_moment_fourier.structure_id,
+    uniquely identifies the atom for which the Fourier
     modulation  components are to be specified.  The Fourier
     modulation components are always presented in a separate loop
     (not in the ATOM_SITE loop).  This string must match an
@@ -1408,6 +1457,24 @@ save_atom_site_moment_fourier.id
 
 save_
 
+save_atom_site_moment_fourier.structure_id
+
+    _definition.id                '_atom_site_moment_Fourier.structure_id'
+    _definition.update            2026-06-03
+    _description.text
+;
+    A code identifying the structure to which this atom site moment belongs.
+;
+    _name.category_id             atom_site_moment_Fourier
+    _name.object_id               structure_id
+    _name.linked_item_id          '_atom_site_moment.structure_id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_atom_site_moment_fourier.wave_vector_seq_id
 
     _definition.id                '_atom_site_moment_Fourier.wave_vector_seq_id'
@@ -1460,7 +1527,12 @@ save_ATOM_SITE_MOMENT_FOURIER_PARAM
 ;
     _name.category_id             ATOM_SITE_MOMENT_FOURIER
     _name.object_id               ATOM_SITE_MOMENT_FOURIER_PARAM
-    _category_key.name            '_atom_site_moment_Fourier_param.id'
+
+    loop_
+      _category_key.name
+         '_atom_site_moment_Fourier_param.id'
+         '_atom_site_moment_Fourier_param.structure_id'
+
     _description_example.case
 ;
     loop_
@@ -1994,12 +2066,32 @@ save_atom_site_moment_fourier_param.sin_symmform
 
 save_
 
+save_atom_site_moment_fourier_param.structure_id
+
+    _definition.id
+        '_atom_site_moment_Fourier_param.structure_id'
+    _definition.update            2026-06-03
+    _description.text
+;
+    A code identifying the structure to which this atom site moment
+    Fourier parameter belongs.
+;
+    _name.category_id             atom_site_moment_Fourier_param
+    _name.object_id               structure_id
+    _name.linked_item_id          '_atom_site_moment.structure_id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_ATOM_SITE_MOMENT_SPECIAL_FUNC
 
     _definition.id                ATOM_SITE_MOMENT_SPECIAL_FUNC
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-05-17
+    _definition.update            2026-06-03
     _description.text
 ;
     Data items in the ATOM_SITE_MOMENT_SPECIAL_FUNC category record
@@ -2027,8 +2119,11 @@ save_ATOM_SITE_MOMENT_SPECIAL_FUNC
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               ATOM_SITE_MOMENT_SPECIAL_FUNC
-    _category_key.name
-        '_atom_site_moment_special_func.atom_site_label'
+
+    loop_
+      _category_key.name
+         '_atom_site_moment_special_func.atom_site_label'
+         '_atom_site_moment_special_func.structure_id'
 
 save_
 
@@ -2361,6 +2456,25 @@ save_atom_site_moment_special_func.sawtooth_w_su
     _units.code                   Bohr_magnetons
 
     _import.get                   [{'file':templ_attr.cif  'save':general_su}]
+
+save_
+
+save_atom_site_moment_special_func.structure_id
+
+    _definition.id                '_atom_site_moment_special_func.structure_id'
+    _definition.update            2026-06-03
+    _description.text
+;
+    A code identifying the structure to which this atom site moment
+    special function belongs.
+;
+    _name.category_id             atom_site_moment_special_func
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
 
 save_
 
@@ -3109,16 +3223,16 @@ save_PARENT_SPACE_GROUP
     _description.text
 ;
     This category provides information about the space group and
-    setting of  a non-magnetic parent structure which is related to
+    setting of a non-magnetic parent structure which is related to
     the present magnetic  structure by a group-subgroup relationship.
     In general, the choice of a parent structure is not unique; it
     could be the lowest-symmetry non-magnetic structure obtained by
     simply setting all magnetic moments to zero, or a higher-symmetry
     approximation to this structure which idealizes some of the
-    atomic coordinates.  The designation of a parent  structure is
+    atomic coordinates. The designation of a parent structure is
     common but optional for a magnetic-structure description. This
     category could also be used to designate high-symmetry parent
-    structures  of low-symmetry non-magnetic structures. As an
+    structures of low-symmetry non-magnetic structures. As an
     alternative to this category, one can define a parent structure
     in a separate data block, and then relate the parent and child
     space-group settings by conveying an appropriate inter-data-block
@@ -3253,7 +3367,7 @@ save_SPACE_GROUP_MAGN
     _definition.id                SPACE_GROUP_MAGN
     _definition.scope             Category
     _definition.class             Set
-    _definition.update            2024-05-17
+    _definition.update            2026-06-04
     _description.text
 ;
     The data items in this category provide identifying and/or
@@ -3293,6 +3407,7 @@ save_SPACE_GROUP_MAGN
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               SPACE_GROUP_MAGN
+    _category_key.name            '_space_group_magn.id'
 
 save_
 
@@ -3337,6 +3452,23 @@ save_space_group_magn.hall_symbol
          "-P 1 1'c"               "BNS = 2.7   UNI = P-1.1'_c"
          "P 2y 1'C"               "BNS = 3.6   UNI = P2.1'_C"
          "I 4bd 2c 3 -1'"         "BNS = 230.1 UNI = Ia'-3'd'"
+
+save_
+
+save_space_group_magn.id
+
+    _definition.id                '_space_group_magn.id'
+    _definition.update            2026-06-04
+    _description.text
+;
+    Arbitrary unique identifier for a magnetic space group/superspace group.
+;
+    _name.category_id             space_group_magn
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
 
 save_
 
@@ -4047,14 +4179,14 @@ save_SPACE_GROUP_MAGN_SSG_TRANSFORMS
     _definition.id                SPACE_GROUP_MAGN_SSG_TRANSFORMS
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-05-17
+    _definition.update            2026-06-04
     _description.text
 ;
     This loop provides a list of matrix transformations to one or
-    more settings of the magnetic  superspace group, including
+    more settings of the magnetic superspace group, including
     transformations to both standard and non-standard settings. A
     transformation loop is particularly helpful for magnetic
-    superspace groups,  which often have several reference settings
+    superspace groups, which often have several reference settings
     of interest.
 
     Analogous tags: transform loops have not yet been approved in
@@ -4062,7 +4194,10 @@ save_SPACE_GROUP_MAGN_SSG_TRANSFORMS
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               SPACE_GROUP_MAGN_SSG_TRANSFORMS
-    _category_key.name            '_space_group_magn_ssg_transforms.id'
+    loop_
+      _category_key.name
+         '_space_group_magn_ssg_transforms.id'
+         '_space_group_magn_ssg_transforms.space_group_magn_id'
 
 save_
 
@@ -4200,12 +4335,32 @@ save_space_group_magn_ssg_transforms.source
 
 save_
 
+save_space_group_magn_ssg_transforms.space_group_magn_id
+
+    _definition.id
+        '_space_group_magn_ssg_transforms.space_group_magn_id'
+    _definition.update            2026-06-04
+    _description.text
+;
+    A code which identifies the relevant space group (MSG) or
+    magnetic superspace group (MSSG) to which the transforms belong.
+;
+    _name.category_id             space_group_magn_ssg_transforms
+    _name.object_id               space_group_magn_id
+    _name.linked_item_id          '_space_group_magn.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_SPACE_GROUP_MAGN_TRANSFORMS
 
     _definition.id                SPACE_GROUP_MAGN_TRANSFORMS
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-05-17
+    _definition.update            2026-06-04
     _description.text
 ;
     This category provides a list of matrix transformations to multiple
@@ -4216,7 +4371,12 @@ save_SPACE_GROUP_MAGN_TRANSFORMS
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               SPACE_GROUP_MAGN_TRANSFORMS
-    _category_key.name            '_space_group_magn_transforms.id'
+
+    loop_
+      _category_key.name
+         '_space_group_magn_transforms.id'
+         '_space_group_magn_transforms.space_group_magn_id'
+
     _description_example.case
 ;
        loop_
@@ -4396,12 +4556,32 @@ save_space_group_magn_transforms.source
 
 save_
 
+save_space_group_magn_transforms.space_group_magn_id
+
+    _definition.id
+        '_space_group_magn_transforms.space_group_magn_id'
+    _definition.update            2026-06-04
+    _description.text
+;
+    A code which identifies the relevant space group (MSG) or
+    magnetic superspace group (MSSG) to which the transforms belong.
+;
+    _name.category_id             space_group_magn_transforms
+    _name.object_id               space_group_magn_id
+    _name.linked_item_id          '_space_group_magn.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_SPACE_GROUP_SYMOP_MAGN_CENTERING
 
     _definition.id                SPACE_GROUP_SYMOP_MAGN_CENTERING
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-05-17
+    _definition.update            2026-06-04
     _description.text
 ;
     This loop provides a list of centering or anti-centering
@@ -4434,7 +4614,12 @@ save_SPACE_GROUP_SYMOP_MAGN_CENTERING
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               SPACE_GROUP_SYMOP_MAGN_CENTERING
-    _category_key.name            '_space_group_symop_magn_centering.id'
+
+    loop_
+      _category_key.name
+         '_space_group_symop_magn_centering.id'
+         '_space_group_symop_magn_centering.space_group_magn_id'
+
     _description_example.case
 ;
     loop_
@@ -4496,6 +4681,26 @@ save_space_group_symop_magn_centering.id
 
 save_
 
+save_space_group_symop_magn_centering.space_group_magn_id
+
+    _definition.id
+        '_space_group_symop_magn_centering.space_group_magn_id'
+    _definition.update            2026-06-04
+    _description.text
+;
+    A code which identifies the relevant space group (MSG) or
+    magnetic superspace group (MSSG) to which the centering belongs.
+;
+    _name.category_id             space_group_symop_magn_centering
+    _name.object_id               space_group_magn_id
+    _name.linked_item_id          '_space_group_magn.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_space_group_symop_magn_centering.xyz
 
     _definition.id                '_space_group_symop_magn_centering.xyz'
@@ -4546,7 +4751,11 @@ save_SPACE_GROUP_SYMOP_MAGN_OG_CENTERING
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               SPACE_GROUP_SYMOP_MAGN_OG_CENTERING
-    _category_key.name            '_space_group_symop_magn_OG_centering.id'
+
+    loop_
+      _category_key.name
+         '_space_group_symop_magn_OG_centering.id'
+         '_space_group_symop_magn_OG_centering.space_group_magn_id'
 
 save_
 
@@ -4598,6 +4807,26 @@ save_space_group_symop_magn_og_centering.id
 
 save_
 
+save_space_group_symop_magn_og_centering.space_group_magn_id
+
+    _definition.id
+        '_space_group_symop_magn_OG_centering.space_group_magn_id'
+    _definition.update            2026-06-04
+    _description.text
+;
+    A code which identifies the relevant space group (MSG) or
+    magnetic superspace group (MSSG) to which the centering belongs.
+;
+    _name.category_id             space_group_symop_magn_OG_centering
+    _name.object_id               space_group_magn_id
+    _name.linked_item_id          '_space_group_magn.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_space_group_symop_magn_og_centering.xyz
 
     _definition.id                '_space_group_symop_magn_OG_centering.xyz'
@@ -4630,14 +4859,18 @@ save_SPACE_GROUP_SYMOP_MAGN_OPERATION
     _definition.id                SPACE_GROUP_SYMOP_MAGN_OPERATION
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-05-17
+    _definition.update            2026-06-04
     _description.text
 ;
     A list of magnetic space-group symmetry operations.
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               SPACE_GROUP_SYMOP_MAGN_OPERATION
-    _category_key.name            '_space_group_symop_magn_operation.id'
+
+    loop_
+      _category_key.name
+         '_space_group_symop_magn_operation.id'
+         '_space_group_symop_magn_operation.space_group_magn_id'
 
 save_
 
@@ -4697,6 +4930,26 @@ save_space_group_symop_magn_operation.id
 
 save_
 
+save_space_group_symop_magn_operation.space_group_magn_id
+
+    _definition.id
+        '_space_group_symop_magn_operation.space_group_magn_id'
+    _definition.update            2026-06-04
+    _description.text
+;
+    A code which identifies the relevant space group (MSG) or
+    magnetic superspace group (MSSG) to which the operation belongs.
+;
+    _name.category_id             space_group_symop_magn_operation
+    _name.object_id               space_group_magn_id
+    _name.linked_item_id          '_space_group_magn.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_space_group_symop_magn_operation.xyz
 
     _definition.id                '_space_group_symop_magn_operation.xyz'
@@ -4749,7 +5002,7 @@ save_SPACE_GROUP_SYMOP_MAGN_SSG_CENTERING
     _definition.id                SPACE_GROUP_SYMOP_MAGN_SSG_CENTERING
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-05-17
+    _definition.update            2026-06-04
     _description.text
 ;
     This loop provides a list of the centering and anti-centering
@@ -4757,7 +5010,11 @@ save_SPACE_GROUP_SYMOP_MAGN_SSG_CENTERING
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               SPACE_GROUP_SYMOP_MAGN_SSG_CENTERING
-    _category_key.name            '_space_group_symop_magn_ssg_centering.id'
+
+    loop_
+      _category_key.name
+         '_space_group_symop_magn_ssg_centering.id'
+         '_space_group_symop_magn_ssg_centering.space_group_magn_id'
 
 save_
 
@@ -4841,12 +5098,32 @@ save_space_group_symop_magn_ssg_centering.id
 
 save_
 
+save_space_group_symop_magn_ssg_centering.space_group_magn_id
+
+    _definition.id
+        '_space_group_symop_magn_ssg_centering.space_group_magn_id'
+    _definition.update            2026-06-04
+    _description.text
+;
+    A code which identifies the relevant space group (MSG) or
+    magnetic superspace group (MSSG) to which the centering belongs.
+;
+    _name.category_id             space_group_symop_magn_ssg_centering
+    _name.object_id               space_group_magn_id
+    _name.linked_item_id          '_space_group_magn.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_SPACE_GROUP_SYMOP_MAGN_SSG_OPERATION
 
     _definition.id                SPACE_GROUP_SYMOP_MAGN_SSG_OPERATION
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-05-17
+    _definition.update            2026-06-04
     _description.text
 ;
     A looped list of magnetic superspace-group symmetry operations.
@@ -4855,7 +5132,11 @@ save_SPACE_GROUP_SYMOP_MAGN_SSG_OPERATION
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               SPACE_GROUP_SYMOP_MAGN_SSG_OPERATION
-    _category_key.name            '_space_group_symop_magn_ssg_operation.id'
+
+    loop_
+      _category_key.name
+         '_space_group_symop_magn_ssg_operation.id'
+         '_space_group_symop_magn_ssg_operation.space_group_magn_id'
 
 save_
 
@@ -4937,6 +5218,45 @@ save_space_group_symop_magn_ssg_operation.id
 
 save_
 
+save_space_group_symop_magn_ssg_operation.space_group_magn_id
+
+    _definition.id
+        '_space_group_symop_magn_ssg_operation.space_group_magn_id'
+    _definition.update            2026-06-04
+    _description.text
+;
+    A code which identifies the relevant space group (MSG) or
+    magnetic superspace group (MSSG) to which the operation belongs.
+;
+    _name.category_id             space_group_symop_magn_ssg_operation
+    _name.object_id               space_group_magn_id
+    _name.linked_item_id          '_space_group_magn.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_structure.space_group_magn_id
+
+    _definition.id                '_structure.space_group_magn_id'
+    _definition.update            2026-06-10
+    _description.text
+;
+    A code which identifies the magnetic space group or magnetic superspace
+    group describing the structure.
+;
+    _name.category_id             structure
+    _name.object_id               space_group_magn_id
+    _name.linked_item_id          '_space_group_magn.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
     loop_
       _dictionary_audit.version
       _dictionary_audit.date
@@ -4989,8 +5309,23 @@ save_
        _atom_site_moment.Cartn* items, corrected and improved *_symmform
        descriptions. Created the atom_site_rotation category. (B Campbell)
 ;
-         0.9.9                    2026-05-28
+         0.9.9                    2026-06-10
 ;
+       Added _structure.id key to ATOM_SITE_MOMENT, ATOM_SITE_ROTATION,
+       ATOM_SITE_MOMENT_FOURIER, ATOM_SITE_MOMENT_SPECIAL_FUNC.
+
+       Added key to SPACE_GROUP_MAGN, and linked key data names to:
+       SPACE_GROUP_MAGN_SSG_TRANSFORMS
+       SPACE_GROUP_MAGN_TRANSFORMS
+       SPACE_GROUP_SYMOP_MAGN_CENTERING
+       SPACE_GROUP_SYMOP_MAGN_OG_CENTERING
+       SPACE_GROUP_SYMOP_MAGN_OPERATION
+       SPACE_GROUP_SYMOP_MAGN_SSG_CENTERING
+       SPACE_GROUP_SYMOP_MAGN_SSG_OPERATION
+
+       Added non-key _structure.space_group_magn_id to link magnetic space
+       group to structure.
+
        Changed several instances of "Jones-Faithful notation" to
        "Jones faithful notation".
 
@@ -5043,4 +5378,5 @@ save_
        because it is defined in cif_ms.dic.
 
        Improved clarity in transform_Pp_abc definitions.
+
 ;

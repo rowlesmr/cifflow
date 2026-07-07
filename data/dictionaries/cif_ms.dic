@@ -1,4 +1,5 @@
 #\#CIF_2.0
+# SPDX-License-Identifier: CC-BY-4.0
 ################################################################################
 #                                                                              #
 #                   CIF Dictionary for Modulated Structures                    #
@@ -24,10 +25,11 @@ data_CIF_MS
     _dictionary.formalism         Modulated
     _dictionary.class             Instance
     _dictionary.version           3.2.5
-    _dictionary.date              2025-12-05
+    _dictionary.date              2026-07-06
     _dictionary.uri               http://www.iucr.org/cif/dic/cif_ms.dic
-    _dictionary.ddl_conformance   4.1.0
-    _dictionary.namespace         ModStruct
+    _dictionary.ddl_conformance   4.2.0
+    _dictionary.licensing_SPDX    CC-BY-4.0
+    _dictionary.namespace         CifCore
     _description.text
 ;
        The DICTIONARY group encompassing the definitions of data items
@@ -40,7 +42,7 @@ save_CIF_MS_HEAD
     _definition.id                CIF_MS_HEAD
     _definition.scope             Category
     _definition.class             Head
-    _definition.update            2025-12-05
+    _definition.update            2026-06-18
     _description.text
 ;
       Encompasses groups of categories applicable to modulated structures.
@@ -50,8 +52,8 @@ save_CIF_MS_HEAD
 
     _import.get
         [
-         {'dupl':Ignore  'file':multi_block_core.dic  'mode':Full
-          'save':MULTIBLOCK_CORE}
+         {'dupl':Ignore  'file':cif_core_multiblock.dic  'mode':Full
+          'save':CIF_CORE_MULTIBLOCK_HEAD}
          {'dupl':Ignore  'file':cif_twin.dic  'mode':Full  'save':CIF_TWIN_HEAD}
         ]
 
@@ -222,7 +224,7 @@ save_ATOM_SITE_ANHARMONIC_ADP
       environment variation induced by the modulation, the components of
       the tensors describing the anharmonicity could become also modulated.
       In that case, the additional modulation parameters would be
-      described by items belong to the _ATOM_SITE_ANHARMONIC_ADP_FOURIER
+      described by items belong to the ATOM_SITE_ANHARMONIC_ADP_FOURIER
       category.
 
       References: Kuznetsov, P.I., Stratonovich, R.L. & Tikhonov, V.I. (1960).
@@ -262,6 +264,7 @@ save_ATOM_SITE_ANHARMONIC_ADP
 
     loop_
       _description_example.case
+      _description_example.detail
 ;
         #\#CIF_2.0
 
@@ -342,9 +345,8 @@ save_ATOM_SITE_ANHARMONIC_ADP
           N2  C333  0.0006(17)
 
         # - - - - data truncated for brevity - - - -
-
-        #=======================================================================
-
+;
+;
         Example based on the article:
         Laura Canadillas-Delgado, Lidia Mazzuca, Oscar Fabelo and
         Juan Rodriguez-Carvajal (2019) IUCrJ. 6, 105-115.
@@ -382,26 +384,25 @@ save_ATOM_SITE_ANHARMONIC_ADP
           _atom_site_anharmonic_ADP.atom_site_label
           _atom_site_anharmonic_ADP.tens_elem
           _atom_site_anharmonic_ADP.coeff
-          Sb D1111  0.00057(8)
-          Sb D1112  0
-          Sb D1113  0
-          Sb D1122  0.0072(7)
-          Sb D1123  0
-          Sb D1133  0.008(2)
-          Sb D1222  0
-          Sb D1223  0
-          Sb D1233  0
-          Sb D1333  0
-          Sb D2222  0.98(6)
-          Sb D2223  0
-          Sb D2233 -0.82(9)
-          Sb D2333  0
-          Sb D3333  0.24(12)
+          Sb1 D1111  0.00057(8)
+          Sb1 D1112  0
+          Sb1 D1113  0
+          Sb1 D1122  0.0072(7)
+          Sb1 D1123  0
+          Sb1 D1133  0.008(2)
+          Sb1 D1222  0
+          Sb1 D1223  0
+          Sb1 D1233  0
+          Sb1 D1333  0
+          Sb1 D2222  0.98(6)
+          Sb1 D2223  0
+          Sb1 D2233 -0.82(9)
+          Sb1 D2333  0
+          Sb1 D3333  0.24(12)
 
         # - - - - data truncated for brevity - - - -
-
-        #=====================================================================
-
+;
+;
         Example based on the article:
         Oxana V. Magdysyuk, Jurgen Nuss and Martin Jansen (2013)
         Acta Cryst. B 69, 547-555. doi:10.1107/S2052519213029436
@@ -464,9 +465,8 @@ save_ATOM_SITE_ANHARMONIC_ADP
           Hf1 F333333  0.09(2)
 
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+;
         Example based on the article:
         Alexei Bosak, Volodymir Svitlyk, Alla Arakcheeva, Roman Burkovskiy,
         Vadim Diadkin, Krystian Roleder and Dmitry Chernyshov (2020)
@@ -703,9 +703,9 @@ save_ATOM_SITE_ANHARMONIC_ADP_FOURIER
           10 Co1   C333  1            0     0.005(3)
           11 O2    C111  1  -0.0016(13)   0.0020(14)
           12 O2    C112  1   -0.0001(5)    0.0003(5)
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Laura Canadillas-Delgado, Lidia Mazzuca, Oscar Fabelo and
         Juan Rodriguez-Carvajal (2019) IUCrJ. 6, 105-115.
@@ -858,7 +858,7 @@ save_atom_site_anharmonic_adp_fourier.wave_vector_seq_id
 
     _definition.id
         '_atom_site_anharmonic_ADP_Fourier.wave_vector_seq_id'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
        A numeric code identifying the wave vectors of the Fourier terms
@@ -873,7 +873,7 @@ save_atom_site_anharmonic_adp_fourier.wave_vector_seq_id
     _type.source                  Related
     _type.container               Single
     _type.contents                Integer
-    _enumeration.range            0:
+    _enumeration.range            1:
     _units.code                   none
 
 save_
@@ -990,9 +990,9 @@ save_ATOM_SITE_ANHARMONIC_ADP_FOURIER_PARAM
           12  -0.0001(5)    0.0003(5)
 
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Laura Canadillas-Delgado, Lidia Mazzuca, Oscar Fabelo and
         Juan Rodriguez-Carvajal (2019) IUCrJ. 6, 105-115.
@@ -1126,7 +1126,7 @@ save_atom_site_anharmonic_adp_fourier_param.phase
     _definition.update            2025-10-20
     _description.text
 ;
-       _The phase [\q(j...)n/2\\p], in cycles, of the complex amplitude
+       The phase [\q(j...)n/2\\p], in cycles, of the complex amplitude
        corresponding to the Fourier term defined by
        _atom_site_anharmonic_ADP_Fourier.atom_site_label,
        _atom_site_anharmonic_ADP_Fourier.tens_elem and
@@ -1179,7 +1179,7 @@ save_atom_site_anharmonic_adp_fourier_param.sin
       The sine coefficient [T(j...)sn] corresponding to the Fourier term
       defined by _atom_site_anharmonic_ADP_Fourier.atom_site_label,
       _atom_site_anharmonic_ADP_Fourier.tens_elem and
-      _atom_site_anharmonic_AD_Fourier.wave_vector_seq_id.
+      _atom_site_anharmonic_ADP_Fourier.wave_vector_seq_id.
 ;
     _name.category_id             atom_site_anharmonic_ADP_Fourier_param
     _name.object_id               sin
@@ -1343,7 +1343,7 @@ save_atom_site_anharmonic_adp_legendre.tens_elem
       A label identifying the anharmonic ADP tensor elements of a given
       atom whose modulation is being parameterized by Legendre polynomials.
       This code must match one of the codes listed in
-      'atom_site_anharmonic_ADP.tens_elem.
+      _atom_site_anharmonic_ADP.tens_elem.
 ;
     _name.category_id             atom_site_anharmonic_ADP_Legendre
     _name.object_id               tens_elem
@@ -1957,9 +1957,9 @@ save_ATOM_SITE_DISPLACE_FOURIER
          Sb_y_6  Sb  y  6   0.00496(16)  -0.00435(17)
          Sb_z_6  Sb  z  6   0.00287(9)    0.00189(9)
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Michel Evain, Vaclav Petricek, Yves Moelo and Colette Maurel (2006)
         Acta Cryst. B62, 775-789. doi:10.1107/S010876810602547X
@@ -2097,7 +2097,7 @@ save_atom_site_displace_fourier.wave_vector_seq_id
         '_atom_site_displace_Fourier.wave_vector_seq_id'
     _alias.definition_id
         '_atom_site_displace_Fourier_wave_vector_seq_id'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
       A numeric code identifying the wave vectors of the Fourier terms
@@ -2114,7 +2114,7 @@ save_atom_site_displace_fourier.wave_vector_seq_id
     _type.source                  Related
     _type.container               Single
     _type.contents                Integer
-    _enumeration.range            0:
+    _enumeration.range            1:
     _units.code                   none
 
 save_
@@ -2258,9 +2258,9 @@ save_ATOM_SITE_DISPLACE_FOURIER_PARAM
          Sb_z_6  0.00287(9)    0.00189(9)
 
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Michel Evain, Vaclav Pericek, Yves Moelo and Colette Maurel (2006)
         Acta Cryst. B62, 775-789. doi:10.1107/S010876810602547X
@@ -2280,7 +2280,7 @@ save_atom_site_displace_fourier_param.cos
       The cosine coefficient (Acn) corresponding to the Fourier term defined
       by _atom_site_displace_Fourier.atom_site_label,
       _atom_site_displace_Fourier.axis and
-      _atom_site_displace_Fourier_wave_vector.seq_id.
+      _atom_site_displace_Fourier.wave_vector_seq_id.
 ;
     _name.category_id             atom_site_displace_Fourier_param
     _name.object_id               cos
@@ -2606,9 +2606,9 @@ save_ATOM_SITE_DISPLACE_LEGENDRE
          O1_L_z_2 O1  z  2     0
          O1_L_x_3 O1  x  3     0.262(9)
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Luis Elcoro, Olivier P\'erez, J. M. Perez-Mato and V\'aclav
         Pet\<r\'i\<cek (2012) Acta Cryst. B68, 341-355.
@@ -2794,7 +2794,7 @@ save_ATOM_SITE_DISPLACE_ORTHO
     _definition.id                ATOM_SITE_DISPLACE_ORTHO
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2025-06-04
+    _definition.update            2026-06-15
     _description.text
 ;
       Data items in the ATOM_SITE_DISPLACE_ORTHO category record
@@ -2862,11 +2862,11 @@ save_ATOM_SITE_DISPLACE_ORTHO
          _atom_site_Fourier_wave_vector.seq_id
          _atom_site_Fourier_wave_vector.q_coeff_seq_id
          _atom_site_Fourier_wave_vector.q_coeff
-            0  [1]  [0]
-            1  [1]  [1]
-            2  [1]  [2]
-            3  [1]  [3]
-            4  [1]  [4]
+            1  [1]  [0]
+            2  [1]  [1]
+            3  [1]  [2]
+            4  [1]  [3]
+            5  [1]  [4]
 
         # - - - - data truncated for brevity - - - -
 
@@ -2890,16 +2890,16 @@ save_ATOM_SITE_DISPLACE_ORTHO
          _atom_sites_ortho.wave_vector_seq_id_list
          _atom_sites_ortho.coeff_cos_list
          _atom_sites_ortho.coeff_sin_list
-         o1  [0 1]      [-3.322 0]        [0 4.323]
-         o2  [0 1]      [-20.803 11.454]  [0 31.365]
-         o3  [0 1]      [0.497 0]         [0 1.774]
-         o4  [0 1]      [0 1.287]         [0 0]
-         o5  [0 1 2]    [0 0.199 0]       [0 0 1.417]
-         o6  [0 1 2]    [-0.870 0 2.020]  [0 -1.611 0]
-         o7  [0 1]      [2.069 0]         [0 3.249]
-         o8  [0 1]      [0 1.414]         [0 0]
-         o9  [0 1 2]    [0 2.271 0]       [0 0 2.267]
-         o10 [0 1 2]    [2.187 0 1.973]   [0 2.785 0]
+         o1  [1 2]      [-3.322 0]        [0 4.323]
+         o2  [1 2]      [-20.803 11.454]  [0 31.365]
+         o3  [1 2]      [0.497 0]         [0 1.774]
+         o4  [1 2]      [0 1.287]         [0 0]
+         o5  [1 2 3]    [0 0.199 0]       [0 0 1.417]
+         o6  [1 2 3]    [-0.870 0 2.020]  [0 -1.611 0]
+         o7  [1 2]      [2.069 0]         [0 3.249]
+         o8  [1 2]      [0 1.414]         [0 0]
+         o9  [1 2 3]    [0 2.271 0]       [0 0 2.267]
+         o10 [1 2 3]    [2.187 0 1.973]   [0 2.785 0]
 
         loop_
          _atom_site_displace_ortho.id
@@ -2920,9 +2920,9 @@ save_ATOM_SITE_DISPLACE_ORTHO
          Zn1_o3_z   Zn1  z  o3   0.00101(7)
          Zn1_o6_z   Zn1  z  o6  -0.00069(5)
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Hanna Lind, Magnus Bostrom, Vaclav Petricek and Sven Lidin (2003)
         Acta Cryst. B59, 720-729. doi:10.1107/S0108768103019694
@@ -3057,7 +3057,7 @@ save_atom_site_displace_ortho.func_id
 ;
       A code identifying the orthogonalized function used in the
       structural model to describe the displacive modulation of an atom
-      or rigid group. This code must match _atom_sites_ortho_func_id.
+      or rigid group. This code must match _atom_sites_ortho.func_id.
 ;
     _name.category_id             atom_site_displace_ortho
     _name.object_id               func_id
@@ -3164,6 +3164,7 @@ save_ATOM_SITE_DISPLACE_SAWTOOTH
 
     loop_
       _description_example.case
+      _description_example.detail
 ;
        #\#CIF_2.0
 
@@ -3201,9 +3202,8 @@ save_ATOM_SITE_DISPLACE_SAWTOOTH
        O2  -0.165(8)  0  0  0.640(4)  0.969(8)
        O3  -0.245(6)  0  0  0.588(4)         1
        # - - - - data truncated for brevity - - - -
-
-       #=======================================================================
-
+;
+;
        Example based on the article:
        Andrei Mironov, V\'aclav Pet\<r\'i\<cek, Nellie Khasanova and Evgenie
        Antipov (2016) Acta Cryst. B72, 395-403. doi:10.1107/S2052520616005643
@@ -3227,9 +3227,8 @@ save_ATOM_SITE_DISPLACE_SAWTOOTH
        O2  [-0.165(8) 0 0]  0.640(4)  0.969(8)
        O3  [-0.245(6) 0 0]  0.588(4)         1
        # - - - - data truncated for brevity - - - -
-
-       #=======================================================================
-
+;
+;
        Example based on the article:
        Andrei Mironov, V\'aclav Pet\<r\'i\<cek, Nellie Khasanova and Evgenie
        Antipov (2016) Acta Cryst. B72, 395-403. doi:10.1107/S2052520616005643
@@ -3299,7 +3298,7 @@ save_atom_site_displace_sawtooth.ax_su
      Standard uncertainty of _atom_site_displace_sawtooth.ax
 ;
     _name.category_id             atom_site_displace_sawtooth
-    _name.object_id               sawtooth_ax_su
+    _name.object_id               ax_su
     _name.linked_item_id          '_atom_site_displace_sawtooth.ax'
     _units.code                   none
 
@@ -3656,9 +3655,9 @@ save_ATOM_SITE_DISPLACE_XHARM
           O6wXhz4 O6w    z  4      0.008(3)
 
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Tamara J. Bernarchuk, Wolfgang Hornfeck, Vasyl Kinzhybalo, Zhengyang
         Zhou, Michal Dusek and Adam Pietraszko (2019)
@@ -3922,9 +3921,9 @@ save_ATOM_SITE_DISPLACE_ZIGZAG
       _atom_site_displace_zigzag.w
       S1  [-0.750 0 0]  0  0.5
       Pb1 [-0.625 0 0]  0  0.5
-
-    #==========================================================================
-
+;
+    _description_example.detail
+;
     Example based on the article:
     Luis Elcoro, J. M. Perez-Mato, Karen Friese, V\'aclav Pet\<r\'i\<cek,
     Ton\<ci Bal\'i-\<Zun\'ic and Lars Arnskov Olsen (2012)
@@ -4092,7 +4091,7 @@ save_ATOM_SITE_FOURIER_WAVE_VECTOR
       details about the wave vectors of the Fourier terms used in the
       structural model to describe the atomic modulation functions. They
       are linear combinations with integer coefficients of the independent
-      wave vectors given in the _cell_wave_vector. list. Therefore, wave
+      wave vectors given in the CELL_WAVE_VECTOR list. Therefore, wave
       vectors are expressed with respect to the three-dimensional reciprocal
       basis that spans the lattice of main reflections. However, in the
       case of composites these wave vectors are expressed with respect to
@@ -4103,13 +4102,13 @@ save_ATOM_SITE_FOURIER_WAVE_VECTOR
       components (see item _atom_site_Fourier_wave_vector.x,
       _atom_site_Fourier_wave_vector.y and _atom_site_Fourier_wave_vector.z)
       or expressed as k=n(1)q(1)+...+n(p)q(p), where p is given by
-      _cell_modulation_dimension (with a maximum value of 8).
+      _cell.modulation_dimension (with a maximum value of 8).
 
-      In that case, _atom_site_Fourier_wave_vector.coeff contains the
+      In that case, _atom_site_Fourier_wave_vector.q_coeff contains the
       coefficients that express a given k as a linear combination of the
       independent wave vectors given in the CELL_WAVE_VECTOR category. The
       enumeration of the independent wave vectors (1,2, ...,9) is given by
-      the value of _atom_site_Fourier_wave_vector_.q_coeff_seq_id matching
+      the value of _atom_site_Fourier_wave_vector.q_coeff_seq_id matching
       the corresponding value of _cell_wave_vector.seq_id.
 
 ;
@@ -4534,10 +4533,10 @@ save_atom_site_fourier_wave_vector.q_coeff
     _description.text
 ;
       The list of coefficients that express a given k as a linear combination
-      of the _cell_modulation_dimension independent wave vectors given in
+      of the _cell.modulation_dimension independent wave vectors given in
       CELL_WAVE_VECTOR category. The enumeration of the independent wave
       vectors (1,2, ...,9) is given by thes value of
-      _atom_site_Fourier_wave_vector_.q_coeff_seq_id matching the
+      _atom_site_Fourier_wave_vector.q_coeff_seq_id matching the
       corresponding value of _cell_wave_vector.seq_id
 ;
     _name.category_id             atom_site_Fourier_wave_vector
@@ -4586,7 +4585,7 @@ save_atom_site_fourier_wave_vector.q_coeff_seq_id
       The list of numeric codes that identifies each independent wave vector
       appearing in the linear combination that expresses a generic
       Fourier wave vector as k=n(1)q(1)+...+n(p)q(p), where p is given
-      by _cell_modulation_dimension. In the case of composites these wave
+      by _cell.modulation_dimension. In the case of composites these wave
       vectors are expressed with respect to the three-dimensional reciprocal
       basis of each subsystem (see _cell_subsystem.matrix_W_).The codes
       must match those given in _cell_wave_vector.seq_id.
@@ -4631,7 +4630,7 @@ save_atom_site_fourier_wave_vector.seq_id
 
     _definition.id                '_atom_site_Fourier_wave_vector.seq_id'
     _alias.definition_id          '_atom_site_Fourier_wave_vector_seq_id'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
       A numeric code identifying the wave vectors defined in
@@ -4643,7 +4642,7 @@ save_atom_site_fourier_wave_vector.seq_id
     _type.source                  Related
     _type.container               Single
     _type.contents                Integer
-    _enumeration.range            0:
+    _enumeration.range            1:
     _units.code                   none
 
 save_
@@ -4864,9 +4863,9 @@ save_ATOM_SITE_OCC_CRENEL
      O2 -0.0080(15)  0.1375
 
     # - - - - data truncated for brevity - - - -
-
-    #==========================================================================
-
+;
+    _description_example.detail
+;
     Example based on the article:
     Luis Elcoro, Olivier P\'erez, J. M. Perez-Mato and V\'aclav Pet\<r\'i\<cek
     (2012) Acta Cryst. B68, 341-355. doi:10.1107/S0108768112018095
@@ -5062,8 +5061,8 @@ save_ATOM_SITE_OCC_FOURIER
         Sn Sn  H  0          0            0           0.01480(12)  d . 0.851(2)
         Cu Cu  H  0.0029(9)  0.0057(5)    0.1147(3)   0.0229(11)   d . 0.149(2)
         S  S1  H  0.5033(2)  0.84278(12)  0.12342(7)  0.0177(3)    d . 1
-        Pb Pb  Q  0.05541(5) 0.24113(4)   0.36783(2)  0.03573(12)  d . 0.701(10
-        Sb Sb  Q  0.055408   0.241132     0.367832    0.03573(12)  d . 0.299(10
+        Pb Pb  Q  0.05541(5) 0.24113(4)   0.36783(2)  0.03573(12)  d . 0.701(10)
+        Sb Sb  Q  0.055408   0.241132     0.367832    0.03573(12)  d . 0.299(10)
         S  S2  Q -0.0402(3)  0.2583(2)    0.59639(13) 0.0310(4)    d . 1
 
         loop_
@@ -5096,9 +5095,9 @@ save_ATOM_SITE_OCC_FOURIER
          Sb_o_4  Sb  4  -0.017(6)   0.042(5)
 
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Michel Evain, Vaclav Petricek, Yves Moelo and Colette Maurel (2006)
         Acta Cryst. B62, 775-789. doi:10.1107/S010876810602547X
@@ -5154,7 +5153,7 @@ save_atom_site_occ_fourier.wave_vector_seq_id
 
     _definition.id                '_atom_site_occ_Fourier.wave_vector_seq_id'
     _alias.definition_id          '_atom_site_occ_Fourier_wave_vector_seq_id'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
       A numeric code identifying the wave vectors of the Fourier terms
@@ -5169,7 +5168,7 @@ save_atom_site_occ_fourier.wave_vector_seq_id
     _type.source                  Related
     _type.container               Single
     _type.contents                Integer
-    _enumeration.range            0:
+    _enumeration.range            1:
     _units.code                   none
 
 save_
@@ -5239,8 +5238,8 @@ save_ATOM_SITE_OCC_FOURIER_PARAM
         Sn Sn  H  0          0            0           0.01480(12)  d . 0.851(2)
         Cu Cu  H  0.0029(9)  0.0057(5)    0.1147(3)   0.0229(11)   d . 0.149(2)
         S  S1  H  0.5033(2)  0.84278(12)  0.12342(7)  0.0177(3)    d . 1
-        Pb Pb  Q  0.05541(5) 0.24113(4)   0.36783(2)  0.03573(12)  d . 0.701(10
-        Sb Sb  Q  0.055408   0.241132     0.367832    0.03573(12)  d . 0.299(10
+        Pb Pb  Q  0.05541(5) 0.24113(4)   0.36783(2)  0.03573(12)  d . 0.701(10)
+        Sb Sb  Q  0.055408   0.241132     0.367832    0.03573(12)  d . 0.299(10)
         S  S2  Q -0.0402(3)  0.2583(2)    0.59639(13) 0.0310(4)    d . 1
 
         loop_
@@ -5284,9 +5283,9 @@ save_ATOM_SITE_OCC_FOURIER_PARAM
          Sb_o_4 -0.017(6)   0.042(5)
 
          # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Michel Evain, Vaclav Petricek, Yves Moelo and Colette Maurel (2006)
         Acta Cryst. B62, 775-789. doi:10.1107/S010876810602547X
@@ -5628,7 +5627,7 @@ save_ATOM_SITE_OCC_ORTHO
 
       Data items in the ATOM_SITE_OCC_ORTHO category record
       details about the orthogonalized functions (see
-      ATOM_SITE_DISPLACE_ORTHO)defined to solve correlation problems
+      ATOM_SITE_DISPLACE_ORTHO) defined to solve correlation problems
       during the refinement of the occupational modulation when the atomic
       domain of a given atom is restricted by a crenel function. The
       functions are constructed selecting Fourier harmonics until the
@@ -5715,7 +5714,7 @@ save_atom_site_occ_ortho.func_id
 ;
       A code identifying the orthogonalized function used in the
       structural model to describe the occupational modulation of an atom
-      or rigid group. This code must match _atom_sites_ortho_func_id.
+      or rigid group. This code must match _atom_sites_ortho.func_id.
 ;
     _name.category_id             atom_site_occ_ortho
     _name.object_id               func_id
@@ -6116,7 +6115,7 @@ save_ATOM_SITE_ROT_FOURIER
          _atom_site_displace_Fourier.wave_vector_seq_id
          _atom_site_displace_Fourier_param.modulus
          _atom_site_displace_Fourier_param.phase
-          S_x_1     S      x  .  1 -0.00453(2)  0.388(1)
+          S_x_1     S      x  .  1  0.00453(2)  0.888(1)
           S_y_1     S      y  .  1  0.0000      0.000
           S_z_1     S      z  .  1  0.02053(4)  0.3190(3)
           S_x_2     S      x  .  2  0.0000      0.0000
@@ -6155,19 +6154,19 @@ save_ATOM_SITE_ROT_FOURIER
           R_a1_2     CPS  a1  1  2  0.60  0.78
           R_a2_2     CPS  a2  1  2  0.70  0.62
           R_y_2_nm   CPS  a2  2  2  0.70  0.10
-
-        #Rigid rotations and translations of the molecule (CPS) are
-        #expressed in two different ways: as movements around and
-        #along the crystallographic axes (R_x_1...R_z_2 and
-        #T_x_1...T_z_1) or through nine normal modes
-        #(R_a1_1...R_y_2_nm) and T_a2_1...T_y_2_nm). The rotation
-        #R_y_2_nm and the translation T_y_2_nm are around and along
-        #the b-axis but are independent, in the sense that they do not
-        #belong to the same Fourier series, of T_y_1, T_y_2 and
-        #R_y_1. Therefore they need a different (but trivial)
-        #transformation matrix.
-
-        #======================================================================
+;
+    _description_example.detail
+;
+        Rigid rotations and translations of the molecule (CPS) are
+        expressed in two different ways: as movements around and
+        along the crystallographic axes (R_x_1...R_z_2 and
+        T_x_1...T_z_1) or through nine normal modes
+        (R_a1_1...R_y_2_nm) and T_a2_1...T_y_2_nm). The rotation
+        R_y_2_nm and the translation T_y_2_nm are around and along
+        the b-axis but are independent, in the sense that they do not
+        belong to the same Fourier series, of T_y_1, T_y_2 and
+        R_y_1. Therefore they need a different (but trivial)
+        transformation matrix.
 
         Example based on the article:
         F.J. Z\'u\~niga, J.M. P\'erez-Mato and T. Breczewski(1993)
@@ -6293,7 +6292,7 @@ save_atom_site_rot_fourier.wave_vector_seq_id
 
     _definition.id                '_atom_site_rot_Fourier.wave_vector_seq_id'
     _alias.definition_id          '_atom_site_rot_Fourier_wave_vector_seq_id'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
       A numeric code identifying the wave vectors of the Fourier terms
@@ -6308,7 +6307,7 @@ save_atom_site_rot_fourier.wave_vector_seq_id
     _type.source                  Related
     _type.container               Single
     _type.contents                Integer
-    _enumeration.range            0:
+    _enumeration.range            1:
     _units.code                   none
 
 save_
@@ -6394,7 +6393,7 @@ save_ATOM_SITE_ROT_FOURIER_PARAM
         loop_
          _cell_wave_vector.seq_id
          _cell_wave_vector.xyz
-          1  [0,0.780(3),0]
+          1  [0 0.780(3) 0]
 
         # - - - - data truncated for brevity - - - -
 
@@ -6507,7 +6506,7 @@ save_ATOM_SITE_ROT_FOURIER_PARAM
          _atom_site_displace_Fourier_param.id
          _atom_site_displace_Fourier_param.modulus
          _atom_site_displace_Fourier_param.phase
-          S_x_1    -0.00453(2)  0.388(1)
+          S_x_1     0.00453(2)  0.888(1)
           S_y_1     0.0000      0.000
           S_z_1     0.02053(4)  0.3190(3)
           S_x_2     0.0000      0.0000
@@ -6561,19 +6560,19 @@ save_ATOM_SITE_ROT_FOURIER_PARAM
           R_a1_2    0.60  0.78
           R_a2_2    0.70  0.62
           R_y_2_nm  0.70  0.10
-
-        #Rigid rotations and translations of the molecule (CPS) are
-        #expressed in two different ways: as movements around and
-        #along the crystallographic axes (R_x_1...R_z_2 and
-        #T_x_1...T_z_1) or through nine normal modes
-        #(R_a1_1...R_y_2_nm) and T_a2_1...T_y_2_nm). The rotation
-        #R_y_2_nm and the translation T_y_2_nm are around and along
-        #the b-axis but are independent, in the sense that they do not
-        #belong to the same Fourier series, of T_y_1, T_y_2 and
-        #R_y_1. Therefore they need a different (but trivial)
-        #transformation matrix.
-
-        #======================================================================
+;
+    _description_example.detail
+;
+        Rigid rotations and translations of the molecule (CPS) are
+        expressed in two different ways: as movements around and
+        along the crystallographic axes (R_x_1...R_z_2 and
+        T_x_1...T_z_1) or through nine normal modes
+        (R_a1_1...R_y_2_nm) and T_a2_1...T_y_2_nm). The rotation
+        R_y_2_nm and the translation T_y_2_nm are around and along
+        the b-axis but are independent, in the sense that they do not
+        belong to the same Fourier series, of T_y_1, T_y_2 and
+        R_y_1. Therefore they need a different (but trivial)
+        transformation matrix.
 
         Example based on the article:
         F.J. Z\'u\~niga, J.M. P\'erez-Mato and T. Breczewski(1993)
@@ -7135,7 +7134,7 @@ save_atom_site_rot_ortho.func_id
       structural model to describe the displacive modulation of an atom
       or rigid group. In the case of a rigid group, it applies only
       to the rotational part of the distortion. This code must match
-      _atom_sites_ortho_func_id.
+      _atom_sites_ortho.func_id.
 ;
     _name.category_id             atom_site_rot_ortho
     _name.object_id               func_id
@@ -7275,7 +7274,7 @@ save_atom_site_rot_sawtooth.ax_su
      Standard uncertainty of _atom_site_rot_sawtooth.ax
 ;
     _name.category_id             atom_site_rot_sawtooth
-    _name.object_id               sawtooth_ax_su
+    _name.object_id               ax_su
     _name.linked_item_id          '_atom_site_rot_sawtooth.ax'
     _units.code                   degrees
 
@@ -7740,7 +7739,7 @@ save_atom_site_rot_zigzag.atom_site_label
       a zigzag function that describes the rotational part of its displacive
       modulation is being defined. This code must match the _atom_site.label
       of the associated coordinate list and conform to the rules described
-      in_atom_site.label.
+      in _atom_site.label.
 ;
     _name.category_id             atom_site_rot_zigzag
     _name.object_id               atom_site_label
@@ -7982,9 +7981,9 @@ save_ATOM_SITE_U_FOURIER
          Pb_U13_3  Pb  U13  3  -0.00023(18)  -0.0004(2)
          Pb_U23_3  Pb  U23  3   0.00004(15)  -0.00305(16)
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Michel Evain, Vaclav Petricek, Yves Moelo and Colette Maurel (2006)
         Acta Cryst. B62, 775-789. doi:10.1107/S010876810602547X
@@ -8070,7 +8069,7 @@ save_atom_site_u_fourier.wave_vector_seq_id
 
     _definition.id                '_atom_site_U_Fourier.wave_vector_seq_id'
     _alias.definition_id          '_atom_site_U_Fourier_wave_vector_seq_id'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
       A numeric code identifying the wave vectors of the Fourier terms
@@ -8085,7 +8084,7 @@ save_atom_site_u_fourier.wave_vector_seq_id
     _type.source                  Related
     _type.container               Single
     _type.contents                Integer
-    _enumeration.range            0:
+    _enumeration.range            1:
     _units.code                   none
 
 save_
@@ -8240,9 +8239,9 @@ save_ATOM_SITE_U_FOURIER_PARAM
          Pb_U13_3 -0.00023(18)  -0.0004(2)
          Pb_U23_3  0.00004(15)  -0.00305(16)
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Michel Evain, Vaclav Petricek, Yves Moelo and Colette Maurel (2006)
         Acta Cryst. B62, 775-789. doi:10.1107/S010876810602547X
@@ -8556,9 +8555,9 @@ save_ATOM_SITE_U_LEGENDRE
          12 Zn5  U23  2     0
 
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Rie T. Fredrickson and Daniel C. Fredrickson (2023)
         Acta Cryst. B79, 775-789. doi:10.1107/S2052520623005292
@@ -8957,9 +8956,9 @@ save_ATOM_SITE_U_XHARM
          22 O6w  U12  2     0.001(3)
          23 O6w  U13  2    -0.003(3)
          24 O6w  U23  2    -0.003(2)
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Tamara J. Bernarchuk, Wolfgang Hornfeck, Vasyl Kinzhybalo, Zhengyang
         Zhou, Michal Dusek and Adam Pietraszko (2019)
@@ -9138,9 +9137,9 @@ save_ATOM_SITES_AXES
          ;
 
         # - - - - data truncated for brevity - - - -
-
-        #======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         F.J. Z\'u\~niga, J.M. P\'erez-Mato and T. Breczewski(1993)
         Acta Cryst. B49, 1060-1068. doi:10.1107/S0108768193008195
@@ -9181,7 +9180,7 @@ save_
 save_atom_sites_axes.matrix_seq_id
 
     _definition.id                '_atom_sites_axes.matrix_seq_id'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-30
     _description.text
 ;
       A numeric code to identify each transformation matrix given
@@ -9193,7 +9192,7 @@ save_atom_sites_axes.matrix_seq_id
     _type.source                  Related
     _type.container               Single
     _type.contents                Integer
-    _enumeration.range            0:
+    _enumeration.range            1:
     _units.code                   none
 
 save_
@@ -9226,7 +9225,9 @@ save_ATOM_SITES_DISPLACE_FOURIER
     _definition.id                ATOM_SITES_DISPLACE_FOURIER
     _definition.scope             Category
     _definition.class             Set
-    _definition.update            2024-08-09
+    _definition_replaced.id       1
+    _definition_replaced.by       .
+    _definition.update            2026-06-15
     _description.text
 ;
       Data items in the ATOM_SITES_DISPLACE_FOURIER category record
@@ -9248,13 +9249,14 @@ save_atom_sites_displace_fourier.axes_description
     loop_
       _definition_replaced.id
       _definition_replaced.by
-         1                        '_atom_sites_axes.matrix_seq_id'
-         2                        '_atom_sites_axes.matrix'
-         3                        '_atom_sites_axes.transf_description'
+         1                        '_atom_site_displace_Fourier.matrix_seq_id'
+         2                        '_atom_sites_axes.matrix_seq_id'
+         3                        '_atom_sites_axes.matrix'
+         4                        '_atom_sites_axes.transf_description'
 
     _alias.definition_id
         '_atom_sites_displace_Fourier_axes_description'
-    _definition.update            2024-07-27
+    _definition.update            2026-06-30
     _description.text
 ;
       DEPRECATED. This data name should not be used. It has been replaced
@@ -9309,9 +9311,9 @@ save_ATOM_SITES_MODULATION
         _atom_sites_modulation.global_phase_t_1            0.125
 
         # - - - - data truncated for brevity - - - -
-
-        #=======================================================================
-
+;
+    _description_example.detail
+;
         Example based on the article:
         Noelia De La Pinta, Paul Benjamin Klar, Tomasz Breczewski & Gotzon
         Madariaga (2020)
@@ -9665,7 +9667,7 @@ save_ATOM_SITES_ORTHO
     _definition.id                ATOM_SITES_ORTHO
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-08-09
+    _definition.update            2026-06-15
     _description.text
 ;
 
@@ -9716,11 +9718,11 @@ save_ATOM_SITES_ORTHO
      _atom_site_Fourier_wave_vector.seq_id
      _atom_site_Fourier_wave_vector.q_coeff_seq_id
      _atom_site_Fourier_wave_vector.q_coeff
-        0  [1]  [0]
-        1  [1]  [1]
-        2  [1]  [2]
-        3  [1]  [3]
-        4  [1]  [4]
+        1  [1]  [0]
+        2  [1]  [1]
+        3  [1]  [2]
+        4  [1]  [3]
+        5  [1]  [4]
 
     # - - - - data truncated for brevity - - - -
 
@@ -9738,21 +9740,21 @@ save_ATOM_SITES_ORTHO
      _atom_sites_ortho.wave_vector_seq_id_list
      _atom_sites_ortho.coeff_cos_list
      _atom_sites_ortho.coeff_sin_list
-     o1  [0 1]      [-3.322 0]        [0 4.323]
-     o2  [0 1]      [-20.803 11.454]  [0 31.365]
-     o3  [0 1]      [0.497 0]         [0 1.774]
-     o4  [0 1]      [0 1.287]         [0 0]
-     o5  [0 1 2]    [0 0.199 0]       [0 0 1.417]
-     o6  [0 1 2]    [-0.870 0 2.020]  [0 -1.611 0]
-     o7  [0 1]      [2.069 0]         [0 3.249]
-     o8  [0 1]      [0 1.414]         [0 0]
-     o9  [0 1 2]    [0 2.271 0]       [0 0 2.267]
-     o10 [0 1 2]    [2.187 0 1.973]   [0 2.785 0]
+     o1  [1 2]      [-3.322 0]        [0 4.323]
+     o2  [1 2]      [-20.803 11.454]  [0 31.365]
+     o3  [1 2]      [0.497 0]         [0 1.774]
+     o4  [1 2]      [0 1.287]         [0 0]
+     o5  [1 2 3]    [0 0.199 0]       [0 0 1.417]
+     o6  [1 2 3]    [-0.870 0 2.020]  [0 -1.611 0]
+     o7  [1 2]      [2.069 0]         [0 3.249]
+     o8  [1 2]      [0 1.414]         [0 0]
+     o9  [1 2 3]    [0 2.271 0]       [0 0 2.267]
+     o10 [1 2 3]    [2.187 0 1.973]   [0 2.785 0]
 
     # - - - - data truncated for brevity - - - -
-
-    #==========================================================================
-
+;
+    _description_example.detail
+;
     Example based on the article:
     Hanna Lind, Magnus Bostrom, Vaclav Petricek and Sven Lidin (2003)
     Acta Cryst. B59, 720-729. doi:10.1107/S0108768103019694
@@ -9769,7 +9771,7 @@ save_atom_sites_ortho.coeff_cos_list
     _description.text
 ;
       The list of cosine components of an orthogonalized function
-      labeled by atom_sites_ortho.func_id corresponding to the wave
+      labeled by _atom_sites_ortho.func_id corresponding to the wave
       vector list given by _atom_sites_ortho.wave_vector_seq_id_list
 ;
     _name.category_id             atom_sites_ortho
@@ -9791,11 +9793,11 @@ save_atom_sites_ortho.coeff_sin_list
     _description.text
 ;
       The list of sine components of an orthogonalized function
-      labeled by atom_sites_ortho.func_id corresponding to the wave
+      labeled by _atom_sites_ortho.func_id corresponding to the wave
       vector list given by _atom_sites_ortho.wave_vector_seq_id_list
 ;
     _name.category_id             atom_sites_ortho
-    _name.object_id               coeff_sin
+    _name.object_id               coeff_sin_list
     _type.purpose                 Number
     _type.source                  Assigned
     _type.container               List
@@ -9828,7 +9830,7 @@ save_
 save_atom_sites_ortho.wave_vector_seq_id_list
 
     _definition.id                '_atom_sites_ortho.wave_vector_seq_id_list'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
       A list of numeric codes that identifies the harmonics chosen for the
@@ -9842,7 +9844,8 @@ save_atom_sites_ortho.wave_vector_seq_id_list
     _type.container               List
     _type.dimension               '[]'
     _type.contents                Integer
-    _enumeration.default          [0]
+    _enumeration.range            1:
+    _enumeration.default          [1]
     _units.code                   none
 
 save_
@@ -9852,7 +9855,9 @@ save_ATOM_SITES_ROT_FOURIER
     _definition.id                ATOM_SITES_ROT_FOURIER
     _definition.scope             Category
     _definition.class             Set
-    _definition.update            2024-08-09
+    _definition_replaced.id       1
+    _definition_replaced.by       .
+    _definition.update            2026-06-29
     _description.text
 ;
       Data items in the ATOM_SITES_ROT_FOURIER category record
@@ -9870,8 +9875,17 @@ save_
 save_atom_sites_rot_fourier.axes_description
 
     _definition.id                '_atom_sites_rot_Fourier.axes_description'
+
+    loop_
+      _definition_replaced.id
+      _definition_replaced.by
+         1                        '_atom_site_rot_Fourier.matrix_seq_id'
+         2                        '_atom_sites_axes.matrix_seq_id'
+         3                        '_atom_sites_axes.matrix'
+         4                        '_atom_sites_axes.transf_description'
+
     _alias.definition_id          '_atom_sites_rot_Fourier_axes_description'
-    _definition.update            2014-06-27
+    _definition.update            2026-06-30
     _description.text
 ;
       DEPRECATED. This data name should not be used. It has been replaced
@@ -9927,9 +9941,9 @@ save_CELL
     _cell.commen_supercell_matrix  [[1 0 -3] [0 1 0] [1 0 1]]
 
     # - - - - data truncated for brevity - - - -
-
-    #==========================================================================
-
+;
+    _description_example.detail
+;
     Example based on the article:
     Noelia De La Pinta, Paul Benjamin Klar, Tomasz Breczewski & Gotzon
     Madariaga (2020)
@@ -9944,7 +9958,7 @@ save_
 save_cell.commen_supercell_matrix
 
     _definition.id                '_cell.commen_supercell_matrix'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
       For commensurately modulated structures the transformation, T,
@@ -9962,7 +9976,7 @@ save_cell.commen_supercell_matrix
     _type.source                  Derived
     _type.container               Matrix
     _type.dimension               '[3,3]'
-    _type.contents                Integer
+    _type.contents                Real
     _enumeration.default          [
                                    [1  0  0]  [0  1  0]  [0  0  1]
                                   ]
@@ -9976,10 +9990,10 @@ save_cell.commen_supercell_matrix
     _cell.commen_supercell_matrix =                                           \
       [ [c.commen_supercell_matrix_1_1, c.commen_supercell_matrix_1_2,        \
         c.commen_supercell_matrix_1_3],                                       \
-        [c.commen_supercell_matrix_1_1, c.commen_supercell_matrix_1_2,        \
-        c.commen_supercell_matrix_1_3],                                       \
-        [c.commen_supercell_matrix_1_1, c.commen_supercell_matrix_1_2,        \
-        c.commen_supercell_matrix_1_3] ]
+        [c.commen_supercell_matrix_2_1, c.commen_supercell_matrix_2_2,        \
+        c.commen_supercell_matrix_2_3],                                       \
+        [c.commen_supercell_matrix_3_1, c.commen_supercell_matrix_3_2,        \
+        c.commen_supercell_matrix_3_3] ]
 ;
 
 save_
@@ -9988,7 +10002,7 @@ save_cell.commen_supercell_matrix_1_1
 
     _definition.id                '_cell.commen_supercell_matrix_1_1'
     _alias.definition_id          '_jana_cell_commen_supercell_matrix_1_1'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
      Element of _cell.commen_supercell_matrix.
@@ -9998,7 +10012,7 @@ save_cell.commen_supercell_matrix_1_1
     _type.purpose                 Number
     _type.source                  Derived
     _type.container               Single
-    _type.contents                Integer
+    _type.contents                Real
     _enumeration.default          1
     _units.code                   none
     _method.purpose               Evaluation
@@ -10015,7 +10029,7 @@ save_cell.commen_supercell_matrix_1_2
 
     _definition.id                '_cell.commen_supercell_matrix_1_2'
     _alias.definition_id          '_jana_cell_commen_supercell_matrix_1_2'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
      Element of _cell.commen_supercell_matrix.
@@ -10025,7 +10039,7 @@ save_cell.commen_supercell_matrix_1_2
     _type.purpose                 Number
     _type.source                  Derived
     _type.container               Single
-    _type.contents                Integer
+    _type.contents                Real
     _enumeration.default          0
     _units.code                   none
     _method.purpose               Evaluation
@@ -10042,7 +10056,7 @@ save_cell.commen_supercell_matrix_1_3
 
     _definition.id                '_cell.commen_supercell_matrix_1_3'
     _alias.definition_id          '_jana_cell_commen_supercell_matrix_1_3'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
      Element of _cell.commen_supercell_matrix.
@@ -10052,7 +10066,7 @@ save_cell.commen_supercell_matrix_1_3
     _type.purpose                 Number
     _type.source                  Derived
     _type.container               Single
-    _type.contents                Integer
+    _type.contents                Real
     _enumeration.default          0
     _units.code                   none
     _method.purpose               Evaluation
@@ -10069,7 +10083,7 @@ save_cell.commen_supercell_matrix_2_1
 
     _definition.id                '_cell.commen_supercell_matrix_2_1'
     _alias.definition_id          '_jana_cell_commen_supercell_matrix_2_1'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
      Element of _cell.commen_supercell_matrix.
@@ -10079,7 +10093,7 @@ save_cell.commen_supercell_matrix_2_1
     _type.purpose                 Number
     _type.source                  Derived
     _type.container               Single
-    _type.contents                Integer
+    _type.contents                Real
     _enumeration.default          0
     _units.code                   none
     _method.purpose               Evaluation
@@ -10096,7 +10110,7 @@ save_cell.commen_supercell_matrix_2_2
 
     _definition.id                '_cell.commen_supercell_matrix_2_2'
     _alias.definition_id          '_jana_cell_commen_supercell_matrix_2_2'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
      Element of _cell.commen_supercell_matrix.
@@ -10106,7 +10120,7 @@ save_cell.commen_supercell_matrix_2_2
     _type.purpose                 Number
     _type.source                  Derived
     _type.container               Single
-    _type.contents                Integer
+    _type.contents                Real
     _enumeration.default          1
     _units.code                   none
     _method.purpose               Evaluation
@@ -10123,7 +10137,7 @@ save_cell.commen_supercell_matrix_2_3
 
     _definition.id                '_cell.commen_supercell_matrix_2_3'
     _alias.definition_id          '_jana_cell_commen_supercell_matrix_2_3'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
      Element of _cell.commen_supercell_matrix.
@@ -10133,7 +10147,7 @@ save_cell.commen_supercell_matrix_2_3
     _type.purpose                 Number
     _type.source                  Derived
     _type.container               Single
-    _type.contents                Integer
+    _type.contents                Real
     _enumeration.default          0
     _units.code                   none
     _method.purpose               Evaluation
@@ -10150,7 +10164,7 @@ save_cell.commen_supercell_matrix_3_1
 
     _definition.id                '_cell.commen_supercell_matrix_3_1'
     _alias.definition_id          '_jana_cell_commen_supercell_matrix_3_1'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
      Element of _cell.commen_supercell_matrix.
@@ -10160,7 +10174,7 @@ save_cell.commen_supercell_matrix_3_1
     _type.purpose                 Number
     _type.source                  Derived
     _type.container               Single
-    _type.contents                Integer
+    _type.contents                Real
     _enumeration.default          0
     _units.code                   none
     _method.purpose               Evaluation
@@ -10177,7 +10191,7 @@ save_cell.commen_supercell_matrix_3_2
 
     _definition.id                '_cell.commen_supercell_matrix_3_2'
     _alias.definition_id          '_jana_cell_commen_supercell_matrix_3_2'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
      Element of _cell.commen_supercell_matrix.
@@ -10187,7 +10201,7 @@ save_cell.commen_supercell_matrix_3_2
     _type.purpose                 Number
     _type.source                  Derived
     _type.container               Single
-    _type.contents                Integer
+    _type.contents                Real
     _enumeration.default          0
     _units.code                   none
     _method.purpose               Evaluation
@@ -10204,7 +10218,7 @@ save_cell.commen_supercell_matrix_3_3
 
     _definition.id                '_cell.commen_supercell_matrix_3_3'
     _alias.definition_id          '_jana_cell_commen_supercell_matrix_3_3'
-    _definition.update            2025-10-28
+    _definition.update            2026-06-15
     _description.text
 ;
      Element of _cell.commen_supercell_matrix.
@@ -10214,7 +10228,7 @@ save_cell.commen_supercell_matrix_3_3
     _type.purpose                 Number
     _type.source                  Derived
     _type.container               Single
-    _type.contents                Integer
+    _type.contents                Real
     _enumeration.default          1
     _units.code                   none
     _method.purpose               Evaluation
@@ -10296,21 +10310,30 @@ save_CELL_SUBSYSTEM
     _definition.id                CELL_SUBSYSTEM
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-08-09
+    _definition.update            2026-07-06
     _description.text
 ;
       Data items in the CELL_SUBSYSTEM category record details about
       the crystallographic cell parameters of each subsystem present in
       a composite.
+
+      _cell_subsystem.structure_id may be omitted if only one
+      _structure.id is present in the same data block.
 ;
     _name.category_id             CIF_MS_HEAD
     _name.object_id               CELL_SUBSYSTEM
-    _category_key.name            '_cell_subsystem.code'
+
+    loop_
+      _category_key.name
+         '_cell_subsystem.code'
+         '_cell_subsystem.structure_id'
+
     _description_example.case
 ;
     #\#CIF_2.0
 
     # - - - - data truncated for brevity - - - -
+    _structure.id   Sr14/11CoO3
 
     _cell.modulation_dimension               1
 
@@ -10329,34 +10352,34 @@ save_CELL_SUBSYSTEM
      _cell_subsystem.description
      _cell_subsystem.matrix_W
       1 '1-st subsystem: CoO3'
-      [[1 0 0 0 0 0 0 0 0 0 0] \
-       [0 1 0 0 0 0 0 0 0 0 0] \
-       [0 0 1 0 0 0 0 0 0 0 0] \
-       [0 0 0 1 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
+      [[1 0 0 0 0 0 0 0 0 0 0]
+       [0 1 0 0 0 0 0 0 0 0 0]
+       [0 0 1 0 0 0 0 0 0 0 0]
+       [0 0 0 1 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
        [0 0 0 0 0 0 0 0 0 0 0]]
       2 '2-nd subsystem: Sr'
-      [[1 0 0 0 0 0 0 0 0 0 0] \
-       [0 1 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 1 0 0 0 0 0 0 0] \
-       [0 0 1 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
-       [0 0 0 0 0 0 0 0 0 0 0] \
+      [[1 0 0 0 0 0 0 0 0 0 0]
+       [0 1 0 0 0 0 0 0 0 0 0]
+       [0 0 0 1 0 0 0 0 0 0 0]
+       [0 0 1 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0 0]
        [0 0 0 0 0 0 0 0 0 0 0]]
 
     # - - - - data truncated for brevity - - - -
-
-    #==========================================================================
-
+;
+    _description_example.detail
+;
     Example based on the article:
     O. Gourdon, V. Petricek, M. Dusek, P. Bezdicka, S.  Durovic, D. Gyepesovad
     and M. Evain (1999)
@@ -10371,12 +10394,10 @@ save_cell_subsystem.code
 
     _definition.id                '_cell_subsystem.code'
     _alias.definition_id          '_cell_subsystem_code'
-    _definition.update            2014-06-27
+    _definition.update            2026-07-06
     _description.text
 ;
-      The code identifying uniquely a certain composite subsystem.
-      This code is used to identify the data blocks that contain
-      the structural information associated with the subsystem.
+      The code uniquely identifying a certain composite subsystem.
 ;
     _name.category_id             cell_subsystem
     _name.object_id               code
@@ -10397,7 +10418,7 @@ save_cell_subsystem.description
 ;
       Description of each subsystem defining a composite structurally.
       The number of definitions must match the number given in
-      _cell_subsystems_number.
+      _cell_subsystems.number.
 ;
     _name.category_id             cell_subsystem
     _name.object_id               description
@@ -10420,7 +10441,7 @@ save_cell_subsystem.matrix_w
       defined in van Smaalen (1991);  [see also van Smaalen (1995) or
       van Smaalen (2012)].
       Its dimension must match
-      (_cell_modulation_dimension+3)*(_cell_modulation_dimension+3).
+      (_cell.modulation_dimension+3)*(_cell.modulation_dimension+3).
 
       Intergrowth compounds are composed of several periodic
       substructures in which the reciprocal lattices of two different
@@ -10469,7 +10490,7 @@ save_cell_subsystem.matrix_w
       *_subsystem_code pointers, the cell parameters, the superspace
       group and the measured modulation wave vectors (see
       CELL_WAVE_VECTOR below) correspond to the reciprocal basis
-      described in _cell_reciprocal_basis_description and coincide
+      described in _cell.reciprocal_basis_description and coincide
       with the reciprocal basis of the specific subsystem (if any)
       whose W matrix is the unit matrix. The cell parameters and the
       symmetry of the remaining subsystems can be derived using the
@@ -13423,12 +13444,53 @@ save_cell_subsystem.matrix_w_9_9
 
 save_
 
+save_cell_subsystem.structure_id
+
+    _definition.id                '_cell_subsystem.structure_id'
+    _definition.update            2026-07-06
+    _description.text
+;
+    A code identifying the crystallographic structure associated with this
+    subsystem description.
+
+    This data name may be omitted if only one _structure.id is present
+    in the same data block.
+;
+    _name.category_id             cell_subsystem
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_cell_subsystem.subsystems_id
+
+    _definition.id                '_cell_subsystem.subsystems_id'
+    _definition.update            2026-07-06
+    _description.text
+;
+    A code which identifies the cell subsystems information applicable
+    to this subsystem.
+;
+    _name.category_id             cell_subsystem
+    _name.object_id               subsystems_id
+    _name.linked_item_id          '_cell_subsystems.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_CELL_SUBSYSTEMS
 
     _definition.id                CELL_SUBSYSTEMS
     _definition.scope             Category
     _definition.class             Set
-    _definition.update            2016-11-17
+    _definition.update            2026-07-06
     _description.text
 ;
       Data items in the CELL_SUBSYSTEMS category describe overall aspects
@@ -13436,6 +13498,25 @@ save_CELL_SUBSYSTEMS
 ;
     _name.category_id             CIF_MS_HEAD
     _name.object_id               CELL_SUBSYSTEMS
+    _category_key.name            '_cell_subsystems.id'
+
+save_
+
+save_cell_subsystems.id
+
+    _definition.id                '_cell_subsystems.id'
+    _definition.update            2026-07-06
+    _description.text
+;
+    Unique identifier for the overall aspects of the subsystems present
+    in a composite.
+;
+    _name.category_id             cell_subsystems
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
 
 save_
 
@@ -13561,7 +13642,7 @@ save_cell_wave_vector.xyz
       the case of composites, the modulation wave vectors of each
       subsystem are expressed in terms of the reciprocal basis of its
       corresponding reference structure. Their number must match
-      _cell_modulation_dimension. In the case of composites described
+      _cell.modulation_dimension. In the case of composites described
       in a single data block, the wave
       vectors are expressed in the three-dimensional basis chosen as
       reference in _cell.reciprocal_basis_description, which would
@@ -14123,7 +14204,7 @@ save_diffrn_refln.index_m_list
 ;
       Additional Miller indices needed to write the reciprocal vector
       of a certain reflection in the basis described in
-      _cell_reciprocal_basis_description. Following the usual
+      _cell.reciprocal_basis_description. Following the usual
       convention, such a vector would be expressed as
 
                H=h*a*+k*b*+l*c*+m1*q(1)+...+m9*q(9),
@@ -15198,7 +15279,7 @@ save_exptl_crystal_face.index_m_list
     _description.text
 ;
       Additional Miller indices of the crystal face associated with the
-      value _exptl_crystal_face_perp_dist when the face is indexed
+      value _exptl_crystal_face.perp_dist when the face is indexed
       using a multidimensional scheme. The total number of indices must
       match (_cell.modulation_dimension + 3). The order of the indices
       must be consistent with the codes given in
@@ -15243,7 +15324,7 @@ save_GEOM_ANGLE
     _definition.id                GEOM_ANGLE
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-08-09
+    _definition.update            2026-06-15
     _description.text
 ;
       Data items in the GEOM_ANGLE category record
@@ -15257,6 +15338,9 @@ save_GEOM_ANGLE
       in the way that they are calculated, even if the
       calculation method is not explicit in either this
       dictionary or the core.
+
+      _geom_angle.model_id may be omitted if only one _model.id
+      is present in the same data block.
 ;
     _name.category_id             CIF_MS_HEAD
     _name.object_id               GEOM_ANGLE
@@ -15266,6 +15350,7 @@ save_GEOM_ANGLE
          '_geom_angle.atom_site_label_1'
          '_geom_angle.atom_site_label_2'
          '_geom_angle.atom_site_label_3'
+         '_geom_angle.model_id'
          '_geom_angle.site_ssg_symmetry_1'
          '_geom_angle.site_ssg_symmetry_2'
          '_geom_angle.site_ssg_symmetry_3'
@@ -15299,9 +15384,9 @@ save_GEOM_ANGLE
      C04  C05  F08  .  .  .  118.9(4)  118.1(4)  119.4(4)  ?
 
     # - - - - data truncated for brevity - - - -
-
-    #=======================================================================
-
+;
+    _description_example.detail
+;
     Example based on the article:
     Andreas Schonleber, Sander van Smaalen, Hans-Christoph Weiss and Andreas J.
     Kesel (2014) Acta Cryst. B70, 652-659. doi:10.1107/S2052520614007707
@@ -15580,7 +15665,7 @@ save_GEOM_BOND
     _definition.id                GEOM_BOND
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-08-09
+    _definition.update            2026-06-15
     _description.text
 ;
       Data items in the GEOM_BOND category record
@@ -15590,6 +15675,9 @@ save_GEOM_BOND
       higher-dimensional superspace form and therefore
       redefines many datanames to reflect the changed
       method of distance calculation.
+
+      _geom_bond.model_id may be omitted if only one
+      _model.id is present in the same data block.
 ;
     _name.category_id             CIF_MS_HEAD
     _name.object_id               GEOM_BOND
@@ -15598,6 +15686,7 @@ save_GEOM_BOND
       _category_key.name
          '_geom_bond.atom_site_label_1'
          '_geom_bond.atom_site_label_2'
+         '_geom_bond.model_id'
          '_geom_bond.site_ssg_symmetry_1'
          '_geom_bond.site_ssg_symmetry_2'
 
@@ -15629,9 +15718,9 @@ save_GEOM_BOND
      Ba2b  O1a  .  14_5545   2.746(7)   2.691(9)   2.803(9)  ?
 
     # - - - - data truncated for brevity - - - -
-
-    #==========================================================================
-
+;
+    _description_example.detail
+;
     Example based on the article:
     Heribert A. Graetsch, Chandra Shekar Pandey, Jurgen Schreuer,
     Manfred Burianek and Manfred Muhlberg (2014) Acta Cryst. B70, 743-749.
@@ -15672,7 +15761,7 @@ save_geom_bond.distance_av_su
      Standard uncertainty of _geom_bond.distance_av
 ;
     _name.category_id             geom_bond
-    _name.object_id               av_su
+    _name.object_id               distance_av_su
     _name.linked_item_id          '_geom_bond.distance_av'
     _units.code                   angstroms
 
@@ -15710,7 +15799,7 @@ save_geom_bond.distance_max_su
      Standard uncertainty of _geom_bond.distance_max
 ;
     _name.category_id             geom_bond
-    _name.object_id               max_su
+    _name.object_id               distance_max_su
     _name.linked_item_id          '_geom_bond.distance_max'
     _units.code                   angstroms
 
@@ -15785,7 +15874,7 @@ save_GEOM_CONTACT
     _definition.id                GEOM_CONTACT
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-08-09
+    _definition.update            2026-06-15
     _description.text
 ;
       The CATEGORY of data items used to specify the interatomic
@@ -15793,6 +15882,9 @@ save_GEOM_CONTACT
       the symmetry-operation code used in bond listings to the
       higher-dimensional superspace form and therefore redefines many
       datanames to reflect the changed method of distance calculation.
+
+      _geom_contact.model_id may be omitted if only one _model.id is
+      present in the same data block.
 ;
     _name.category_id             CIF_MS_HEAD
     _name.object_id               GEOM_CONTACT
@@ -15801,6 +15893,7 @@ save_GEOM_CONTACT
       _category_key.name
          '_geom_contact.atom_site_label_1'
          '_geom_contact.atom_site_label_2'
+         '_geom_contact.model_id'
          '_geom_contact.site_ssg_symmetry_1'
          '_geom_contact.site_ssg_symmetry_2'
 
@@ -15836,7 +15929,7 @@ save_geom_contact.distance_av_su
      Standard uncertainty of _geom_contact.distance_av
 ;
     _name.category_id             geom_contact
-    _name.object_id               av_su
+    _name.object_id               distance_av_su
     _name.linked_item_id          '_geom_contact.distance_av'
     _units.code                   angstroms
 
@@ -15874,7 +15967,7 @@ save_geom_contact.distance_max_su
      Standard uncertainty of _geom_contact.distance_max
 ;
     _name.category_id             geom_contact
-    _name.object_id               max_su
+    _name.object_id               distance_max_su
     _name.linked_item_id          '_geom_contact.distance_max'
     _units.code                   angstroms
 
@@ -15949,7 +16042,7 @@ save_GEOM_HBOND
     _definition.id                GEOM_HBOND
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-08-09
+    _definition.update            2026-06-15
     _description.text
 ;
      The CATEGORY of data items used to specify the hydrogen bond
@@ -15958,6 +16051,9 @@ save_GEOM_HBOND
      to the higher-dimensional superspace form and therefore redefines many
      datanames to reflect the changed method of distance and angle
      calculation.
+
+     _geom_hbond.model_id may be omitted if only one _model.id is present
+     in the same data block.
 ;
     _name.category_id             CIF_MS_HEAD
     _name.object_id               GEOM_HBOND
@@ -15967,6 +16063,7 @@ save_GEOM_HBOND
          '_geom_hbond.atom_site_label_D'
          '_geom_hbond.atom_site_label_H'
          '_geom_hbond.atom_site_label_A'
+         '_geom_hbond.model_id'
          '_geom_hbond.site_ssg_symmetry_D'
          '_geom_hbond.site_ssg_symmetry_H'
          '_geom_hbond.site_ssg_symmetry_A'
@@ -15981,7 +16078,7 @@ save_geom_hbond.angle_dha_av
     _description.text
 ;
      The average value of the angle subtended by the sites identified by
-     the _geom_hbond key names.The hydrogen at site *_H is at the apex
+     the GEOM_HBOND key names. The hydrogen at site *_H is at the apex
      of the angle.
 ;
     _name.category_id             geom_hbond
@@ -16021,7 +16118,7 @@ save_geom_hbond.angle_dha_max
     _description.text
 ;
      The maximum value of the angle subtended by the sites identified by
-     the _geom_hbond key names.The hydrogen at site *_H is at the apex
+     the GEOM_HBOND key names. The hydrogen at site *_H is at the apex
      of the angle.
 ;
     _name.category_id             geom_hbond
@@ -16061,7 +16158,7 @@ save_geom_hbond.angle_dha_min
     _description.text
 ;
      The minimum value of the angle subtended by the sites identified by
-     the _geom_hbond key names.The hydrogen at site *_H is at the apex
+     the GEOM_HBOND key names. The hydrogen at site *_H is at the apex
      of the angle.
 ;
     _name.category_id             geom_hbond
@@ -16101,7 +16198,7 @@ save_geom_hbond.distance_da_av
     _description.text
 ;
      The average distance between the donor and acceptor sites in the
-     hydrogen bond identified by the _geom_hbond key names.
+     hydrogen bond identified by the GEOM_HBOND key names.
 ;
     _name.category_id             geom_hbond
     _name.object_id               distance_DA_av
@@ -16140,7 +16237,7 @@ save_geom_hbond.distance_da_max
     _description.text
 ;
      The maximum distance between the donor and acceptor sites in the
-     hydrogen bond identified by the _geom_hbond key names.
+     hydrogen bond identified by the GEOM_HBOND key names.
 ;
     _name.category_id             geom_hbond
     _name.object_id               distance_DA_max
@@ -16179,7 +16276,7 @@ save_geom_hbond.distance_da_min
     _description.text
 ;
      The minimum distance between the donor and acceptor sites in the
-     hydrogen bond identified by the _geom_hbond key names.
+     hydrogen bond identified by the GEOM_HBOND key names.
 ;
     _name.category_id             geom_hbond
     _name.object_id               distance_DA_min
@@ -16218,7 +16315,7 @@ save_geom_hbond.distance_dh_av
     _description.text
 ;
      The average distance between the donor and hydrogen sites in the
-     hydrogen bond identified by the _geom_hbond key names.
+     hydrogen bond identified by the GEOM_HBOND key names.
 ;
     _name.category_id             geom_hbond
     _name.object_id               distance_DH_av
@@ -16239,7 +16336,6 @@ save_geom_hbond.distance_dh_av_su
 ;
      Standard uncertainty of the average angle given in
      _geom_hbond.distance_DH_av.
-
 ;
     _name.category_id             geom_hbond
     _name.object_id               distance_DH_av_su
@@ -16258,7 +16354,7 @@ save_geom_hbond.distance_dh_max
     _description.text
 ;
      The maximum distance between the donor and hydrogen sites in the
-     hydrogen bond identified by the _geom_hbond key names.
+     hydrogen bond identified by the GEOM_HBOND key names.
 ;
     _name.category_id             geom_hbond
     _name.object_id               distance_DH_max
@@ -16297,7 +16393,7 @@ save_geom_hbond.distance_dh_min
     _description.text
 ;
      The minimum distance between the donor and hydrogen sites in the
-     hydrogen bond identified by the _geom_hbond key names.
+     hydrogen bond identified by the GEOM_HBOND key names.
 ;
     _name.category_id             geom_hbond
     _name.object_id               distance_DH_min
@@ -16336,7 +16432,7 @@ save_geom_hbond.distance_ha_av
     _description.text
 ;
      The average distance between the hydrogen and acceptor sites in the
-     hydrogen bond identified by the _geom_hbond key names.
+     hydrogen bond identified by the GEOM_HBOND key names.
 ;
     _name.category_id             geom_hbond
     _name.object_id               distance_HA_av
@@ -16375,7 +16471,7 @@ save_geom_hbond.distance_ha_max
     _description.text
 ;
      The maximum distance between the hydrogen and acceptor sites in the
-     hydrogen bond identified by the _geom_hbond key names.
+     hydrogen bond identified by the GEOM_HBOND key names.
 ;
     _name.category_id             geom_hbond
     _name.object_id               distance_HA_max
@@ -16414,7 +16510,7 @@ save_geom_hbond.distance_ha_min
     _description.text
 ;
      The minimum distance between the hydrogen and acceptor sites in the
-     hydrogen bond identified by the _geom_hbond key names.
+     hydrogen bond identified by the GEOM_HBOND key names.
 ;
     _name.category_id             geom_hbond
     _name.object_id               distance_HA_min
@@ -16486,7 +16582,7 @@ save_GEOM_TORSION
     _definition.id                GEOM_TORSION
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2024-08-09
+    _definition.update            2026-06-15
     _description.text
 ;
      The CATEGORY of data items used to specify the torsion angles in the
@@ -16495,6 +16591,9 @@ save_GEOM_TORSION
      higher-dimensional superspace form and therefore redefines many
      datanames to reflect the changed method of distance and angle
      calculation.
+
+     _geom_torsion.model_id may be omitted if only one _model.id is
+     present in the same data block.
 ;
     _name.category_id             CIF_MS_HEAD
     _name.object_id               GEOM_TORSION
@@ -16505,6 +16604,7 @@ save_GEOM_TORSION
          '_geom_torsion.atom_site_label_2'
          '_geom_torsion.atom_site_label_3'
          '_geom_torsion.atom_site_label_4'
+         '_geom_torsion.model_id'
          '_geom_torsion.site_ssg_symmetry_1'
          '_geom_torsion.site_ssg_symmetry_2'
          '_geom_torsion.site_ssg_symmetry_3'
@@ -16534,9 +16634,9 @@ save_GEOM_TORSION
      O10  C01  C02  C06  .  .  .  .   -8.8(3)   -179.9(3)  179.4(3)
 
     # - - - - data truncated for brevity - - - -
-
-    #==========================================================================
-
+;
+    _description_example.detail
+;
     Example based on the article:
     Andreas Schonleber, Sander van Smaalen, Hans-Christoph Weiss and Andreas J.
     Kesel (2014) Acta Cryst. B70, 652-659. doi:10.1107/S2052520614007707
@@ -17176,7 +17276,7 @@ save_refln.index_m_list
     _description.text
 ;
       Additional Miller indices of a particular reflection in the basis
-      described in _cell_reciprocal_basis_description. The total number
+      described in _cell.reciprocal_basis_description. The total number
       of indices must match (_cell.modulation_dimension + 3). The
       order of the additional indices must be consistent with the codes
       given in _cell_wave_vector.seq_id.
@@ -17622,7 +17722,7 @@ save_reflns.limit_index_m_max_list
 ;
       Maximum of the additional Miller indices
       appearing in _refln.index_m_. The number of ranges must match
-      _cell_modulation_dimension. The order of the additional indices
+      _cell.modulation_dimension. The order of the additional indices
       must be consistent with the codes given in
       _cell_wave_vector.seq_id. These need not be the same as
       the _diffrn_reflns.limit_index_m_max_list.
@@ -17671,7 +17771,7 @@ save_reflns.limit_index_m_min_list
 ;
       Minimum values of the additional Miller indices
       appearing in _refln.index_m_. The number of ranges must match
-      _cell_modulation_dimension. The order of the additional indices
+      _cell.modulation_dimension. The order of the additional indices
       must be consistent with the codes given in
       _cell_wave_vector.seq_id. These need not be the same as
       the _diffrn_reflns.limit_index_m_min_list.
@@ -17743,6 +17843,24 @@ save_SUPERSPACE_GROUP
 ;
     _name.category_id             CIF_MS_HEAD
     _name.object_id               SUPERSPACE_GROUP
+    _category_key.name            '_superspace_group.id'
+
+save_
+
+save_superspace_group.id
+
+    _definition.id                '_superspace_group.id'
+    _definition.update            2026-06-07
+    _description.text
+;
+    Arbitrary unique identifier for a superspace group.
+;
+    _name.category_id             superspace_group
+    _name.object_id               id
+    _type.purpose                 Key
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
 
 save_
 
@@ -17898,7 +18016,7 @@ save_SUPERSPACE_GROUP_SYMOP
     _definition.id                SUPERSPACE_GROUP_SYMOP
     _definition.scope             Category
     _definition.class             Loop
-    _definition.update            2025-06-04
+    _definition.update            2026-06-07
     _description.text
 ;
       The SUPERSPACE_GROUP_SYMOP category contains information about the
@@ -17906,7 +18024,12 @@ save_SUPERSPACE_GROUP_SYMOP
 ;
     _name.category_id             CIF_MS_HEAD
     _name.object_id               SUPERSPACE_GROUP_SYMOP
-    _category_key.name            '_superspace_group_symop.id'
+
+    loop_
+      _category_key.name
+         '_superspace_group_symop.id'
+         '_superspace_group_symop.superspace_group_id'
+
     _description_example.case
 ;
     #\#CIF_2.0
@@ -17915,6 +18038,7 @@ save_SUPERSPACE_GROUP_SYMOP
 
     _space_group.crystal_system              trigonal
     _superspace_group.name                   'R-3m(00\g)0s'
+    _superspace_group.id                     SSG_01
 
     loop_
      _superspace_group_symop.id
@@ -17940,9 +18064,9 @@ save_SUPERSPACE_GROUP_SYMOP
      19 -x1+2/3,-x2+1/3,-x3+1/3,-x4
 
     # - - - - data truncated for brevity - - - -
-
-    #=======================================================================
-
+;
+    _description_example.detail
+;
     Example based on the article: O. Gourdon, V. Petricek, M. Dusek,
     P. Bezdicka, S.  Durovic, D. Gyepesovad and M. Evain (1999) Acta
     Cryst. B55, 841-848. doi:10.1107/S0108768199006485 Determination
@@ -17981,7 +18105,7 @@ save_superspace_group_symop.operation_algebraic
       A parsable string giving one of the symmetry operations of the
       superspace group in algebraic form. These data will generally be
       repeated in a loop. Use symbols as necessary according to
-      _cell_modulation_dimension.
+      _cell.modulation_dimension.
       All symmetry operations should be entered, including the
       identity operation, those for lattice centring and that for
       a centre of symmetry, if present. The symbolic notation for
@@ -17997,6 +18121,24 @@ save_superspace_group_symop.operation_algebraic
     _type.source                  Assigned
     _type.container               Single
     _type.contents                Code
+
+save_
+
+save_superspace_group_symop.superspace_group_id
+
+    _definition.id                '_superspace_group_symop.superspace_group_id'
+    _definition.update            2026-06-07
+    _description.text
+;
+    A code which identifies the superspace group to which the symop belongs.
+;
+    _name.category_id             superspace_group_symop
+    _name.object_id               superspace_group_id
+    _name.linked_item_id          '_superspace_group.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
 
 save_
 
@@ -18244,6 +18386,24 @@ save_twin_refln.index_m_list
 
 _twin_refln.index_m_list = temp.index_m_list[0:_cell.modulation_dimension - 1]
 ;
+
+save_
+
+save_structure.superspace_group_id
+
+    _definition.id                '_structure.superspace_group_id'
+    _definition.update            2026-06-15
+    _description.text
+;
+    A code which identifies the superspace group describing the structure.
+;
+    _name.category_id             structure
+    _name.object_id               superspace_group_id
+    _name.linked_item_id          '_superspace_group.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
 
 save_
 
@@ -18589,7 +18749,7 @@ save_
         2024-12-12
         Technical fixes (JRH)
 ;
-         3.2.5                    2025-12-05
+         3.2.5                    2026-07-06
 ;
         _SPECIAL_FUNC categories, replaced by:
         _DISPLACE_SAWTOOTH
@@ -18667,4 +18827,40 @@ save_
 
         Changed the _category_key.name  of DIFFRN_REFLN and REFLN to
         _diffrn_refln.id and _refln.id, respectively.
+
+        2026-06-15
+        Added key _superspace_group.id and linked key
+        _superspace_group_symop.superspace_group_id
+
+        Added linked non-key _structure.superspace_group_id
+        2026-06-18
+
+        Added _geom_*.model_id as linked key data name to GEOM_ANGLE, BOND,
+        CONTACT, HBOND, and TORSION, mimicking CIF_MULTI.
+
+        Explicitly deprecated the ATOM_SITES_DISPLACE_FOURIER category.
+
+        Changed the content type of _cell.commen_supercell_matrix* data items
+        from 'Integer' to 'Real'.
+
+        Restricted the values of _atom_site_Fourier_wave_vector.seq_id and
+        linked data items to positive integers.
+
+        2026-06-29
+
+        Explicitly deprecated the ATOM_SITES_ROT_FOURIER category.
+
+        2026-06-30
+
+        Improved deprecation of _atom_sites_displace_Fourier.axes_description
+        and _atom_sites_rot_Fourier.axes_description.
+
+        Changed the lower enumeration range of _atom_sites_axes.matrix_seq_id
+        from 0 to 1.
+
+        2026-07-06
+
+        Added _cell_subsystem.structure_id as linked category key.
+        Added _cell_subsystem.subsystems_id as linked non-key data name
+        Added _cell_subsystems.id as unique category key
 ;

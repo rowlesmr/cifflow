@@ -1,22 +1,24 @@
 #\#CIF_2.0
+# SPDX-License-Identifier: CC-BY-4.0
 ##########################################################################
 #                                                                        #
 #  MULTIBLOCK CIF CORE DICTIONARY                                        #
 #                                                                        #
 ##########################################################################
 
-data_MULTIBLOCK_DIC
+data_CIF_CORE_MULTIBLOCK
 
-    _dictionary.title             MULTIBLOCK_DIC
+    _dictionary.title             CIF_CORE_MULTIBLOCK
     _dictionary.class             Instance
-    _dictionary.version           1.1.0
-    _dictionary.date              2026-05-02
+    _dictionary.version           1.1.1-dev
+    _dictionary.date              2026-07-01
     _dictionary.uri
 ;\
-https://raw.githubusercontent.com/COMCIFS/cif_multiblock/main/\
-multi_block_core.dic
+https://raw.githubusercontent.com/COMCIFS/cif_core_multiblock/main/\
+cif_core_multiblock.dic
 ;
     _dictionary.ddl_conformance   4.2.0
+    _dictionary.licensing_SPDX    CC-BY-4.0
     _dictionary.namespace         CifCore
     _description.text
 ;
@@ -38,19 +40,19 @@ multi_block_core.dic
     any linked and child data names.
 ;
 
-save_MULTIBLOCK_CORE
+save_CIF_CORE_MULTIBLOCK_HEAD
 
-    _definition.id                MULTIBLOCK_CORE
+    _definition.id                CIF_CORE_MULTIBLOCK_HEAD
     _definition.scope             Category
     _definition.class             Head
-    _definition.update            2024-05-15
+    _definition.update            2026-06-17
     _description.text
 ;
-    The MULTIBLOCK_CORE category becomes the overarching category
+    The CIF_CORE_MULTIBLOCK_HEAD category becomes the overarching category
     for all core data names used in one or more data units.
 ;
-    _name.category_id             MULTIBLOCK_DIC
-    _name.object_id               MULTIBLOCK_CORE
+    _name.category_id             CIF_CORE_MULTIBLOCK
+    _name.object_id               CIF_CORE_MULTIBLOCK_HEAD
 
     _import.get
         [
@@ -59,153 +61,111 @@ save_MULTIBLOCK_CORE
 
 save_
 
-save_AUDIT_DATASET
+save_ATOM_SITES
 
-    _definition.id                AUDIT_DATASET
+    _definition.id                ATOM_SITES
     _definition.scope             Category
-    _definition.class             Loop
-    _definition.update            2025-04-14
+    _definition.class             Set
+    _definition.update            2026-06-15
     _description.text
 ;
-    The CATEGORY of data items used for linking data blocks to aid in grouping
-    blocks which contain information which are interrelated.
-
-    Data blocks which should be interpreted together are identified with the
-    same unique _audit_dataset.id.
+    The category of data items used to describe information which applies
+    to all atom sites in a crystal structure.
 ;
-    _name.category_id             AUDIT
-    _name.object_id               AUDIT_DATASET
-    _category_key.name            '_audit_dataset.id'
-
-    loop_
-      _description_example.case
-      _description_example.detail
-;
-         data_structure1
-         _audit_dataset.id  82c0a1e2-29ad-47b8-ace1-01e653e1cae8
-         _pd_phase.name "First phase"
-         #cell parameters and atom positions
-         #...
-
-         data_structure2
-         _audit_dataset.id  82c0a1e2-29ad-47b8-ace1-01e653e1cae8
-         _pd_phase.id "Second phase"
-         #cell parameters and atom positions
-         #...
-
-         data_diffraction_data1
-         _audit_dataset.id  82c0a1e2-29ad-47b8-ace1-01e653e1cae8
-         _pd_diffractogram.id "First dataset"
-         #diffracted intensities vs angle
-         #...
-
-         data_information
-         _audit_dataset.id  82c0a1e2-29ad-47b8-ace1-01e653e1cae8
-         #wavelength, specimen preparation, temperature, pressure...
-         #...
-;
-;
-         Four data blocks for a powder diffraction experiment.
-         By the presence of an identical _audit_dataset.id value, it is made
-         clear that all four data blocks are to be interpreted together as
-         a whole. It is clear that there are two crystal structures, one
-         diffractogram, and a block containing other experimental information.
-
-         These blocks may be contained in the same file, or many files, but
-         the presence of an _audit_dataset.id value removes doubt as to their
-         relationship to each other.
-;
-;
-         data_structure1
-         _pd_phase.name "First phase"
-         #cell parameters and atom positions
-         #...
-
-         data_structure2
-         _pd_phase.id "Second phase"
-         #cell parameters and atom positions
-         #...
-
-         data_diffraction_data1
-         _pd_diffractogram.id "First dataset"
-         #diffracted intensities vs angle
-         #...
-
-         data_information
-         #wavelength, specimen preparation, temperature, pressure...
-         #...
-;
-;
-         Four data blocks for a powder diffraction experiment.
-         The absence of an _audit_dataset.id value does not preclude
-         interpreting these data blocks together. The
-         consumer of the information may be able to infer that they belong
-         together due to contextual information.
-;
-;
-         data_structure1
-         _audit_dataset.id  34e58dee-900c-47cf-8f8c-1f52e5a9a3b9
-         _pd_phase.name "First phase"
-         #cell parameters and atom positions
-         #...
-
-         data_calibration_structure
-         loop_
-           _audit_dataset.id
-           34e58dee-900c-47cf-8f8c-1f52e5a9a3b9
-           2d7ee621-d916-4302-9045-ec68f56add45
-           255bb051-a3d5-43f0-8384-fa8ccb2ce3c7
-         _pd_phase.id "Calibration phase"
-         #cell parameters and atom positions
-         #...
-
-         data_diffraction_data
-         _audit_dataset.id  34e58dee-900c-47cf-8f8c-1f52e5a9a3b9
-         _pd_diffractogram.id "First dataset"
-         #diffracted intensities vs angle
-         #...
-;
-;
-         Three data blocks for a powder diffraction experiment.
-         The identical _audit_dataset.id value makes it
-         clear that all data blocks are to be interpreted together as
-         a whole. The presence of multiple _audit_dataset.id values for the
-         second data block indicates it is included in more than one dataset.
-
-         Because they have different
-         _audit_dataset.id values, the diffractogram _pd_diffractogram.id
-         "First dataset" in the first example is different to the diffractogram
-         _pd_diffractogram.id "First dataset" in this example.
-;
+    _name.category_id             ATOM
+    _name.object_id               ATOM_SITES
+    _category_key.name            '_atom_sites.structure_id'
 
 save_
 
-save_audit_dataset.id
+save_atom_sites.structure_id
 
-    _definition.id                '_audit_dataset.id'
-    _definition.update            2025-04-14
+    _definition.id                '_atom_sites.structure_id'
+    _definition.update            2026-06-15
     _description.text
 ;
-    Globally unique identifier for data blocks that are meant to be interpreted
-    together as a whole.
-
-    Data blocks which belong together, for instance, as they form part of the
-    same experiment, are given an identical _audit_dataset.id value.
-
-    Data blocks, such as calibration information, can be designated with more
-    than one _audit_dataset.id value.
-
-    Data blocks which do not contain an _audit_dataset.id may still be related,
-    depending on the presence of other data names and values. Data blocks which
-    contain different _audit_dataset.id values are not related in a CIF-sense,
-    even if other data names and values are common.
-
-    To ensure global uniqueness, a UUID-like identifier is suggested.
+    A code identifying the crystallographic structure associated with this atom
+    sites description.
 ;
-    _name.category_id             audit_dataset
-    _name.object_id               id
-    _type.purpose                 Key
-    _type.source                  Related
+    _name.category_id             atom_sites
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_ATOM_SITES_CARTN_TRANSFORM
+
+    _definition.id                ATOM_SITES_CARTN_TRANSFORM
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2026-06-15
+    _description.text
+;
+    The category of data items used to describe the matrix elements
+    used to transform fractional coordinates into Cartesian coordinates
+    of all atom sites in a crystal structure.
+;
+    _name.category_id             ATOM_SITES
+    _name.object_id               ATOM_SITES_CARTN_TRANSFORM
+    _category_key.name            '_atom_sites_Cartn_transform.structure_id'
+
+save_
+
+save_atom_sites_cartn_transform.structure_id
+
+    _definition.id                '_atom_sites_Cartn_transform.structure_id'
+    _definition.update            2026-06-15
+    _description.text
+;
+    A code identifying the crystallographic structure associated with this atom
+    sites Cartesian coordinate transform.
+;
+    _name.category_id             atom_sites_Cartn_transform
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_ATOM_SITES_FRACT_TRANSFORM
+
+    _definition.id                ATOM_SITES_FRACT_TRANSFORM
+    _definition.scope             Category
+    _definition.class             Set
+    _definition.update            2026-06-15
+    _description.text
+;
+    The category of data items used to describe the matrix elements
+    used to transform Cartesian coordinates into fractional coordinates
+    of all atom sites in a crystal structure.
+;
+    _name.category_id             ATOM_SITES
+    _name.object_id               ATOM_SITES_FRACT_TRANSFORM
+    _category_key.name            '_atom_sites_fract_transform.structure_id'
+
+save_
+
+save_atom_sites_fract_transform.structure_id
+
+    _definition.id                '_atom_sites_fract_transform.structure_id'
+    _definition.update            2026-06-15
+    _description.text
+;
+    A code identifying the crystallographic structure associated with this atom
+    sites fractional coordinate transform.
+;
+    _name.category_id             atom_sites_fract_transform
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
     _type.container               Single
     _type.contents                Word
 
@@ -677,6 +637,46 @@ save_diffrn_radiation_wavelength.radiation_id
 
 save_
 
+save_DIFFRN_REFLN
+
+    _definition.id                DIFFRN_REFLN
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2026-06-11
+    _description.text
+;
+    The category of data items which specify the reflection measurements,
+    prior to data reduction and merging.
+;
+    _name.category_id             DIFFRN
+    _name.object_id               DIFFRN_REFLN
+
+    loop_
+      _category_key.name
+         '_diffrn_refln.diffrn_id'
+         '_diffrn_refln.id'
+
+save_
+
+save_diffrn_refln.diffrn_id
+
+    _definition.id                '_diffrn_refln.diffrn_id'
+    _definition.update            2026-06-11
+    _description.text
+;
+    A code which identifies the diffraction conditions under which the data for
+    reflection measurements were collected.
+;
+    _name.category_id             diffrn_refln
+    _name.object_id               diffrn_id
+    _name.linked_item_id          '_diffrn.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
 save_DIFFRN_SOURCE
 
     _definition.id                DIFFRN_SOURCE
@@ -706,6 +706,46 @@ save_diffrn_source.radiation_id
     _name.category_id             diffrn_source
     _name.object_id               radiation_id
     _name.linked_item_id          '_diffrn_radiation.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
+
+save_
+
+save_REFLN
+
+    _definition.id                REFLN
+    _definition.scope             Category
+    _definition.class             Loop
+    _definition.update            2026-05-19
+    _description.text
+;
+    The category of data items used to describe the reflection data
+    used in the refinement of a crystallographic structure model.
+;
+    _name.category_id             DIFFRACTION
+    _name.object_id               REFLN
+
+    loop_
+      _category_key.name
+         '_refln.id'
+         '_refln.structure_id'
+
+save_
+
+save_refln.structure_id
+
+    _definition.id                '_refln.structure_id'
+    _definition.update            2026-05-19
+    _description.text
+;
+    A code identifying the crystallographic structure associated with this
+    reflection.
+;
+    _name.category_id             refln
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
     _type.purpose                 Link
     _type.source                  Assigned
     _type.container               Single
@@ -793,7 +833,7 @@ save_space_group.id
     Unique identifier for a space group.
 
     Two space groups can share the same identifier if and only if they have
-    the same space group name, number, setting, and have their their symmetry
+    the same space group name, number, setting, and have their symmetry
     operations listed with the same symop ids (see SPACE_GROUP_SYMOP).
 ;
     _name.category_id             space_group
@@ -930,7 +970,7 @@ save_MODEL
     _definition.id                MODEL
     _definition.scope             Category
     _definition.class             Set
-    _definition.update            2025-07-07
+    _definition.update            2026-06-17
     _description.text
 ;
     Items in the MODEL Category specify data for the crystal structure
@@ -939,7 +979,7 @@ save_MODEL
     described principally in terms of the geometry of the 'connected'
     atom sites and the crystal symmetry in which they reside.
 ;
-    _name.category_id             MULTIBLOCK_CORE
+    _name.category_id             CIF_CORE_MULTIBLOCK_HEAD
     _name.object_id               MODEL
     _category_key.name            '_model.id'
 
@@ -1289,12 +1329,12 @@ save_STRUCTURE
     _definition.id                STRUCTURE
     _definition.scope             Category
     _definition.class             Set
-    _definition.update            2023-10-25
+    _definition.update            2026-06-17
     _description.text
 ;
     A category for collecting information about a crystallographic structure.
 ;
-    _name.category_id             MULTIBLOCK_CORE
+    _name.category_id             CIF_CORE_MULTIBLOCK_HEAD
     _name.object_id               STRUCTURE
     _category_key.name            '_structure.id'
 
@@ -1377,6 +1417,7 @@ save_ATOM_SITE
       _description_example.case
       _description_example.detail
 ;
+         _structure.id  STR_1
          loop_
            _atom_site.label
            _atom_site.occupancy
@@ -1391,9 +1432,9 @@ save_ATOM_SITE
             H13B   .5     M     2
 ;
 ;
-         A hypothetical example of a positional disorder description. Disorder
-         assembly 'M' describes a methyl group with two alternative
-         configurations '1' and '2':
+         A hypothetical example of a positional disorder description for the
+         structure designated "STR_1". Disorder assembly 'M' describes a
+         methyl group with two alternative configurations '1' and '2':
 
                             H11B    H11A      H13B
                               .      |      .
@@ -1406,6 +1447,7 @@ save_ATOM_SITE
                             H12A    H12B    H13A
 ;
 ;
+         _structure.id  STR_I
          loop_
            _atom_site.label
            _atom_site.type_symbol
@@ -1423,9 +1465,10 @@ save_ATOM_SITE
             # ...
 ;
 ;
-         An example of a compositional disorder description. Disorder assembly
-         'A' describes a site that is simultaneously occupied by Co and Mn
-         atoms which are assigned to disorder group '1' and disorder group '2'
+         An example of a compositional disorder description for the
+         structure designated "STR_I". Disorder assembly 'A' describes
+         a site that is simultaneously occupied by Co and Mn atoms which
+         are assigned to disorder group '1' and disorder group '2'
          respectively.
 
          The example was created based on data from:
@@ -1493,6 +1536,18 @@ save_atom_site_aniso.structure_id
 save_
 
     loop_
+      _dictionary_author.id
+      _dictionary_author.name
+      _dictionary_author.id_orcid
+      _dictionary_author.email
+         1               'Hester, James R.'                 0000-0002-2004-8672
+         jxh@ansto.gov.au
+         2               'Vaitkus, Antanas'                 0000-0002-5944-1391
+         antanas.vaitkus@bti.vu.lt
+         3               'Rowles, Matthew R.'               0000-0002-7448-6774
+         .
+
+    loop_
       _dictionary_audit.version
       _dictionary_audit.date
       _dictionary_audit.revision
@@ -1500,31 +1555,13 @@ save_
 ;
        All multi-block items from core 3.2.0 added.
 ;
-         1.1.0                    2026-05-02
+         1.1.0                    2026-07-01
 ;
-       # Update date above and add audit comments below. Remove
-       this comment when ready for release.
+       Add STRUCTURE and related data names and links, including
+       REFLN, CELL, ATOM_SITE, and ATOM_SITES_* categories.
 
-       Add STRUCTURE and related data names and links.
-
-       Update definitions of _cell.structure_id and
-       _cell_measurement.structure_id. Removed _cell.diffrn_id.
-
-       Update the CIF_CORE dictionary import statement with the new Head
-       category name.
-
-       Added _diffrn_radiation.diffrn_id as key for diffrn_radiation
-       category.
-
-       Added AUDIT_DATASET.
-
-       Renamed _space_group_generator.key to _space_group_generator.id
-       to reflect changes in the CIF_CORE dictionary.
-
-       Added _model.id as key to MODEL.
-
-       Added GEOM_* and MODEL_SITE categories with _model.id child key data
-       names.
+       Added _model.id as key to MODEL and added child key data names
+       to GEOM_* and MODEL_SITE categories.
 
        Add DIFFRN_SOURCE category with _diffrn_source.radiation_id key data
        name.
@@ -1540,7 +1577,13 @@ save_
        Included _diffrn_measurement.diffrn_id to maintain compatibility with
        imgCIF.
 
-       Updated type contents of _diffrn_detector.id to match the mmCIF/PDBx
-       type.
-;
+       Added _diffrn_refln.diffrn_id is linked key to DIFFRN_REFLN.
 
+       Renamed dictionary to CIF_CORE_MULTIBLOCK and adjusted the head
+       category name accordingly.
+;
+         1.1.1-dev                2026-07-01
+;
+       # Add update summary below and change date above until ready for
+       # release.
+;

@@ -2687,12 +2687,18 @@ save_
       _dictionary_author.name
       _dictionary_author.id_orcid
       _dictionary_author.email
-         1  'Hall, Sydney R.'   .                    .
-         2  'Spadaccini, Nick'  .                    .
-         3  'Hester, James R.'  0000-0002-2004-8672  jxh@ansto.gov.au
-         4  'Vaitkus, Antanas'  0000-0002-5944-1391  antanas.vaitkus@bti.vu.lt
-         5  'Rowles, Matthew'   .                    .
-         6  'McMahon, Brian'    0000-0003-0391-0002  .
+         1               'Hall, Sydney R.'                  .
+         .
+         2               'Spadaccini, Nick'                 .
+         .
+         3               'Hester, James R.'                 0000-0002-2004-8672
+         jxh@ansto.gov.au
+         4               'Vaitkus, Antanas'                 0000-0002-5944-1391
+         antanas.vaitkus@bti.vu.lt
+         5               'Rowles, Matthew R.'               0000-0002-7448-6774
+         .
+         6               'McMahon, Brian'                   0000-0003-0391-0002
+         .
 
     loop_
       _dictionary_audit.version
