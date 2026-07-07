@@ -5,7 +5,7 @@ data_CIF_IMG
     _dictionary.title             CIF_IMG
     _dictionary.class             Instance
     _dictionary.version           1.8.9
-    _dictionary.date              2026-05-14
+    _dictionary.date              2026-06-18
     _dictionary.uri               https://github.com/COMCIFS/imgCIF/cif_img.dic
     _dictionary.ddl_conformance   4.2.0
     _dictionary.namespace         CifCore
@@ -699,7 +699,7 @@ save_CIF_IMG_HEAD
     _definition.id                CIF_IMG_HEAD
     _definition.scope             Category
     _definition.class             Head
-    _definition.update            2026-05-14
+    _definition.update            2026-06-18
     _description.text
 ;
     The HEAD category is the parent category of all definitions in the
@@ -709,8 +709,8 @@ save_CIF_IMG_HEAD
     _name.object_id               CIF_IMG_HEAD
 
     _import.get
-        [{'dupl':Ignore  'file':multi_block_core.dic  'mode':Full
-          'save':multiblock_core}]
+        [{'dupl':Ignore  'file':cif_core_multiblock.dic  'mode':Full
+          'save':CIF_CORE_MULTIBLOCK_HEAD}]
 
 save_
 
@@ -11432,7 +11432,7 @@ save_
 ;
        Pick up minor type corrections from 1.8.9 dcitionary
 ;
-         1.8.9                    2026-05-14
+         1.8.9                    2026-06-18
 ;
    Addition of missing diffrn.id pointers
 

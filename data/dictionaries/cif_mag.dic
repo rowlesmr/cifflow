@@ -11,10 +11,11 @@ data_CIF_MAG
     _dictionary.title             CIF_MAG
     _dictionary.class             Instance
     _dictionary.version           0.9.9
-    _dictionary.date              2026-06-10
+    _dictionary.date              2026-07-07
     _dictionary.uri
         https://raw.githubusercontent.com/COMCIFS/magnetic_dic/main/cif_mag.dic
-    _dictionary.ddl_conformance   4.1.0
+    _dictionary.ddl_conformance   4.2.0
+    _dictionary.licensing_SPDX    CC-BY-4.0
     _dictionary.namespace         CifCore
     _description.text
 ;
@@ -640,7 +641,7 @@ save_atom_site_moment.structure_id
 ;
     _name.category_id             atom_site_moment
     _name.object_id               structure_id
-    _name.linked_item_id          '_structure.id'
+    _name.linked_item_id          '_atom_site.structure_id'
     _type.purpose                 Link
     _type.source                  Assigned
     _type.container               Single
@@ -1297,7 +1298,7 @@ save_atom_site_rotation.structure_id
 ;
     _name.category_id             atom_site_rotation
     _name.object_id               structure_id
-    _name.linked_item_id          '_structure.id'
+    _name.linked_item_id          '_atom_site.structure_id'
     _type.purpose                 Link
     _type.source                  Assigned
     _type.container               Single
@@ -1478,7 +1479,7 @@ save_
 save_atom_site_moment_fourier.wave_vector_seq_id
 
     _definition.id                '_atom_site_moment_Fourier.wave_vector_seq_id'
-    _definition.update            2024-02-07
+    _definition.update            2026-07-07
     _description.text
 ;
     An arbitrary positive integer code that uniquely identifies the wave vector
@@ -1501,6 +1502,7 @@ save_atom_site_moment_fourier.wave_vector_seq_id
     _type.container               Single
     _type.contents                Integer
     _enumeration.range            1:
+    _units.code                   none
 
 save_
 
@@ -2068,8 +2070,7 @@ save_
 
 save_atom_site_moment_fourier_param.structure_id
 
-    _definition.id
-        '_atom_site_moment_Fourier_param.structure_id'
+    _definition.id                '_atom_site_moment_Fourier_param.structure_id'
     _definition.update            2026-06-03
     _description.text
 ;
@@ -2078,7 +2079,7 @@ save_atom_site_moment_fourier_param.structure_id
 ;
     _name.category_id             atom_site_moment_Fourier_param
     _name.object_id               structure_id
-    _name.linked_item_id          '_atom_site_moment.structure_id'
+    _name.linked_item_id          '_atom_site_moment_Fourier.structure_id'
     _type.purpose                 Link
     _type.source                  Assigned
     _type.container               Single
@@ -2483,7 +2484,7 @@ save_ATOM_SITES_MOMENT_FOURIER
     _definition.id                ATOM_SITES_MOMENT_FOURIER
     _definition.scope             Category
     _definition.class             Set
-    _definition.update            2024-05-17
+    _definition.update            2026-06-15
     _description.text
 ;
     Data items in the ATOM_SITES_MOMENT_FOURIER category record
@@ -2498,6 +2499,7 @@ save_ATOM_SITES_MOMENT_FOURIER
 ;
     _name.category_id             CIF_MAG_HEAD
     _name.object_id               ATOM_SITES_MOMENT_FOURIER
+    _category_key.name            '_atom_sites_moment_Fourier.structure_id'
 
 save_
 
@@ -2530,6 +2532,25 @@ save_atom_sites_moment_fourier.axes_description
      Extracted from Baudour & Sanquer
      [Acta Cryst. (1983), B39, 75-84].
 ;
+
+save_
+
+save_atom_sites_moment_fourier.structure_id
+
+    _definition.id                '_atom_sites_moment_Fourier.structure_id'
+    _definition.update            2026-06-15
+    _description.text
+;
+    A code identifying the crystallographic structure associated with the
+    magnetic modulations for the atom sites description.
+;
+    _name.category_id             atom_sites_moment_Fourier
+    _name.object_id               structure_id
+    _name.linked_item_id          '_structure.id'
+    _type.purpose                 Link
+    _type.source                  Assigned
+    _type.container               Single
+    _type.contents                Word
 
 save_
 
@@ -4248,6 +4269,62 @@ save_space_group_magn_ssg_transforms.id
 
 save_
 
+save_space_group_magn_ssg_transforms.pp
+
+    _definition.id                '_space_group_magn_ssg_transforms.Pp'
+    _definition.update            2026-07-03
+    _description.text
+;
+    This item is the matrix equivalent of
+    _space_group_magn_ssg_transforms.Pp_superspace, and specifies the
+    transformation (P,p) of the superspace basis vectors from the
+    current setting (a1,...,a(3+d)) to a reference setting
+    (a1',...,a(3+d)') given by
+    _space_group_magn_ssg_transforms.description. The origin shift is
+    presented in the unitless lattice coordinates of the current
+    setting.  The notation and usage are analogous to those of
+    _space_group_magn_transforms.Pp, except that P now represents a
+    superspace point operation and p now represents a superspace
+    translation.
+;
+    _name.category_id             space_group_magn_ssg_transforms
+    _name.object_id               Pp
+    _type.purpose                 Describe
+    _type.source                  Assigned
+    _type.container               Matrix
+    _type.dimension               '[]'
+    _type.contents                Real
+    _units.code                   none
+
+    loop_
+      _description_example.case
+      _description_example.detail
+         [
+          [1  0  0  0  0]
+          [0  1  0  0  0]
+          [0  0  1  0  0]
+          [0  0  0  1  0]
+          [0  0  0  0  1]
+         ]
+;
+         Identity transformation
+;
+         [
+          [0  -1     0  0  0   0.25]
+          [1   0     0  0  0  -0.25]
+          [0   0   0.5  0  0      0]
+          [-1  0     0  0  1   0.25]
+          [0   0  -0.5  1  0      0]
+          [0   0     0  0  0      1]
+         ]
+;
+         Transforms from a supercentered setting to the
+         ISO(3+d)D setting of
+         65.2.43.64.m481.1  Cmmm(0,b1,1/2)000(1,0,g2)0s0.
+;
+
+save_
+
 save_space_group_magn_ssg_transforms.pp_superspace
 
     _definition.id
@@ -5258,6 +5335,32 @@ save_structure.space_group_magn_id
 save_
 
     loop_
+      _dictionary_author.id
+      _dictionary_author.name
+      _dictionary_author.id_orcid
+      _dictionary_author.email
+         1            'Campbell, Branton J.'               0000-0002-7109-0854
+         .
+         2            'Perez-Mato, J. Manuel'              .
+         .
+         3            'Petříček, Václav'                   .
+         petricek@fzu.cz
+         4            'Rodriguez-Carvajal, Juan'           .
+         .
+         5            'Sikora, Wiesława'                   .
+         .
+         6            'Stokes, Harold T.'                  .
+         .
+         7            'McMahon, Brian'                     0000-0003-0391-0002
+         .
+         8            'Hester, James R.'                   0000-0002-2004-8672
+         jxh@ansto.gov.au
+         9            'Vaitkus, Antanas'                   0000-0002-5944-1391
+         antanas.vaitkus@bti.vu.lt
+         10           'Rowles, Matthew R.'                 0000-0002-7448-6774
+         .
+
+    loop_
       _dictionary_audit.version
       _dictionary_audit.date
       _dictionary_audit.revision
@@ -5309,7 +5412,7 @@ save_
        _atom_site_moment.Cartn* items, corrected and improved *_symmform
        descriptions. Created the atom_site_rotation category. (B Campbell)
 ;
-         0.9.9                    2026-06-10
+         0.9.9                    2026-07-07
 ;
        Added _structure.id key to ATOM_SITE_MOMENT, ATOM_SITE_ROTATION,
        ATOM_SITE_MOMENT_FOURIER, ATOM_SITE_MOMENT_SPECIAL_FUNC.
@@ -5379,4 +5482,11 @@ save_
 
        Improved clarity in transform_Pp_abc definitions.
 
+       2026-06-15: added _atom_sites_moment_fourier.structure_id as linked
+       key data name.
+
+       Added author list.
+
+       Added _space_group_magn_ssg_transforms.Pp by analogy with
+       _space_group_magn_transforms.Pp.
 ;

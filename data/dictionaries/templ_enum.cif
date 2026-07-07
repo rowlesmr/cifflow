@@ -11,7 +11,7 @@ data_COM_VAL
     _dictionary.title            COM_VAL
     _dictionary.class            Template
     _dictionary.version          1.4.10-dev
-    _dictionary.date             2026-04-20
+    _dictionary.date             2026-06-25
     _dictionary.uri              https://raw.githubusercontent.com/COMCIFS/Enumeration_Templates/main/templ_enum.cif
     _dictionary.ddl_conformance  4.2.0
     _description.text
@@ -850,6 +850,9 @@ save_units_code
    'electrons_per_second_per_angstrom_squared'
    "electron flux density  'electrons per second per angstrom squared (electrons * (seconds^(-1)) * (metres * 10^(-10))^(-2))'"
 
+   'electrons_per_second'
+   "electron flux 'electrons per second (electrons * (seconds^(-1)))'"
+
    'femtometres_per_angstrom_cubed'
    "scattering-length-density 'femtometres per angstroms cubed (10^-6 * (metres * 10^(-10))^(-2))'"
 
@@ -885,6 +888,9 @@ save_units_code
 
    'neutrons_per_second_per_millimetre_squared'
    "neutron flux density  'neutrons per second per millimetre squared (neutrons * (seconds^(-1)) * (metres * 10^(-3))^(-2))'"
+
+   'neutrons_per_second'
+   "neutron flux 'neutrons per second (neutrons * (seconds^(-1)))'"
 
    'megagray'     "radiation dose       'megagrays'"
 
@@ -2434,8 +2440,8 @@ save_
 
        Converted enumeration_default to enumeration_defaults. (jrh)
 ;
-         1.4.10-dev               2026-04-20
+         1.4.10-dev               2026-06-25
 ;
-       # Please note changes below and update date above until ready
-       # for next release
+       Added 'electrons_per_second' and 'neutrons_per_second' to
+       the unit list. (jrh)
 ;
