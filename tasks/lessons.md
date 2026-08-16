@@ -9,7 +9,7 @@
 - **Emit / output:** 48b, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 66, 67, 68, 69, 70, 71, 72, 73, 74, 120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136, 137, 138, 139, 140, 141, 146, 147, 148, 156, 158, 159
 - **Known gaps:** 124
 - **Fidelity:** 59, 60, 62, 63, 77
-- **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86
+- **FK propagation / ingest:** 21, 22, 23, 24, 25, 26, 28, 29, 30, 32, 34, 35, 37, 39, 43, 44, 45, 46, 47, 83, 84, 85, 86, 160
 - **Lexer / parser:** 1, 2, 3, 4, 10, 11, 37, 49b, 65, 68L, 149
 - **Performance:** 102, 109, 111, 112, 113, 114, 115, 116
 - **SQLite:** 18, 19, 20, 75, 76
@@ -1612,3 +1612,13 @@ all_items = list(_merged.values())
 ```
 
 **Rule:** Never pass a list with duplicate `definition_id`s to `_build_lookup_tables`. The deduplication that should happen before building lookup tables was accidentally deferred into the lookup builder, causing false alias collision warnings whenever a dictionary redefines an item already present in a constituent.
+
+---
+
+## Lesson 160 — `propagate_fk=True` must not fill intra-category link columns (2026-08-14)
+
+**Context:** `propagate_fk=True` fills non-key FK columns that are absent from the CIF data by looking up a value in the parent staging table. Some DDLm `Link` items point to a column in the *same* category (e.g. `_atom_site.calc_attached_atom` → `_atom_site.label`). These are semantic cross-references between rows, not parent-child relationships. Applying the fill logic to them would overwrite the NULL with an arbitrary `label` value from the same block — semantically wrong.
+
+**Fix:** In `_fill_single_fk`, `_fill_composite_fk`, and `_fill_propagation_links`, add a guard that skips propagation when `tgt_tbl == tbl_name` (source and target are the same table). Key-FK columns (where the column is also the PK) are exempt from this guard, but self-referential key-FKs cannot occur in a valid DDLm dictionary.
+
+**Rule:** Before propagating a non-key FK, check that the target table differs from the source table. Same-table links are row-to-row cross-references and must never be auto-filled.

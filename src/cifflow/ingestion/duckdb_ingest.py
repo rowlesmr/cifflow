@@ -557,6 +557,8 @@ def _fill_single_fk(
         if not is_key_fk and not propagate_fk:
             continue
         tgt_tbl = fk.target_table
+        if not is_key_fk and tgt_tbl == tbl_name:
+            continue
         if tgt_tbl not in schema.tables:
             if is_key_fk:
                 emit(
@@ -607,6 +609,8 @@ def _fill_composite_fk(
         if not is_key_fk and not propagate_fk:
             continue
         tgt_tbl = fk.target_table
+        if not is_key_fk and tgt_tbl == tbl_name:
+            continue
         if tgt_tbl not in schema.tables:
             continue
         if not all(sc in col_by_name for sc in fk.source_columns):
@@ -650,7 +654,9 @@ def _fill_propagation_links(
         col = col_by_name.get(col_name)
         if col is None:
             continue
-        do_fk_propagate = col.is_primary_key or propagate_fk
+        first_loc = tag_to_column.get(target_def_id)
+        is_same_category = first_loc is not None and first_loc[0] == tbl_name
+        do_fk_propagate = col.is_primary_key or (propagate_fk and not is_same_category)
         if not do_fk_propagate and default_val is None:
             continue
 

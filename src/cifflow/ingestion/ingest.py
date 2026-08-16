@@ -399,7 +399,11 @@ def ingest(
         are routed to _cif_fallback.
     propagate_fk:
         When True, non-key FK columns absent from the CIF data inherit their
-        value from the FK target already known in the same block.
+        value from the FK target already known in the same block.  Links where
+        the source and target belong to the same category (e.g.
+        ``_atom_site.calc_attached_atom`` → ``_atom_site.label``) are never
+        propagated regardless of this flag, as filling from a sibling row
+        would be semantically wrong.
     dataset_id:
         The _audit_dataset.id value to ingest. When None, auto-detected.
         Raises ``ValueError`` if specified but not found in any dataset block,
